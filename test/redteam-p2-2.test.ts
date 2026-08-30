@@ -11,10 +11,10 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { createBodyParser, type ContextWithBody } from "../src/components/body-parser.ts";
-import { validator, type StandardSchema } from "../src/components/validator.ts";
-import { cors, csrf } from "../src/components/cors.ts";
-import { stream, streamSSE, streamText } from "../src/components/streams.ts";
+import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { validator, type StandardSchema } from "../src/middleware/validator.ts";
+import { cors, csrf } from "../src/middleware/cors.ts";
+import { stream, streamSSE, streamText } from "../src/helpers/streams.ts";
 
 const quiet = { env: "test", silent: true } as const;
 const req = (path: string, init: RequestInit = {}): Request =>

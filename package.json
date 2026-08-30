@@ -18,10 +18,22 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./middleware/*": {
+      "types": "./dist/middleware/*.d.ts",
+      "import": "./dist/middleware/*.js"
+    },
+    "./helpers/*": {
+      "types": "./dist/helpers/*.d.ts",
+      "import": "./dist/helpers/*.js"
+    },
+    "./plugins/*": {
+      "types": "./dist/plugins/*.d.ts",
+      "import": "./dist/plugins/*.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc --noEmit && bun build src/index.ts --target bun --outdir dist && tsc -p tsconfig.build.json && find dist -name '*.d.ts' -exec sed -i '' 's/\\.ts\\\"/.js\\\"/g' {} +",
+    "build": "tsc --noEmit && rm -rf dist && tsc -p tsconfig.build.json && find dist \\( -name '*.js' -o -name '*.d.ts' \\) -exec sed -i '' 's/\\.ts\\\"/.js\\\"/g' {} +",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

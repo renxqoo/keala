@@ -13,7 +13,7 @@
 | D2  | WebSocket + validator 纳入，**组件化可插拔** | 两者均为独立组件，核心零依赖；不装组件零成本。                                                                                                                                            |
 | D3  | 双运行时保留                                 | 核心代码不引用 `Bun` 全局；Node + Bun 双跑测试；bench 三方对比（v2 / hono / raw）。                                                                                                       |
 | D4  | 消灭 koa3 闭包税                             | 保留 v1 的注册期预编译链（每请求零 dispatch 闭包）；所有扩展点不允许引入每请求闭包分配。                                                                                                  |
-| D5  | 功能组件化可插拔                             | 见 §6 组件协议。核心 = 路由 + 洋葱 + Context + respond，其余皆组件。                                                                                                                      |
+| D5  | 功能组件化可插拔                             | 见 §6 插件协议。核心 = 路由 + 洋葱 + Context + respond，其余皆组件。                                                                                                                      |
 
 审计带来的强制修订（已并入本文）：Response 实例缓存不可行（复验 500 `ERR_BODY_ALREADY_USED`）→ 改为状态重建式缓存组件；性能门禁全部改相对比值；参数路由分桶必须自动回退 trie（防共享首段 128x 退化）；11 条安全契约绑定重写规格；`server.reload()`（`update()` 不存在）。
 
@@ -109,15 +109,15 @@ strict/trailing-slash：路由选项 `strict: false`（默认 true），trim 中
 
 ## 6. 可插拔组件系统
 
-**组件协议**（D5，核心零依赖）：
+**插件协议**（D5，核心零依赖）：
 
 ```ts
-interface Component {
+interface Plugin {
   name: string;
   install(app: App): void; // 注册期钩子；可在 listen 前任意顺序插拔
 }
-app.use(Component); // 中间件组件（进链，注册期编译）
-app.use(component); // 组件实例（bodyParser/ws/validator/cache/…）
+app.use(Plugin); // 中间件组件（进链，注册期编译）
+app.use(plugin); // 组件实例（bodyParser/ws/validator/cache/…）
 ```
 
 内建组件全景（全部独立文件、可插拔、不装零成本）：

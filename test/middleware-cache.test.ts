@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { cache } from "../src/components/cache.ts";
+import { cache } from "../src/middleware/cache.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);

@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 const REAL_BUN = typeof Bun !== "undefined";
 
 import { createApp } from "../src/core/app.ts";
-import { csrfToken, csrfTokenGuard } from "../src/components/csrf-token.ts";
+import { csrfToken, csrfTokenGuard } from "../src/middleware/csrf-token.ts";
 import { createHmac, randomBytes } from "node:crypto";
 
 const quiet = { env: "test" } as const;

@@ -12,12 +12,7 @@
  * runs under Node (tests).
  */
 
-import type {
-  AppOptions,
-  Component as AppOptionsComponent,
-  ListenOptions,
-  Runtime,
-} from "../types.ts";
+import type { AppOptions, Plugin as AppOptionsPlugin, ListenOptions, Runtime } from "../types.ts";
 import { getPath } from "../utils/url.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
@@ -25,10 +20,10 @@ import { baseContextProto, createContext, resetContext, type Context } from "./c
 import { createPool } from "./context/pool.ts";
 import { compose } from "./compose.ts";
 import {
-  componentInstallerOf,
   dispatchChain,
   finalizeGuarded,
   parseListenArgs,
+  pluginInstallerOf,
   routeShortcut,
   wsUpgradeHandler,
 } from "./dispatch.ts";
@@ -72,8 +67,8 @@ export interface Application {
   emit(event: string, ...args: unknown[]): boolean;
   off(event: string, listener: (...args: unknown[]) => void): void;
   listenerCount(event: string): number;
-  /** Register global middleware or a component (compiled into every route chain). */
-  use(...middleware: (RouteHandler | AppOptionsComponent)[]): Application;
+  /** Register global middleware or a plugin (compiled into every route chain). */
+  use(...middleware: (RouteHandler | AppOptionsPlugin)[]): Application;
   /** Register a route. Named form: get(name, path, ...handlers). */
   get(path: string, ...handlers: RouteHandler[]): Application;
   get(name: string, path: string, ...handlers: RouteHandler[]): Application;
@@ -207,13 +202,13 @@ export const createApp = (options: AppOptions = {}): Application => {
 
     use(...args) {
       for (const mw of args) {
-        const installer = componentInstallerOf(mw);
+        const installer = pluginInstallerOf(mw);
         if (installer !== null) {
           installer(app);
           continue;
         }
         if (typeof mw !== "function") {
-          throw new TypeError("app.use() requires a middleware function or component");
+          throw new TypeError("app.use() requires a middleware function or plugin");
         }
         if (nativeSinks.size > 0) {
           throw new TypeError(
@@ -372,7 +367,7 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     decorate(key, value) {
-      // A `{ get }` object installs a lazy accessor (components use this for
+      // A `{ get }` object installs a lazy accessor (plugins use this for
       // request-side facades); anything else is a plain value.
       if (
         typeof value === "object" &&

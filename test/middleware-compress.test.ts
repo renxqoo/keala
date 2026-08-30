@@ -8,7 +8,7 @@ import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { compress } from "../src/components/etag.ts";
+import { compress } from "../src/middleware/etag.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);

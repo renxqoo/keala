@@ -63,8 +63,8 @@ export {
   readBodyLimited,
   type BodyParserOptions,
   type RequestBodyFacade,
-} from "./components/body-parser.ts";
-export { validator, type StandardSchema } from "./components/validator.ts";
+} from "./plugins/body-parser.ts";
+export { validator, type StandardSchema } from "./middleware/validator.ts";
 export {
   stream,
   streamText,
@@ -74,7 +74,7 @@ export {
   type SSEWriter,
   type SSEMessage,
   type StreamSSEOptions,
-} from "./components/streams.ts";
+} from "./helpers/streams.ts";
 export {
   secureHeaders,
   requestId,
@@ -82,25 +82,27 @@ export {
   logger,
   type SecureHeadersOptions,
   type LoggerOptions,
-} from "./components/headers.ts";
-export { cors, csrf, type CorsOptions } from "./components/cors.ts";
-export { etag, compress } from "./components/etag.ts";
-export { bodyLimit, timeout } from "./components/limits.ts";
-export { serveStatic, type ServeStaticOptions } from "./components/serve-static.ts";
-export { html, raw, escapeHtml } from "./components/html.ts";
-export type { Component } from "./types.ts";
-export { cache, type ResponseCacheOptions } from "./components/cache.ts";
+} from "./middleware/headers.ts";
+export { cors, csrf, type CorsOptions } from "./middleware/cors.ts";
+export { etag, compress } from "./middleware/etag.ts";
+export { bodyLimit, timeout } from "./middleware/limits.ts";
+export { serveStatic, type ServeStaticOptions } from "./middleware/serve-static.ts";
+export { html, raw, escapeHtml } from "./helpers/html.ts";
+export type { Plugin } from "./types.ts";
+export { cache, type ResponseCacheOptions } from "./middleware/cache.ts";
 export {
   basicAuth,
   bearerAuth,
+  type BasicAuthOptions,
+  type BearerAuthOptions,
+} from "./middleware/auth.ts";
+export {
   bunPasswordHasher,
   pbkdf2PasswordHasher,
   hashPassword,
   verifyPassword,
-  type BasicAuthOptions,
-  type BearerAuthOptions,
   type PasswordHasher,
-} from "./components/auth.ts";
+} from "./helpers/password.ts";
 export {
   csrfToken,
   csrfTokenGuard,
@@ -108,5 +110,5 @@ export {
   type CsrfTokenService,
   type CsrfTokenGuardOptions,
   type CsrfAlgorithm,
-} from "./components/csrf-token.ts";
+} from "./middleware/csrf-token.ts";
 export type { NativeSinkEntry, NativeStaticSink, NativeDirSink } from "./core/sink.ts";

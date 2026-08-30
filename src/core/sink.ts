@@ -23,7 +23,7 @@
  * PARITY.md). The mirror also keeps serveStatic's symlink denial.
  */
 
-import { serveStatic } from "../components/serve-static.ts";
+import { serveStatic } from "../middleware/serve-static.ts";
 import {
   pathsConflict,
   registerDef,

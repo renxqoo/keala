@@ -7,14 +7,13 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
+import { basicAuth, bearerAuth } from "../src/middleware/auth.ts";
 import {
-  basicAuth,
-  bearerAuth,
   bunPasswordHasher,
   hashPassword,
   verifyPassword,
   type PasswordHasher,
-} from "../src/components/auth.ts";
+} from "../src/helpers/password.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);

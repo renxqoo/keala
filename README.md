@@ -55,7 +55,13 @@ api.get("/orgs/:oid", (c) => c.text("org"));
 app.mount("/api", api);
 ```
 
-## Components (P2): everything pluggable, zero cost until used
+## Middleware, plugins & helpers
+
+Three lifecycles, one `app.use()` entry:
+
+- **middleware** — per-request pipeline functions: `app.use(cors())`
+- **plugins** — setup-time installers (`install(app)`), decorate contexts: `app.use(createBodyParser())`
+- **helpers** — called inside handlers: `streamSSE(c, ...)`, `hashPassword(pw)`
 
 ```ts
 import {
@@ -83,7 +89,7 @@ import {
   raw,
 } from "bun-koa";
 
-app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // c.req.json()/text()/formData()…
+app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req.json()/text()/formData()…
 app.use(cors({ origin: ["https://app.site"], allowCredentials: true }));
 app.use(secureHeaders());
 

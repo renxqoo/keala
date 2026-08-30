@@ -28,11 +28,13 @@ export interface ResponseInitLike {
 }
 
 /**
- * Pluggable component: installs capabilities onto an app at setup time.
- * Middleware functions and components share `app.use(...)` — anything with an
- * `install(app)` method is treated as a component.
+ * Plugin: installs capabilities onto an app at setup (bootstrap) time —
+ * decorating contexts, publishing configuration. Middleware functions and
+ * plugins share the single `app.use(...)` entry: anything with an
+ * `install(app)` method is treated as a plugin, anything else must be a
+ * middleware function. Distinct lifecycles, one ergonomic entry point.
  */
-export interface Component {
+export interface Plugin {
   readonly name: string;
   install(app: unknown): void;
 }

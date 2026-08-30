@@ -6,11 +6,11 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { secureHeaders, requestId, timing, logger } from "../src/components/headers.ts";
-import { cors, csrf } from "../src/components/cors.ts";
-import { etag, compress } from "../src/components/etag.ts";
-import { bodyLimit, timeout } from "../src/components/limits.ts";
-import { html, raw, escapeHtml } from "../src/components/html.ts";
+import { secureHeaders, requestId, timing, logger } from "../src/middleware/headers.ts";
+import { cors, csrf } from "../src/middleware/cors.ts";
+import { etag, compress } from "../src/middleware/etag.ts";
+import { bodyLimit, timeout } from "../src/middleware/limits.ts";
+import { html, raw, escapeHtml } from "../src/helpers/html.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);

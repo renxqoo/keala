@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 const REAL_BUN = typeof Bun !== "undefined";
 
 import { createApp } from "../src/core/app.ts";
-import { streamSSE, disableIdleTimeout } from "../src/components/streams.ts";
+import { streamSSE, disableIdleTimeout } from "../src/helpers/streams.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
@@ -53,7 +53,7 @@ describe.skipIf(REAL_BUN)("serve-static × Bun.file body", () => {
         file: (path: string): Blob => new Blob([readFileSync(path)]),
       },
       async () => {
-        const { serveStatic } = await import("../src/components/serve-static.ts");
+        const { serveStatic } = await import("../src/middleware/serve-static.ts");
         const app = createApp(quiet);
         app.get("/f/*", serveStatic({ root, prefix: "/f" }));
         const res = await app.handle(new Request("http://localhost:3000/f/a.txt"));
@@ -67,13 +67,13 @@ describe.skipIf(REAL_BUN)("serve-static × Bun.file body", () => {
 describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
   it("ignores a malformed Bun.password shape and uses the portable pbkdf2 default", async () => {
     await withBun({ password: { hash: "not-a-function" } }, async () => {
-      const { hashPassword, verifyPassword } = await import("../src/components/auth.ts");
+      const { hashPassword, verifyPassword } = await import("../src/helpers/password.ts");
       const hash = await hashPassword("pw");
       expect(hash.startsWith("pbkdf2$")).toBe(true);
       expect(await verifyPassword(hash, "pw")).toBe(true);
     });
     await withBun({ password: "string-not-object" }, async () => {
-      const { hashPassword } = await import("../src/components/auth.ts");
+      const { hashPassword } = await import("../src/helpers/password.ts");
       expect((await hashPassword("pw")).startsWith("pbkdf2$")).toBe(true);
     });
   });
@@ -92,7 +92,7 @@ describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
       },
       async () => {
         const { hashPassword, verifyPassword, bunPasswordHasher } =
-          await import("../src/components/auth.ts");
+          await import("../src/helpers/password.ts");
         const native = bunPasswordHasher();
         const hash = await hashPassword("pw", native);
         expect(hash).toBe("stubbed:pw");
@@ -105,9 +105,43 @@ describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
 
   it("bunPasswordHasher() reports malformed Bun.password shapes loudly", async () => {
     await withBun({ password: { hash: () => "x" } }, async () => {
-      const { bunPasswordHasher } = await import("../src/components/auth.ts");
+      const { bunPasswordHasher } = await import("../src/helpers/password.ts");
       expect(() => bunPasswordHasher()).toThrow(/malformed Bun\.password/);
     });
+    await withBun({ password: "string-not-object" }, async () => {
+      const { bunPasswordHasher } = await import("../src/helpers/password.ts");
+      expect(() => bunPasswordHasher()).toThrow(/requires Bun\.password/);
+    });
+  });
+
+  it("a failing WebCrypto derive makes verification fail closed, not throw", async () => {
+    const { pbkdf2PasswordHasher } = await import("../src/helpers/password.ts");
+    const realCrypto = globalThis.crypto;
+    const broken = {
+      getRandomValues: realCrypto.getRandomValues.bind(realCrypto),
+      subtle: {
+        importKey: async () => {
+          throw new Error("broken provider");
+        },
+        deriveBits: realCrypto.subtle.deriveBits.bind(realCrypto.subtle),
+      },
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+    // `crypto` is accessor-only on some runtimes — redefine as a data
+    // property (getter descriptors cannot carry a value).
+    Object.defineProperty(globalThis, "crypto", {
+      value: broken,
+      writable: true,
+      configurable: true,
+      enumerable: descriptor?.enumerable ?? true,
+    });
+    try {
+      // Well-formed hash string; derivation fails inside verify().
+      const hash = "pbkdf2$600000$" + Buffer.from("0123456789abcdef").toString("base64") + "$" + Buffer.from("k".repeat(32)).toString("base64");
+      expect(await pbkdf2PasswordHasher().verify(hash, "pw")).toBe(false);
+    } finally {
+      if (descriptor !== undefined) Object.defineProperty(globalThis, "crypto", descriptor);
+    }
   });
 });
 
@@ -129,7 +163,7 @@ describe.skipIf(REAL_BUN)("csrfToken × Bun.CSRF wrapping", () => {
         },
       },
       async () => {
-        const { csrfToken } = await import("../src/components/csrf-token.ts");
+        const { csrfToken } = await import("../src/middleware/csrf-token.ts");
         const service = csrfToken({
           secret: "s",
           expiresIn: 5000,
@@ -172,7 +206,7 @@ describe.skipIf(REAL_BUN)("csrfToken × Bun.CSRF wrapping", () => {
 
   it("a malformed Bun.CSRF shape falls back to the HMAC implementation", async () => {
     await withBun({ CSRF: { generate: () => "x" } }, async () => {
-      const { csrfToken } = await import("../src/components/csrf-token.ts");
+      const { csrfToken } = await import("../src/middleware/csrf-token.ts");
       const service = csrfToken({ secret: "s" });
       expect(service.verify(service.issue())).toBe(true);
       expect(service.issue().startsWith("t1.")).toBe(true);
@@ -192,7 +226,7 @@ describe.skipIf(REAL_BUN)("csrfToken × Bun.CSRF wrapping", () => {
         },
       },
       async () => {
-        const { csrfToken } = await import("../src/components/csrf-token.ts");
+        const { csrfToken } = await import("../src/middleware/csrf-token.ts");
         csrfToken({ secret: "s" }).issue();
         expect(generateCalls).toEqual([{ expiresIn: 86_400_000, algorithm: "sha256" }]);
       },

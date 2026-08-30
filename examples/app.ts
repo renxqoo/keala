@@ -3,7 +3,7 @@
  *
  *   bun examples/app.ts   → http://localhost:3000
  *
- * Covers the whole component stack: onion middleware, both response styles,
+ * Covers the whole plugin stack: onion middleware, both response styles,
  * routing (params/wildcards/named urls), validation, body parsing, CORS,
  * CSRF tokens, auth (Bun.password), SSE, static files, websocket, and the
  * Bun-native route sink.
@@ -27,7 +27,7 @@ import {
 
 const app = createApp({ keys: ["change-me"], env: "production" });
 
-// --- components (context facades — safe alongside native sinks) ----------
+// --- plugins (context facades — safe alongside native sinks) ----------
 app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
 
 // NOTE: onion middleware (like secureHeaders) must NOT be registered

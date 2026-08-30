@@ -13,8 +13,8 @@ import { isHttpError, normalizeError } from "../http/errors.ts";
 import { isValidErrorStatus, statusMessage } from "../http/status.ts";
 import type { ListenOptions } from "../types.ts";
 
-/** A component is any object exposing `install(app)`; middleware is not one. */
-export const componentInstallerOf = (value: unknown): ((app: Application) => void) | null => {
+/** A plugin is any object exposing `install(app)`; middleware is not one. */
+export const pluginInstallerOf = (value: unknown): ((app: Application) => void) | null => {
   if (typeof value !== "object" || value === null) return null;
   const install = (value as { install?: unknown }).install;
   return typeof install === "function"

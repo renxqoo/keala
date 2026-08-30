@@ -1,7 +1,7 @@
 /**
- * bodyParser — the request-body component.
+ * bodyParser — the request-body plugin.
  *
- * `app.use(bodyParser())` installs a lazy `c.req` facade with json/text/
+ * `app.use(bodyParser())` — a PLUGIN (install protocol) — installs a lazy `c.req` facade with json/text/
  * formData/arrayBuffer/blob readers. The raw body is read ONCE (bounded by
  * the configured limits) and every reader derives from the memoized bytes —
  * middleware, validators and handlers can each call a reader safely.
@@ -12,7 +12,7 @@
  */
 
 import { createError } from "../http/errors.ts";
-import type { Component } from "../types.ts";
+import type { Plugin } from "../types.ts";
 import type { Application } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
 
@@ -105,7 +105,7 @@ export interface RequestBodyFacade {
 
 const decoder = new TextDecoder();
 
-export const createBodyParser = (options: BodyParserOptions = {}): Component => {
+export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
   const jsonLimit = options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const textLimit = options.textLimit ?? options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const formLimit = options.formLimit ?? DEFAULT_FORM_LIMIT;

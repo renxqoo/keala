@@ -8,12 +8,12 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { etag, compress } from "../src/components/etag.ts";
-import { cors, csrf } from "../src/components/cors.ts";
-import { secureHeaders, requestId } from "../src/components/headers.ts";
-import { stream, streamText, streamSSE } from "../src/components/streams.ts";
-import { createBodyParser, type ContextWithBody } from "../src/components/body-parser.ts";
-import { serveStatic } from "../src/components/serve-static.ts";
+import { etag, compress } from "../src/middleware/etag.ts";
+import { cors, csrf } from "../src/middleware/cors.ts";
+import { secureHeaders, requestId } from "../src/middleware/headers.ts";
+import { stream, streamText, streamSSE } from "../src/helpers/streams.ts";
+import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { serveStatic } from "../src/middleware/serve-static.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

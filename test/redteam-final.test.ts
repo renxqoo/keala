@@ -15,11 +15,11 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp, startBunServer, type ServeImplementation } from "../src/index.ts";
-import { createBodyParser } from "../src/components/body-parser.ts";
-import { cache } from "../src/components/cache.ts";
-import { csrfToken } from "../src/components/csrf-token.ts";
-import { etag } from "../src/components/etag.ts";
-import { validator } from "../src/components/validator.ts";
+import { createBodyParser } from "../src/plugins/body-parser.ts";
+import { cache } from "../src/middleware/cache.ts";
+import { csrfToken } from "../src/middleware/csrf-token.ts";
+import { etag } from "../src/middleware/etag.ts";
+import { validator } from "../src/middleware/validator.ts";
 
 const quiet = { env: "test" } as const;
 const readJson = (body: unknown): { json(): Promise<unknown> } =>

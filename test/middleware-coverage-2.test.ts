@@ -7,8 +7,8 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { compress } from "../src/components/etag.ts";
-import { cors } from "../src/components/cors.ts";
+import { compress } from "../src/middleware/etag.ts";
+import { cors } from "../src/middleware/cors.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { createRouter } from "../src/router/group.ts";
 import { startBunServer } from "../src/adapters/bun.ts";

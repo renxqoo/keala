@@ -10,7 +10,7 @@
  *   plus a 10-case core regression quick-scan under the new ctx fields.
  *
  * Findings ledger (severity, repro, root cause) lives in the audit report;
- * file:line references point at src/components/* and src/core/app.ts.
+ * file:line references point at src/middleware/* and src/core/app.ts.
  *
  * Green assets split across two files (oxlint max-lines 500): this file
  * carries the locked bugs, serveStatic/websocket greens and the core
@@ -26,12 +26,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
 import { startBunServer } from "../src/adapters/bun.ts";
-import { createBodyParser, type ContextWithBody } from "../src/components/body-parser.ts";
-import { validator, type StandardSchema } from "../src/components/validator.ts";
-import { cors, csrf } from "../src/components/cors.ts";
-import { serveStatic } from "../src/components/serve-static.ts";
-import { streamSSE } from "../src/components/streams.ts";
-import { html, raw } from "../src/components/html.ts";
+import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { validator, type StandardSchema } from "../src/middleware/validator.ts";
+import { cors, csrf } from "../src/middleware/cors.ts";
+import { serveStatic } from "../src/middleware/serve-static.ts";
+import { streamSSE } from "../src/helpers/streams.ts";
+import { html, raw } from "../src/helpers/html.ts";
 import { createRouter } from "../src/router/group.ts";
 
 const quiet = { env: "test", silent: true } as const;

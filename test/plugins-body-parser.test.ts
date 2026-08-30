@@ -6,12 +6,12 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { createBodyParser, type ContextWithBody } from "../src/components/body-parser.ts";
+import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
 import {
   validator,
   type ContextWithValid,
   type StandardSchema,
-} from "../src/components/validator.ts";
+} from "../src/middleware/validator.ts";
 import type { RouteHandler } from "../src/router/router.ts";
 
 const quiet = { env: "test" } as const;

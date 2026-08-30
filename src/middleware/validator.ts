@@ -8,7 +8,7 @@
  */
 
 import { createError } from "../http/errors.ts";
-import { readBodyLimited } from "./body-parser.ts";
+import { readBodyLimited } from "../plugins/body-parser.ts";
 import type { RouteHandler } from "../router/router.ts";
 import type { Application } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";

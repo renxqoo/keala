@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { serveStatic } from "../src/components/serve-static.ts";
+import { serveStatic } from "../src/middleware/serve-static.ts";
 
 const quiet = { env: "test" } as const;
 let root = "";
