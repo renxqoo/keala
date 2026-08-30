@@ -68,6 +68,12 @@ export interface AppOptions {
    * instead of vanishing. Costs one wrapper per streaming response.
    */
   onStreamError?: (error: Error, c: import("./core/context/context.ts").Context) => void;
+  /**
+   * Recycle the per-request contexts (opt-in, GUARDED): a settled context is
+   * prototype-swapped so any late write throws instead of corrupting the
+   * next request that reuses it.
+   */
+  pooling?: boolean;
 }
 
 export interface ListenOptions {

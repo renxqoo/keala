@@ -21,7 +21,8 @@ import type {
 import { getPath } from "../utils/url.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
-import { baseContextProto, createContext, type Context } from "./context/context.ts";
+import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
+import { createPool } from "./context/pool.ts";
 import { compose } from "./compose.ts";
 import { dispatchChain, finalizeGuarded, parseListenArgs } from "./dispatch.ts";
 import { createEmitter, type Listener } from "./emitter.ts";
@@ -180,6 +181,11 @@ export const createApp = (options: AppOptions = {}): Application => {
   let globalChain: Chain | null = null;
   let notFoundHandler: NotFoundHandler = defaultNotFound;
   const wsRoutes = new Map<string, WebSocketHandlers>();
+  // Guarded pooling (opt-in): settled contexts retire through a prototype
+  // swap; late writes throw instead of corrupting the next request. Built
+  // after `app` exists (the pool captures it); handle() runs later still.
+  const poolingEnabled = options.pooling === true;
+  let pool: ReturnType<typeof createPool> | null = null;
 
   const app: Application = {
     env: options.env ?? process.env["NODE_ENV"] ?? "development",
@@ -381,27 +387,47 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     handle(request, runtime) {
-      const c = createContext(app, contextProto, request, runtime);
-      const path = getPath(request.url);
-      const match = matchRoute(router, path);
-      if (match !== null) {
-        c.params = match.params ?? EMPTY_PARAMS;
-        const rawMethod = request.method;
-        const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
-        // Express-style convenience: HEAD falls back to the GET handler.
-        const chain =
-          (match.target.methods.get(method) as Chain | undefined) ??
-          (method === "HEAD"
-            ? (match.target.methods.get("GET") as Chain | undefined)
-            : undefined) ??
-          (match.target.methods.get("ALL") as Chain | undefined);
-        if (chain !== undefined) return dispatchChain(app, c, chain);
-        for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
-      }
-      // No handler: global middleware still runs (koa contract), then the
-      // finalizer decides between 405/501/OPTIONS and not-found.
-      if (globalChain === null) return finalizeGuarded(app, c);
-      return dispatchChain(app, c, globalChain);
+      const recycled = pool?.acquire();
+      const c =
+        recycled === undefined
+          ? createContext(app, contextProto, request, runtime)
+          : resetContext(recycled, request, runtime);
+
+      const dispatchOf = (): Response | Promise<Response> => {
+        const path = getPath(request.url);
+        const match = matchRoute(router, path);
+        if (match !== null) {
+          c.params = match.params ?? EMPTY_PARAMS;
+          const rawMethod = request.method;
+          const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
+          // Express-style convenience: HEAD falls back to the GET handler.
+          const chain =
+            (match.target.methods.get(method) as Chain | undefined) ??
+            (method === "HEAD"
+              ? (match.target.methods.get("GET") as Chain | undefined)
+              : undefined) ??
+            (match.target.methods.get("ALL") as Chain | undefined);
+          if (chain !== undefined) return dispatchChain(app, c, chain);
+          for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
+        }
+        // No handler: global middleware still runs (koa contract), then the
+        // finalizer decides between 405/501/OPTIONS and not-found.
+        if (globalChain === null) return finalizeGuarded(app, c);
+        return dispatchChain(app, c, globalChain);
+      };
+
+      pool ??= createPool(app, contextProto);
+      if (!poolingEnabled) return dispatchOf();
+      pool ??= createPool(app, contextProto);
+      // Guarded lifecycle: settle (sync or async), then retire to the pool —
+      // a late write on the retired context throws instead of corrupting it.
+      const activePool = pool;
+      const release = (value: Response): Response => {
+        activePool.release(c);
+        return value;
+      };
+      const settled = dispatchOf();
+      return settled instanceof Promise ? settled.then(release) : release(settled);
     },
 
     callback() {

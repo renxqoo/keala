@@ -88,3 +88,4 @@ export { bodyLimit, timeout } from "./components/limits.ts";
 export { serveStatic, type ServeStaticOptions } from "./components/serve-static.ts";
 export { html, raw, escapeHtml } from "./components/html.ts";
 export type { Component } from "./types.ts";
+export { cache, type ResponseCacheOptions } from "./components/cache.ts";
