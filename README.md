@@ -158,52 +158,26 @@ bun run coverage    # >90% thresholds on statements/branches/functions/lines
 bun run lint        # oxlint (max-lines 500 enforced)
 bun run fmt         # oxfmt
 bun run typecheck   # TypeScript 7 native (tsc --noEmit)
+bun run verify      # all of the above in one gate
 bun run smoke       # boots a real Bun.serve and exercises every critical path
-bun run soak        # memory-leak soak: 1.2M+ requests, heap must stabilize
-bun run bench       # koa vs hono vs bun-koa benchmark
+bun run soak        # memory soak: in-process + HTTP + concurrent, heap must stabilize
+bun run bench       # vs hono / raw benchmark harness
 ```
 
-- 928 tests green on **both Node and Bun runtimes**, including:
-  - `test/koa-parity.test.ts` — behavior-equivalent ports of koa 3.2.1's
-    official suite, verified against the koa sources (JSON `null` bodies,
-    `Blob`/web-`Response` bodies, query rewrite, redirect-back, teapots…)
-  - `test/security.test.ts` — injection / pollution / disclosure / abuse cases
-  - `test/official-parity.test.ts` — ports of assertions from the **official
-    repos** (koa@3.2.1 `__tests__`, cloned source), covering the Koa behaviors
-    listed below
-
-**Exhaustive parity audit** — every one of the **562 official test cases** in
-koa@3.2.1 (`__tests__`) and @koa/router@13 (`test/`) was classified; 528 are
-verified by bun-koa's suite, 26 are inapplicable to the fetch model (reasons
-per case in [docs/PARITY.md](docs/PARITY.md)). This pass surfaced and fixed
-three more Koa behaviors: `ctx.back()` (same-origin referrer redirect),
-`response.is()` (with `.ext` and `*/subtype` matching) and type-is returning
-the caller's original form.
-
-**Verified against the official koa 3.2.1 test suite** (cloned from
-`koajs/koa`, `.parity/`): onerror header reset, `err.statusCode`, `ctx.set({})`,
-`ctx.type` shorthand expansion (`'json'` → `application/json; charset=utf-8`),
-empty-status content-header stripping, `attachment` with GHSA-c5vw-j4hf-j526
-(Content-Type never overridden), basename handling, `?` non-ASCII fallback and
-`type: 'inline'`, `ctx.search=` / `ctx.querystring=` setters, `req.URL`,
-extension-based `accepts('png')`, `ctx.toJSON()`, `app.context` /
-`app.request` / `app.response` extension layers, and opt-in
-`app.currentContext` (AsyncLocalStorage — off by default: it costs ~30%
-throughput on Bun).
-
-Node-specific Koa features intentionally not ported (no `req`/`res` objects in
-the fetch model): `ctx.respond = false`, `flushHeaders()`, `res.writable` /
-`res.socket`, HTTP/2 `:authority`, custom status codes outside 200-599, and
-raw Node stream lifecycle management.
-
-- Memory soak: 8x150k in-process + 4x20k live HTTP requests across every path
-  (text, JSON, params, cookies, errors, redirects) — heap drift < 0.5%,
-  no leaks
-
-- 928 tests green on **both Node and Bun runtimes**
-- Coverage ≥ 90% on all four metrics (98 / 90 / 98 / 99)
-- Every file ≤ 500 lines, enforced by oxlint `max-lines`
-- Functional style only: factories + closures, zero `class`
+- **969 tests green on both Node and Bun runtimes** (37 files), including:
+  - `test/security*.test.ts` + `agent-security-audit` — injection / pollution /
+    disclosure / abuse / proxy-trust cases (255+ assertions)
+  - `test/redteam-v2*.test.ts` — red-team regression locks for 11 confirmed
+    bug groups found during the v2 hardening pass, plus the
+    `matchRoute ≡ pure trie` equivalence fuzz (100 randomized route tables ×
+    120 paths per run)
+  - `test/anomalies*.test.ts`, `matrix`, `agent-bugs`, `agent-concurrency*` —
+    the full abnormal-input and state-machine matrices ported from v1
+  - `test/parity-security.test.ts` — security-relevant koa parity semantics
+    (GHSA-c5vw-j4hf-j526, redirect/back same-origin, expose gate…)
+- Coverage ≥90% on all four dimensions (currently ~96.8/90.9/96.6/97.8).
+- soak: 480k+ in-process requests, 32k over real HTTP and concurrent floods —
+  retained-heap drift ≤ 0.1 B/req (in-process) against a 1500 B budget.
 
 ## Security
 

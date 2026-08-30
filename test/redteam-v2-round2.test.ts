@@ -24,6 +24,12 @@ import { createRouterState, matchRoute, registerDef } from "../src/router/router
 import { createNode, createTarget, insertPattern, matchPattern } from "../src/router/trie.ts";
 import type { RouteTarget, TrieNode } from "../src/router/trie.ts";
 
+/** handle() may settle synchronously — normalize to a Promise for .then chains. */
+const handleFlat = (
+  app: { handle(r: Request): Response | Promise<Response> },
+  r: Request,
+): Promise<Response> => Promise.resolve(app.handle(r));
+
 const quiet = { env: "test", silent: true } as const;
 const req = (url: string, init: RequestInit = {}): Request => new Request(url, init);
 const text = async (res: Response): Promise<string> => res.text();
@@ -218,33 +224,34 @@ describe("redteam v2 round2 — GA-2 concurrency isolation", () => {
         const id = `u${i}`;
         switch (i % 7) {
           case 0:
-            return app
-              .handle(req("http://localhost/text"))
-              .then(async (r) => [r.status, await r.text()] as const);
+            return handleFlat(app, req("http://localhost/text")).then(
+              async (r) => [r.status, await r.text()] as const,
+            );
           case 1:
-            return app
-              .handle(req(`http://localhost/users/${id}`))
-              .then(async (r) => [r.status, await r.text()] as const);
+            return handleFlat(app, req(`http://localhost/users/${id}`)).then(
+              async (r) => [r.status, await r.text()] as const,
+            );
           case 2:
-            return app
-              .handle(req("http://localhost/err"))
-              .then(async (r) => [r.status, await r.text()] as const);
+            return handleFlat(app, req("http://localhost/err")).then(
+              async (r) => [r.status, await r.text()] as const,
+            );
           case 3:
-            return app
-              .handle(req(`http://localhost/users/${id}/posts`, { method: "POST" }))
-              .then(async (r) => [r.status, await r.text()] as const);
+            return handleFlat(
+              app,
+              req(`http://localhost/users/${id}/posts`, { method: "POST" }),
+            ).then(async (r) => [r.status, await r.text()] as const);
           case 4:
-            return app
-              .handle(req("http://localhost/wild/a/b/c"))
-              .then(async (r) => [r.status, await r.text()] as const);
+            return handleFlat(app, req("http://localhost/wild/a/b/c")).then(
+              async (r) => [r.status, await r.text()] as const,
+            );
           case 5:
-            return app
-              .handle(req(`http://localhost/users/${id}`, { method: "HEAD" }))
-              .then(async (r) => [r.status, await r.text()] as const);
+            return handleFlat(app, req(`http://localhost/users/${id}`, { method: "HEAD" })).then(
+              async (r) => [r.status, await r.text()] as const,
+            );
           default:
-            return app
-              .handle(req(`http://localhost/missing-${i}`))
-              .then(async (r) => [r.status, await r.text()] as const);
+            return handleFlat(app, req(`http://localhost/missing-${i}`)).then(
+              async (r) => [r.status, await r.text()] as const,
+            );
         }
       }),
     );
@@ -296,7 +303,7 @@ describe("redteam v2 round2 — GA-3 leak fence", () => {
         (p) => new Request(`http://localhost${p}`),
       );
       const run = async (n: number): Promise<void> => {
-        for (let i = 0; i < n; i++) await app.handle(requests[i % requests.length] as Request);
+        for (let i = 0; i < n; i++) await handleFlat(app, requests[i % requests.length] as Request);
       };
       await run(20_000); // warm caches/pools
       Bun.gc(true);
@@ -316,7 +323,7 @@ describe("redteam v2 round2 — GA-4 security quick-scan", () => {
       c.set("x-inj", "a\r\nSet-Cookie: pwned=1");
       return c.text("ok");
     });
-    const res = await app.handle(req("http://localhost/x"));
+    const res = await handleFlat(app, req("http://localhost/x"));
     expect(res.status).toBe(500);
     expect(res.headers.get("x-inj")).toBeNull();
     expect(res.headers.getSetCookie()).toEqual([]);
@@ -327,7 +334,7 @@ describe("redteam v2 round2 — GA-4 security quick-scan", () => {
     app.get("/read", (c) => c.text(`v=${c.cookies.get("sess", { signed: true }) ?? "REJECT"}`));
     const good = sign("v1", "k1");
     const read = async (cookie: string): Promise<string> =>
-      text(await app.handle(new Request("http://localhost/read", { headers: { cookie } })));
+      text(await handleFlat(app, new Request("http://localhost/read", { headers: { cookie } })));
     expect(await read(`sess=${good}`)).toBe("v=v1");
     expect(await read(`sess=admin.${good.slice(3)}`)).toBe("v=REJECT");
     expect(await read(`sess=${good.slice(0, -2)}xx`)).toBe("v=REJECT");
@@ -348,11 +355,13 @@ describe("redteam v2 round2 — GA-4 security quick-scan", () => {
     app.get("/q", (c) =>
       c.json({ polluted: ({} as Record<string, unknown>).polluted === undefined, a: c.query["a"] }),
     );
-    const res1 = await app.handle(
+    const res1 = await handleFlat(
+      app,
       new Request("http://localhost/read", { headers: { cookie: "sess=admin.FORGED" } }),
     );
     expect(await text(res1)).toBe("THROWS");
-    const res2 = await app.handle(
+    const res2 = await handleFlat(
+      app,
       req(
         "http://localhost/q?__proto__[polluted]=1&__proto__=2&constructor[polluted]=3&prototype=4&a=1",
       ),
@@ -365,7 +374,7 @@ describe("redteam v2 round2 — GA-4 security quick-scan", () => {
     const app = createApp(quiet);
     expect(() => app.on("GET\r\nX: 1", "/x", () => {})).toThrow();
     app.post("/x", (c) => c.text("p"));
-    const res = await app.handle(req("http://localhost/x", { method: "PUT" }));
+    const res = await handleFlat(app, req("http://localhost/x", { method: "PUT" }));
     expect(res.status).toBe(405);
     expect(res.headers.get("allow")).toBe("POST");
   });
@@ -373,7 +382,7 @@ describe("redteam v2 round2 — GA-4 security quick-scan", () => {
   it("Location header cannot carry CRLF (redirect target is URL-normalized + encoded)", async () => {
     const app = createApp(quiet);
     app.get("/r", (c) => c.redirect("http://evil.test/a\r\nSet-Cookie: pwned=1"));
-    const res = await app.handle(req("http://localhost/r"));
+    const res = await handleFlat(app, req("http://localhost/r"));
     expect(res.headers.get("location") ?? "").not.toMatch(/[\r\n]/);
     expect(res.headers.getSetCookie()).toEqual([]);
   });
@@ -381,7 +390,7 @@ describe("redteam v2 round2 — GA-4 security quick-scan", () => {
   it("encoded traversal in a captured param stays a decoded string (no path semantics)", async () => {
     const app = createApp(quiet);
     app.get("/files/:name", (c) => c.text(`f=${c.params?.["name"]}`));
-    const res = await app.handle(req("http://localhost/files/..%2F..%2Fetc"));
+    const res = await handleFlat(app, req("http://localhost/files/..%2F..%2Fetc"));
     expect([res.status, await text(res)]).toEqual([200, "f=../../etc"]);
   });
 });

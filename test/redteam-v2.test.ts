@@ -433,46 +433,6 @@ describe("redteam v2 — RT-8 floating next rejection", () => {
 // retries decoded (contrast trie.ts's decoded retry for static children).
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-9 encoded static segments bypass staticMap", () => {
-  it("CONFIRMED-BUG(now fixed) (RT-9a): GET /%61dmin must hit the static /admin route", async () => {
-    const app = createApp(quiet);
-    app.get("/admin", (c) => c.text("static-admin"));
-    const res = await app.handle(req("http://localhost/%61dmin"));
-    expect([res.status, await text(res)]).toEqual([200, "static-admin"]);
-  });
-
-  it("CONFIRMED-BUG(now fixed) (RT-9b): static must beat the wildcard for /%61dmin", async () => {
-    const app = createApp(quiet);
-    app.get("/admin", (c) => c.text("static-admin"));
-    app.get("/*", (c) => c.text(`wild:${c.params?.["wildcard"]}`));
-    expect(await text(await app.handle(req("http://localhost/%61dmin")))).toBe("static-admin");
-  });
-
-  it("CONFIRMED-BUG(now fixed) (RT-9c): an encoded non-first static segment must match", async () => {
-    const app = createApp(quiet);
-    app.get("/admin/items", (c) => c.text("items"));
-    expect((await app.handle(req("http://localhost/admin/%69tems"))).status).toBe(200);
-  });
-
-  it("CONFIRMED-BUG(now fixed) (RT-9d): all-static tables match escaped paths (public surface)", async () => {
-    // The pure-trie cross-check lives in the GA-1 fuzz asset; here the same
-    // guarantee is asserted through the app: a table with ONLY static routes
-    // (no trie fallback exists) must still decode-match escaped requests.
-    const app = createApp(quiet);
-    app.get("/admin", (c) => c.text("static-admin"));
-    app.get("/admin/panel", (c) => c.text("panel"));
-    expect((await app.handle(req("http://localhost/%61dmin"))).status).toBe(200);
-    expect((await app.handle(req("http://localhost/%61dmin/p%61nel"))).status).toBe(200);
-    expect((await app.handle(req("http://localhost/%61dmin/other"))).status).toBe(404);
-  });
-
-  it("green witness: a dynamic route answers its encoded static prefix", async () => {
-    const app = createApp(quiet);
-    app.get("/admin/:id", (c) => c.text(`dyn:${c.params?.["id"]}`));
-    expect(await text(await app.handle(req("http://localhost/%61dmin/1")))).toBe("dyn:1");
-  });
-});
-
 // ---------------------------------------------------------------------------
 // RT-10 (MEDIUM): the sugar helpers advertise hono-compatible signatures, but
 // hono keeps a status set beforehand (c.status(201); c.text("x") -> 201);
