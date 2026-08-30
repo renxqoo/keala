@@ -44,7 +44,11 @@ forces JS-only serving when byte-parity matters more than the fast path
 (and stays sticky across later `sink()` calls / `reloadNativeRoutes()`).
 Bun 1.4 utility surface deliberately NOT adopted: HTMLRewriter, Glob, Semver,
 TOML/YAML/JSON5 parsers, Image, Color, Secrets — app-level tools with no role
-in the framework core.
+in the framework core. Bun.Archive evaluated and rejected for 1.4.0: the
+pinned build DROPS tar entry names (files() keys "0"/"1", size 0, extract()
+writes literal "0"/"1" files — verified by probe; the path-keyed behavior in
+the docs postdates 1.4.0), and an archive-backed static mode would be a
+memory regression versus the Bun.file sendfile path.
 
 ---
 
