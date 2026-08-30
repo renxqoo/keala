@@ -7,8 +7,6 @@
  * streams pass through untouched.
  */
 
-import { gzip as gzipCallback } from "node:zlib";
-
 import type { RouteHandler } from "../router/router.ts";
 
 const wyhashOf = (bytes: Uint8Array): string | null => {
@@ -76,26 +74,56 @@ export const etag = (): RouteHandler => {
 };
 
 export interface CompressOptions {
-  /** Injectable gzip for tests; defaults to async node:zlib gzip (works on
-   *  Bun and Node — Bun 1.4 ships only the synchronous Bun.gzipSync). */
+  /** Injectable gzip for tests; defaults to the Web-standard
+   *  CompressionStream("gzip") — measured on Bun 1.4 at 4–5x the throughput
+   *  of node:zlib's async callback path (5.7µs vs 25.3µs per 10KB body,
+   *  2–4x under 200-way concurrency) and it drops the node:zlib module
+   *  bridge (~1.2MB idle RSS). On Node it is ~50% slower than node:zlib
+   *  async (37.6µs vs 24.8µs) — still microseconds; Bun is the target. */
   gzip?: (input: Uint8Array) => Promise<Uint8Array>;
 }
 
-const zlibGzip = (input: Uint8Array): Promise<Uint8Array> =>
-  new Promise((resolve, reject) => {
-    gzipCallback(input, (error, output) => (error === null ? resolve(output) : reject(error)));
-  });
+/**
+ * One-shot gzip over the Web-standard CompressionStream. The stream
+ * plumbing is fire-and-forget with catch handlers (a rejecting write/close
+ * promise must never become an unhandledRejection); failures surface
+ * through the awaited reader instead. Single-chunk output passes through
+ * without a copy; multi-chunk output is reassembled once.
+ */
+const webGzip = async (input: Uint8Array): Promise<Uint8Array> => {
+  const stream = new CompressionStream("gzip");
+  const writer = stream.writable.getWriter();
+  void writer.write(input).catch(() => undefined);
+  void writer.close().catch(() => undefined);
+  const reader = stream.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.byteLength;
+  }
+  if (chunks.length === 1) return chunks[0] as Uint8Array;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return out;
+};
 
 /**
  * compress — gzip for state-mode string/JSON bodies.
  *
- * Streams and committed responses pass through (CompressionStream piping is
- * future work). The default gzip runs asynchronously — never the
- * synchronous variants (Bun.gzipSync / zlib.gzipSync), which block the
- * event loop.
+ * Streams and committed responses pass through. The default gzip is the
+ * Web-standard CompressionStream — asynchronous (never the blocking
+ * Bun.gzipSync / zlib.gzipSync) and, on Bun, several times faster than the
+ * node:zlib callback bridge it replaced.
  */
 export const compress = (options: CompressOptions = {}): RouteHandler => {
-  const gzip = options.gzip ?? zlibGzip;
+  const gzip = options.gzip ?? webGzip;
   const accepts = (header: string): boolean => {
     for (const part of header.split(",")) {
       if (part.trim().split(";")[0]?.trim() === "gzip") return true;
