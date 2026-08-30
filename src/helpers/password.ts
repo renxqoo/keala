@@ -11,7 +11,7 @@
  * middleware; the request guards live in `middleware/auth.ts`.
  */
 
-import { timingSafeEqual } from "node:crypto";
+import { nodeCrypto } from "../utils/node-lazy.ts";
 
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
@@ -85,7 +85,7 @@ export const pbkdf2PasswordHasher = (): PasswordHasher => ({
     if (salt.length === 0 || expected.length === 0) return false;
     const actual = await derive(password, salt, iterations).catch(() => null);
     if (actual === null || actual.length !== expected.length) return false;
-    return timingSafeEqual(actual, expected);
+    return nodeCrypto().timingSafeEqual(actual, expected);
   },
 });
 

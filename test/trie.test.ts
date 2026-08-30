@@ -120,12 +120,80 @@ describe("trie matching", () => {
     );
   });
 
-  it("same-name params merge patterns and optionality across registrations", () => {
+  it("same-name params with different patterns stay separate variants, both reachable", () => {
     const root = createNode();
-    insertPattern(root, compilePattern("/n/:id").segments);
+    insertPattern(root, compilePattern("/n/:id").segments).target = createTarget();
     insertPattern(root, compilePattern("/n/:id(\\d+)?").segments).target = createTarget();
-    const param = root.children.get("n")?.param;
-    expect(param?.pattern).not.toBeNull();
-    expect(param?.optional).toBe(true);
+    const node = root.children.get("n");
+    // The plain head keeps its identity — the custom pattern is a variant.
+    expect(node?.param?.pattern).toBeNull();
+    expect(node?.paramMore?.length).toBe(1);
+    expect(node?.paramMore?.[0]?.optional).toBe(true);
+    // Every variant's subtree stays reachable.
+    expect(matchPattern(root, "/n/word")).not.toBeNull();
+    expect(matchPattern(root, "/n/7")).not.toBeNull();
+    expect(matchPattern(root, "/n")).not.toBeNull();
+  });
+
+  it("identical patterns merge into one variant with sticky optionality", () => {
+    const root = createNode();
+    insertPattern(root, compilePattern("/n/:id(\\d+)").segments).target = createTarget();
+    insertPattern(root, compilePattern("/n/:id(\\d+)?").segments).target = createTarget();
+    const node = root.children.get("n");
+    expect(node?.paramMore).toBeNull();
+    expect(node?.param?.optional).toBe(true);
+    expect(matchPattern(root, "/n")).not.toBeNull();
+    expect(matchPattern(root, "/n/7")).not.toBeNull();
+    expect(matchPattern(root, "/n/x")).toBeNull();
+  });
+});
+
+describe("variant lookup", () => {
+  it("a third distinct pattern walks past the head and existing variants", () => {
+    const root = createNode();
+    insertPattern(root, compilePattern("/n/:id(\\d+)").segments).target = createTarget();
+    insertPattern(root, compilePattern("/n/:id([a-z]+)").segments).target = createTarget();
+    insertPattern(root, compilePattern("/n/:id(\\w+-\\w+)").segments).target = createTarget();
+    expect(matchPattern(root, "/n/7")).not.toBeNull();
+    expect(matchPattern(root, "/n/abc")).not.toBeNull();
+    expect(matchPattern(root, "/n/a-b")).not.toBeNull();
+    expect(matchPattern(root, "/n/a.b")).toBeNull();
+  });
+});
+
+describe("variant priority", () => {
+  it("the FIRST-registered variant wins when several match", () => {
+    const root = createNode();
+    const restrictive = insertPattern(root, compilePattern("/files/:id(\\d+)").segments);
+    restrictive.target = createTarget();
+    const plain = insertPattern(root, compilePattern("/files/:id").segments);
+    plain.target = createTarget();
+    // "123" satisfies BOTH — the numeric (first-registered) route must own it.
+    expect(matchPattern(root, "/files/123")?.target).toBe(restrictive.target);
+    // Only the plain variant matches words.
+    expect(matchPattern(root, "/files/readme")?.target).toBe(plain.target);
+  });
+
+  it("three variants keep registration order across the board", () => {
+    const root = createNode();
+    const numeric = insertPattern(root, compilePattern("/v/:x(\\d+)").segments);
+    numeric.target = createTarget();
+    const alpha = insertPattern(root, compilePattern("/v/:x([a-z]+)").segments);
+    alpha.target = createTarget();
+    const plain = insertPattern(root, compilePattern("/v/:x").segments);
+    plain.target = createTarget();
+    expect(matchPattern(root, "/v/42")?.target).toBe(numeric.target);
+    expect(matchPattern(root, "/v/abc")?.target).toBe(alpha.target);
+    expect(matchPattern(root, "/v/a.b")?.target).toBe(plain.target);
+  });
+
+  it("the first-registered OPTIONAL variant wins at end-of-path", () => {
+    const root = createNode();
+    const first = insertPattern(root, compilePattern("/a/:x?").segments);
+    first.target = createTarget();
+    const second = insertPattern(root, compilePattern("/a/:x(\\d+)?").segments);
+    second.target = createTarget();
+    expect(matchPattern(root, "/a")?.target).toBe(first.target);
+    expect(matchPattern(root, "/a/7")?.target).toBe(first.target);
   });
 });

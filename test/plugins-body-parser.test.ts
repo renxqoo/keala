@@ -207,3 +207,160 @@ describe("validator", () => {
     expect(bad.status).toBe(400);
   });
 });
+
+describe("bodyParser: form part budget", () => {
+  it("multipart bodies over the part limit answer 413", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser({ formPartLimit: 3 }));
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req
+        .formData()
+        .then((fd) => c.text(String(fd.getAll("f").length)));
+    });
+    const boundary = "bk-test-boundary";
+    const parts = ["a", "b", "c", "d", "e"]
+      .map((v) => `--${boundary}\r\ncontent-disposition: form-data; name="f"\r\n\r\n${v}\r\n`)
+      .join("");
+    const body = `${parts}--${boundary}--\r\n`;
+    const res = await app.handle(
+      post(body, { "content-type": `multipart/form-data; boundary=${boundary}` }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("multipart bodies within the part limit parse normally", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser({ formPartLimit: 10 }));
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req
+        .formData()
+        .then((fd) => c.text(String(fd.getAll("f").length)));
+    });
+    const boundary = "bk-test-boundary";
+    const parts = ["a", "b", "c"]
+      .map((v) => `--${boundary}\r\ncontent-disposition: form-data; name="f"\r\n\r\n${v}\r\n`)
+      .join("");
+    const body = `${parts}--${boundary}--\r\n`;
+    const res = await app.handle(
+      post(body, { "content-type": `multipart/form-data; boundary=${boundary}` }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("3");
+  });
+
+  it("urlencoded pair counts are budgeted too", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser({ formPartLimit: 3 }));
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req.formData().then((fd) => c.text(String(fd.get("c"))));
+    });
+    const res = await app.handle(
+      post("a=1&b=2&c=3&d=4", { "content-type": "application/x-www-form-urlencoded" }),
+    );
+    expect(res.status).toBe(413);
+    const ok = await app.handle(
+      post("a=1&b=2&c=3", { "content-type": "application/x-www-form-urlencoded" }),
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("the default budget (1000) rejects an amplification body well under the byte limit", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser());
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+    });
+    const boundary = "bk-amp";
+    // ~1200 near-empty parts, only a few KB — under every byte limit.
+    const part = `--${boundary}\r\ncontent-disposition: form-data; name="f"\r\n\r\nx\r\n`;
+    const body = `${part.repeat(1200)}--${boundary}--\r\n`;
+    const res = await app.handle(
+      post(body, { "content-type": `multipart/form-data; boundary=${boundary}` }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("negative formPartLimit is refused at construction", () => {
+    expect(() => createBodyParser({ formPartLimit: -1 })).toThrow(/non-negative/);
+  });
+});
+
+describe("bodyParser: coverage top-up", () => {
+  it("a quoted boundary is honored", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser({ formPartLimit: 5 }));
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req.formData().then((fd) => c.text(String(fd.get("f"))));
+    });
+    const boundary = "quoted-boundary";
+    const body = `--${boundary}\r\ncontent-disposition: form-data; name="f"\r\n\r\nv\r\n--${boundary}--\r\n`;
+    const res = await app.handle(
+      post(body, { "content-type": `multipart/form-data; boundary="${boundary}"` }),
+    );
+    expect(await res.text()).toBe("v");
+  });
+
+  it("a mixed-CASE boundary is still scanned (value taken verbatim from the header)", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser({ formPartLimit: 50 }));
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+    });
+    // RFC 2046 boundaries are case-sensitive: scanning for a lowercased
+    // delimiter counts zero occurrences and silently disarms the budget.
+    const boundary = "AbCdEfGhIjKlMnOpQrSt";
+    const part = `--${boundary}\r\ncontent-disposition: form-data; name="f"\r\n\r\nx\r\n`;
+    const res = await app.handle(
+      post(`${part.repeat(120)}--${boundary}--\r\n`, {
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+      }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("an 80-char boundary (past RFC 2046, accepted by parsers) is still budgeted", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser({ formPartLimit: 50 }));
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+    });
+    const long = "x".repeat(80);
+    const part = `--${long}\r\ncontent-disposition: form-data; name="f"\r\n\r\nx\r\n`;
+    const res = await app.handle(
+      post(`${part.repeat(120)}--${long}--\r\n`, {
+        "content-type": `multipart/form-data; boundary=${long}`,
+      }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("a declared content-length over the limit fails fast with 413", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser({ jsonLimit: 16 }));
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req.json().then(() => c.text("parsed"));
+    });
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", {
+        method: "POST",
+        body: "x".repeat(64),
+        headers: { "content-type": "application/json", "content-length": "64" },
+      }),
+    );
+    expect(res.status).toBe(413);
+  });
+});
+
+describe("bodyParser: boundary edge cases", () => {
+  it("an empty boundary parameter is treated as absent", async () => {
+    const app = createApp(quiet);
+    app.use(createBodyParser());
+    app.post("/x", (c) => {
+      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+    });
+    const res = await app.handle(
+      post("--x\r\n", { "content-type": "multipart/form-data; boundary=" }),
+    );
+    expect(res.status).toBe(400);
+  });
+});

@@ -71,5 +71,44 @@ try {
 } finally {
   proc.kill(9);
 }
+
+// The same application under node:http (the official Node adapter). Runs
+// under the real Bun binary too — Bun implements node:http, so this leg
+// exercises the adapter on both runtimes with one script.
+const nodeProc = Bun.spawn(["bun", "examples/app-node.ts", "3188"], {
+  cwd: root,
+  stdout: "pipe",
+  stderr: "pipe",
+});
+try {
+  const nodeBase = "http://127.0.0.1:3188";
+  let nodeUp = false;
+  for (let i = 0; i < 50 && !nodeUp; i++) {
+    try {
+      nodeUp = (await fetch(`${nodeBase}/health`)).ok;
+    } catch {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  check("node-adapter example boots", nodeUp);
+  const mirror = await fetch(`${nodeBase}/assets/app.css`);
+  check(
+    "node-adapter sink mirror",
+    mirror.status === 200 && (await mirror.text()).includes("body"),
+  );
+  const login = await fetch(`${nodeBase}/api/login`, {
+    method: "POST",
+    headers: { authorization: `Basic ${Buffer.from("admin:hunter2").toString("base64")}` },
+  });
+  check("node-adapter basicAuth + PBKDF2", login.status === 200);
+  const events = await fetch(`${nodeBase}/api/events`);
+  check(
+    "node-adapter SSE",
+    events.headers.get("content-type") === "text/event-stream" &&
+      (await events.text()).includes("event: tick"),
+  );
+} finally {
+  nodeProc.kill(9);
+}
 console.log(failures === 0 ? "EXAMPLE OK" : `EXAMPLE FAILED: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -22,6 +22,11 @@ one flat context (see docs/v2-DESIGN.md). Semantics that CHANGED on purpose:
 | Password hashing         | —                                                              | `hashPassword`/`verifyPassword` (WebCrypto PBKDF2 default; `bunPasswordHasher()` argon2id opt-in — Bun 1.4.0's native verify + node:crypto.scrypt are broken on some platforms) |
 | WS error event           | —                                                              | `ws.error(ws, err, c)` handler wired through the adapter                                                                                                                        |
 | Serve error callback     | —                                                              | `Bun.serve({error})` default → app error hook + plain 500; `onServeError` overrides                                                                                             |
+| Node runtime             | —                                                              | official adapter `bun-koa/adapters/node` (streaming body bridge, pipeline backpressure, set-cookie fanout, 400/500/501 failure surfaces; ws stays Bun-only)                     |
+| Lazy native bridges      | —                                                              | node:crypto/fs/path load on first use (`createRequire` sync-lazy); idle import ≈ 2.8MB less RSS on Bun                                                                          |
+| Param variants           | single layer list (independent regexes)                        | trie positions carry same-name pattern variants; conflicting param NAMES still throw at registration                                                                            |
+| decorate / ws duplicates | last-writer-wins                                               | `decorate()` duplicate/core keys and duplicate `app.ws()` paths throw at setup (no silent shadowing)                                                                            |
+| form data budgets        | —                                                              | `formData()` is byte-budgeted (formLimit) AND part-budgeted (formPartLimit, default 1000 — memory-amplification fence)                                                          |
 
 Retained koa semantics (locked by tests): onion `await next()`, `c.throw`/
 `c.assert`, signed cookies with key rotation, lazy query/cookies/ip, error
@@ -30,9 +35,16 @@ status/body state machine (204 coercion, JSON `null` literal, HEAD
 Content-Length backfill), url rewrite cache-invalidation chain, proxy trust
 gates, content negotiation, attachment GHSA fix, redirect encodeurl+escape.
 
-Still-open divergence: `[T2]` — a `:id(\d+)` route registered before a plain
-`:id` route at the same position keeps its regex for both (trie merges param
-slots). Locked as a skip in `test/agent-redteam.test.ts`.
+Still-open divergence: none in routing — `[T2]` is FIXED (trie positions keep
+same-name pattern variants; the skip in `test/agent-redteam.test.ts` is
+un-skipped). The remaining honest performance divergence is Node/V8-only:
+in-process param routes run ~7.5% behind hono under Node (3670 vs 3414ns;
+text routes tie at 3203/3221ns). Isolated attribution: our matcher costs
+66ns vs hono's 23.5ns (V8 native single-regex advantage) and the
+`Object.create(null)` params record costs 19ns create+read vs 4ns for a
+literal on V8 — but JSC reverses both (null-proto 2.96ns is fastest, literal
+8.5ns), so the shapes stay optimized for the primary runtime. HTTP-level
+Node numbers remain within noise of hono.
 
 Native-sink notes: native entries are emitted as `{ GET: value }` — a bare
 key answers POST/DELETE/… with the sunk response on Bun 1.4 (verified by

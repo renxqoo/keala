@@ -159,3 +159,53 @@ describe("streamSSE", () => {
     expect(seen).toEqual(["stream-exploded"]);
   });
 });
+
+describe("onStreamError observation (opt-in wrapper)", () => {
+  it("pump is pull-driven: a stalled consumer stops the source reads", async () => {
+    const app = createApp(quiet);
+    const seen: Error[] = [];
+    const observed = createApp({ ...quiet, onStreamError: (e) => seen.push(e) });
+    let sourceReads = 0;
+    // A source that counts reads and yields slowly.
+    const slowSource = () =>
+      new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          sourceReads++;
+          await new Promise((r) => setTimeout(r, 5));
+          controller.enqueue(new Uint8Array([1]));
+        },
+      });
+    observed.get("/x", (c) => {
+      c.body = slowSource();
+    });
+    const res = await observed.handle(req("/x"));
+    expect(seen).toEqual([]);
+    // Read exactly one chunk, then hold the reader open without reading.
+    const reader = res.body!.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    const readsAtPull = sourceReads;
+    // Give the wrapper ample time to over-produce if it were eager —
+    // a pull-driven pump must NOT read ahead of the consumer.
+    await new Promise((r) => setTimeout(r, 80));
+    expect(sourceReads).toBeLessThanOrEqual(readsAtPull + 2); // small scheduler slack only
+    await reader.cancel();
+    void app;
+  });
+
+  it("producer errors reach the hook and the client sees the stream fail", async () => {
+    const seen: Error[] = [];
+    const observed = createApp({ ...quiet, onStreamError: (e) => seen.push(e) });
+    observed.get("/x", (c) => {
+      c.body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.error(new Error("producer blew up"));
+        },
+      });
+    });
+    const res = await observed.handle(req("/x"));
+    const reader = res.body!.getReader();
+    await expect(reader.read()).rejects.toThrow(/producer blew up/);
+    expect(seen.map((e) => e.message)).toEqual(["producer blew up"]);
+  });
+});

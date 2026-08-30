@@ -99,12 +99,14 @@ describe("branch coverage: round 3", () => {
     expect(compilePattern("/files/%E0%A4%A").segments[1]?.value).toBe("%E0%A4%A");
   });
 
-  it("rejects conflicting param names and upgrades patterns", () => {
+  it("rejects conflicting param names; distinct patterns become variants", () => {
     const root = createNode();
     insertPattern(root, compilePattern("/users/:id").segments);
     expect(() => insertPattern(root, compilePattern("/users/:name").segments)).toThrow(TypeError);
     insertPattern(root, compilePattern("/users/:id(\\d+)").segments);
-    expect(root.children.get("users")?.param?.pattern?.test("7")).toBe(true);
+    // The plain head keeps its identity; the custom pattern is a variant.
+    expect(root.children.get("users")?.param?.pattern).toBeNull();
+    expect(root.children.get("users")?.paramMore?.[0]?.pattern?.test("7")).toBe(true);
   });
 
   it("url() throws when a required param is missing", () => {

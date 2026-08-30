@@ -334,32 +334,12 @@ describe("redteam P2: websocket (green)", () => {
     expect(() => dispatch?.({ data: { wsKey: "/missing", ctx: undefined } })).not.toThrow();
   });
 
-  it("duplicate app.ws on one path upgrades once and the last handlers serve events", async () => {
-    const events: string[] = [];
-    const upgradeCalls: { wsKey: string; ctx: unknown }[] = [];
-    const server = {
-      upgrade: (_r: Request, opts: { data: { wsKey: string; ctx: unknown } }) => {
-        upgradeCalls.push(opts.data);
-        return true;
-      },
-    };
+  it("duplicate app.ws on one path is refused at registration (no silent shadowing)", () => {
     const app = createApp(quiet);
-    app.ws("/dup", {
-      open: () => {
-        events.push("A-open");
-      },
-    });
-    app.ws("/dup", {
-      open: () => {
-        events.push("B-open");
-      },
-    });
-    const res = await app.handle(req("/dup"), { server });
-    expect(res.status).toBe(200);
-    expect(upgradeCalls.length).toBe(1); // no double-upgrade / no spurious 400
-    const handlers = app.wsRoutes.get("/dup");
-    handlers?.open?.({}, upgradeCalls[0]?.ctx as never);
-    expect(events).toEqual(["B-open"]);
+    app.ws("/dup", { open: () => undefined });
+    expect(() => app.ws("/dup", { open: () => undefined })).toThrow(/already registered/);
+    // The first registration stays intact.
+    expect(app.wsRoutes.get("/dup")).toBeDefined();
   });
 });
 

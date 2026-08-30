@@ -2,12 +2,17 @@
  * serveStatic — file responses with the security ordering from the audit:
  * decode → normalize → containment check, null-byte rejection, symlink
  * denial (opt-in via lstat), nosniff, weak ETag + Last-Modified/304.
+ *
+ * Path handling is separator-correct for the host: on Windows a backslash is
+ * a filesystem separator, so an escaped `%5C` must collapse exactly like `/`
+ * (and the containment check compares with the platform separator). The
+ * fs/path bridges load with the FIRST request — importing this middleware
+ * costs nothing at idle.
  */
 
-import { lstat, readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
 import { createError } from "../http/errors.ts";
 import type { RouteHandler } from "../router/router.ts";
+import { nodeFsPromises, nodePath } from "../utils/node-lazy.ts";
 import { mimeFromExtension } from "../utils/mime.ts";
 
 // Bun.file bodies are zero-copy (sendfile) with automatic Content-Length and
@@ -29,14 +34,45 @@ export interface ServeStaticOptions {
   prefix?: string;
 }
 
+/** On Windows both separators reach the filesystem; everywhere else a
+ * backslash is an ordinary filename character and must stay one. */
+const WINDOWS_SEPARATORS = /[\\/]/;
+
+/**
+ * Collapse a decoded request path into safe segments (dropping empty and ".",
+ * resolving ".."). Exported for cross-platform tests — `windowsSeparators`
+ * decides whether `\` behaves as a separator.
+ */
+export const cleanSegments = (decoded: string, windowsSeparators: boolean): string[] => {
+  const parts = decoded.split(windowsSeparators ? WINDOWS_SEPARATORS : "/");
+  const segments: string[] = [];
+  for (const part of parts) {
+    if (part.length === 0 || part === ".") continue;
+    if (part === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(part);
+  }
+  return segments;
+};
+
+/** `absolute` is inside `root` (or IS root), compared with the host separator. */
+export const isWithinRoot = (absolute: string, root: string, sep: string): boolean =>
+  absolute === root || absolute.startsWith(`${root}${sep}`);
+
 export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
   if (typeof options.root !== "string" || options.root.length === 0) {
     throw new TypeError("serveStatic({ root }) requires a directory path");
   }
-  const root = resolve(options.root);
   const indexName = options.index === undefined ? "index.html" : options.index;
+  // Resolved on the first request — keeps the path bridge out of setup.
+  let rootCache: string | null = null;
 
   return async (c) => {
+    const { resolve, sep } = nodePath();
+    const root = (rootCache ??= resolve(options.root));
+    const windows = sep === "\\";
     const relative =
       options.prefix !== undefined && c.path.startsWith(options.prefix)
         ? c.path.slice(options.prefix.length)
@@ -52,25 +88,18 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     } catch {
       decoded = relative;
     }
-    const segments: string[] = [];
-    for (const part of decoded.split("/")) {
-      if (part.length === 0 || part === ".") continue;
-      if (part === "..") {
-        segments.pop();
-        continue;
-      }
-      segments.push(part);
-    }
+    const segments = cleanSegments(decoded, windows);
     if (segments.some((s) => s.includes("\0"))) {
       throw createError(400, "null byte in path", { expose: true });
     }
     const clean = segments.join("/");
     if (clean.length === 0 && indexName === false) throw createError(404);
     const absolute = resolve(root, clean.length === 0 ? (indexName as string) : clean);
-    if (absolute !== root && !absolute.startsWith(`${root}/`)) {
+    if (!isWithinRoot(absolute, root, sep)) {
       throw createError(403, "path traversal rejected", { expose: true });
     }
 
+    const { stat, lstat, readFile } = nodeFsPromises();
     let info;
     try {
       info = await stat(absolute);
@@ -82,7 +111,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       if (indexName === false) throw createError(404);
       filePath = resolve(absolute, indexName as string);
       // A configured index ("../../x") must never escape the root.
-      if (filePath !== root && !filePath.startsWith(`${root}/`)) {
+      if (!isWithinRoot(filePath, root, sep)) {
         throw createError(403, "path traversal rejected", { expose: true });
       }
       try {
@@ -95,10 +124,10 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       // ANY symlink component under root — a linked directory just as much
       // as a linked file — is denied, even when it points back inside root.
       // (root itself may legitimately be a symlink.)
-      const parts = absolute.slice(root.length + 1).split("/");
+      const parts = absolute.slice(root.length + 1).split(windows ? WINDOWS_SEPARATORS : "/");
       let walked = root;
       for (const part of parts) {
-        walked = `${walked}/${part}`;
+        walked = `${walked}${sep}${part}`;
         const link = await lstat(walked).catch(() => null);
         if (link === null) throw createError(404);
         if (link.isSymbolicLink()) {

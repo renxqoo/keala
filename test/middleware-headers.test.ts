@@ -97,7 +97,7 @@ describe("cors", () => {
     expect(() => cors({ allowCredentials: true })).toThrow(/whitelist/);
   });
 
-  it("reflects any origin by default and adds Vary", async () => {
+  it("reflects any origin by default; the constant '*' answer never varies", async () => {
     const app = createApp(quiet);
     app.use(cors());
     app.get("/x", (c) => c.text("ok"));
@@ -105,7 +105,24 @@ describe("cors", () => {
       new Request("http://localhost:3000/x", { headers: { origin: "https://any.site" } }),
     );
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    expect(res.headers.get("vary")).toContain("Origin");
+    // ACAO is the constant "*" — the response is origin-independent, so
+    // `Vary: Origin` would only needlessly disable shared caches.
+    expect(res.headers.get("vary")).toBeNull();
+  });
+
+  it("a reflected whitelist origin always carries Vary (even without an Origin header)", async () => {
+    const app = createApp(quiet);
+    app.use(cors({ origin: ["https://app.site"] }));
+    app.get("/x", (c) => c.text("ok"));
+    const reflected = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { origin: "https://app.site" } }),
+    );
+    expect(reflected.headers.get("access-control-allow-origin")).toBe("https://app.site");
+    expect(reflected.headers.get("vary")).toContain("Origin");
+    // Origin-less answers must still declare the variance — the same URL
+    // answers differently for an allowed origin.
+    const bare = await app.handle(req("/x"));
+    expect(bare.headers.get("vary")).toContain("Origin");
   });
 
   it("preflight answers 204 with methods and never cookies", async () => {
@@ -242,5 +259,39 @@ describe("html escape protocol", () => {
   it("flattens arrays and stringifies primitives; null vanishes", () => {
     expect(html`${[1, "a", raw("<i>")]}!`).toBe("1a<i>!");
     expect(html`x${null}${undefined}y`).toBe("xy");
+  });
+});
+
+describe("cors: rejected preflights", () => {
+  it("a disallowed preflight answers 403 by default", async () => {
+    const app = createApp(quiet);
+    app.use(cors({ origin: ["https://app.site"] }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", {
+        method: "OPTIONS",
+        headers: { origin: "https://evil.site", "access-control-request-method": "GET" },
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("a reject handler replaces the default 403", async () => {
+    const app = createApp(quiet);
+    app.use(
+      cors({
+        origin: ["https://app.site"],
+        reject: () => new Response("nope", { status: 418 }),
+      }),
+    );
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", {
+        method: "OPTIONS",
+        headers: { origin: "https://evil.site", "access-control-request-method": "GET" },
+      }),
+    );
+    expect(res.status).toBe(418);
+    expect(await res.text()).toBe("nope");
   });
 });

@@ -134,11 +134,12 @@ export interface StreamSSEOptions {
 }
 
 /** Serialize one event per the SSE wire format (multi-line data supported). */
+const sseSanitize = (value: string): string => value.replaceAll(/[\r\n]/g, " ");
+
 const sseFrame = (message: SSEMessage): string => {
-  const sanitize = (value: string): string => value.replaceAll(/[\r\n]/g, " ");
   let frame = "";
-  if (message.event !== undefined) frame += `event: ${sanitize(message.event)}\n`;
-  if (message.id !== undefined) frame += `id: ${sanitize(message.id)}\n`;
+  if (message.event !== undefined) frame += `event: ${sseSanitize(message.event)}\n`;
+  if (message.id !== undefined) frame += `id: ${sseSanitize(message.id)}\n`;
   if (message.retry !== undefined && Number.isFinite(message.retry)) {
     frame += `retry: ${Math.trunc(message.retry)}\n`;
   }

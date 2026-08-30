@@ -12,10 +12,10 @@
  * — production must pass an explicit shared `secret`.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createError } from "../http/errors.ts";
 import type { Context } from "../core/context/context.ts";
 import type { RouteHandler } from "../router/router.ts";
+import { nodeCrypto } from "../utils/node-lazy.ts";
 
 export type CsrfAlgorithm = "sha256" | "sha384" | "sha512";
 
@@ -105,15 +105,22 @@ export const csrfToken = (options: CsrfTokenOptions): CsrfTokenService => {
     };
   }
 
-  const sign = (value: string): Buffer =>
-    createHmac(algorithm, options.secret).update(value).digest();
+  // The crypto bridge loads with the first fallback token (Bun.CSRF never
+  // touches it) — apps on Bun pay nothing for this module.
+  const sign = (value: string): Uint8Array => {
+    const { createHmac } = nodeCrypto();
+    return createHmac(algorithm, options.secret).update(value).digest();
+  };
 
   return {
     issue(sessionId) {
+      const { randomBytes } = nodeCrypto();
       const nonce = randomBytes(16).toString("base64url");
       const issuedAt = Date.now().toString();
       const ttlText = ttl.toString();
-      const mac = sign(macInput(sessionId ?? "", nonce, issuedAt, ttlText)).toString("base64url");
+      const mac = Buffer.from(sign(macInput(sessionId ?? "", nonce, issuedAt, ttlText))).toString(
+        "base64url",
+      );
       return `t1.${nonce}.${issuedAt}.${ttlText}.${mac}`;
     },
     verify(token, sessionId) {
@@ -150,7 +157,7 @@ export const csrfToken = (options: CsrfTokenOptions): CsrfTokenService => {
       const expected = sign(macInput(sessionId ?? "", nonce, issuedAtText, ttlText));
       const provided = Buffer.from(macText, "base64url");
       if (provided.length !== expected.length) return false;
-      return timingSafeEqual(provided, expected);
+      return nodeCrypto().timingSafeEqual(provided, expected);
     },
   };
 };

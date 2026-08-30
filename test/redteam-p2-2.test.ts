@@ -380,10 +380,40 @@ describe("redteam P2: component protocol (green)", () => {
     ).toThrow("install boom");
   });
 
-  it("decorate('__proto__'/'constructor') never pollutes Object.prototype", async () => {
+  it("decorate refuses duplicate keys and core context keys at setup time", () => {
     const app = createApp(quiet);
-    app.decorate("__proto__", { polluted: true });
-    app.decorate("constructor", () => 1);
+    app.decorate("feature", { enable: () => undefined });
+    expect(() => app.decorate("feature", 2)).toThrow(/already defined/);
+    // Core context members are guarded too — shadowing them silently changes
+    // framework behavior under the caller's feet.
+    expect(() => app.decorate("body", "x")).toThrow(/already defined/);
+    expect(() => app.decorate("status", 200)).toThrow(/already defined/);
+    // Accessor decorations fall under the same rule.
+    expect(() => app.decorate("status", { get: () => 200 })).toThrow(/already defined/);
+  });
+
+  it("decorate refuses per-request instance slots (params/bodyValue/…)", () => {
+    const app = createApp(quiet);
+    // These live as own slots on every context, not on the prototype — a
+    // getter decoration would make every request throw in initContext.
+    expect(() => app.decorate("params", { get: () => ({}) })).toThrow(/already defined/);
+    expect(() => app.decorate("bodyValue", 1)).toThrow(/already defined/);
+    expect(() => app.decorate("_res", null)).toThrow(/already defined/);
+    expect(() => app.decorate("rawRequest", {})).toThrow(/already defined/);
+    // Unrelated keys still decorate fine.
+    app.decorate("featureX", 1);
+  });
+
+  it("decorate rejects non-string and empty keys", () => {
+    const app = createApp(quiet);
+    expect(() => app.decorate(42 as unknown as string, 1)).toThrow(TypeError);
+    expect(() => app.decorate("", 1)).toThrow(TypeError);
+  });
+
+  it("decorate('__proto__'/'constructor') refuses the keys, never pollutes Object.prototype", async () => {
+    const app = createApp(quiet);
+    expect(() => app.decorate("__proto__", { polluted: true })).toThrow(TypeError);
+    expect(() => app.decorate("constructor", () => 1)).toThrow(TypeError);
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(req("/x"));
     expect(res.status).toBe(200);

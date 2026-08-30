@@ -4,9 +4,8 @@
  * cookie facade used by `ctx.cookies`.
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto";
-
 import type { HeaderMap } from "../types.ts";
+import { nodeCrypto } from "../utils/node-lazy.ts";
 import { hasCrlf, isValidCookieName, isValidCookieValue } from "../utils/text.ts";
 
 export interface CookieOptions {
@@ -27,8 +26,12 @@ export type SigningKeys = (string | Uint8Array)[];
 
 const base64Url = (input: Uint8Array): string => Buffer.from(input).toString("base64url");
 
-const hmac = (key: string | Uint8Array, value: string): Uint8Array =>
-  createHmac("sha256", key).update(value).digest();
+// The crypto bridge loads with the first signed cookie — unsigned apps never
+// pay for it.
+const hmac = (key: string | Uint8Array, value: string): Uint8Array => {
+  const { createHmac } = nodeCrypto();
+  return createHmac("sha256", key).update(value).digest();
+};
 
 /** Sign a value with the first key: `value.base64url(hmac(key, value))`. */
 export const sign = (value: string, key: string | Uint8Array): string =>
@@ -40,6 +43,7 @@ export const unsign = (signed: string, keys: SigningKeys): string | false => {
   if (dot === -1) return false;
   const value = signed.slice(0, dot);
   const digest = Buffer.from(signed.slice(dot + 1), "base64url");
+  const { timingSafeEqual } = nodeCrypto();
   for (const key of keys) {
     const expected = hmac(key, value);
     if (digest.length === expected.length && timingSafeEqual(digest, expected)) {

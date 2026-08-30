@@ -4,3 +4,4 @@ coverage/
 *.log
 .DS_Store
 .parity/
+bench/server-go/server-go

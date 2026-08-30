@@ -122,17 +122,18 @@ const webGzip = async (input: Uint8Array): Promise<Uint8Array> => {
  * Bun.gzipSync / zlib.gzipSync) and, on Bun, several times faster than the
  * node:zlib callback bridge it replaced.
  */
+const acceptsGzip = (header: string): boolean => {
+  for (const part of header.split(",")) {
+    if (part.trim().split(";")[0]?.trim() === "gzip") return true;
+  }
+  return false;
+};
+
 export const compress = (options: CompressOptions = {}): RouteHandler => {
   const gzip = options.gzip ?? webGzip;
-  const accepts = (header: string): boolean => {
-    for (const part of header.split(",")) {
-      if (part.trim().split(";")[0]?.trim() === "gzip") return true;
-    }
-    return false;
-  };
   return async (c, next) => {
     const encoding = c.get("accept-encoding");
-    if (!accepts(encoding)) {
+    if (!acceptsGzip(encoding)) {
       await next();
       c.append("Vary", "Accept-Encoding");
       return;

@@ -175,6 +175,10 @@ export const createApp = (options: AppOptions = {}): Application => {
   // after `app` exists (the pool captures it); handle() runs later still.
   const poolingEnabled = options.pooling === true;
   let pool: ReturnType<typeof createPool> | null = null;
+  // decorate() guard input: own slots of a real context (params, bodyValue,
+  // _res…), computed once on first decorate so new slots are guarded without
+  // maintaining a parallel list.
+  let contextSlots: Set<string> | null = null;
 
   const app: Application = {
     env: options.env ?? process.env["NODE_ENV"] ?? "development",
@@ -281,6 +285,13 @@ export const createApp = (options: AppOptions = {}): Application => {
         );
       }
       const routeKey = normalizePrefix(path) || "/";
+      // A duplicate registration would silently shadow the first handlers
+      // (the map entry) while chaining a second upgrade route — refuse it.
+      if (wsRoutes.has(routeKey)) {
+        throw new TypeError(
+          `app.ws(${JSON.stringify(routeKey)}) is already registered — a duplicate would shadow it`,
+        );
+      }
       wsRoutes.set(routeKey, handlers);
       // The upgrade happens on ANY method hit; register ALL so method-based
       // 405s never interfere with connection upgrades.
@@ -367,6 +378,26 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     decorate(key, value) {
+      if (typeof key !== "string" || key.length === 0) {
+        throw new TypeError("app.decorate() requires a non-empty key");
+      }
+      // Shadowing a core context member or a previous decoration would
+      // silently change behavior under the caller's feet — refuse it loudly
+      // (Fastify-style) instead of last-writer-wins. Instance slots are
+      // probed from a real context so the guard can never drift from
+      // createContext's own shape.
+      contextSlots ??= new Set(
+        Object.keys(createContext(app, contextProto, new Request("http://localhost/"), undefined)),
+      );
+      if (
+        contextSlots.has(key) ||
+        key in baseContextProto ||
+        Object.prototype.hasOwnProperty.call(contextProto, key)
+      ) {
+        throw new TypeError(
+          `app.decorate(): "${key}" is already defined on the context — pick a distinct key`,
+        );
+      }
       // A `{ get }` object installs a lazy accessor (plugins use this for
       // request-side facades); anything else is a plain value.
       if (

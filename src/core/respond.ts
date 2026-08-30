@@ -233,22 +233,22 @@ const jsonInit = (body: object, init: ResponseInit): Response =>
 /**
  * Opt-in stream error observation: re-pump the body through a guard so a
  * producer failure reaches the app hook (the client just sees the stream end).
+ * The pump runs on `pull` — the source is only read as the consumer demands,
+ * so backpressure passes straight through instead of buffering the whole
+ * body the moment the wrapper is constructed.
  */
 const observedStream = (
   body: ReadableStream,
   onError: (error: Error, c: Context) => void,
   c: Context,
-): ReadableStream =>
-  new ReadableStream({
-    async start(controller) {
+): ReadableStream => {
+  const reader = body.getReader();
+  return new ReadableStream({
+    async pull(controller) {
       try {
-        const reader = body.getReader();
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          controller.enqueue(value);
-        }
-        controller.close();
+        const { done, value } = await reader.read();
+        if (done) controller.close();
+        else controller.enqueue(value);
       } catch (err) {
         onError(err instanceof Error ? err : new Error(String(err)), c);
         try {
@@ -259,9 +259,10 @@ const observedStream = (
       }
     },
     cancel(reason) {
-      void body.cancel(reason);
+      void reader.cancel(reason).catch(() => undefined);
     },
   });
+};
 
 const fromState = (c: Context, head: boolean): Response => {
   const status = c.statusValue;

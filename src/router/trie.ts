@@ -6,6 +6,12 @@
  * child slots. Matching is an iterative DFS with an explicit stack,
  * preferring static children over parameters over wildcards, so the common
  * case never backtracks and no recursion is involved.
+ *
+ * One position may hold SEVERAL param variants — same name, different custom
+ * patterns (`/users/:id(\\d+)/a` next to `/users/:id/b`). The head slot keeps
+ * the first-registered variant (hot path: one branch), `paramMore` keeps the
+ * rest in registration order; a variant matches by (name, pattern source),
+ * and identical variants share one node with sticky optionality.
  */
 
 import type { CompiledSegment } from "./pattern.ts";
@@ -29,7 +35,12 @@ export interface ParamChild {
 
 export interface TrieNode {
   children: Map<string, TrieNode>;
+  /** First-registered param variant at this position. */
   param: ParamChild | null;
+  /** Additional same-name variants (different custom patterns), in
+   *  registration order. Null on the overwhelmingly common single-variant
+   *  node — the match hot path only pays one null check for it. */
+  paramMore: ParamChild[] | null;
   wildcard: ParamChild | null;
   target: RouteTarget | null;
 }
@@ -42,6 +53,7 @@ export interface TrieMatch {
 export const createNode = (): TrieNode => ({
   children: new Map(),
   param: null,
+  paramMore: null,
   wildcard: null,
   target: null,
 });
@@ -59,6 +71,27 @@ interface Frame {
   index: number; // next segment to consume
   params: ParamLink | null; // immutable cons-list of params along the path
 }
+
+/** Push every param transition of `variant` (skip first, then consume). */
+const pushVariant = (
+  stack: Frame[],
+  variant: ParamChild,
+  index: number,
+  segment: string,
+  decoded: string,
+  params: ParamLink | null,
+): void => {
+  if (variant.optional) {
+    stack.push({ node: variant.node, index, params });
+  }
+  if (segment.length > 0 && (variant.pattern === null || variant.pattern.test(decoded))) {
+    stack.push({
+      node: variant.node,
+      index: index + 1,
+      params: { name: variant.name, value: decoded, next: params },
+    });
+  }
+};
 
 /**
  * Match a concrete request path against the trie.
@@ -79,8 +112,18 @@ export const matchPattern = (root: TrieNode, path: string): TrieMatch | null => 
     if (index === segments.length) {
       if (node.target !== null) return { target: node.target, params: recordOf(params) };
       // Trailing optional params (`:x?`) may be skipped at the end of a path.
-      if (node.param !== null && node.param.optional) {
-        stack.push({ node: node.param.node, index, params });
+      // Push order = pop priority: later variants first, the head (first
+      // registered) last so it pops first.
+      const head = node.param;
+      const more = node.paramMore;
+      if (more !== null) {
+        for (let i = more.length - 1; i >= 0; i--) {
+          const variant = more[i] as ParamChild;
+          if (variant.optional) stack.push({ node: variant.node, index, params });
+        }
+      }
+      if (head !== null && head.optional) {
+        stack.push({ node: head.node, index, params });
       }
       continue;
     }
@@ -98,23 +141,20 @@ export const matchPattern = (root: TrieNode, path: string): TrieMatch | null => 
       });
     }
 
-    // Push param first so the static child (pushed last) is tried first (LIFO).
-    if (node.param !== null) {
-      const param = node.param;
-      // Push order = priority (LIFO): skip first (pushed deepest), consume
-      // after — consecutive optionals resolve left-to-right like
-      // path-to-regexp.
-      if (param.optional) {
-        stack.push({ node: param.node, index, params });
-      }
+    // Push params before the static child (pushed last) so the static child
+    // is tried first (LIFO). Among variants the first-registered (the head)
+    // must POP first, so it is pushed LAST: later variants go first, in
+    // reverse order so more[0] precedes more[1].
+    const head = node.param;
+    if (head !== null) {
       const decoded = decodeSegment(segment);
-      if (segment.length > 0 && (param.pattern === null || param.pattern.test(decoded))) {
-        stack.push({
-          node: param.node,
-          index: index + 1,
-          params: { name: param.name, value: decoded, next: params },
-        });
+      const more = node.paramMore;
+      if (more !== null) {
+        for (let i = more.length - 1; i >= 0; i--) {
+          pushVariant(stack, more[i] as ParamChild, index, segment, decoded, params);
+        }
       }
+      pushVariant(stack, head, index, segment, decoded, params);
     }
 
     // Static children are keyed by the DECODED pattern segment (compile time
@@ -152,9 +192,30 @@ export const splitSegments = (path: string): string[] => {
 const normalizeInPlace = (path: string): string =>
   path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 
+/** Same matcher identity: both patterns absent, or identical sources. */
+const samePattern = (a: RegExp | null, b: RegExp | null): boolean =>
+  a === null || b === null ? a === b : a.source === b.source;
+
+/** The existing variant for (name, pattern) at this position, if any. */
+const variantFor = (node: TrieNode, pattern: RegExp | null): ParamChild | undefined => {
+  const head = node.param;
+  if (head !== null && samePattern(head.pattern, pattern)) return head;
+  const more = node.paramMore;
+  if (more === null) return undefined;
+  for (const variant of more) {
+    if (samePattern(variant.pattern, pattern)) return variant;
+  }
+  return undefined;
+};
+
 /**
  * Insert a compiled pattern, returning the terminal node.
- * Conflicting parameter names at the same position throw at registration.
+ *
+ * A DIFFERENT parameter name at a position already holding one still throws
+ * (inconsistent naming is a bug to surface at setup); a different custom
+ * pattern for the SAME name becomes an additional variant, each keeping its
+ * own subtree reachable — an earlier `:id(\\d+)` must never swallow a later
+ * plain `:id`.
  */
 export const insertPattern = (root: TrieNode, segments: readonly CompiledSegment[]): TrieNode => {
   let node = root;
@@ -179,21 +240,31 @@ export const insertPattern = (root: TrieNode, segments: readonly CompiledSegment
           optional: segment.optional,
           node: createNode(),
         };
-      } else {
-        const existing = node.param;
-        if (existing.name !== segment.value) {
-          throw new TypeError(
-            `Conflicting parameter names at the same position: ":${existing.name}" vs ":${segment.value}"`,
-          );
-        }
-        if (existing.pattern === null && segment.pattern !== null) {
-          existing.pattern = segment.pattern;
-        }
-        // Registration order must not decide matchability: once optional,
-        // always optional at this position.
-        if (segment.optional) existing.optional = true;
+        node = node.param.node;
+        continue;
       }
-      node = node.param.node;
+      const head = node.param as ParamChild;
+      if (head.name !== segment.value) {
+        throw new TypeError(
+          `Conflicting parameter names at the same position: ":${head.name}" vs ":${segment.value}"`,
+        );
+      }
+      const existing = variantFor(node, segment.pattern);
+      if (existing === undefined) {
+        const created: ParamChild = {
+          name: segment.value,
+          pattern: segment.pattern,
+          optional: segment.optional,
+          node: createNode(),
+        };
+        (node.paramMore ??= []).push(created);
+        node = created.node;
+        continue;
+      }
+      // Registration order must not decide matchability: once optional,
+      // always optional at this position.
+      if (segment.optional) existing.optional = true;
+      node = existing.node;
       continue;
     }
     let child = node.children.get(segment.value);

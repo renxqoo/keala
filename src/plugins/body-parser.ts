@@ -23,11 +23,105 @@ export interface BodyParserOptions {
   textLimit?: number;
   /** Max bytes for formData(). Default 10MB. */
   formLimit?: number;
+  /**
+   * Max parsed parts (fields + files) for formData(). Default 1000 — a byte
+   * budget alone still admits hundreds of thousands of tiny parts, and every
+   * part becomes its own entry object (memory amplification far past the
+   * body size). Applies to multipart and urlencoded alike.
+   */
+  formPartLimit?: number;
 }
 
 const KIB = 1024;
 const DEFAULT_JSON_LIMIT = KIB * KIB;
 const DEFAULT_FORM_LIMIT = 10 * KIB * KIB;
+const DEFAULT_PART_LIMIT = 1000;
+/**
+ * Scan budget for a boundary needle: RFC 2046 caps real boundaries at 70
+ * chars, but parsers accept longer — the scan honors anything up to this
+ * size. Beyond it the needle is not scanned: a boundary this long makes
+ * every part cost ≥ its length in bytes, so the BYTE budget already caps the
+ * part count at ~formLimit/1024 (≈10k entries on the 10MB default) — no
+ * amplification vector remains.
+ */
+const MAX_BOUNDARY_LENGTH = 1024;
+
+/**
+ * Case-insensitive `boundary=` parameter of a content type, quoted or bare.
+ * The VALUE is taken verbatim from the original header — RFC 2046 boundaries
+ * are case-sensitive, and scanning for a lowercased delimiter would count
+ * zero occurrences (the budget silently disarmed).
+ */
+const boundaryOf = (contentType: string): string | null => {
+  for (const param of contentType.split(";").slice(1)) {
+    const eq = param.indexOf("=");
+    if (eq === -1) continue;
+    if (param.slice(0, eq).trim().toLowerCase() !== "boundary") continue;
+    let value = param.slice(eq + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+      value = value.slice(1, -1);
+    }
+    return value.length === 0 || value.length > MAX_BOUNDARY_LENGTH ? null : value;
+  }
+  return null;
+};
+
+/** Non-overlapping occurrences of an ASCII needle in raw bytes. */
+const countOccurrences = (bytes: Uint8Array, needle: string): number => {
+  const first = needle.charCodeAt(0);
+  const length = needle.length;
+  let count = 0;
+  for (let i = 0; i + length <= bytes.length; i++) {
+    if (bytes[i] !== first) continue;
+    let matched = true;
+    for (let j = 1; j < length; j++) {
+      if (bytes[i + j] !== needle.charCodeAt(j)) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      count++;
+      i += length - 1;
+    }
+  }
+  return count;
+};
+
+const tooManyParts = (bytes: number): never => {
+  throw createError(413, `form data exceeds the part budget (${bytes} parts)`, { expose: true });
+};
+
+/**
+ * Reject form bodies whose PART count (not byte size) busts the budget,
+ * before handing the bytes to the runtime's FormData parser. The scan can
+ * only over-count (a boundary-looking value inside a part counts too), so it
+ * fails closed: real delimiters are always counted, spurious ones only make
+ * the rejection slightly eager.
+ */
+const assertFormPartBudget = (bytes: Uint8Array, contentType: string, limit: number): void => {
+  const type = contentType.toLowerCase();
+  if (type.startsWith("multipart/")) {
+    // Boundary from the ORIGINAL header (case-sensitive value); absent or
+    // empty → the runtime parser itself answers 400.
+    const boundary = boundaryOf(contentType);
+    if (boundary === null) return;
+    // `--boundary` appears once per part opening plus once in the closing
+    // `--boundary--` delimiter.
+    const parts = countOccurrences(bytes, `--${boundary}`) - 1;
+    if (parts > limit) tooManyParts(parts);
+    return;
+  }
+  if (type.startsWith("application/x-www-form-urlencoded")) {
+    const ampersand = 0x26; /* "&" */
+    let separators = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      if (bytes[i] === ampersand) separators++;
+    }
+    const parts = separators + 1;
+    if (parts > limit) tooManyParts(parts);
+  }
+};
 
 interface BodyCacheState {
   bytes: Promise<Uint8Array> | null;
@@ -109,11 +203,13 @@ export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
   const jsonLimit = options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const textLimit = options.textLimit ?? options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const formLimit = options.formLimit ?? DEFAULT_FORM_LIMIT;
+  const formPartLimit = options.formPartLimit ?? DEFAULT_PART_LIMIT;
 
   if (
     (options.jsonLimit !== undefined && options.jsonLimit < 0) ||
     (options.textLimit !== undefined && options.textLimit < 0) ||
-    (options.formLimit !== undefined && options.formLimit < 0)
+    (options.formLimit !== undefined && options.formLimit < 0) ||
+    (options.formPartLimit !== undefined && options.formPartLimit < 0)
   ) {
     throw new TypeError("bodyParser limits must be non-negative");
   }
@@ -143,11 +239,11 @@ export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
             blob: async () => new Blob([await read(jsonLimit)]),
             formData: async () => {
               const bytes = await read(formLimit);
+              const contentType = this.header("content-type") || "application/octet-stream";
+              assertFormPartBudget(bytes, contentType, formPartLimit);
               try {
                 return (await new Response(bytes, {
-                  headers: {
-                    "content-type": this.header("content-type") || "application/octet-stream",
-                  },
+                  headers: { "content-type": contentType },
                 }).formData()) as FormData;
               } catch {
                 throw createError(400, "request body is not decodable form data", {

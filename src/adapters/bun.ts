@@ -60,7 +60,9 @@ export const startBunServer = (
 ): ServerHandle => {
   const serve = serveImpl ?? defaultServeImplementation();
   if (serve === undefined) {
-    throw new Error("listen() requires Bun.serve (Bun >= 1.4). Use app.handle() elsewhere.");
+    throw new Error(
+      'listen() requires Bun.serve (Bun >= 1.4). Under Node use startNodeServer from "bun-koa/adapters/node", or call app.handle() yourself.',
+    );
   }
 
   // The server handle rides the runtime channel: `c.ip` resolves through

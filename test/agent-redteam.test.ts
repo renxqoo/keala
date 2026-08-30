@@ -9,6 +9,9 @@
  * FIXED in v2 (now green regression locks):
  *  [T1] optional flag merges when /:id and /:id? share a position —
  *       src/router/trie.ts insertPattern() now ORs `optional` in.
+ *  [T2] an earlier `:id(\d+)` route no longer constrains later `:id` routes —
+ *       trie positions carry multiple param variants (same name, different
+ *       custom patterns), each with its own subtree (2026-08-31).
  *  [T3] trailing "?" after a custom pattern — src/router/pattern.ts
  *       compilePattern() strips the "?" before extracting the pattern.
  *  [T4] consecutive optional params assign left-to-right — matchPattern()
@@ -25,11 +28,6 @@
  *  [P5] HEAD preserves an explicit user Content-Length.
  *  [P6] an unexpandable ctx.type never emits an invalid Content-Type (v2
  *       drops the header; the runtime supplies the default — see D1).
- *
- * STILL BROKEN in v2 (kept skipped; do not weaken):
- *  [T2] an earlier `:id(\d+)` route constrains every later `:id` route —
- *       trie.ts insertPattern() still keeps the FIRST param pattern and
- *       silently drops later ones at the same position/name.
  *
  * v2-structural divergences (old shape removed, semantic preserved):
  *  [R3] v2 has no runtime prefix()/path-scoped use(). The lock below keeps
@@ -96,12 +94,11 @@ describe("red team: trie matching", () => {
     expect(matchPattern(optionalLast, "/users/5")?.params).toEqual({ id: "5" });
   });
 
-  // Re-verified against v2 (2026-08-30): STILL BROKEN. trie.ts
-  // insertPattern() keeps the first `param.pattern` ("if (existing.pattern
-  // === null && segment.pattern !== null)") and drops any later pattern for
-  // the same param name/position, so the plain `:id` route stays
-  // unreachable. TODO-BUG: decide per-registration pattern storage.
-  it.skip("[T2] does not let an earlier :id(\\d+) route constrain a later plain :id route", () => {
+  // Fixed (2026-08-31): a trie position now carries multiple param VARIANTS
+  // (same name, different custom patterns). insertPattern() used to keep the
+  // first `param.pattern` and drop later ones, making the plain `:id` route
+  // unreachable; each variant keeps its own subtree now.
+  it("[T2] does not let an earlier :id(\\d+) route constrain a later plain :id route", () => {
     const root = buildTrie(["/users/:id(\\d+)/a", "/users/:id/b"]);
     expect(matchPattern(root, "/users/xyz/b")).not.toBeNull();
     expect(matchPattern(root, "/users/123/a")).not.toBeNull();
@@ -109,6 +106,28 @@ describe("red team: trie matching", () => {
     const clashing = buildTrie(["/v/:x(\\d+)/num", "/v/:x([a-z]+)/word"]);
     expect(matchPattern(clashing, "/v/abc/word")).not.toBeNull();
     expect(matchPattern(clashing, "/v/7/num")).not.toBeNull();
+  });
+
+  it("[T2b] param variants backtrack into each other's subtrees", () => {
+    const root = buildTrie(["/users/:id(\\d+)/a", "/users/:id/b"]);
+    // "5" satisfies BOTH variants — the numeric subtree has no /b child, so
+    // matching must backtrack into the plain variant's subtree.
+    expect(matchPattern(root, "/users/5/b")).not.toBeNull();
+    // "xyz" only satisfies the plain variant; its subtree has no /a child.
+    expect(matchPattern(root, "/users/xyz/a")).toBeNull();
+  });
+
+  it("[T2c] an identical pattern variant shares one node (no duplicate variants)", () => {
+    const root = buildTrie(["/users/:id(\\d+)", "/users/:id(\\d+)"]);
+    expect(matchPattern(root, "/users/7")).not.toBeNull();
+    expect(matchPattern(root, "/users/x")).toBeNull();
+    // The second registration must not have created a second variant that
+    // could match "/users/x" through the plain-looking path.
+    expect(root.children.get("users")?.param?.pattern).not.toBeNull();
+  });
+
+  it("[T2d] conflicting parameter NAMES at one position still throw", () => {
+    expect(() => buildTrie(["/users/:id", "/users/:name"])).toThrow(TypeError);
   });
 
   it("[T3] treats a trailing ? after a custom pattern as optional", () => {

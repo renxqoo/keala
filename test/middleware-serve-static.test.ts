@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { serveStatic } from "../src/middleware/serve-static.ts";
+import { cleanSegments, isWithinRoot, serveStatic } from "../src/middleware/serve-static.ts";
 
 const quiet = { env: "test" } as const;
 let root = "";
@@ -132,5 +132,66 @@ describe("serveStatic: security matrix", () => {
 
   it("root is required", () => {
     expect(() => serveStatic({} as { root: string })).toThrow(TypeError);
+  });
+});
+
+describe("serveStatic: platform separators", () => {
+  it("cleanSegments collapses traversal on both separators under Windows rules", () => {
+    // A backslash is a filesystem separator on Windows: "%5C" escapes must
+    // collapse exactly like "/" instead of surviving as one segment.
+    expect(cleanSegments("a/..\\..\\..\\secret", true)).toEqual(["secret"]);
+    expect(cleanSegments("..\\..\\secret", true)).toEqual(["secret"]);
+    expect(cleanSegments("sub\\deep.css", true)).toEqual(["sub", "deep.css"]);
+    // On POSIX a backslash is an ordinary filename character.
+    expect(cleanSegments("a\\b.css", false)).toEqual(["a\\b.css"]);
+    expect(cleanSegments("a/../b/./c//d", false)).toEqual(["b", "c", "d"]);
+  });
+
+  it("isWithinRoot compares with the platform separator", () => {
+    expect(isWithinRoot("C:\\www\\file", "C:\\www", "\\")).toBe(true);
+    expect(isWithinRoot("C:\\www\\sub\\file", "C:\\www", "\\")).toBe(true);
+    // Forward-slash containment must NOT hold for backslash paths — the
+    // old check silently rejected every legitimate Windows path (and any
+    // mixed-separator bypass relied on the same mismatch).
+    expect(isWithinRoot("C:\\www\\file", "C:\\www", "/")).toBe(false);
+    expect(isWithinRoot("C:\\other\\file", "C:\\www", "\\")).toBe(false);
+    expect(isWithinRoot("C:\\www", "C:\\www", "\\")).toBe(true);
+    expect(isWithinRoot("/www/file", "/www", "/")).toBe(true);
+    expect(isWithinRoot("/wwwfile", "/www", "/")).toBe(false);
+  });
+});
+
+describe("serveStatic: coverage top-up", () => {
+  it("a directory whose index is missing answers 404", async () => {
+    const app = createApp(quiet);
+    app.use(serveStatic({ root }));
+    const res = await app.handle(req("/sub"));
+    expect(res.status).toBe(404);
+  });
+
+  it("a configured index escaping the root is refused", async () => {
+    const app = createApp(quiet);
+    app.use(serveStatic({ root, index: `../../${OUTSIDE_NAME}/secret.txt` }));
+    const res = await app.handle(req("/sub"));
+    expect(res.status).toBe(403);
+  });
+
+  it("malformed percent escapes pass through verbatim and miss", async () => {
+    const app = createApp(quiet);
+    app.use(serveStatic({ root }));
+    const res = await app.handle(req("/%FF%FE%zz"));
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("cleanSegments: boundary inputs", () => {
+  it("empty and dot-only paths collapse to nothing on either platform", () => {
+    for (const windows of [false, true]) {
+      expect(cleanSegments("", windows)).toEqual([]);
+      expect(cleanSegments(".", windows)).toEqual([]);
+      expect(cleanSegments("./.", windows)).toEqual([]);
+      expect(cleanSegments("..", windows)).toEqual([]);
+      expect(cleanSegments("a/..", windows)).toEqual([]);
+    }
   });
 });

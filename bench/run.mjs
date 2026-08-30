@@ -8,6 +8,7 @@
 //
 // Usage: node bench/run.mjs [connections] [durationSeconds]
 import { execSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import autocannon from "autocannon";
 
@@ -20,6 +21,28 @@ const CONNECTIONS = Number(process.argv[2] ?? 200);
 const DURATION = Number(process.argv[3] ?? 8);
 const ROUNDS = 4;
 
+// Go baseline (stdlib net/http): built on demand when a toolchain exists;
+// silently skipped otherwise so the harness stays runnable everywhere.
+const GO_BINARY = "bench/server-go/server-go";
+const GO_AVAILABLE =
+  existsSync(GO_BINARY) ||
+  (() => {
+    try {
+      execSync("go version", { stdio: "pipe" });
+    } catch {
+      return false;
+    }
+    execSync("go build -o server-go .", { cwd: "bench/server-go", stdio: "inherit" });
+    return true;
+  })();
+const GO_LABEL = GO_AVAILABLE
+  ? (() => {
+      const v = execSync("go version", { encoding: "utf8" }).trim(); // go version go1.25.0 darwin/amd64
+      const m = v.match(/go(\d+\.\d+)/);
+      return `go ${m?.[1] ?? "?"}`;
+    })()
+  : "";
+
 const SERVERS = [
   { name: "raw Bun.serve (bun 1.4)", cmd: ["bun", "bench/server-raw.ts"], port: 4104 },
   { name: "bun-koa (bun 1.4)", cmd: ["bun", "bench/server-bun-koa.ts"], port: 4103 },
@@ -28,6 +51,9 @@ const SERVERS = [
   { name: `fastify 5 (${NODE_LABEL})`, cmd: ["node", "bench/server-fastify.mjs"], port: 4105 },
   { name: "koa 3 (bun 1.4)", cmd: ["bun", "bench/server-koa.mjs"], port: 4106 },
   { name: "fastify 5 (bun 1.4)", cmd: ["bun", "bench/server-fastify.mjs"], port: 4107 },
+  ...(GO_AVAILABLE
+    ? [{ name: `go net/http (${GO_LABEL})`, cmd: [GO_BINARY], port: 4108 }]
+    : []),
 ];
 
 const SCENARIOS = [
@@ -67,6 +93,9 @@ const SCALE_SERVERS = [
     port: 4115,
     scale: true,
   },
+  ...(GO_AVAILABLE
+    ? [{ name: `go net/http (${GO_LABEL})`, cmd: [GO_BINARY, "scale"], port: 4118, scale: true }]
+    : []),
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -83,6 +112,45 @@ const waitReady = async (port, scale = false) => {
     await sleep(100);
   }
   throw new Error(`server on ${port} never became ready`);
+};
+
+// Response-correctness contract, asserted for EVERY server×scenario before
+// any load runs (borrowed from hono's http-server harness): a framework that
+// answers a wrong-but-fast body must not make it into the tables.
+const EXPECTED = new Map(
+  [
+    ["/text", { body: "hello world" }],
+    ["/json", { body: '{"hello":"world"}' }],
+    ["/users/12345", { body: "user 12345" }],
+    [
+      "/mw",
+      {
+        body: "middleware",
+        headers: { "x-step": "1", "x-step-2": "2", "x-step-3": "3" },
+      },
+    ],
+    ["/route-999", { body: "route-999" }],
+  ].map(([path, expected]) => [path, expected]),
+);
+
+const verifyResponses = async (instance) => {
+  const paths = instance.scale ? ["/route-999"] : ["/text", "/json", "/users/12345", "/mw"];
+  for (const path of paths) {
+    const res = await fetch(`http://127.0.0.1:${instance.port}${path}`);
+    const expected = EXPECTED.get(path);
+    if (res.status !== 200) {
+      throw new Error(`${instance.name}: ${path} answered ${res.status}, expected 200`);
+    }
+    const body = await res.text();
+    if (body !== expected.body) {
+      throw new Error(`${instance.name}: ${path} answered ${JSON.stringify(body)}`);
+    }
+    for (const [name, value] of Object.entries(expected.headers ?? {})) {
+      if (res.headers.get(name) !== value) {
+        throw new Error(`${instance.name}: ${path} header ${name} mismatch`);
+      }
+    }
+  }
 };
 
 const sampleMemory = async (port) => {
@@ -145,6 +213,7 @@ const main = async () => {
       });
       children.push(child);
       await waitReady(instance.port, instance.scale);
+      if (!process.argv.includes("--skip-tests")) await verifyResponses(instance);
       ready.set(instance.port, { instance, idle: null });
     }
     // Idle memory AFTER every server is up, so all idle samples share the
@@ -215,8 +284,13 @@ const main = async () => {
     lines.push(
       "- Ratio lines carry each side's run-to-run noise (±spread); a ratio inside the noise band is a TIE, not a win",
     );
-    lines.push(`- Runtimes: ${BUN_LABEL} (raw / bun-koa / hono) vs ${NODE_LABEL} (koa / fastify)`);
+    lines.push(
+      `- Runtimes: ${BUN_LABEL} (raw / bun-koa / hono) vs ${NODE_LABEL} (koa / fastify)${GO_AVAILABLE ? ` vs ${GO_LABEL}` : ""}`,
+    );
     lines.push("- Loopback HTTP/1.1 keep-alive; identical response shapes on every framework");
+    lines.push(
+      "- Response correctness (bodies + middleware headers) is asserted for every server×scenario BEFORE any load runs",
+    );
     lines.push("");
 
     for (const { scenario } of allScenarios) {
@@ -239,7 +313,7 @@ const main = async () => {
         );
       }
       const ours = entries.find((e) => e.instance.name.startsWith("bun-koa"));
-      for (const other of ["koa 3", "fastify 5", "hono 4", "raw Bun"]) {
+      for (const other of ["koa 3", "fastify 5", "hono 4", "raw Bun", "go net/http"]) {
         const ref = entries.find((e) => e.instance.name.startsWith(other) && e !== ours);
         if (ours && ref && ref !== ours) {
           const ratio = median(ours.entry.rps) / median(ref.entry.rps);
