@@ -1,44 +1,39 @@
-// bun-koa bench server (Bun runtime) — mirrors the other bench servers.
-import { createApp } from "../src/application/app.ts";
-import { createRouter } from "../src/router/router.ts";
+// bun-koa v2 bench server (Bun runtime) — mirrors the other bench servers.
+import { createApp } from "../src/index.ts";
 
 const app = createApp();
-const router = createRouter();
 
-router.get("/text", (ctx) => {
-  ctx.body = "hello world";
-});
+app.get("/text", (c) => c.text("hello world"));
 
-router.get("/json", (ctx) => {
-  ctx.body = { hello: "world" };
-});
+app.get("/json", (c) => c.json({ hello: "world" }));
 
-router.get("/users/:id", (ctx) => {
-  ctx.body = `user ${ctx.params["id"]}`;
-});
+app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
 
-router.get(
+app.get(
   "/mw",
-  async (ctx, next) => {
-    ctx.set("X-Step", "1");
+  async (c, next) => {
+    c.set("X-Step", "1");
     await next();
-    ctx.set("X-Step-3", "3");
+    c.set("X-Step-3", "3");
   },
-  async (ctx, next) => {
-    ctx.set("X-Step-2", "2");
+  async (c, next) => {
+    c.set("X-Step-2", "2");
     await next();
   },
-  (ctx) => {
-    ctx.type = "text/plain";
-    ctx.body = "middleware";
+  (c) => {
+    c.type = "text/plain";
+    c.body = "middleware";
   },
 );
 
-const port = Number(process.argv[2] ?? 4103);
-router.get("/debug/memory", (ctx) => {
-  const mu = process.memoryUsage();
-  ctx.body = { rss: mu.rss, heapUsed: mu.heapUsed, heapTotal: mu.heapTotal, external: mu.external };
-});
+app.get("/debug/memory", (c) =>
+  c.json({
+    rss: process.memoryUsage().rss,
+    heapUsed: process.memoryUsage().heapUsed,
+    heapTotal: process.memoryUsage().heapTotal,
+    external: process.memoryUsage().external,
+  }),
+);
 
-app.use(router.routes());
+const port = Number(process.argv[2] ?? 4103);
 app.listen(port, "127.0.0.1");

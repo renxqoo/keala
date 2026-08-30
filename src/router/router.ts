@@ -1,43 +1,47 @@
 /**
- * Router — @koa/router-compatible API on top of a static Map + pattern trie.
+ * Hybrid router: exact static Map + per-bucket compiled fast matchers, with
+ * the trie as the source of truth for every dynamic pattern.
  *
- * Static routes (no params) hit a single `Map` lookup: O(1), no trie walk.
- * Dynamic routes (`:id`, `:id(\\d+)`, `:id?`, `*`) walk the trie.
+ * Matching order per request:
+ *   1. staticMap — O(1) exact hit (plus the trailing-slash retry)
+ *   2. bucket fast matcher — only when the bucket holds exactly ONE dynamic
+ *      pattern of "simple shape" (static head + plain params), where the
+ *      matcher is provably equivalent to the trie walk
+ *   3. trie — handles every other shape (optionals, custom patterns,
+ *      wildcards, param-first routes, multi-pattern buckets); its O(segments)
+ *      walk is what keeps 1000-route tables fast where regex scans collapse.
  *
- * Every route's middleware stack is compiled ONCE at registration time and
- * reused for all requests — no per-request composition. Fully functional:
- * the router is a closure, not a class.
+ * Registration is incremental and validates eagerly (conflicting parameter
+ * names throw at `register`, not at request time). Chains are recomposed via
+ * `rebuildChains` whenever the app-level middleware stack changes.
  */
 
-import { requestStateOf, type Context } from "../context/context.ts";
-import { createError } from "../http/errors.ts";
-import { compose, type Composed, type Middleware } from "../application/compose.ts";
-import { getPath } from "../utils/url.ts";
+import { compose, direct, type Composed, type Handler } from "../core/compose.ts";
+import type { Context } from "../core/context/context.ts";
+import type { CompiledSegment, PatternIR } from "./pattern.ts";
+import { compilePattern, decodeSegment, paramNamesOf } from "./pattern.ts";
 import {
-  compilePattern,
-  normalizePath,
   createNode,
   createTarget,
   insertPattern,
-  isStaticPattern,
   matchPattern,
-  paramNamesOf,
-  type CompiledSegment,
   type RouteTarget,
   type TrieNode,
 } from "./trie.ts";
 
-export type RouterContext = Context & { params: Record<string, string> };
+export type RouteHandler = Handler<Context>;
 
-export interface RouterOptions {
-  prefix?: string;
-}
+/** All built-in chains share this signature (composed or direct). */
+export type Chain = Composed<Context>;
 
-export interface RegisterOptions {
+export interface RouteDef {
+  method: string; // uppercase, or "ALL"
+  /** Full path including router prefix. */
+  path: string;
+  handlers: RouteHandler[];
   name?: string;
 }
 
-// koa-router's methods order — Allow headers follow this sequence.
 const KNOWN_METHOD_LIST = [
   "HEAD",
   "OPTIONS",
@@ -50,86 +54,237 @@ const KNOWN_METHOD_LIST = [
   "CONNECT",
 ] as const;
 
-const KNOWN_METHODS = new Set<string>(KNOWN_METHOD_LIST);
+export const KNOWN_METHODS = new Set<string>(KNOWN_METHOD_LIST);
+/** koa-router's methods order — Allow headers follow this sequence. */
+export const ALLOW_ORDER = KNOWN_METHOD_LIST;
 
 const ALL = "ALL";
-const EMPTY_PARAMS: Record<string, string> = Object.freeze(Object.create(null));
+export const EMPTY_PARAMS: Record<string, string> = Object.freeze(Object.create(null));
 
-interface RouteEntry {
-  method: string;
-  /** Path as passed by the user (relative to the router prefix). */
-  path: string;
-  name?: string;
-  middleware: Middleware<RouterContext>[];
+/** A fast matcher for a bucket with exactly one simple-shape pattern. */
+interface FastMatcher {
+  /** Length of "/firstSegment" this matcher skips (decoded first segment). */
+  prefixLength: number;
+  names: readonly string[];
+  target: RouteTarget;
 }
 
-interface MountedMiddleware {
-  /** Prefix relative to the router's own prefix (recomputed on prefix()). */
-  relative: string | null;
-  prefix: string | null;
-  chain: Composed<Context>;
+interface Bucket {
+  fast: FastMatcher | null;
+  /** Dynamic patterns in this bucket (always present in the trie as well). */
+  count: number;
 }
 
-/** Allowed-methods record lives on the context: shared across nested routers
- *  and cleared when a pooled context is recycled. */
-const allowedOf = (ctx: Context): Set<string> => {
-  const holder = ctx as unknown as { _routerAllowed?: Set<string> };
-  return (holder._routerAllowed ??= new Set());
-};
-
-export interface Router {
-  get(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  get(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  post(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  post(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  put(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  put(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  patch(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  patch(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  delete(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  delete(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  head(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  head(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  options(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  options(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  all(path: string | string[], ...middleware: Middleware<RouterContext>[]): Router;
-  all(name: string, path: string, ...middleware: Middleware<RouterContext>[]): Router;
-  register(
-    method: string,
-    path: string,
-    middleware: Middleware<RouterContext>[],
-    options?: RegisterOptions,
-  ): Router;
-  use(path: string | Middleware<RouterContext>, ...middleware: Middleware<RouterContext>[]): Router;
-  prefix(prefix: string): Router;
-  param(name: string, middleware: Middleware<RouterContext>): Router;
-  redirect(source: string, destination: string, code?: number): Router;
-  route(name: string): { path: string } | undefined;
-  url(name: string, params?: Record<string, string>): string;
-  routes(): Middleware<Context>;
-  allowedMethods(options?: { throw?: boolean }): Middleware<Context>;
-  readonly stack: RouteEntry[];
+export interface RouterState {
+  defs: RouteDef[];
+  named: Map<string, RouteDef>;
+  paramMiddlewares: Map<string, RouteHandler>;
+  staticMap: Map<string, RouteTarget>;
+  buckets: Map<string, Bucket>;
+  trieRoot: TrieNode;
+  hasDynamic: boolean;
+  prefix: string;
 }
 
-const normalizePrefix = (prefix: string): string => {
+export const createRouterState = (prefix = ""): RouterState => ({
+  defs: [],
+  named: new Map(),
+  paramMiddlewares: new Map(),
+  staticMap: new Map(),
+  buckets: new Map(),
+  trieRoot: createNode(),
+  hasDynamic: false,
+  prefix: normalizePrefix(prefix),
+});
+
+export const normalizePrefix = (prefix: string): string => {
   if (prefix.length === 0 || prefix === "/") return "";
   return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
 };
 
-/** Compose a previously-registered chain ahead of a newer one. */
-const chainHandlers = (
-  previous: unknown,
-  next: (ctx: Context, tail: () => Promise<void>) => Promise<void> | void,
-): Composed<Context> =>
-  compose([
-    previous as Middleware<Context>,
-    next as Middleware<Context>,
-  ]) as unknown as Composed<Context>;
+/**
+ * Index one compiled pattern. The trie insert validates conflicts eagerly;
+ * bucket bookkeeping mirrors it. A bucket keeps its fast matcher only while
+ * it holds exactly one simple-shape dynamic pattern.
+ */
+const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): RouteTarget => {
+  if (ir.isStatic) {
+    let target = state.staticMap.get(fullPath);
+    if (target === undefined) {
+      target = createTarget();
+      state.staticMap.set(fullPath, target);
+    }
+    return target;
+  }
+  const node = insertPattern(state.trieRoot, ir.segments);
+  if (node.target === null) node.target = createTarget();
+  state.hasDynamic = true;
+  const first = ir.segments[0] as CompiledSegment;
+  if (first.kind !== "static") return node.target;
+  let bucket = state.buckets.get(first.value);
+  if (bucket === undefined) {
+    bucket = { fast: null, count: 0 };
+    state.buckets.set(first.value, bucket);
+  }
+  bucket.count++;
+  bucket.fast =
+    bucket.count === 1 && ir.isSimple
+      ? {
+          prefixLength: first.value.length + 1,
+          names: paramNamesOf(ir.segments),
+          target: node.target,
+        }
+      : null;
+  return node.target;
+};
 
-const pathStartsWith = (path: string, prefix: string): boolean =>
-  path === prefix || (prefix !== "" && path.startsWith(`${prefix}/`));
+const paramChainFor = (
+  state: RouterState,
+  segments: readonly CompiledSegment[],
+): RouteHandler[] => {
+  const chain: RouteHandler[] = [];
+  for (const name of paramNamesOf(segments)) {
+    const mw = state.paramMiddlewares.get(name);
+    if (mw !== undefined && !chain.includes(mw)) chain.push(mw);
+  }
+  return chain;
+};
 
-const buildURL = (segments: readonly CompiledSegment[], params: Record<string, string>): string => {
+const chainOf = (handlers: readonly RouteHandler[], globalMw: readonly RouteHandler[]): Chain => {
+  if (globalMw.length === 0 && handlers.length === 1) return direct(handlers[0] as RouteHandler);
+  return compose(globalMw.length === 0 ? handlers : [...globalMw, ...handlers]) as Chain;
+};
+
+/** Index + compose the chain for ONE definition (incremental registration). */
+const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHandler[]): void => {
+  const ir = compilePattern(def.path);
+  const target = indexPattern(state, ir, def.path);
+  const handlers = [...paramChainFor(state, ir.segments), ...def.handlers];
+  const chain = chainOf(handlers, globalMw);
+  // Duplicate path+method registrations chain in registration order
+  // (@koa/router runs every matching layer).
+  const previous = target.methods.get(def.method);
+  target.methods.set(
+    def.method,
+    previous === undefined ? chain : compose([previous as RouteHandler, chain as RouteHandler]),
+  );
+  target.allowed.add(def.method);
+  if (def.method === ALL) target.allowed.add("*");
+  if (def.method === "GET") target.allowed.add("HEAD");
+  if (def.name !== undefined) target.name = def.name;
+};
+
+const resetIndex = (state: RouterState): void => {
+  state.staticMap = new Map();
+  state.buckets = new Map();
+  state.trieRoot = createNode();
+  state.hasDynamic = false;
+};
+
+/** Full re-index + recompose (middleware stack or param middleware changed). */
+export const rebuildChains = (state: RouterState, globalMw: readonly RouteHandler[]): void => {
+  resetIndex(state);
+  for (const def of state.defs) bindDef(state, def, globalMw);
+};
+
+export const registerDef = (
+  state: RouterState,
+  method: string,
+  path: string,
+  handlers: RouteHandler[],
+  name?: string,
+  globalMw: readonly RouteHandler[] = [],
+): void => {
+  const upper = method.toUpperCase();
+  if (!KNOWN_METHODS.has(upper) && upper !== ALL) {
+    throw new TypeError(`Unknown HTTP method: ${JSON.stringify(method)}`);
+  }
+  if (handlers.length === 0) {
+    throw new TypeError("Route registration requires at least one handler");
+  }
+  for (const handler of handlers) {
+    if (typeof handler !== "function") {
+      throw new TypeError("Route handlers must be functions");
+    }
+  }
+  const joined = `${state.prefix}${normalizePrefix(path)}`;
+  const def: RouteDef = {
+    method: upper,
+    path: normalizePath(joined.length === 0 ? "/" : joined),
+    handlers,
+    name,
+  };
+  state.defs.push(def);
+  if (name !== undefined) state.named.set(name, def);
+  bindDef(state, def, globalMw);
+};
+
+const normalizePath = (path: string): string =>
+  path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+
+export interface RouteMatch {
+  target: RouteTarget;
+  params: Record<string, string> | null;
+}
+
+/** Try the fast matcher for a bucket; provably equivalent to the trie walk. */
+const fastMatch = (bucket: Bucket, path: string): RouteMatch | null => {
+  const fast = bucket.fast;
+  if (fast === null) return null;
+  const rest = path.slice(fast.prefixLength);
+  const names = fast.names;
+  // Single-param specialization: exactly one capture means the remainder is
+  // one non-empty, slash-free segment — no split allocation needed.
+  if (names.length === 1) {
+    if (rest.length <= 1) return null;
+    const value = rest.slice(1);
+    if (value.indexOf("/") !== -1) return null;
+    const params: Record<string, string> = Object.create(null);
+    params[names[0] as string] = decodeSegment(value);
+    return { target: fast.target, params };
+  }
+  if (rest.length <= 1) return null;
+  const parts = rest.slice(1).split("/");
+  if (parts.length !== names.length) return null;
+  const params: Record<string, string> = Object.create(null);
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i] as string;
+    if (part.length === 0) return null;
+    params[names[i] as string] = decodeSegment(part);
+  }
+  return { target: fast.target, params };
+};
+
+export const matchRoute = (state: RouterState, path: string): RouteMatch | null => {
+  let target = state.staticMap.get(path);
+  if (target === undefined && path.length > 1 && path.endsWith("/")) {
+    target = state.staticMap.get(path.slice(0, -1));
+  }
+  if (target !== undefined) return { target, params: null };
+  if (!state.hasDynamic) return null;
+
+  // Bucket by first segment. The fast matcher only applies to a RAW first
+  // segment (its prefix length is derived from the pattern's decoded
+  // segment); an escaped first segment goes straight to the trie, whose
+  // static children implement the decoded retry themselves.
+  const firstEnd = path.indexOf("/", 1);
+  const first = firstEnd === -1 ? path.slice(1) : path.slice(1, firstEnd);
+  if (first.length > 0) {
+    const bucket = state.buckets.get(first);
+    if (bucket !== undefined) {
+      const fast = fastMatch(bucket, path);
+      if (fast !== null) return fast;
+    }
+  }
+  return matchPattern(state.trieRoot, path);
+};
+
+// ---- URL building (named routes) ---------------------------------------------
+
+export const buildURL = (
+  segments: readonly CompiledSegment[],
+  params: Record<string, string>,
+): string => {
   const parts: string[] = [];
   for (const segment of segments) {
     if (segment.kind === "static") {
@@ -148,305 +303,17 @@ const buildURL = (segments: readonly CompiledSegment[], params: Record<string, s
   return joined.startsWith("/") ? joined : `/${joined}`;
 };
 
-/** Create a router: `const router = createRouter({ prefix: "/api" })`. */
-export const createRouter = (options: RouterOptions = {}): Router => {
-  const stack: RouteEntry[] = [];
-  const staticRoutes = new Map<string, RouteTarget>();
-  const root: TrieNode = createNode();
-  const paramMiddlewares = new Map<string, Middleware<RouterContext>>();
-  const mounted: MountedMiddleware[] = [];
-  const named = new Map<string, RouteEntry>();
-  let prefixValue = normalizePrefix(options.prefix ?? "");
-
-  const fullPathOf = (path: string): string => {
-    const joined = `${prefixValue}${path}`;
-    return normalizePath(joined.length === 0 ? "/" : joined);
-  };
-
-  const paramChainFor = (segments: readonly CompiledSegment[]): Middleware<RouterContext>[] => {
-    const chain: Middleware<RouterContext>[] = [];
-    for (const name of paramNamesOf(segments)) {
-      const mw = paramMiddlewares.get(name);
-      if (mw !== undefined && !chain.includes(mw)) chain.push(mw);
-    }
-    return chain;
-  };
-
-  const targetOf = (segments: readonly CompiledSegment[], fullPath: string): RouteTarget => {
-    if (isStaticPattern(segments)) {
-      const existing = staticRoutes.get(fullPath);
-      if (existing !== undefined) return existing;
-      const target = createTarget();
-      staticRoutes.set(fullPath, target);
-      return target;
-    }
-    const node = insertPattern(root, segments);
-    if (node.target === null) node.target = createTarget();
-    return node.target;
-  };
-
-  /** Recompute absolute mounted prefixes from the current router prefix. */
-  const refreshMountedPrefixes = (): void => {
-    mountedPrefixBase = prefixValue;
-    for (const entry of mounted) {
-      entry.prefix = entry.relative === null ? null : normalizePrefix(prefixValue + entry.relative);
-    }
-  };
-  let mountedPrefixBase = prefixValue;
-
-  const bindRoute = (entry: RouteEntry): void => {
-    const fullPath = fullPathOf(entry.path);
-    const segments = compilePattern(fullPath);
-    const paramChain = paramChainFor(segments);
-    const chain =
-      paramChain.length === 0 && entry.middleware.length === 1
-        ? (entry.middleware[0] as Middleware<Context>)
-        : (compose([...paramChain, ...entry.middleware]) as unknown as Composed<Context>);
-    const target = targetOf(segments, fullPath);
-    const previous = target.methods.get(entry.method);
-    // Duplicate path+method registrations chain in registration order
-    // (@koa/router runs every matching layer).
-    const merged = previous === undefined ? chain : chainHandlers(previous, chain);
-    target.methods.set(entry.method, merged);
-    target.allowed.add(entry.method);
-    if (entry.method === ALL) target.allowed.add("*");
-    // koa-router convention: a GET route also answers HEAD.
-    if (entry.method === "GET") target.allowed.add("HEAD");
-  };
-
-  const rebuild = (): void => {
-    staticRoutes.clear();
-    root.children.clear();
-    root.param = null;
-    root.wildcard = null;
-    for (const entry of stack) bindRoute(entry);
-  };
-
-  const register = (
-    method: string,
-    path: string | string[],
-    middleware: Middleware<RouterContext>[],
-    registerOptions: RegisterOptions = {},
-  ): Router => {
-    const upper = method.toUpperCase();
-    if (!KNOWN_METHODS.has(upper) && upper !== ALL) {
-      throw new TypeError(`Unknown HTTP method: ${JSON.stringify(method)}`);
-    }
-    for (const mw of middleware) {
-      if (typeof mw !== "function") {
-        throw new TypeError("Route handlers must be functions");
-      }
-    }
-    const paths = Array.isArray(path) ? path : [path];
-    for (const single of paths) {
-      const entry: RouteEntry = {
-        method: upper,
-        path: single,
-        middleware,
-        name: registerOptions.name,
-      };
-      stack.push(entry);
-      if (registerOptions.name !== undefined) named.set(registerOptions.name, entry);
-      bindRoute(entry);
-    }
-    return router;
-  };
-
-  const methodShortcut =
-    (method: string) =>
-    (
-      pathOrName: string,
-      pathOrMiddleware: string | Middleware<RouterContext>,
-      ...rest: Middleware<RouterContext>[]
-    ): Router => {
-      if (typeof pathOrMiddleware === "string") {
-        return register(method, pathOrMiddleware, rest, { name: pathOrName });
-      }
-      return register(method, pathOrName, [pathOrMiddleware, ...rest]);
-    };
-
-  const dispatchRoute = (ctx: Context, path: string, next: () => Promise<void>) => {
-    let staticTarget = staticRoutes.get(path);
-    if (staticTarget === undefined && path.length > 1 && path.endsWith("/")) {
-      staticTarget = staticRoutes.get(path.slice(0, -1));
-    }
-    let target: RouteTarget | null = null;
-    let params: Record<string, string> | null = null;
-    if (staticTarget !== undefined) {
-      target = staticTarget;
-    } else {
-      const match = matchPattern(root, path);
-      if (match !== null) {
-        target = match.target;
-        params = match.params;
-      }
-    }
-    if (target === null) return next();
-
-    const rawMethod = requestStateOf(ctx).rawRequest.method;
-    const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
-    // Express-style convenience: HEAD falls back to the GET handler.
-    const chain = (target.methods.get(method) ??
-      (method === "HEAD" ? target.methods.get("GET") : undefined) ??
-      target.methods.get(ALL)) as Composed<Context> | undefined;
-    if (chain === undefined) {
-      const allowed = allowedOf(ctx);
-      for (const entry of target.allowed) allowed.add(entry);
-      return next();
-    }
-    (ctx as unknown as RouterContext).params = params ?? EMPTY_PARAMS;
-    return chain(ctx, next);
-  };
-
-  const router: Router = {
-    stack,
-    get: methodShortcut("GET"),
-    post: methodShortcut("POST"),
-    put: methodShortcut("PUT"),
-    patch: methodShortcut("PATCH"),
-    delete: methodShortcut("DELETE"),
-    head: methodShortcut("HEAD"),
-    options: methodShortcut("OPTIONS"),
-    all: methodShortcut(ALL),
-    register,
-
-    use(path: string | Middleware<RouterContext>, ...rest: Middleware<RouterContext>[]): Router {
-      const hasPath = typeof path === "string" || Array.isArray(path);
-      const middleware = (hasPath ? rest : ([path, ...rest] as Middleware<RouterContext>[])).filter(
-        (mw) => typeof mw === "function",
-      );
-      if (middleware.length === 0) {
-        throw new TypeError("router.use() requires at least one middleware function");
-      }
-      const chain = compose(middleware) as unknown as Composed<Context>;
-      const relatives: string[] = [];
-      if (typeof path === "string") relatives.push(path);
-      else if (Array.isArray(path)) relatives.push(...path);
-      if (relatives.length === 0) {
-        mounted.push({ relative: null, prefix: null, chain });
-      } else {
-        for (const relative of relatives) {
-          mounted.push({ relative, prefix: null, chain });
-        }
-      }
-      refreshMountedPrefixes();
-      return router;
-    },
-
-    prefix(prefix: string): Router {
-      const next = normalizePrefix(prefix);
-      if (prefixValue === next) return router;
-      prefixValue = next;
-      rebuild();
-      refreshMountedPrefixes();
-      return router;
-    },
-
-    param(name: string, middleware: Middleware<RouterContext>): Router {
-      if (typeof name !== "string" || name.length === 0) {
-        throw new TypeError("router.param() requires a parameter name");
-      }
-      if (typeof middleware !== "function") {
-        throw new TypeError("router.param() requires a middleware function");
-      }
-      paramMiddlewares.set(name, middleware);
-      rebuild();
-      return router;
-    },
-
-    redirect(source: string, destination: string, code = 301): Router {
-      const destSegments = destination.includes(":") ? compilePattern(destination) : null;
-      return register("GET", source, [
-        (ctx) => {
-          const target = destSegments === null ? destination : buildURL(destSegments, ctx.params);
-          ctx.status = code;
-          ctx.redirect(target);
-        },
-      ]);
-    },
-
-    route(name: string): { path: string } | undefined {
-      const entry = named.get(name);
-      return entry === undefined ? undefined : { path: fullPathOf(entry.path) };
-    },
-
-    url(name: string, params: Record<string, string> = Object.create(null)): string {
-      const entry = named.get(name);
-      if (entry === undefined) {
-        throw new Error(`No route registered under name: ${JSON.stringify(name)}`);
-      }
-      return buildURL(compilePattern(fullPathOf(entry.path)), params);
-    },
-
-    routes(): Middleware<Context> {
-      return (ctx, next) => {
-        const state = requestStateOf(ctx);
-        const path = state._url !== null ? getPath(state._url) : getPath(state.rawRequest.url);
-        const middlewares = mounted;
-        if (middlewares.length === 0) return dispatchRoute(ctx, path, next);
-        if (mountedPrefixBase !== prefixValue) refreshMountedPrefixes();
-        let index = 0;
-        const runMounted = (): Promise<void> | void => {
-          if (index === middlewares.length) return dispatchRoute(ctx, path, next);
-          const entry = middlewares[index++] as MountedMiddleware;
-          if (entry.prefix !== null && !pathStartsWith(path, entry.prefix)) {
-            return runMounted();
-          }
-          if (entry.prefix === null) {
-            return entry.chain(ctx, () => runMounted() as Promise<void>);
-          }
-          // Mount semantics (like koa-mount): downstream sees the stripped
-          // path — but the query string survives the rewrite.
-          const previousUrl = ctx.url;
-          const stripped = path.slice(entry.prefix.length) || "/";
-          const mark = previousUrl.indexOf("?");
-          ctx.url = mark === -1 ? stripped : `${stripped}${previousUrl.slice(mark)}`;
-          return Promise.resolve(
-            entry.chain(ctx, () => runMounted() as Promise<void>) as Promise<void>,
-          ).finally(() => {
-            ctx.url = previousUrl;
-          });
-        };
-        return runMounted();
-      };
-    },
-
-    allowedMethods(throwOptions: { throw?: boolean } = {}): Middleware<Context> {
-      return (ctx, next) =>
-        next().then(() => {
-          if (ctx.status !== 404) return;
-          const allowed = (ctx as unknown as { _routerAllowed?: Set<string> })._routerAllowed;
-          if (allowed === undefined || allowed.size === 0) return;
-          // koa-router emits Allow in its methods-array order (HEAD first).
-          const allowHeader = KNOWN_METHOD_LIST.filter((m) => allowed.has(m)).join(", ");
-          ctx.set("Allow", allowHeader);
-          const method = ctx.method.toUpperCase();
-          if (!KNOWN_METHODS.has(method)) {
-            if (throwOptions.throw === true) {
-              throw createError(501, { headers: { Allow: allowHeader } });
-            }
-            ctx.status = 501;
-            return;
-          }
-          if (method === "OPTIONS") {
-            // koa-router: OPTIONS answers 200 with an empty body and Allow.
-            if (throwOptions.throw === true) {
-              throw createError(405, { headers: { Allow: allowHeader } });
-            }
-            ctx.status = 200;
-            ctx.body = "";
-            return;
-          }
-          if (!allowed.has(method)) {
-            if (throwOptions.throw === true) {
-              throw createError(405, { headers: { Allow: allowHeader } });
-            }
-            ctx.status = 405;
-            return;
-          }
-        });
-    },
-  };
-
-  return router;
+export const urlFor = (
+  state: RouterState,
+  name: string,
+  params: Record<string, string>,
+): string => {
+  const def = state.named.get(name);
+  if (def === undefined) {
+    throw new Error(`No route registered under name: ${JSON.stringify(name)}`);
+  }
+  return buildURL(compilePattern(def.path).segments, params);
 };
+
+export const routePathOf = (state: RouterState, name: string): string | undefined =>
+  state.named.get(name)?.path;

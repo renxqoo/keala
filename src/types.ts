@@ -1,8 +1,8 @@
 /**
- * Shared type definitions for bun-koa.
+ * Shared type definitions.
  *
  * The framework is functional-first: no classes, only factory functions and
- * plain (often prototype-less) objects. All runtime-facing types live here or
+ * plain (often prototype-less) objects. Runtime-facing types live here or
  * next to their owning module.
  */
 
@@ -12,14 +12,30 @@ export type Next = () => Promise<void>;
 /** A single header value or multiple values (e.g. multiple `Set-Cookie`). */
 export type HeaderValue = string | string[];
 
-/** Header map stored on the response facade. Always created with null prototype. */
+/** Header map kept on the context; created lazily on first response write. */
 export type HeaderMap = Record<string, HeaderValue>;
 
 /**
- * Allowed response body types (Koa 3 semantics): objects are JSON.stringify-ed
- * by the `body` setter; `Blob` and web `Response` values are supported directly.
+ * Allowed response bodies (state mode): objects are serialized as JSON,
+ * `Blob` / `Response` / `ReadableStream` pass through directly.
  */
 export type ResponseBody = string | Uint8Array | ReadableStream | Blob | Response | object | null;
+
+/** Response-shaping arguments accepted by the `c.text/json/html` sugar. */
+export interface ResponseInitLike {
+  status?: number;
+  headers?: Record<string, HeaderValue>;
+}
+
+/** Per-request runtime injection channel (server handle, env, remote addr). */
+export interface Runtime {
+  /** Bun server handle — enables `c.ip` via `requestIP` and websocket upgrades. */
+  readonly server?: unknown;
+  /** Literal remote address or a thunk resolving it. */
+  readonly remote?: string | (() => string | undefined);
+  /** Bindings surfaced to handlers (defaults to `process.env` on Node-like hosts). */
+  readonly env?: Record<string, string | undefined>;
+}
 
 export interface AppOptions {
   /** Cookie signing keys (rotation supported: first key signs, any key verifies). */
@@ -30,22 +46,12 @@ export interface AppOptions {
   proxyIpHeader?: string;
   /** Max IPs kept from the proxy header when `proxy` is enabled. */
   maxIpsCount?: number;
-  /** Number of hostname labels that make up the "root". Default 2 (`subdomainOffset`). */
+  /** Number of hostname labels that make up the "root". Default 2. */
   subdomainOffset?: number;
   /** Environment name. Default `process.env.NODE_ENV` or `"development"`. */
   env?: string;
   /** Silence error logging when no `error` listener is registered. */
   silent?: boolean;
-  /**
-   * Enable `app.currentContext` (koa 3). Uses AsyncLocalStorage, which costs
-   * meaningful per-request throughput on Bun — off by default.
-   */
-  currentContext?: boolean;
-  /**
-   * Recycle the per-request context objects (opt-in). Unsafe if middleware
-   * stores ctx beyond the request lifetime (timers, background jobs).
-   */
-  pooling?: boolean;
 }
 
 export interface ListenOptions {
@@ -55,4 +61,6 @@ export interface ListenOptions {
   maxRequestBodySize?: number;
   idleTimeout?: number;
   development?: boolean;
+  /** Sink static, unauthenticated routes into Bun's native routing table. */
+  nativeRoutes?: boolean;
 }

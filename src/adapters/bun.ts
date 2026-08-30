@@ -1,12 +1,12 @@
 /**
  * Bun adapter: `Bun.serve` glue.
  *
- * The only place in the framework that references the `Bun` global, and only
- * inside function bodies — so importing this module under Node (tests) is
+ * The only module in the framework that references the `Bun` global, and only
+ * inside function bodies — importing the core under Node (tests) is
  * side-effect free. The serve implementation is injectable for unit tests.
  */
 
-import type { Application } from "../application/app.ts";
+import type { Application } from "../core/app.ts";
 import type { ListenOptions } from "../types.ts";
 
 /** Minimal structural type of the Bun server handle we expose to users. */
@@ -15,7 +15,8 @@ export interface ServerHandle {
   readonly hostname: string;
   stop(closeActiveConnections?: boolean): void;
   fetch(request: Request): Response | Promise<Response>;
-  update(options: { fetch?: (request: Request) => Response | Promise<Response> }): void;
+  /** Hot-reload server options (Bun's actual API — `update` does not exist). */
+  reload(options: Record<string, unknown>): void;
 }
 
 export type ServeImplementation = (options: Record<string, unknown>) => ServerHandle;
@@ -48,8 +49,10 @@ export const startBunServer = (
     throw new Error("listen() requires Bun.serve (Bun >= 1.4). Use app.handle() elsewhere.");
   }
 
+  // The server handle rides the runtime channel: `c.ip` resolves through
+  // `requestIP` without any Bun-specific code in the core.
   const fetch = (request: Request, server: RequestIPHost): Response | Promise<Response> =>
-    app.handle(request, server);
+    app.handle(request, { server });
 
   const serveOptions: Record<string, unknown> = {
     port: options.port ?? 3000,

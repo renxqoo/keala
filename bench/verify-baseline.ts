@@ -1,8 +1,7 @@
 // One-shot verification of the in-process baseline: raw vs bun-koa vs hono.
 // Not part of the repo's benchmark suite; exists to re-verify claims for the
 // refactor plan. Run: bun bench/verify-baseline.ts
-import { createApp } from "../src/application/app.ts";
-import { createRouter } from "../src/router/router.ts";
+import { createApp } from "../src/index.ts";
 import { Hono } from "hono";
 
 const WARM = 300_000;
@@ -12,14 +11,12 @@ const BATCHES = 40;
 const rawHandler = (_req: Request): Response => new Response("hello world");
 
 const app = createApp();
-const router = createRouter();
-router.get("/text", (ctx) => {
-  ctx.body = "hello world";
+app.get("/text", (c) => {
+  c.body = "hello world";
 });
-router.get("/users/:id", (ctx) => {
-  ctx.body = `user ${ctx.params["id"]}`;
+app.get("/users/:id", (c) => {
+  c.body = `user ${c.params?.["id"]}`;
 });
-app.use(router.routes());
 
 const hono = new Hono();
 hono.get("/text", (c) => c.text("hello world"));
