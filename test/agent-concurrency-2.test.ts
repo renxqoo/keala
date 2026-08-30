@@ -241,10 +241,12 @@ describe("stream bodies", () => {
   // default to save 567ns/response and restore backpressure). The opt-in
   // switch has not shipped yet (P2); until it does, this lock is explicitly
   // parked rather than silently dropped.
-  it.skip("[P2 挂账] a failing body stream must reach app error listeners once observeStream ships", async () => {
+  it("[P2 delivered] a failing body stream reaches the onStreamError hook (opt-in)", async () => {
     const seen: string[] = [];
-    const app = createApp(quiet);
-    app.onError((e: Error) => seen.push(e.message));
+    const app = createApp({
+      env: "test",
+      onStreamError: (e) => seen.push(e.message),
+    });
     app.use((c) => {
       c.body = new ReadableStream({
         start(controller) {
