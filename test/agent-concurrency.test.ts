@@ -7,15 +7,21 @@
  * (file:line). "语义锁定" tests encode behavior that matches Koa (or a
  * documented deliberate deviation) and must stay green.
  *
+ * v2 migration notes (see docs/v2-MIGRATION.md §2):
+ *  - routing is app-level (`app.get` / `app.mount`); no router middleware API
+ *  - `currentContext` / `pooling` app options no longer exist (removed from
+ *    the core) — their tests were dropped; context recycling semantics are
+ *    covered by test/pooling.test.ts against `resetContext`
+ *  - the v1 CONFIRMED-BUGs around the identical-querystring no-op, the error
+ *    statusText leak and the lazy ip thunk were fixed in v2 and are now
+ *    green 语义锁定 locks.
+ *
  * Koa baseline: .parity/koa/lib/{request,context,application}.js (v3.2.1).
  */
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import { createError } from "../src/http/errors.ts";
-import { createRouter } from "../src/router/router.ts";
-import type { QueryMap } from "../src/utils/query.ts";
+import { createApp, createRouter, createError } from "../src/index.ts";
 
 const quiet = { env: "test" } as const;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -27,99 +33,118 @@ describe("same-request interleaving: query cache", () => {
   it("语义锁定: re-reading query after a downstream ctx.url rewrite reflects the new value", async () => {
     // Koa keys _querycache by the querystring string, so a url rewrite makes
     // the next read re-parse. Our single-slot cache must be invalidated by
-    // the url setter (src/http/request.ts set url).
+    // the url setter (src/core/context/request.ts set url).
     const observed: unknown[] = [];
     const app = createApp(quiet);
-    app.use(async (ctx, next) => {
-      observed.push({ ...ctx.query });
+    app.use(async (c, next) => {
+      observed.push({ ...c.query });
       await next();
-      observed.push({ ...ctx.query });
+      observed.push({ ...c.query });
     });
-    app.use(async (ctx) => {
-      ctx.url = "/rewritten?b=2";
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.url = "/rewritten?b=2";
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/?a=1"));
     expect(observed).toEqual([{ a: "1" }, { b: "2" }]);
   });
 
-  it("语义锁定: a path rewrite keeps the cached query object and its values", async () => {
-    // Koa's set path keeps the query string, so the cache key is unchanged.
+  it("语义锁定: a path rewrite keeps the query string values", async () => {
     const observed: unknown[] = [];
     const app = createApp(quiet);
-    app.use(async (ctx, next) => {
-      const before = ctx.query;
-      before["touched"] = "yes";
+    app.use(async (c, next) => {
       await next();
-      observed.push(ctx.query === before, { ...ctx.query });
+      observed.push(c.path, c.querystring, { ...c.query });
     });
-    app.use(async (ctx) => {
-      ctx.path = "/moved";
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.path = "/moved";
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/orig?a=1"));
-    expect(observed).toEqual([true, { a: "1", touched: "yes" }]);
+    expect(observed).toEqual(["/moved", "a=1", { a: "1" }]);
+  });
+
+  // CONFIRMED-BUG (parity): a path rewrite must keep the CACHED query object.
+  // Koa's query getter caches by the querystring string
+  // (.parity/koa/lib/request.js get query), and `set path` only replaces the
+  // pathname — the querystring is unchanged, so the same cache entry survives
+  // and in-place mutations made upstream of `await next()` stay visible.
+  // Repro: middleware A reads query and mutates the cached object, awaits;
+  // middleware B rewrites only the path; A re-reads. Expected (Koa): the
+  // identity is preserved and the mutation is visible. Actual: v2's
+  // `set path` delegates to the url setter, which unconditionally nulls
+  // `queryValue`, so the re-read returns a fresh parse and the mutation is
+  // silently dropped.
+  // Root cause: src/core/context/request.ts set path (writes through
+  // `this.url = ...`, whose setter resets the query cache) — it should update
+  // urlValue without touching queryValue because the querystring is intact.
+  it("CONFIRMED-BUG: a path rewrite keeps the cached query object and its mutations", async () => {
+    const app = createApp(quiet);
+    const observed: unknown[] = [];
+    app.use(async (c, next) => {
+      const cached = c.query;
+      cached["touched"] = "yes";
+      await next();
+      observed.push(c.query === cached, c.query["touched"]);
+    });
+    app.use(async (c) => {
+      c.path = "/moved";
+      c.body = "ok";
+    });
+    await app.handle(new Request("http://localhost:3000/orig?a=1"));
+    expect(observed).toEqual([true, "yes"]);
   });
 
   it("语义锁定: re-reading query after a downstream ctx.search rewrite reflects the new value", async () => {
     const observed: unknown[] = [];
     const app = createApp(quiet);
-    app.use(async (ctx, next) => {
-      observed.push({ ...ctx.query });
+    app.use(async (c, next) => {
+      observed.push({ ...c.query });
       await next();
-      observed.push({ ...ctx.query });
+      observed.push({ ...c.query });
     });
-    app.use(async (ctx) => {
-      ctx.search = "?c=3";
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.search = "?c=3";
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/?a=1"));
     expect(observed).toEqual([{ a: "1" }, { c: "3" }]);
   });
 
-  // CONFIRMED-BUG (parity): assigning the IDENTICAL querystring must be a
-  // no-op that preserves the cached query object, because Koa guards with
-  // `if (url.search === `?${str}`) return` (.parity/koa/lib/request.js set
-  // querystring). Repro: middleware A reads query and mutates the cached
-  // object, awaits; middleware B assigns the same querystring value; A
-  // re-reads. Expected (Koa): the same cache entry survives — the mutation is
-  // visible. Actual: our setter unconditionally drops `_query`, so the
-  // re-read returns a fresh parse and cross-await mutations are lost.
-  // Root cause: src/http/request.ts:201-206 (set querystring has no
-  // same-value guard before `this._query = null`).
-  it("CONFIRMED-BUG: assigning an identical querystring preserves the cached query object", async () => {
+  // Fixed in v2 (was a v1 CONFIRMED-BUG): the querystring setter now carries
+  // Koa's same-value guard, so the cached query object survives an identical
+  // assignment (src/core/context/request.ts set querystring).
+  it("语义锁定: assigning an identical querystring preserves the cached query object", async () => {
     const app = createApp(quiet);
     const observed: unknown[] = [];
-    app.use(async (ctx, next) => {
-      const cached = ctx.query;
+    app.use(async (c, next) => {
+      const cached = c.query;
       cached["mutated"] = "yes";
       await next();
-      observed.push(ctx.query === cached, ctx.query["mutated"]);
+      observed.push(c.query === cached, c.query["mutated"]);
     });
-    app.use(async (ctx) => {
-      ctx.querystring = "a=1"; // identical to the current "?a=1" — Koa no-ops
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.querystring = "a=1"; // identical to the current "?a=1" — Koa no-ops
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/?a=1"));
     expect(observed).toEqual([true, "yes"]);
   });
 
-  // 语义锁定 (documented deviation): this project's `query=` setter stashes
-  // the assigned object, so reads return it verbatim (identity + value types
-  // preserved). Koa re-stringifies and re-parses, so it would return a fresh
-  // all-strings object. Locked in by test/request.test.ts ("parses and caches
-  // the query"); recorded here as an intentional deviation, not a defect.
-  it("语义锁定(偏差): query= keeps the assigned object (no koa round-trip)", async () => {
+  // v2 follows Koa here (design contract #8 lists `query` among the five
+  // cache-invalidating url writers): the assignment rewrites the query string
+  // and the next read re-parses the stringified form. v1's verbatim-stash
+  // deviation is gone, so this now locks plain Koa semantics.
+  it("语义锁定(koa parity): query= rewrites the query string and re-parses on read", async () => {
     const app = createApp(quiet);
     const observed: unknown[] = [];
-    app.use(async (ctx) => {
-      const assigned = { page: 2, tags: ["a", "b"] } as unknown as QueryMap;
-      ctx.query = assigned;
-      observed.push(ctx.query === assigned, ctx.query["page"], ctx.query["tags"]);
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.query = { page: 2, tags: ["a", "b"] };
+      observed.push(c.querystring, { ...c.query });
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/?old=1"));
-    expect(observed).toEqual([true, 2, ["a", "b"]]);
+    expect(observed).toEqual(["page=2&tags=a&tags=b", { page: "2", tags: ["a", "b"] }]);
     expect(observed[1]).not.toBe("2");
   });
 });
@@ -131,26 +156,26 @@ describe("concurrent isolation", () => {
   const buildApp = () => {
     const app = createApp({ ...quiet, keys: ["k"] });
     const router = createRouter();
-    router.get("/user/:id", async (ctx) => {
-      await delay(Number(ctx.params.id) % 3);
-      ctx.set("X-Path", "param");
-      ctx.body = `user:${ctx.params.id}:${ctx.query.tag ?? "none"}`;
+    router.get("/user/:id", async (c) => {
+      await delay(Number(c.params?.["id"]) % 3);
+      c.set("X-Path", "param");
+      c.body = `user:${c.params?.["id"]}:${c.query["tag"] ?? "none"}`;
     });
-    router.get("/static", (ctx) => {
-      ctx.type = "json";
-      ctx.body = { stable: true };
+    router.get("/static", (c) => {
+      c.type = "json";
+      c.body = { stable: true };
     });
     router.get("/error", () => {
       throw createError(418, "teapot");
     });
-    router.get("/redirect", (ctx) => {
-      ctx.redirect(`/user/${ctx.query.to ?? "0"}`);
+    router.get("/redirect", (c) => {
+      c.redirect(`/user/${c.query["to"] ?? "0"}`);
     });
-    router.get("/cookie", (ctx) => {
-      ctx.cookies.set("sid", `s-${ctx.query.n ?? "0"}`, { signed: true });
-      ctx.body = `cookie:${ctx.cookies.get("sid")}`;
+    router.get("/cookie", (c) => {
+      c.cookies.set("sid", `s-${c.query["n"] ?? "0"}`, { signed: true });
+      c.body = `cookie:${c.cookies.get("sid")}`;
     });
-    app.use(router.routes());
+    app.mount("/", router);
     return app;
   };
 
@@ -174,7 +199,7 @@ describe("concurrent isolation", () => {
           allow: res.headers.get("allow"),
           cookie: res.headers
             .getSetCookie()
-            .map((c) => c.replace(/s-\d+/, "s-N").replace(/user\/\d+/, "user/N")),
+            .map((cookie) => cookie.replace(/s-\d+/, "s-N").replace(/user\/\d+/, "user/N")),
         });
       }
       return out;
@@ -190,7 +215,7 @@ describe("concurrent isolation", () => {
           allow: res.headers.get("allow"),
           cookie: res.headers
             .getSetCookie()
-            .map((c) => c.replace(/s-\d+/, "s-N").replace(/user\/\d+/, "user/N")),
+            .map((cookie) => cookie.replace(/s-\d+/, "s-N").replace(/user\/\d+/, "user/N")),
         };
       }),
     );
@@ -203,14 +228,14 @@ describe("concurrent isolation", () => {
   it("语义锁定: ctx.state stays request-private across await points under concurrency", async () => {
     const app = createApp(quiet);
     const violations: string[] = [];
-    app.use(async (ctx) => {
-      const mine = ctx.query.token as string;
-      ctx.state.token = mine;
+    app.use(async (c) => {
+      const mine = c.query["token"] as string;
+      c.state["token"] = mine;
       await delay(Number(mine) % 4);
-      if (ctx.state.token !== mine) violations.push(`token:${mine}->${String(ctx.state.token)}`);
-      const extra = Object.keys(ctx.state).filter((k) => k !== "token");
+      if (c.state["token"] !== mine) violations.push(`token:${mine}->${String(c.state["token"])}`);
+      const extra = Object.keys(c.state).filter((k) => k !== "token");
       if (extra.length > 0) violations.push(`extra:${mine}:${extra.join(",")}`);
-      ctx.body = String(ctx.state.token);
+      c.body = String(c.state["token"]);
     });
     const results = await Promise.all(
       Array.from({ length: 30 }, (_, i) =>
@@ -223,34 +248,17 @@ describe("concurrent isolation", () => {
     expect(results).toEqual(Array.from({ length: 30 }, (_, i) => String(i)));
   });
 
-  it("语义锁定: app.currentContext tracks the right ctx per concurrent request", async () => {
-    const app = createApp({ ...quiet, currentContext: true });
-    const seen: string[] = [];
-    app.use(async (ctx) => {
-      await delay(Number(ctx.query.i) % 4);
-      seen.push(app.currentContext === ctx ? ctx.path : "WRONG");
-      ctx.body = "ok";
-    });
-    await Promise.all(
-      Array.from({ length: 12 }, (_, i) =>
-        app.handle(new Request(`http://localhost:3000/p${i}?i=${i}`)),
-      ),
-    );
-    expect(seen.filter((s) => s === "WRONG")).toEqual([]);
-    expect(seen.toSorted()).toEqual(Array.from({ length: 12 }, (_, i) => `/p${i}`).toSorted());
-  });
-
-  it("语义锁定: concurrent 405s (no pooling) each produce the right Allow header", async () => {
+  it("语义锁定: concurrent 405s each produce the right Allow header", async () => {
     const app = createApp(quiet);
-    const router = createRouter();
-    router.get("/only-get", (ctx) => {
-      ctx.body = "g";
+    app.use(async (_c, next) => {
+      await next();
     });
-    router.put("/only-put", (ctx) => {
-      ctx.body = "p";
+    app.get("/only-get", (c) => {
+      c.body = "g";
     });
-    app.use(router.routes());
-    app.use(router.allowedMethods());
+    app.put("/only-put", (c) => {
+      c.body = "p";
+    });
     const responses = await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         app.handle(
@@ -266,64 +274,31 @@ describe("concurrent isolation", () => {
     }
   });
 
-  // CONFIRMED-BUG (pooling lifecycle): the router keys its 405 bookkeeping on
-  // ctx object identity (WeakMap, src/router/router.ts:140 + dispatchRoute
-  // 262-268). With `pooling: true` the ctx object is recycled into the next
-  // request (src/application/app.ts:94-96,135-144) and stays referenced by
-  // the pool, so the WeakMap entry survives `resetContext`, which cannot
-  // clear it. Repro: request 1 = POST /only-get (no POST route) -> 405,
-  // allowed={GET,HEAD} recorded on pooled ctx A; request 2 reuses ctx A with
-  // POST /only-post (a POST route whose handler writes nothing -> stays 404).
-  // Expected: 404 (allowedMethods only speaks for methods its own dispatch
-  // recorded). Actual: the stale {GET,HEAD} set turns the 404 into a bogus
-  // 405 with "Allow: HEAD, GET" from a foreign path.
-  // Root cause: src/router/router.ts:140,262-268 (state keyed by ctx
-  // identity) + src/context/context.ts:334-353 (resetContext cannot clear
-  // it) + src/application/app.ts:94-96 (recycle keeps the object alive).
-  it("CONFIRMED-BUG: pooled ctx reuses a foreign request's 405 allowed-methods set", async () => {
-    const app = createApp({ ...quiet, pooling: true });
-    const router = createRouter();
-    router.get("/only-get", (ctx) => {
-      ctx.body = "g";
-    });
-    router.post("/only-post", async (_ctx, next) => {
-      // Defers downstream (fall-through style): allowedMethods gets to run
-      // while this route's handler wrote nothing, so status stays 404.
-      await next();
-    });
-    app.use(router.routes());
-    app.use(router.allowedMethods());
-
-    const first = await app.handle(
-      new Request("http://localhost:3000/only-get", { method: "POST" }),
-    );
-    expect(first.status).toBe(405); // allowed={GET,HEAD} recorded on the pooled ctx
-
-    const second = await app.handle(
-      new Request("http://localhost:3000/only-post", { method: "POST" }),
-    );
-    expect(second.status).toBe(404); // actual: 405
-    expect(second.headers.get("allow")).toBe(null); // actual: "HEAD, GET"
-  });
-
-  it("语义锁定: the same 405/404 sequence without pooling stays correct (control)", async () => {
+  // v2's 405 bookkeeping is per-request state (`routerAllowed` on the context,
+  // nulled by initContext/resetContext), so a recycled context cannot leak a
+  // foreign request's allowed-methods set — the v1 pooled leak is structurally
+  // gone. The recycling contract itself is locked in test/pooling.test.ts
+  // (resetContext field conservation); this locks the observable sequence.
+  it("语义锁定: a 405 answer never bleeds into the next request's 404", async () => {
     const app = createApp(quiet);
-    const router = createRouter();
-    router.get("/only-get", (ctx) => {
-      ctx.body = "g";
-    });
-    router.post("/only-post", async (_ctx, next) => {
+    app.use(async (_c, next) => {
       await next();
     });
-    app.use(router.routes());
-    app.use(router.allowedMethods());
+    app.get("/only-get", (c) => {
+      c.body = "g";
+    });
+    app.post("/only-post", async (_c, next) => {
+      // Defers downstream (fall-through style): the route's handler wrote
+      // nothing, so status stays 404 with no Allow header.
+      await next();
+    });
     const first = await app.handle(
       new Request("http://localhost:3000/only-get", { method: "POST" }),
-    );
-    const second = await app.handle(
-      new Request("http://localhost:3000/only-post", { method: "POST" }),
     );
     expect(first.status).toBe(405);
+    const second = await app.handle(
+      new Request("http://localhost:3000/only-post", { method: "POST" }),
+    );
     expect(second.status).toBe(404);
     expect(second.headers.get("allow")).toBe(null);
   });
@@ -336,15 +311,15 @@ describe("error path lifecycle", () => {
   it("语义锁定: a failed response drops its headers and body, keeps set-cookie (documented deviation)", async () => {
     // Koa's ctx.onerror unsets ALL headers; this project deliberately keeps
     // set-cookie so a failing request still clears cookies (see
-    // src/application/app.ts buildErrorResponse).
+    // src/core/app.ts buildErrorResponse).
     const errors: unknown[] = [];
     const app = createApp(quiet);
     app.on("error", (e) => errors.push(e));
-    app.use(async (ctx) => {
-      ctx.set("X-Custom", "leak");
-      ctx.append("Set-Cookie", "sid=dead; Path=/");
-      ctx.status = 200;
-      ctx.body = "partial";
+    app.use(async (c) => {
+      c.set("X-Custom", "leak");
+      c.append("Set-Cookie", "sid=dead; Path=/");
+      c.status = 200;
+      c.body = "partial";
       throw createError(500, "boom");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
@@ -359,12 +334,12 @@ describe("error path lifecycle", () => {
   it("语义锁定: upstream middleware may recover after a downstream error", async () => {
     const app = createApp(quiet);
     app.on("error", () => {});
-    app.use(async (ctx, next) => {
+    app.use(async (c, next) => {
       try {
         await next();
       } catch {
-        ctx.status = 200;
-        ctx.body = "recovered";
+        c.status = 200;
+        c.body = "recovered";
       }
     });
     app.use(async () => {
@@ -379,7 +354,7 @@ describe("error path lifecycle", () => {
     const messages: string[] = [];
     const app = createApp(quiet);
     app.on("error", (e: Error) => messages.push(e.message));
-    app.use(async (_ctx, next) => {
+    app.use(async (_c, next) => {
       try {
         await next();
       } catch {
@@ -408,44 +383,33 @@ describe("error path lifecycle", () => {
     expect(await res.text()).toBe("Internal Server Error");
   });
 
-  it("语义锁定: allowedMethods stays silent when the matched route itself errors", async () => {
+  it("语义锁定: the built-in 405 layer stays silent when the matched route itself errors", async () => {
     // The route handler runs (method matched) and throws: the rejection skips
-    // allowedMethods' status fixup and the error path owns the response,
-    // exactly like @koa/router under koa-compose.
+    // the 405/Allow fixup and the error path owns the response, exactly like
+    // @koa/router under koa-compose.
     const app = createApp(quiet);
     app.on("error", () => {});
-    const router = createRouter();
-    router.get("/get-only", () => {
+    app.get("/get-only", () => {
       throw createError(410, "gone");
     });
-    app.use(router.routes());
-    app.use(router.allowedMethods());
     const res = await app.handle(new Request("http://localhost:3000/get-only"));
     expect(res.status).toBe(410);
     expect(res.headers.get("allow")).toBe(null);
   });
 
-  // CONFIRMED-BUG (parity): the error response inherits the FAILED
-  // response's custom status message when the pre-error status equals the
-  // error status. Repro: middleware sets ctx.status=500 + ctx.message=
-  // "Custom Phrase", then throws a 500. Expected: the status line carries
-  // the standard reason phrase ("Internal Server Error") — Koa's error path
-  // never maps ctx.message onto the status line. Actual: our status setter
-  // only clears _message when the status CHANGES
-  // (src/http/response.ts:191) and buildErrorResponse never resets it, so
-  // respond() ships the stale phrase as statusText.
-  // Root cause: src/application/app.ts:284-289 (buildErrorResponse resets
-  // headers/body/flags but not _message) + src/http/response.ts:191.
-  it("CONFIRMED-BUG: error response inherits the failed response's custom statusText", async () => {
+  // Fixed in v2 (was a v1 CONFIRMED-BUG): buildErrorResponse now resets
+  // `messageValue`, so a custom status phrase set before the failure cannot
+  // leak onto the error response's status line.
+  it("语义锁定: the error response does not inherit the failed response's custom statusText", async () => {
     const app = createApp(quiet);
     app.on("error", () => {});
-    app.use(async (ctx) => {
-      ctx.status = 500;
-      ctx.message = "Custom Phrase";
+    app.use(async (c) => {
+      c.status = 500;
+      c.message = "Custom Phrase";
       throw createError(500, "boom");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(500);
-    expect(res.statusText).toBe("Internal Server Error"); // actual: "Custom Phrase"
+    expect(res.statusText).toBe("");
   });
 });

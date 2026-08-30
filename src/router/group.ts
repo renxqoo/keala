@@ -40,6 +40,8 @@ export interface Router {
   readonly defs: readonly RouteDef[];
   /** Param middleware registered on this router (consumed at mount time). */
   readonly paramMiddlewares: ReadonlyMap<string, RouteHandler>;
+  /** Router-level middleware (applied at mount time, whenever registered). */
+  readonly middleware: readonly RouteHandler[];
 }
 
 import type { Application } from "../core/app.ts";
@@ -66,7 +68,9 @@ export const createRouter = (options: { prefix?: string } = {}): Router => {
     const def: RouteDef = {
       method: method.toUpperCase(),
       path: full.length > 1 && full.endsWith("/") ? full.slice(0, -1) : full,
-      handlers: [...middleware, ...handlers],
+      // Raw handlers only — router middleware is injected at mount time, so
+      // `use()` registered after routes still applies.
+      handlers,
       name,
     };
     defs.push(def);
@@ -145,6 +149,9 @@ export const createRouter = (options: { prefix?: string } = {}): Router => {
     },
     get paramMiddlewares(): ReadonlyMap<string, RouteHandler> {
       return params;
+    },
+    get middleware(): readonly RouteHandler[] {
+      return middleware;
     },
   };
 

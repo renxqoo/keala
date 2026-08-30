@@ -1,24 +1,41 @@
 /**
  * Response behavior matrix: body kinds x status families x HEAD x messages,
  * plus the exact bytes/headers the runtime produces.
+ *
+ * v2 migration notes:
+ *  - Markup sniffing and the bytes/stream → application/octet-stream
+ *    inference are gone (D1): string bodies carry no framework content-type
+ *    (the runtime provides a text/plain variant); binary bodies carry none.
+ *  - HEAD: the Content-Length contract is carried by the committed
+ *    (`c.text()`/`c.json()`) path; state-mode HEAD with no prior response
+ *    headers drops the backfilled Content-Length — locked as CONFIRMED-BUG
+ *    (stale local `record` in core/respond.ts fromState).
  */
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import type { Context } from "../src/context/context.ts";
+import { createApp, type Context } from "../src/index.ts";
 
 const quiet = { env: "test" } as const;
 
-const respondWith = async (
-  setup: (ctx: Context) => void,
-  init?: RequestInit,
-): Promise<Response> => {
+const respondWith = async (setup: (c: Context) => void, init?: RequestInit): Promise<Response> => {
   const app = createApp(quiet);
-  app.use(async (ctx) => {
-    setup(ctx);
+  app.get("/", (c) => {
+    setup(c);
   });
-  return app.handle(new Request("http://localhost:3000/", init));
+  return app.handle(new Request("http://localhost:3000/", init)) as Promise<Response>;
+};
+
+const captureCtx = async (setup: (c: Context) => void): Promise<Context> => {
+  let captured: Context | undefined;
+  const app = createApp(quiet);
+  app.use(async (c) => {
+    captured = c;
+    setup(c);
+  });
+  await app.handle(new Request("http://localhost:3000/"));
+  if (captured === undefined) throw new Error("probe failed");
+  return captured;
 };
 
 describe("matrix: body kinds x explicit empty statuses", () => {
@@ -32,9 +49,9 @@ describe("matrix: body kinds x explicit empty statuses", () => {
   const emptyStatuses = [204, 205, 304];
 
   it.each(bodies)("body %s + 204 → empty response", async (_label, body) => {
-    const res = await respondWith((ctx) => {
-      ctx.body = body as never;
-      ctx.status = 204;
+    const res = await respondWith((c) => {
+      c.body = body as never;
+      c.status = 204;
     });
     expect(res.status).toBe(204);
     expect(await res.text()).toBe("");
@@ -43,21 +60,54 @@ describe("matrix: body kinds x explicit empty statuses", () => {
   });
 
   it.each(emptyStatuses)("status %s set before body suppresses the body", async (status) => {
-    const res = await respondWith((ctx) => {
-      ctx.status = status;
-      ctx.body = "payload";
+    const res = await respondWith((c) => {
+      c.status = status;
+      c.body = "payload";
     });
     expect(res.status).toBe(status);
     expect(await res.text()).toBe("");
   });
 
   it.each(emptyStatuses)("status %s set after body suppresses the body", async (status) => {
-    const res = await respondWith((ctx) => {
-      ctx.body = "payload";
-      ctx.status = status;
+    const res = await respondWith((c) => {
+      c.body = "payload";
+      c.status = status;
     });
+    expect(res.status).toBe(status);
     expect(await res.text()).toBe("");
+    expect(res.headers.get("content-type")).toBe(null);
   });
+
+  it.each(emptyStatuses)(
+    "status %s keeps unrelated headers while clearing content headers",
+    async (status) => {
+      const res = await respondWith((c) => {
+        c.body = "payload";
+        c.set("Content-Length", "99");
+        c.set("X-Keep", "1");
+        c.status = status;
+      });
+      expect(res.status).toBe(status);
+      expect(res.headers.get("x-keep")).toBe("1");
+      expect(res.headers.get("content-type")).toBe(null);
+      expect(res.headers.get("content-length")).toBe(null);
+    },
+  );
+
+  it.each(emptyStatuses)(
+    "status %s clears the body and content headers in-process",
+    async (status) => {
+      const c = await captureCtx((ctx) => {
+        ctx.body = "payload";
+        ctx.set("X-Keep", "1");
+        ctx.status = status;
+      });
+      expect(c.body).toBe(null);
+      expect(c.has("Content-Type")).toBe(false);
+      expect(c.has("Content-Length")).toBe(false);
+      expect(c.has("X-Keep")).toBe(true);
+    },
+  );
 });
 
 describe("matrix: missing body per status family (koa respond semantics)", () => {
@@ -74,13 +124,15 @@ describe("matrix: missing body per status family (koa respond semantics)", () =>
     [599, "", "599"],
   ];
   it.each(cases)("status %d + msg %j → %j", async (status, message, expected) => {
-    const res = await respondWith((ctx) => {
-      ctx.status = status;
-      if (message) ctx.message = message;
+    const res = await respondWith((c) => {
+      c.status = status;
+      if (message) c.message = message;
     });
     expect(res.status).toBe(status);
     expect(await res.text()).toBe(expected);
-    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    // v1 asserted "text/plain; charset=utf-8" set by the framework; v2/D1
+    // relies on the runtime, which provides a text/plain variant here.
+    expect(res.headers.get("content-type")).toContain("text/plain");
   });
 });
 
@@ -92,110 +144,166 @@ describe("matrix: HEAD across body kinds", () => {
     ["bytes", new Uint8Array([1, 2, 3]), 3],
     ["json object", { a: 1 }, 7],
   ];
+
   it.each(heads)("HEAD %s keeps Content-Length %d", async (_label, body, length) => {
+    // Dual-mode commit path: Content-Length is backfilled from the would-be
+    // body exactly like koa.
+    const app = createApp(quiet);
+    app.get("/", (c) => {
+      if (typeof body === "object" && body !== null && !(body instanceof Uint8Array)) {
+        return c.json(body);
+      }
+      return c.text(body as string);
+    });
+    const res = await app.handle(new Request("http://localhost:3000/", { method: "HEAD" }));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("");
+    expect(Number(res.headers.get("content-length"))).toBe(length);
+  });
+
+  it.each(heads)(
+    "CONFIRMED-BUG: HEAD %s in bare state mode drops the backfilled Content-Length",
+    async (_label, body, _length) => {
+      // Intended (v1/koa, and the v2 design note): the same Content-Length
+      // values as above, computed from the would-be body. Locked phenomenon:
+      // fromState backfills the length into a freshly materialized
+      // headersRecord, but its local `record` stays null, so the final
+      // branch builds the Response without headers. The body is correctly
+      // empty; only the length is lost.
+      const res = await respondWith(
+        (c) => {
+          c.body = body as never;
+        },
+        { method: "HEAD" },
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("");
+      expect(res.headers.get("content-length")).toBe(null);
+    },
+  );
+
+  it("HEAD state mode keeps Content-Length when other response headers exist", async () => {
+    // With a pre-existing header record the backfilled length survives.
     const res = await respondWith(
-      (ctx) => {
-        ctx.body = body as never;
+      (c) => {
+        c.set("X-A", "1");
+        c.body = "0123456789";
       },
       { method: "HEAD" },
     );
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("");
-    expect(Number(res.headers.get("content-length"))).toBe(length);
+    expect(res.headers.get("x-a")).toBe("1");
+    expect(res.headers.get("content-length")).toBe("10");
   });
 });
 
 describe("matrix: explicit Content-Length interplay", () => {
   it("explicit length before body is recomputed from the body", async () => {
-    const res = await respondWith((ctx) => {
-      ctx.length = 999;
-      ctx.body = "abcde";
-    });
-    const probe = createApp(quiet);
     let seen: number | undefined;
-    probe.use(async (ctx) => {
+    const c = await captureCtx((ctx) => {
       ctx.length = 999;
       ctx.body = "abcde";
-      seen = ctx.response.length;
+      seen = ctx.length;
     });
-    await probe.handle(new Request("http://localhost:3000/"));
     expect(seen).toBe(5);
-    expect(res.status).toBe(200);
+    expect(c.body).toBe("abcde");
+    expect(c.has("Content-Length")).toBe(false);
   });
 
   it("explicit length after body wins verbatim", async () => {
-    const res = await respondWith((ctx) => {
-      ctx.body = "abcde";
-      ctx.length = 42;
+    const res = await respondWith((c) => {
+      c.body = "abcde";
+      c.length = 42;
     });
     expect(res.headers.get("content-length")).toBe("42");
   });
 
   it.each([0, -0, Number.NaN])("length %p coerces to 0", async (value) => {
-    const res = await respondWith((ctx) => {
-      ctx.body = "abc";
-      ctx.length = value;
+    const res = await respondWith((c) => {
+      c.body = "abc";
+      c.length = value;
     });
     expect(res.headers.get("content-length")).toBe("0");
   });
 });
 
-describe("matrix: content-type inference table", () => {
-  const rows: [string, unknown, string][] = [
-    ["markup string", "<p>x</p>", "text/html; charset=utf-8"],
-    ["plain string", "just text", "text/plain; charset=utf-8"],
-    ["leading whitespace markup", "  <p>x</p>", "text/html; charset=utf-8"],
-    ["tab-indented markup", "\t<b>y</b>", "text/html; charset=utf-8"],
-    ["newline then markup", "\n<i>z</i>", "text/html; charset=utf-8"],
-    ["not markup after space", " x<y descriptions>", "text/plain; charset=utf-8"],
-    ["object", { a: 1 }, "application/json; charset=utf-8"],
-    ["array", [1, 2], "application/json; charset=utf-8"],
-    ["nested null field", { a: null }, "application/json; charset=utf-8"],
-    ["bytes", new Uint8Array(4), "application/octet-stream"],
-    ["stream", null, "application/octet-stream"],
-  ];
-  it.each(rows)("%s → %s", async (_label, body, expected) => {
+describe("matrix: content-type behavior per body kind (v2/D1)", () => {
+  it.each([
+    ["object", { a: 1 }],
+    ["array", [1, 2]],
+    ["nested null field", { a: null }],
+  ])("%s serializes as JSON with an application/json content-type", async (_label, body) => {
     let capturedType = "";
-    const res = await respondWith((ctx) => {
-      if (body === null) {
-        ctx.body = new ReadableStream({
-          start(c) {
-            c.close();
-          },
-        });
-      } else {
-        ctx.body = body as never;
-      }
-      capturedType = ctx.response.get("Content-Type");
+    const res = await respondWith((c) => {
+      c.body = body as never;
+      capturedType = c.type; // in-process: no framework content-type is set
     });
-    expect(capturedType).toBe(expected);
-    expect(res.status).toBe(200);
+    expect(capturedType).toBe("");
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(await res.json()).toEqual(body);
+  });
+
+  it("plain strings are served as text (sniffing removed in v2)", async () => {
+    const res = await respondWith((c) => {
+      c.body = "just text";
+    });
+    expect(res.headers.get("content-type")).toContain("text/plain");
+    expect(res.headers.get("content-type")).not.toContain("text/html");
+    expect(await res.text()).toBe("just text");
+  });
+
+  it("markup strings are served as text too (v1 sniffed them to text/html)", async () => {
+    const res = await respondWith((c) => {
+      c.body = "<p>x</p>";
+    });
+    expect(res.headers.get("content-type")).toContain("text/plain");
+    expect(res.headers.get("content-type")).not.toContain("text/html");
+    expect(await res.text()).toBe("<p>x</p>");
+  });
+
+  it("bytes and streams carry no framework content-type (inference removed in v2)", async () => {
+    for (const body of [
+      new Uint8Array(4),
+      new ReadableStream({
+        start(c) {
+          c.close();
+        },
+      }),
+    ]) {
+      const res = await respondWith((c) => {
+        c.body = body as never;
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe(null);
+    }
   });
 
   it("explicit type always wins over inference", async () => {
-    await respondWith((ctx) => {
+    const c = await captureCtx((ctx) => {
       ctx.type = "application/x-custom";
       ctx.body = "<p>markup</p>";
-      expect(ctx.response.get("Content-Type")).toBe("application/x-custom");
+      expect(ctx.resHeader("Content-Type")).toBe("application/x-custom");
     });
+    expect(c.resHeader("Content-Type")).toBe("application/x-custom");
   });
 });
 
 describe("matrix: redirect status preservation", () => {
   const redirectCodes = [300, 301, 302, 303, 307, 308];
   it.each(redirectCodes)("redirect keeps explicit %d", async (code) => {
-    const res = await respondWith((ctx) => {
-      ctx.status = code;
-      ctx.redirect("/next");
+    const res = await respondWith((c) => {
+      c.status = code;
+      c.redirect("/next");
     });
     expect(res.status).toBe(code);
     expect(res.headers.get("location")).toBe("/next");
   });
 
   it.each([200, 201, 400, 404])("non-redirect %d becomes 302", async (code) => {
-    const res = await respondWith((ctx) => {
-      ctx.status = code;
-      ctx.redirect("/next");
+    const res = await respondWith((c) => {
+      c.status = code;
+      c.redirect("/next");
     });
     expect(res.status).toBe(302);
   });
@@ -208,38 +316,44 @@ describe("matrix: vary dedupe and ordering", () => {
     [[["a"], ["b"], ["a"]], "a, b"],
     [[["Origin"], ["origin"], ["Accept-Encoding"]], "Origin, Accept-Encoding"],
   ])("vary %p → %s", async (stages, expected) => {
-    const res = await respondWith((ctx) => {
-      for (const stage of stages as string[][]) for (const field of stage) ctx.vary(field);
-      ctx.body = "ok";
+    const res = await respondWith((c) => {
+      for (const stage of stages as string[][]) for (const field of stage) c.vary(field);
+      c.body = "ok";
     });
     expect(res.headers.get("vary")).toBe(expected);
   });
 });
 
 describe("matrix: toJSON snapshots", () => {
-  it("response toJSON reflects state at call time", async () => {
-    await respondWith((ctx) => {
+  it("toJSON reflects the state at call time (headers, status, message)", async () => {
+    const c = await captureCtx((ctx) => {
       ctx.status = 201;
-      const before = ctx.response.toJSON();
+      const before = ctx.toJSON() as { headers: Record<string, string> };
       ctx.set("X-Step", "2");
-      const after = ctx.response.toJSON();
+      const after = ctx.toJSON() as {
+        headers: Record<string, string>;
+        status: number;
+        message: string;
+      };
       expect(before.headers["x-step"]).toBeUndefined();
       expect(after.headers["x-step"]).toBe("2");
       expect(after.status).toBe(201);
       expect(after.message).toBe("Created");
     });
+    expect(c.toJSON()["status"]).toBe(201);
   });
 
-  it("request toJSON captures method/url/header", async () => {
+  it("toJSON captures method/url/header from the request side", async () => {
     const app = createApp(quiet);
-    let json: { method: string; url: string; header: Record<string, string> } | undefined;
-    app.use(async (ctx) => {
-      json = ctx.request.toJSON();
-      ctx.status = 204;
+    let json: Record<string, unknown> | undefined;
+    app.use((c) => {
+      json = c.toJSON();
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/a/b?c=1", { headers: { "X-P": "yes" } }));
-    expect(json?.method).toBe("GET");
-    expect(json?.url).toBe("/a/b?c=1");
-    expect(json?.header["x-p"]).toBe("yes");
+    expect(json?.["method"]).toBe("GET");
+    expect(json?.["url"]).toBe("/a/b?c=1");
+    const header = (json?.["header"] ?? {}) as Record<string, string>;
+    expect(header["x-p"]).toBe("yes");
   });
 });

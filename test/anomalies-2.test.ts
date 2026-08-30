@@ -1,13 +1,24 @@
 /**
  * Anomaly-path matrix, part 2: query/URL stress, compose misuse, router
  * illegal inputs, exotic throwables and hostile requests.
+ *
+ * v2 migration: routing is app-level (`app.get` / `app.on` / `app.mount`);
+ * there is no `router.routes()` / `allowedMethods()` — 405/Allow/OPTIONS/501
+ * are built in. A standalone router defers pattern validation to mount time,
+ * so illegal-path assertions run against app-level registration (eager) and
+ * one lock documents the mount-time throw.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import { compose, NOOP_TAIL, type Middleware } from "../src/application/compose.ts";
-import { createRouter } from "../src/router/router.ts";
+import {
+  compose,
+  createApp,
+  createRouter,
+  NOOP_TAIL,
+  type Middleware,
+  type MiddlewareContext,
+} from "../src/index.ts";
 import { parseQuery } from "../src/utils/query.ts";
 
 const quiet = { env: "test" } as const;
@@ -52,7 +63,8 @@ describe("anomalies: compose illegal usage", () => {
 
   it("empty stack invokes tail exactly once", async () => {
     let calls = 0;
-    await compose([])({ state: {} }, async () => {
+    const ctx = { state: {} } as MiddlewareContext;
+    await compose([])(ctx, async () => {
       calls += 1;
     });
     expect(calls).toBe(1);
@@ -60,19 +72,21 @@ describe("anomalies: compose illegal usage", () => {
 
   it("triple next() call surfaces the guard error", async () => {
     const chain = compose([
-      async (_ctx, next) => {
+      async (_c, next) => {
         await next();
         await next().catch(() => undefined);
         await next().catch(() => undefined);
       },
     ]);
-    await expect(chain({ state: {} }, NOOP_TAIL)).rejects.toThrow(/multiple times/);
+    await expect(chain({ state: {} } as MiddlewareContext, NOOP_TAIL)).rejects.toThrow(
+      /multiple times/,
+    );
   });
 
   it("sync throw in the innermost middleware propagates to the outermost catch", async () => {
     const seen: string[] = [];
     const chain = compose([
-      async (_ctx, next) => {
+      async (_c, next) => {
         try {
           await next();
         } catch {
@@ -84,7 +98,7 @@ describe("anomalies: compose illegal usage", () => {
         throw new Error("inner");
       },
     ]);
-    await expect(chain({ state: {} }, NOOP_TAIL)).rejects.toThrow("reraised");
+    await expect(chain({ state: {} } as MiddlewareContext, NOOP_TAIL)).rejects.toThrow("reraised");
     expect(seen).toEqual(["outer"]);
   });
 
@@ -95,65 +109,70 @@ describe("anomalies: compose illegal usage", () => {
           throw "string rejection";
         }),
     ]);
-    await expect(chain({ state: {} }, NOOP_TAIL)).rejects.toBe("string rejection");
+    await expect(chain({ state: {} } as MiddlewareContext, NOOP_TAIL)).rejects.toBe(
+      "string rejection",
+    );
   });
 });
 
 describe("anomalies: router illegal inputs", () => {
   const badPaths = ["no-slash", "/a//b", "/:x(unbalanced", "/:?", "/a/*/b", "/:x("];
-  it.each(badPaths)("route path %p throws", (path) => {
+  it.each(badPaths)("route path %p throws at registration", (path) => {
+    const app = createApp(quiet);
+    expect(() => app.get(path, (c) => void c)).toThrow();
+  });
+
+  it.each(badPaths)("standalone router rejects path %p at mount time", (path) => {
     const router = createRouter();
-    expect(() => router.get(path, (ctx) => void ctx)).toThrow();
+    router.get(path, (c) => void c);
+    const app = createApp(quiet);
+    expect(() => app.mount("", router)).toThrow();
   });
 
   it.each(["", "//"])("edge path %p is treated as the root route", (path) => {
-    const router = createRouter();
-    expect(() => router.get(path, (ctx) => void ctx)).not.toThrow();
+    const app = createApp(quiet);
+    expect(() => app.get(path, (c) => void c)).not.toThrow();
   });
 
   it.each([undefined, null, 42, "GET"])("register middleware %p throws", (mw) => {
-    const router = createRouter();
-    expect(() => router.get("/ok", mw as never)).toThrow(TypeError);
+    const app = createApp(quiet);
+    expect(() => app.get("/ok", mw as never)).toThrow(TypeError);
   });
 
   it.each(["", " ", "GET;POST", "GE T"])("method %p throws", (method) => {
-    const router = createRouter();
-    expect(() => router.register(method, "/x", [])).toThrow(TypeError);
+    const app = createApp(quiet);
+    expect(() => app.on(method, "/x", (c) => void c)).toThrow(TypeError);
   });
 
   it("url() for an unknown name throws a helpful error", () => {
-    const router = createRouter();
-    expect(() => router.url("ghost")).toThrow(/No route registered/);
+    const app = createApp(quiet);
+    expect(() => app.url("ghost")).toThrow(/No route registered/);
   });
 
   it("url() missing required params throws", () => {
-    const router = createRouter();
-    router.get("detail", "/items/:id(\\d+)", (ctx) => void ctx);
-    expect(() => router.url("detail", {})).toThrow(/Missing required parameter/);
+    const app = createApp(quiet);
+    app.get("detail", "/items/:id(\\d+)", (c) => void c);
+    expect(() => app.url("detail", {})).toThrow(/Missing required parameter/);
   });
 
   it("param() validates both arguments", () => {
     const router = createRouter();
-    expect(() => router.param("", (ctx) => void ctx)).toThrow(TypeError);
+    expect(() => router.param("", (c) => void c)).toThrow(TypeError);
     expect(() => router.param("x", undefined as never)).toThrow(TypeError);
   });
 
   it("matching a path with an unmatched custom pattern 404s cleanly", async () => {
     const app = createApp(quiet);
-    const router = createRouter();
-    router.get("/n/:num(\\d+)", (ctx) => void ctx);
-    app.use(router.routes());
+    app.get("/n/:num(\\d+)", (c) => void c);
     const res = await app.handle(new Request("http://localhost:3000/n/not-a-number"));
     expect(res.status).toBe(404);
   });
 
   it("deep path (30 segments) matches and captures correctly", async () => {
     const app = createApp(quiet);
-    const router = createRouter();
-    router.get("/a/:p1/b/:p2/c/*", (ctx) => {
-      ctx.body = `${ctx.params.p1}-${ctx.params.p2}-${ctx.params.wildcard}`;
+    app.get("/a/:p1/b/:p2/c/*", (c) => {
+      c.body = `${c.params?.p1}-${c.params?.p2}-${c.params?.wildcard}`;
     });
-    app.use(router.routes());
     const tail = Array.from({ length: 30 }, (_, i) => `s${i}`).join("/");
     const res = await app.handle(new Request(`http://localhost:3000/a/ONE/b/TWO/c/${tail}`));
     expect(await res.text()).toBe(`ONE-TWO-${tail}`);
@@ -169,8 +188,8 @@ describe("anomalies: non-Error throwables from middleware", () => {
     ["array", [1, 2]],
   ])("%s throwables answer 500 with a clean body", async (_label, value) => {
     const app = createApp(quiet);
-    app.on("error", () => {});
-    app.use(async () => {
+    app.onError(() => {});
+    app.get("/", async () => {
       throw value;
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
@@ -195,8 +214,11 @@ describe("anomalies: exotic requests never crash the app", () => {
   ];
   it.each(requests)("%s yields a well-formed response", async (_label, url) => {
     const app = createApp(quiet);
-    app.use(async (ctx) => {
-      ctx.body = `hit:${ctx.path}`;
+    app.use((c) => {
+      // v2/D1: a string body carries no framework content-type, so the type
+      // is set explicitly to keep the "well-formed text response" assertion.
+      c.type = "text/plain";
+      c.body = `hit:${c.path}`;
     });
     const res = await app.handle(new Request(url));
     expect([200, 404, 500]).toContain(res.status);
@@ -217,11 +239,9 @@ describe("anomalies: exotic requests never crash the app", () => {
     "FANCY-CUSTOM",
   ])("method %s dispatches without crashing", async (method) => {
     const app = createApp(quiet);
-    const router = createRouter();
-    router.get("/x", (ctx) => {
-      ctx.body = "ok";
+    app.get("/x", (c) => {
+      c.body = "ok";
     });
-    app.use(router.routes()).use(router.allowedMethods());
     const res = await app.handle(new Request("http://localhost:3000/x", { method }));
     expect([200, 404, 405, 501]).toContain(res.status);
   });

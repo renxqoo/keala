@@ -1,23 +1,39 @@
+/**
+ * Agent-audit regression locks (v2 API): request url/query cache chain,
+ * freshness (fresh@0.5.2 semantics), Referrer handling, redirect status
+ * classification, emitter edges, router mount/trie encoding, is() array
+ * form and the compose next() guard.
+ *
+ * v2 migration notes:
+ *  - One flat Context: no `ctx.request` / `ctx.response` facades; response
+ *    headers are read via `c.resHeader`.
+ *  - The app exposes onError/off/emit/listenerCount; `once` lives on the
+ *    emitter the app is built around, so the once-semantics locks target
+ *    createEmitter() directly.
+ *  - createRouter().use(prefix, mw) koa-mount url-stripping is gone: a
+ *    standalone router's middleware prepends to its routes and sees the full
+ *    url (route-table merge semantics). The query-visibility intent is kept.
+ *  - response.is() no longer exists (type negotiation is request-side);
+ *    that case was dropped — see the migration report.
+ */
+
 import { describe, expect, it, vi } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import { createResponse, linkResponsePeer } from "../src/http/response.ts";
-import { isRedirectStatus } from "../src/http/status.ts";
-import { createRouter } from "../src/router/router.ts";
-import type { Context } from "../src/context/context.ts";
+import { createApp, createRouter, isRedirectStatus, type Context } from "../src/index.ts";
+import { createEmitter } from "../src/core/emitter.ts";
 
-const quiet = { env: "test" as const };
+const quiet = { env: "test" } as const;
 
-/** Drive a request through an app and capture the ctx for inspection. */
+/** Drive a request through an app and capture the context for inspection. */
 const probe = async (
   init: { url: string; method?: string; headers?: Record<string, string> },
   setup?: (app: ReturnType<typeof createApp>) => void,
 ): Promise<Context> => {
   let captured: Context | undefined;
   const app = createApp(quiet);
-  app.use(async (ctx) => {
-    captured = ctx;
-    ctx.status = 204;
+  app.use(async (c) => {
+    captured = c;
+    c.body = "done";
   });
   setup?.(app);
   await app.handle(new Request(init.url, init));
@@ -27,57 +43,56 @@ const probe = async (
 
 describe("agent audit: request url/query cache chain", () => {
   it("re-assigning url invalidates the parsed query cache", async () => {
-    const ctx = await probe({ url: "http://localhost:3000/old?a=1" });
-    expect(ctx.query).toEqual({ a: "1" }); // build the cache first
-    ctx.url = "/new?b=2";
-    expect(ctx.url).toBe("/new?b=2");
-    expect(ctx.querystring).toBe("b=2");
-    expect(ctx.search).toBe("?b=2");
-    expect(ctx.query).toEqual({ b: "2" });
-    expect(ctx.request.query).toEqual({ b: "2" });
-    expect(ctx.originalUrl).toBe("/old?a=1");
+    const c = await probe({ url: "http://localhost:3000/old?a=1" });
+    expect(c.query).toEqual({ a: "1" }); // build the cache first
+    c.url = "/new?b=2";
+    expect(c.url).toBe("/new?b=2");
+    expect(c.querystring).toBe("b=2");
+    expect(c.search).toBe("?b=2");
+    expect(c.query).toEqual({ b: "2" });
+    expect(c.originalUrl).toBe("/old?a=1");
   });
 
   it("url rewrites to a query-less target clear the parsed query", async () => {
-    const ctx = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
-    expect(ctx.query).toEqual({ a: "1", b: "2" });
-    ctx.url = "/plain";
-    expect(ctx.querystring).toBe("");
-    expect(ctx.query).toEqual({});
+    const c = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
+    expect(c.query).toEqual({ a: "1", b: "2" });
+    c.url = "/plain";
+    expect(c.querystring).toBe("");
+    expect(c.query).toEqual({});
   });
 
   it("path setter rewrites the pathname while keeping the query string", async () => {
-    const ctx = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
-    const before = ctx.query;
-    ctx.path = "/rewritten";
-    expect(ctx.path).toBe("/rewritten");
-    expect(ctx.url).toBe("/rewritten?a=1&b=2");
-    expect(ctx.querystring).toBe("a=1&b=2");
-    expect(ctx.query).toBe(before); // cache not invalidated: query is unchanged
-    expect(ctx.originalUrl).toBe("/old?a=1&b=2");
+    const c = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
+    const before = c.query;
+    c.path = "/rewritten";
+    expect(c.path).toBe("/rewritten");
+    expect(c.url).toBe("/rewritten?a=1&b=2");
+    expect(c.querystring).toBe("a=1&b=2");
+    expect(c.query).toEqual(before); // same query, recomputed after the rewrite
+    expect(c.originalUrl).toBe("/old?a=1&b=2");
   });
 
-  it("path setter works without a query and on the request facade directly", async () => {
-    const ctx = await probe({ url: "http://localhost:3000/a/b" });
-    ctx.request.path = "/c";
-    expect(ctx.request.path).toBe("/c");
-    expect(ctx.request.url).toBe("/c");
-    expect(ctx.request.querystring).toBe("");
+  it("path setter works without a query on the bare context", async () => {
+    const c = await probe({ url: "http://localhost:3000/a/b" });
+    c.path = "/c";
+    expect(c.path).toBe("/c");
+    expect(c.url).toBe("/c");
+    expect(c.querystring).toBe("");
   });
 });
 
 describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
   const freshProbe = async (
-    responseSetup: (ctx: Context) => void,
+    responseSetup: (c: Context) => void,
     headers: Record<string, string>,
   ): Promise<boolean> => {
     let fresh: boolean | undefined;
     const app = createApp(quiet);
-    app.use(async (ctx) => {
-      ctx.status = 200;
-      responseSetup(ctx);
-      fresh = ctx.fresh;
-      ctx.body = "x";
+    app.get("/", (c) => {
+      c.status = 200;
+      responseSetup(c);
+      fresh = c.fresh;
+      c.body = "x";
     });
     await app.handle(new Request("http://localhost:3000/", { headers }));
     return fresh === true;
@@ -85,8 +100,8 @@ describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
 
   it("Cache-Control: no-cache forces a stale response even when the etag matches", async () => {
     const fresh = await freshProbe(
-      (ctx) => {
-        ctx.etag = "v1";
+      (c) => {
+        c.etag = "v1";
       },
       { "if-none-match": '"v1"', "cache-control": "no-cache" },
     );
@@ -95,8 +110,8 @@ describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
 
   it("a matching etag is not enough when If-Modified-Since has no validator", async () => {
     const fresh = await freshProbe(
-      (ctx) => {
-        ctx.etag = "v1";
+      (c) => {
+        c.etag = "v1";
       },
       { "if-none-match": '"v1"', "if-modified-since": "Mon, 01 Jan 2024 00:00:00 GMT" },
     );
@@ -105,9 +120,9 @@ describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
 
   it("a matching etag with an outdated If-Modified-Since is stale (both validators)", async () => {
     const fresh = await freshProbe(
-      (ctx) => {
-        ctx.etag = "v1";
-        ctx.lastModified = new Date(Date.UTC(2025, 0, 1));
+      (c) => {
+        c.etag = "v1";
+        c.lastModified = new Date(Date.UTC(2025, 0, 1));
       },
       {
         "if-none-match": '"v1"',
@@ -119,9 +134,9 @@ describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
 
   it("etag and last-modified both matching is fresh", async () => {
     const fresh = await freshProbe(
-      (ctx) => {
-        ctx.etag = "v1";
-        ctx.lastModified = new Date(Date.UTC(2024, 0, 1));
+      (c) => {
+        c.etag = "v1";
+        c.lastModified = new Date(Date.UTC(2024, 0, 1));
       },
       {
         "if-none-match": '"v1"',
@@ -133,8 +148,8 @@ describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
 
   it("If-None-Match without a response etag never falls back to last-modified", async () => {
     const fresh = await freshProbe(
-      (ctx) => {
-        ctx.lastModified = new Date(Date.UTC(2020, 0, 1));
+      (c) => {
+        c.lastModified = new Date(Date.UTC(2020, 0, 1));
       },
       {
         "if-none-match": '"unrelated"',
@@ -152,18 +167,18 @@ describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
 
 describe("agent audit: Referrer alias and back()", () => {
   it("get() reads the Referer header through both spellings", async () => {
-    const ctx = await probe({
+    const c = await probe({
       url: "http://localhost:3000/",
       headers: { Referer: "http://localhost:3000/login" },
     });
-    expect(ctx.get("Referrer")).toBe("http://localhost:3000/login");
-    expect(ctx.get("referrer")).toBe("http://localhost:3000/login");
-    expect(ctx.get("Referer")).toBe("http://localhost:3000/login");
+    expect(c.get("Referrer")).toBe("http://localhost:3000/login");
+    expect(c.get("referrer")).toBe("http://localhost:3000/login");
+    expect(c.get("Referer")).toBe("http://localhost:3000/login");
   });
 
   it("back() redirects to a same-origin Referer from a real request", async () => {
     const app = createApp(quiet);
-    app.use((ctx) => ctx.back("/alt"));
+    app.get("/target", (c) => c.back("/alt"));
     const res = await app.handle(
       new Request("http://example.com:3000/target", {
         headers: { Referer: "http://example.com:3000/login" },
@@ -175,7 +190,7 @@ describe("agent audit: Referrer alias and back()", () => {
 
   it('redirect("back") resolves through the Referer header', async () => {
     const app = createApp(quiet);
-    app.use((ctx) => ctx.redirect("back"));
+    app.get("/", (c) => c.redirect("back"));
     const res = await app.handle(
       new Request("http://example.com/", { headers: { Referer: "/previous" } }),
     );
@@ -195,9 +210,9 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
 
   it("redirect() replaces a previously-set 304 instead of keeping it", async () => {
     const app = createApp(quiet);
-    app.use((ctx) => {
-      ctx.status = 304;
-      ctx.redirect("/next");
+    app.get("/", (c) => {
+      c.status = 304;
+      c.redirect("/next");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(302);
@@ -206,31 +221,27 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
 
   it("redirect() keeps 305 (a real redirect status)", async () => {
     const app = createApp(quiet);
-    app.use((ctx) => {
-      ctx.status = 305;
-      ctx.redirect("/proxy");
+    app.get("/", (c) => {
+      c.status = 305;
+      c.redirect("/proxy");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(305);
     expect(res.headers.get("location")).toBe("/proxy");
   });
 
-  it("redirect() resets a custom status message when coercing to 302", () => {
-    const response = createResponse();
-    linkResponsePeer(response, {
-      request: {
-        method: "GET",
-        href: "http://localhost:3000/",
-        host: "localhost:3000",
-        get: () => "",
-        accepts: () => "text/plain",
-      },
+  it("redirect() resets a custom status message when coercing to 302", async () => {
+    let message = "";
+    const app = createApp(quiet);
+    app.get("/", (c) => {
+      c.status = 404;
+      c.message = "Custom Phrase";
+      c.redirect("/elsewhere");
+      message = c.message;
     });
-    response.status = 404;
-    response.message = "Custom Phrase";
-    response.redirect("/elsewhere");
-    expect(response.status).toBe(302);
-    expect(response.message).toBe("Found");
+    const res = await app.handle(new Request("http://localhost:3000/"));
+    expect(res.status).toBe(302);
+    expect(message).toBe("Found");
   });
 });
 
@@ -238,7 +249,7 @@ describe("agent audit: emitter once/off edges", () => {
   it("off() with an unknown listener is a no-op and keeps other listeners", () => {
     const app = createApp(quiet);
     const keep = vi.fn();
-    app.on("error", keep);
+    app.onError(keep);
     app.off("error", vi.fn());
     expect(app.listenerCount("error")).toBe(1);
     app.emit("error", new Error("x"));
@@ -246,32 +257,32 @@ describe("agent audit: emitter once/off edges", () => {
   });
 
   it("the disposer returned by once() unsubscribes the wrapper", () => {
-    const app = createApp(quiet);
+    const emitter = createEmitter();
     const spy = vi.fn();
-    const dispose = app.once("error", spy);
+    const dispose = emitter.once("error", spy);
     dispose();
-    expect(app.emit("error", new Error("x"))).toBe(false);
+    expect(emitter.emit("error", new Error("x"))).toBe(false);
     expect(spy).not.toHaveBeenCalled();
-    expect(app.listenerCount("error")).toBe(0);
+    expect(emitter.listenerCount("error")).toBe(0);
   });
 
   it("once() fires exactly once across repeated emits", () => {
-    const app = createApp(quiet);
+    const emitter = createEmitter();
     const spy = vi.fn();
-    app.once("error", spy);
-    app.emit("error", new Error("a"));
-    app.emit("error", new Error("b"));
+    emitter.once("error", spy);
+    emitter.emit("error", new Error("a"));
+    emitter.emit("error", new Error("b"));
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("re-subscribing after the last off() works on a fresh list", () => {
     const app = createApp(quiet);
     const first = vi.fn();
-    const sub = app.on("error", first);
-    sub();
+    app.onError(first);
+    app.off("error", first);
     expect(app.listenerCount("error")).toBe(0);
     const second = vi.fn();
-    app.on("error", second);
+    app.onError(second);
     app.emit("error", new Error("c"));
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
@@ -279,65 +290,60 @@ describe("agent audit: emitter once/off edges", () => {
 });
 
 describe("agent audit: router mount and trie encoding", () => {
-  it("router.use(prefix) keeps the query string visible downstream", async () => {
+  it("router.use() middleware keeps the query string visible downstream", async () => {
     const router = createRouter();
     const app = createApp(quiet);
     const seen: string[] = [];
-    // Upstream of the router: after next() resolves the url is restored.
-    app.use(async (ctx, next) => {
+    // Upstream of the mounted router: after next() resolves the url is intact.
+    app.use(async (c, next) => {
       await next();
-      seen.push(`upstream-after:${ctx.url}`);
+      seen.push(`upstream-after:${c.url}`);
     });
-    router.use("/api", async (ctx, next) => {
-      seen.push(`mounted:${ctx.url}`, `query:${JSON.stringify(ctx.query)}`);
+    router.use(async (c, next) => {
+      seen.push(`mounted:${c.url}`, `query:${JSON.stringify(c.query)}`);
       await next();
-      // koa-mount semantics: the mounted subtree still sees the stripped url.
-      seen.push(`mounted-after:${ctx.url}`);
+      // v2 route-table merge semantics: no koa-mount url stripping — the
+      // mounted subtree still sees the full url.
+      seen.push(`mounted-after:${c.url}`);
     });
-    router.get("/api/users", (ctx) => {
-      ctx.body = { page: ctx.query["page"] };
+    router.get("/users", (c) => {
+      c.body = { page: c.query["page"] };
     });
-    app.use(router.routes());
+    app.mount("/api", router);
     const res = await app.handle(new Request("http://localhost:3000/api/users?page=2&size=10"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ page: "2" });
-    expect(seen[0]).toBe("mounted:/users?page=2&size=10");
+    expect(seen[0]).toBe("mounted:/api/users?page=2&size=10");
     expect(seen[1]).toBe(`query:${JSON.stringify({ page: "2", size: "10" })}`);
-    expect(seen[2]).toBe("mounted-after:/users?page=2&size=10");
+    expect(seen[2]).toBe("mounted-after:/api/users?page=2&size=10");
     expect(seen[3]).toBe("upstream-after:/api/users?page=2&size=10");
   });
 
   it("percent-encoded static segments inside dynamic routes match", async () => {
-    const router = createRouter();
     const app = createApp(quiet);
-    router.get("/caf%C3%A9/:id", (ctx) => {
-      ctx.body = { id: ctx.params["id"] };
+    app.get("/caf%C3%A9/:id", (c) => {
+      c.body = { id: c.params?.["id"] };
     });
-    app.use(router.routes());
     const res = await app.handle(new Request("http://localhost:3000/caf%C3%A9/42"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id: "42" });
   });
 
   it("unicode route patterns match percent-encoded requests", async () => {
-    const router = createRouter();
     const app = createApp(quiet);
-    router.get("/café/:id", (ctx) => {
-      ctx.body = `ok:${ctx.params["id"]}`;
+    app.get("/café/:id", (c) => {
+      c.body = `ok:${c.params?.["id"]}`;
     });
-    app.use(router.routes());
     const res = await app.handle(new Request("http://localhost:3000/caf%C3%A9/7"));
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("ok:7");
   });
 
   it("keeps %2F inside a single param segment (no path splitting)", async () => {
-    const router = createRouter();
     const app = createApp(quiet);
-    router.get("/files/:name", (ctx) => {
-      ctx.body = `file:${ctx.params["name"]}`;
+    app.get("/files/:name", (c) => {
+      c.body = `file:${c.params?.["name"]}`;
     });
-    app.use(router.routes());
     // %2F stays a single segment for matching purposes (no path splitting).
     const res = await app.handle(new Request("http://localhost:3000/files/a%2Fb"));
     expect(res.status).toBe(200);
@@ -346,45 +352,33 @@ describe("agent audit: router mount and trie encoding", () => {
 });
 
 describe("agent audit: response details", () => {
-  it("length setter is a no-op while Transfer-Encoding is set", () => {
-    const response = createResponse();
-    response.set("Transfer-Encoding", "chunked");
-    response.length = 99;
-    expect(response.get("Content-Length")).toBe("");
-    response.remove("Transfer-Encoding");
-    response.length = 99;
-    expect(response.get("Content-Length")).toBe("99");
+  it("length setter is a no-op while Transfer-Encoding is set", async () => {
+    const c = await probe({ url: "http://localhost:3000/" });
+    c.set("Transfer-Encoding", "chunked");
+    c.length = 99;
+    expect(c.resHeader("Content-Length")).toBe("");
+    c.remove("Transfer-Encoding");
+    c.length = 99;
+    expect(c.resHeader("Content-Length")).toBe("99");
   });
 });
 
 describe("agent audit: is() array form (type-is compatibility)", () => {
-  it("ctx.is() accepts a single array of candidate types", async () => {
-    const ctx = await probe({
+  it("c.is() accepts a single array of candidate types", async () => {
+    const c = await probe({
       url: "http://localhost:3000/",
       headers: { "Content-Type": "application/json" },
     });
-    expect(ctx.is(["json", "html"])).toBe("json");
-    expect(ctx.is(["html", "xml"])).toBe(false);
-  });
-
-  it("response.is() accepts a single array of candidate types", async () => {
-    const app = createApp(quiet);
-    let matched: string | false = "";
-    app.use((ctx) => {
-      ctx.type = "image/png";
-      matched = ctx.response.is(["png", "jpeg"]);
-      ctx.status = 204;
-    });
-    await app.handle(new Request("http://localhost:3000/"));
-    expect(matched).toBe("png");
+    expect(c.is(["json", "html"])).toBe("json");
+    expect(c.is(["html", "xml"])).toBe(false);
   });
 
   it("varargs form is unchanged", async () => {
-    const ctx = await probe({
+    const c = await probe({
       url: "http://localhost:3000/",
       headers: { "Content-Type": "text/html" },
     });
-    expect(ctx.is("html", "json")).toBe("html");
+    expect(c.is("html", "json")).toBe("html");
   });
 });
 
@@ -397,7 +391,7 @@ describe("agent audit: app.onerror contract", () => {
   it("still forwards real errors to listeners", () => {
     const app = createApp({ env: "development" });
     const spy = vi.fn();
-    app.on("error", spy);
+    app.onError(spy);
     app.onerror(new Error("real"));
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -406,33 +400,29 @@ describe("agent audit: app.onerror contract", () => {
 describe("agent audit: compose next() guard under nesting", () => {
   it("rejects a second next() from a route handler nested in app middleware", async () => {
     const app = createApp(quiet);
-    const router = createRouter();
     let message = "";
-    app.use(async (_ctx, next) => {
+    app.use(async (_c, next) => {
       try {
         await next();
       } catch (err) {
         message = (err as Error).message;
       }
     });
-    router.get("/double", async (_ctx, next) => {
+    app.get("/double", async (_c, next) => {
       await next();
       await next(); // the bug pattern: calling next twice
     });
-    app.use(router.routes());
     await app.handle(new Request("http://localhost:3000/double"));
     expect(message).toBe("next() called multiple times in the same middleware");
   });
 
   it("still resolves when the same handler serves many sequential requests", async () => {
     const app = createApp(quiet);
-    const router = createRouter();
-    router.get("/seq", async (ctx, next) => {
+    app.use(async (_c, next) => next());
+    app.get("/seq", async (c, next) => {
       await next();
-      ctx.body = "done";
+      c.body = "done";
     });
-    app.use(async (_ctx, next) => next());
-    app.use(router.routes());
     for (let i = 0; i < 5; i++) {
       const res = await app.handle(new Request("http://localhost:3000/seq"));
       expect(res.status).toBe(200);

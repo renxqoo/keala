@@ -5,8 +5,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import type { Context } from "../src/context/context.ts";
+import { createApp } from "../src/index.ts";
+import type { Context } from "../src/core/context/context.ts";
 import { serializeCookie } from "../src/context/cookies.ts";
 import { acceptsType } from "../src/negotiation/accepts.ts";
 
@@ -17,7 +17,7 @@ const probe = async (headers: Record<string, string>): Promise<Context> => {
   let ctx: Context | undefined;
   app.use(async (c) => {
     ctx = c;
-    c.status = 204;
+    c.body = "probed";
   });
   await app.handle(new Request("http://localhost:3000/", { headers }));
   if (ctx === undefined) throw new Error("probe failed");
@@ -175,10 +175,10 @@ describe("cookies matrix: serialization option table", () => {
 describe("cookies matrix: facade behaviors", () => {
   it("multiple distinct cookies accumulate in order", async () => {
     const app = createApp(quiet);
-    app.use(async (ctx) => {
-      ctx.cookies.set("a", "1");
-      ctx.cookies.set("b", "2");
-      ctx.cookies.set("c", "3");
+    app.use(async (c) => {
+      c.cookies.set("a", "1");
+      c.cookies.set("b", "2");
+      c.cookies.set("c", "3");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect([...res.headers.getSetCookie()]).toEqual(["a=1", "b=2", "c=3"]);
@@ -186,21 +186,20 @@ describe("cookies matrix: facade behaviors", () => {
 
   it("signed cookies round-trip through the facade with options intact", async () => {
     const app = createApp({ ...quiet, keys: ["k1"] });
-    app.use(async (ctx) => {
-      if (ctx.path === "/set") {
-        ctx.cookies.set("sid", "user-9", { signed: true, httpOnly: true, path: "/" });
+    app.use(async (c) => {
+      if (c.path === "/set") {
+        c.cookies.set("sid", "user-9", { signed: true, httpOnly: true, path: "/" });
         return;
       }
-      ctx.body = ctx.cookies.get("sid") ?? "none";
+      c.body = c.cookies.get("sid") ?? "none";
     });
     await app.handle(new Request("http://localhost:3000/set"));
     const setter = createApp({ ...quiet, keys: ["k1"] });
-    let cookieLine = "";
-    setter.use(async (ctx) => {
-      ctx.cookies.set("sid", "user-9", { signed: true });
-      cookieLine = ctx.responseHeaders["set-cookie"]?.[0] ?? "";
+    setter.use(async (c) => {
+      c.cookies.set("sid", "user-9", { signed: true });
     });
-    await setter.handle(new Request("http://localhost:3000/"));
+    const baked = await setter.handle(new Request("http://localhost:3000/"));
+    const cookieLine = baked.headers.getSetCookie()[0] ?? "";
     const res = await app.handle(
       new Request("http://localhost:3000/get", {
         headers: { Cookie: cookieLine.split(";")[0] ?? "" },
@@ -251,15 +250,15 @@ describe("url/query matrix: dense getters", () => {
   it.each(rows)("%s → %j", async (url, expected) => {
     const app = createApp(quiet);
     let seen: Record<string, unknown> = {};
-    app.use(async (ctx) => {
+    app.use(async (c) => {
       seen = {
-        path: ctx.path,
-        host: ctx.host,
-        hostname: ctx.hostname,
-        querystring: ctx.querystring,
-        search: ctx.search,
+        path: c.path,
+        host: c.host,
+        hostname: c.hostname,
+        querystring: c.querystring,
+        search: c.search,
       };
-      ctx.status = 204;
+      c.body = "ok";
     });
     await app.handle(new Request(url, { headers: { Host: url.split("/")[2] ?? "h" } }));
     for (const [key, value] of Object.entries(expected)) {

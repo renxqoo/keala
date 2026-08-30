@@ -340,11 +340,13 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     mount(prefix, sub) {
-      const base = prefix.length > 1 && prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+      // "/" (and "") mount at the root without doubling slashes.
+      const base =
+        prefix === "/" || prefix === "" ? "" : prefix.endsWith("/") && prefix.length > 1 ? prefix.slice(0, -1) : prefix;
       const defs = isRouter(sub) ? sub.defs : sub.router.defs;
       const paramMiddlewares = isRouter(sub) ? sub.paramMiddlewares : sub.router.paramMiddlewares;
-      // A mounted app carries its own global middleware ahead of its routes.
-      const subGlobal = isRouter(sub) ? [] : sub.globalMiddleware;
+      // A mounted app (or router) carries its own middleware ahead of its routes.
+      const subGlobal = isRouter(sub) ? sub.middleware : sub.globalMiddleware;
       for (const [name, handler] of paramMiddlewares) {
         if (!router.paramMiddlewares.has(name)) router.paramMiddlewares.set(name, handler);
       }

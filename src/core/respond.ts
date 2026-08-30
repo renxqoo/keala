@@ -140,6 +140,7 @@ const isStreaming = (body: unknown): body is ReadableStream | Blob | Response =>
 
 /** Serialize per body kind: objects through native JSON, the rest verbatim. */
 const bodyInitOf = (body: Context["bodyValue"]): BodyData => {
+  if (body === null || body === undefined) return null; // empty bodies stay empty
   if (typeof body === "string" || body instanceof Uint8Array) return body;
   if (isStreaming(body)) return body as BodyData;
   return JSON.stringify(body) ?? "null";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import type { Context } from "../src/context/context.ts";
+import { createApp } from "../src/index.ts";
+import type { Context } from "../src/core/context/context.ts";
 
 const probe = async (
   init: { url: string; method?: string; headers?: Record<string, string> },
@@ -9,16 +9,16 @@ const probe = async (
 ): Promise<Context> => {
   let captured: Context | undefined;
   const probing = createApp({ keys: ["k"], proxy, proxyIpHeader: "x-forwarded-for" });
-  probing.use(async (ctx) => {
-    captured = ctx;
-    ctx.status = 204;
+  probing.use(async (c) => {
+    captured = c;
+    c.body = "probed";
   });
   await probing.handle(new Request(init.url, init));
   if (captured === undefined) throw new Error("probe middleware did not run");
   return captured;
 };
 
-describe("request facade", () => {
+describe("request facade (flat context)", () => {
   it("exposes method, url, path and originalUrl", async () => {
     const ctx = await probe({
       url: "http://localhost:3000/users/42?page=2&size=10",
@@ -44,9 +44,12 @@ describe("request facade", () => {
     const ctx = await probe({ url: "http://localhost:3000/?tags=a&tags=b", method: "GET" });
     expect(ctx.query).toEqual({ tags: ["a", "b"] });
     expect(ctx.query).toBe(ctx.query);
-    const replacement = Object.create(null) as Record<string, string>;
-    ctx.query = replacement;
-    expect(ctx.query).toBe(replacement);
+    // Koa semantics (v2 design contract #8): assigning an object rewrites the
+    // query string and invalidates the parse cache — the next read re-parses
+    // the stringified form (v1's verbatim-stash deviation is gone).
+    ctx.query = { page: 2, tags: ["a", "b"] };
+    expect(ctx.querystring).toBe("page=2&tags=a&tags=b");
+    expect(ctx.query).toEqual({ page: "2", tags: ["a", "b"] });
   });
 
   it("reads headers case-insensitively", async () => {
@@ -58,9 +61,10 @@ describe("request facade", () => {
     expect(ctx.get("X-CUSTOM")).toBe("yes");
     expect(ctx.get("x-custom")).toBe("yes");
     expect(ctx.get("missing")).toBe("");
-    expect(ctx.header.get("x-custom")).toBe("yes");
-    expect(ctx.headers).toBe(ctx.request.header);
-    expect(ctx.request.type).toBe("application/json");
+    expect(ctx.header("x-custom")).toBe("yes");
+    // v2: c.headers IS the raw fetch Headers (no second facade object).
+    expect(ctx.headers).toBe(ctx.raw.headers);
+    expect(ctx.reqType).toBe("application/json");
     expect(ctx.charset).toBe("utf-8");
     expect(ctx.is("json")).toBe("json");
     expect(ctx.is()).toBe("application/json");
@@ -73,7 +77,7 @@ describe("request facade", () => {
       method: "PUT",
       headers: { "Content-Length": "42" },
     });
-    expect(ctx.request.length).toBe(42);
+    expect(ctx.reqLength).toBe(42);
     expect(ctx.idempotent).toBe(true);
     expect(ctx.host).toBe("localhost:3000");
     expect(ctx.hostname).toBe("localhost");
@@ -86,9 +90,9 @@ describe("request facade", () => {
   it("derives host from the URL when the Host header is absent", async () => {
     const app = createApp();
     let captured: Context | undefined;
-    app.use(async (ctx) => {
-      captured = ctx;
-      ctx.status = 204;
+    app.use(async (c) => {
+      captured = c;
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/x"));
     expect(captured?.host).toBe("localhost:3000");
@@ -98,13 +102,13 @@ describe("request facade", () => {
 
   it("returns undefined length for absent or invalid content-length", async () => {
     const missing = await probe({ url: "http://localhost:3000/", method: "GET" });
-    expect(missing.request.length).toBeUndefined();
+    expect(missing.reqLength).toBeUndefined();
     const invalid = await probe({
       url: "http://localhost:3000/",
       method: "GET",
       headers: { "Content-Length": "abc" },
     });
-    expect(invalid.request.length).toBeUndefined();
+    expect(invalid.reqLength).toBeUndefined();
   });
 
   it("derives ip from proxy headers when proxy is enabled", async () => {
@@ -122,7 +126,7 @@ describe("request facade", () => {
   });
 
   it("honors maxIpsCount and proxyIpHeader", async () => {
-    let ctx = await probe(
+    const ctx = await probe(
       {
         url: "http://localhost:3000/",
         method: "GET",
@@ -136,7 +140,7 @@ describe("request facade", () => {
     let captured: Context | undefined;
     limited.use(async (c) => {
       captured = c;
-      c.status = 204;
+      c.body = "ok";
     });
     await limited.handle(
       new Request("http://localhost:3000/", {
@@ -160,14 +164,15 @@ describe("request facade", () => {
     expect(ctx.ip).toBe("");
   });
 
-  it("falls back to the remote address from the adapter", async () => {
+  it("falls back to the remote address from the runtime channel", async () => {
     const remoteApp = createApp();
     let captured: Context | undefined;
-    remoteApp.use(async (ctx) => {
-      captured = ctx;
-      ctx.status = 204;
+    remoteApp.use(async (c) => {
+      captured = c;
+      c.body = "ok";
     });
-    await remoteApp.handle(new Request("http://localhost:3000/"), "192.168.1.10");
+    // v2: the remote address rides the runtime object instead of a bare string.
+    await remoteApp.handle(new Request("http://localhost:3000/"), { remote: "192.168.1.10" });
     expect(captured?.ip).toBe("192.168.1.10");
   });
 
@@ -237,11 +242,11 @@ describe("request facade", () => {
   it("reports freshness against response validators", async () => {
     const etagApp = createApp();
     let etagCtx: Context | undefined;
-    etagApp.use(async (ctx) => {
-      etagCtx = ctx;
-      ctx.status = 200;
-      ctx.etag = "v1";
-      ctx.body = "payload";
+    etagApp.use(async (c) => {
+      etagCtx = c;
+      c.status = 200;
+      c.etag = "v1";
+      c.body = "payload";
     });
     await etagApp.handle(
       new Request("http://localhost:3000/", { headers: { "If-None-Match": '"v1"' } }),
@@ -251,11 +256,11 @@ describe("request facade", () => {
 
     const staleApp = createApp();
     let staleCtx: Context | undefined;
-    staleApp.use(async (ctx) => {
-      staleCtx = ctx;
-      ctx.status = 200;
-      ctx.etag = "v2";
-      ctx.body = "payload";
+    staleApp.use(async (c) => {
+      staleCtx = c;
+      c.status = 200;
+      c.etag = "v2";
+      c.body = "payload";
     });
     await staleApp.handle(
       new Request("http://localhost:3000/", { headers: { "If-None-Match": '"other"' } }),
@@ -269,10 +274,10 @@ describe("request facade", () => {
 
     const errApp = createApp();
     let errCtx: Context | undefined;
-    errApp.use(async (ctx) => {
-      errCtx = ctx;
-      ctx.status = 500;
-      ctx.body = "x";
+    errApp.use(async (c) => {
+      errCtx = c;
+      c.status = 500;
+      c.body = "x";
     });
     await errApp.handle(
       new Request("http://localhost:3000/", { headers: { "If-None-Match": "*" } }),
@@ -283,19 +288,20 @@ describe("request facade", () => {
   it("exposes cookies bound to the app keys", async () => {
     const cookieApp = createApp({ keys: ["secret-1"] });
     let cookieCtx: Context | undefined;
-    cookieApp.use(async (ctx) => {
-      cookieCtx = ctx;
-      ctx.cookies.set("sid", "session-1", { signed: true });
-      ctx.status = 204;
+    cookieApp.use(async (c) => {
+      cookieCtx = c;
+      c.cookies.set("sid", "session-1", { signed: true });
+      c.body = "ok";
     });
-    await cookieApp.handle(new Request("http://localhost:3000/", { method: "GET" }));
+    const baked = await cookieApp.handle(new Request("http://localhost:3000/", { method: "GET" }));
+    // A freshly-set cookie is not visible to reads (the jar holds request cookies).
     expect(cookieCtx?.cookies.get("sid")).toBeUndefined();
-    const setCookie = cookieCtx?.responseHeaders["set-cookie"]?.[0] ?? "";
+    const setCookie = baked.headers.getSetCookie()[0] ?? "";
     const roundTrip = createApp({ keys: ["secret-1"] });
     let readCtx: Context | undefined;
-    roundTrip.use(async (ctx) => {
-      readCtx = ctx;
-      ctx.status = 204;
+    roundTrip.use(async (c) => {
+      readCtx = c;
+      c.body = "ok";
     });
     await roundTrip.handle(
       new Request("http://localhost:3000/", { headers: { Cookie: setCookie.split(";")[0] ?? "" } }),
@@ -305,9 +311,9 @@ describe("request facade", () => {
 
   it("supports throw and assert helpers", async () => {
     const throwing = createApp();
-    throwing.use(async (ctx) => {
-      ctx.assert(ctx.query["token"] !== undefined, 401, "token required");
-      ctx.throw(418, "teapot");
+    throwing.use(async (c) => {
+      c.assert(c.query["token"] !== undefined, 401, "token required");
+      c.throw(418, "teapot");
     });
     const ok = await throwing.handle(new Request("http://localhost:3000/?token=1"));
     expect(ok.status).toBe(418);
@@ -319,7 +325,8 @@ describe("request facade", () => {
   it("exposes app settings", () => {
     const app = createApp({ keys: ["test-key"], proxyIpHeader: "x-forwarded-for" });
     expect(app.env).toBe(process.env["NODE_ENV"] ?? "development");
-    expect(app.subdomainOffset).toBe(2);
-    expect(app.proxyIpHeader).toBe("x-forwarded-for");
+    expect(app.settings.subdomainOffset).toBe(2);
+    expect(app.settings.proxyIpHeader).toBe("x-forwarded-for");
+    expect(app.toJSON()).toEqual({ env: app.env, proxy: false });
   });
 });

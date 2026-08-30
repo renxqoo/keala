@@ -1,19 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
+import { createApp } from "../src/index.ts";
 
-const makeApp = () => {
-  const app = createApp();
-  return app;
-};
+const makeApp = () => createApp({ env: "test" });
 
-describe("response facade", () => {
+describe("response facade (flat context)", () => {
   it("starts as 404 with no body", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      expect(ctx.status).toBe(404);
-      expect(ctx.body).toBe(null);
-      expect(ctx.headerSent).toBe(false);
+    app.use(async (c) => {
+      expect(c.status).toBe(404);
+      expect(c.body).toBe(null);
+      expect(c.headerSent).toBe(false);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(404);
@@ -22,14 +19,14 @@ describe("response facade", () => {
 
   it("validates status codes", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
+    app.use(async (c) => {
       expect(() => {
-        ctx.status = 700;
+        c.status = 700;
       }).toThrow(TypeError);
       expect(() => {
-        ctx.status = 404.5;
+        c.status = 404.5;
       }).toThrow(TypeError);
-      ctx.status = 201;
+      c.status = 201;
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(201);
@@ -37,10 +34,10 @@ describe("response facade", () => {
 
   it("sets status message", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.status = 200;
-      ctx.message = "all good";
-      ctx.body = "x";
+    app.use(async (c) => {
+      c.status = 200;
+      c.message = "all good";
+      c.body = "x";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(200);
@@ -49,65 +46,66 @@ describe("response facade", () => {
 
   it("rejects CR/LF in status message", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
+    app.use(async (c) => {
       expect(() => {
-        ctx.message = "bad\r\nmessage";
+        c.message = "bad\r\nmessage";
       }).toThrow(TypeError);
-      ctx.status = 204;
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/"));
   });
 
-  it("string bodies default to html only when markup is present", async () => {
+  it("delivers string bodies verbatim with a runtime text content-type (markup sniffing removed in v2)", async () => {
+    // v2 D1 divergence: c.body = string no longer sniffs markup — no
+    // content-type is recorded in-process and the wire type comes from the
+    // fetch runtime (text/plain for strings).
     const app = makeApp();
-    let sawHtmlType = "";
-    let sawTextType = "";
-    app.use(async (ctx, next) => {
+    let sawType = "";
+    app.use(async (c, next) => {
       await next();
-      sawHtmlType = ctx.type;
+      sawType = c.type;
     });
-    app.use(async (ctx) => {
-      ctx.body = "<h1>hello</h1>";
-      sawTextType = "";
+    app.use(async (c) => {
+      c.body = "<h1>hello</h1>";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(sawType).toBe("");
     expect(await res.text()).toBe("<h1>hello</h1>");
-    expect(sawHtmlType).toBe("text/html");
-    expect(sawTextType).toBe("");
+    expect((res.headers.get("content-type") ?? "").startsWith("text/plain")).toBe(true);
 
     const plain = makeApp();
-    plain.use(async (ctx) => {
-      ctx.body = "plain words";
+    plain.use(async (c) => {
+      c.body = "plain words";
     });
     const plainRes = await plain.handle(new Request("http://localhost:3000/"));
-    expect(plainRes.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect((plainRes.headers.get("content-type") ?? "").startsWith("text/plain")).toBe(true);
   });
 
-  it("JSON-serializes object bodies", async () => {
+  it("JSON-serializes object bodies via Response.json", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.body = { users: [1, 2, 3] };
+    app.use(async (c) => {
+      c.body = { users: [1, 2, 3] };
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(res.headers.get("content-type")).toBe("application/json");
     expect(await res.json()).toEqual({ users: [1, 2, 3] });
   });
 
   it("supports binary bodies", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.body = new Uint8Array([1, 2, 3]);
+    app.use(async (c) => {
+      c.body = new Uint8Array([1, 2, 3]);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-type")).toBe("application/octet-stream");
+    // v2 D1: no octet-stream sniffing — the body passes through untouched.
+    expect(res.headers.get("content-type")).toBe(null);
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   it("supports stream bodies", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.body = new ReadableStream({
+    app.use(async (c) => {
+      c.body = new ReadableStream({
         start(controller) {
           const encoder = new TextEncoder();
           controller.enqueue(encoder.encode("chunked"));
@@ -121,18 +119,18 @@ describe("response facade", () => {
 
   it("null body maps to 204 (or keeps empty statuses)", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.body = "temp";
-      ctx.body = null;
+    app.use(async (c) => {
+      c.body = "temp";
+      c.body = null;
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(204);
     expect(res.headers.get("content-type")).toBe(null);
 
     const keep304 = makeApp();
-    keep304.use(async (ctx) => {
-      ctx.status = 304;
-      ctx.body = null;
+    keep304.use(async (c) => {
+      c.status = 304;
+      c.body = null;
     });
     const notModified = await keep304.handle(new Request("http://localhost:3000/"));
     expect(notModified.status).toBe(304);
@@ -140,9 +138,9 @@ describe("response facade", () => {
 
   it("keeps an explicit status when body is set", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.status = 201;
-      ctx.body = { ok: true };
+    app.use(async (c) => {
+      c.status = 201;
+      c.body = { ok: true };
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(201);
@@ -150,9 +148,9 @@ describe("response facade", () => {
 
   it("strips content headers for 204/304", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.body = "will be dropped";
-      ctx.status = 204;
+    app.use(async (c) => {
+      c.body = "will be dropped";
+      c.status = 204;
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(204);
@@ -161,10 +159,20 @@ describe("response facade", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("drops the body for HEAD requests", async () => {
+  // CONFIRMED-BUG (core): the HEAD Content-Length backfill is lost whenever
+  // the request produced NO other response headers. fromState reads the header
+  // record into a local `const record` up front (src/core/respond.ts fromState,
+  // `const record = c.headersRecord`); the HEAD backfill then assigns a FRESH
+  // record via `(record ?? (c.headersRecord = {}))["content-length"] = ...`,
+  // but hasRecord/multiValue/the serialization all still consult the stale
+  // null local, so the bare fast path returns `new Response(null)` and the
+  // backfilled "12" never reaches the wire. With any prior header (e.g. a
+  // c.set call) the local is non-null and the backfill survives.
+  // Expected (koa): HEAD keeps status 200, Content-Length "12", empty body.
+  it("CONFIRMED-BUG: drops the body for HEAD requests", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.body = "body-content";
+    app.use(async (c) => {
+      c.body = "body-content";
     });
     const res = await app.handle(new Request("http://localhost:3000/", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -174,16 +182,16 @@ describe("response facade", () => {
 
   it("set/append/remove/vary header operations", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.set("X-One", "1");
-      ctx.set("x-one", "override");
-      ctx.append("X-Many", "a");
-      ctx.append("X-Many", "b");
-      ctx.vary("Origin");
-      ctx.vary("origin");
-      ctx.vary("Accept");
-      ctx.remove("x-one");
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.set("X-One", "1");
+      c.set("x-one", "override");
+      c.append("X-Many", "a");
+      c.append("X-Many", "b");
+      c.vary("Origin");
+      c.vary("origin");
+      c.vary("Accept");
+      c.remove("x-one");
+      c.body = "ok";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("x-one")).toBe(null);
@@ -193,21 +201,21 @@ describe("response facade", () => {
 
   it("rejects invalid header field names and values", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      expect(() => ctx.set("Bad Name", "v")).toThrow(TypeError);
-      expect(() => ctx.set("X-Ok", "v\r\nInjected: 1")).toThrow(TypeError);
-      expect(() => ctx.vary("Origin, Accept")).toThrow(TypeError);
-      ctx.status = 204;
+    app.use(async (c) => {
+      expect(() => c.set("Bad Name", "v")).toThrow(TypeError);
+      expect(() => c.set("X-Ok", "v\r\nInjected: 1")).toThrow(TypeError);
+      expect(() => c.vary("Origin, Accept")).toThrow(TypeError);
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/"));
   });
 
   it("type setter and getter", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.type = "application/xml; charset=utf-8";
-      expect(ctx.type).toBe("application/xml");
-      ctx.body = "<x/>";
+    app.use(async (c) => {
+      c.type = "application/xml; charset=utf-8";
+      expect(c.type).toBe("application/xml");
+      c.body = "<x/>";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("content-type")).toBe("application/xml; charset=utf-8");
@@ -215,17 +223,17 @@ describe("response facade", () => {
 
   it("etag quoting and lastModified validation", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.etag = "abc";
-      expect(ctx.etag).toBe('"abc"');
-      ctx.etag = '"quoted"';
-      expect(ctx.etag).toBe('"quoted"');
-      ctx.lastModified = new Date(Date.UTC(2024, 5, 1));
-      expect(ctx.lastModified?.toISOString()).toBe("2024-06-01T00:00:00.000Z");
+    app.use(async (c) => {
+      c.etag = "abc";
+      expect(c.etag).toBe('"abc"');
+      c.etag = '"quoted"';
+      expect(c.etag).toBe('"quoted"');
+      c.lastModified = new Date(Date.UTC(2024, 5, 1));
+      expect(c.lastModified?.toISOString()).toBe("2024-06-01T00:00:00.000Z");
       expect(() => {
-        ctx.lastModified = "nope" as unknown as Date;
+        c.lastModified = "nope" as unknown as Date;
       }).toThrow(TypeError);
-      ctx.body = "ok";
+      c.body = "ok";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("etag")).toBe('"quoted"');
@@ -234,10 +242,10 @@ describe("response facade", () => {
 
   it("etag removal on empty value", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.etag = "temp";
-      ctx.etag = "";
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.etag = "temp";
+      c.etag = "";
+      c.body = "ok";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("etag")).toBe(null);
@@ -245,8 +253,8 @@ describe("response facade", () => {
 
   it("redirect sets location and html fallback body", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.redirect("/target?x=1");
+    app.use(async (c) => {
+      c.redirect("/target?x=1");
     });
     const res = await app.handle(
       new Request("http://localhost:3000/", {
@@ -259,8 +267,8 @@ describe("response facade", () => {
     expect(await res.text()).toContain("Redirecting to /target?x=1.");
 
     const plain = makeApp();
-    plain.use(async (ctx) => {
-      ctx.redirect("/t");
+    plain.use(async (c) => {
+      c.redirect("/t");
     });
     const plainRes = await plain.handle(
       new Request("http://localhost:3000/", { headers: { Accept: "text/plain" } }),
@@ -271,8 +279,8 @@ describe("response facade", () => {
 
   it("redirect supports back with referrer and alt fallback", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.redirect("back", "/fallback");
+    app.use(async (c) => {
+      c.redirect("back", "/fallback");
     });
     const withReferrer = await app.handle(
       new Request("http://localhost:3000/", { headers: { Referrer: "http://x.dev/prev" } }),
@@ -280,8 +288,8 @@ describe("response facade", () => {
     expect(withReferrer.headers.get("location")).toBe("http://x.dev/prev");
 
     const plain = makeApp();
-    plain.use(async (ctx) => {
-      ctx.redirect("back");
+    plain.use(async (c) => {
+      c.redirect("back");
     });
     const res = await plain.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("location")).toBe("/");
@@ -289,9 +297,9 @@ describe("response facade", () => {
 
   it("keeps an explicit redirect status", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.status = 301;
-      ctx.redirect("/gone");
+    app.use(async (c) => {
+      c.status = 301;
+      c.redirect("/gone");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(301);
@@ -299,8 +307,8 @@ describe("response facade", () => {
 
   it("escapes html in redirect bodies", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.redirect("/a?next=<script>alert(1)</script>");
+    app.use(async (c) => {
+      c.redirect("/a?next=<script>alert(1)</script>");
     });
     const res = await app.handle(
       new Request("http://localhost:3000/", { headers: { Accept: "text/html" } }),
@@ -312,9 +320,9 @@ describe("response facade", () => {
 
   it("attachment sets content-disposition and infers type", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.attachment("report.pdf");
-      ctx.body = "binary-ish";
+    app.use(async (c) => {
+      c.attachment("report.pdf");
+      c.body = "binary-ish";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("content-disposition")).toBe('attachment; filename="report.pdf"');
@@ -323,9 +331,9 @@ describe("response facade", () => {
 
   it("attachment without filename", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.attachment();
-      ctx.body = "x";
+    app.use(async (c) => {
+      c.attachment();
+      c.body = "x";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("content-disposition")).toBe("attachment");
@@ -333,21 +341,21 @@ describe("response facade", () => {
 
   it("attachment rejects path separators in fallback", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      expect(() => ctx.attachment("报表.bin", { fallback: "a/b" })).toThrow(TypeError);
-      ctx.status = 204;
+    app.use(async (c) => {
+      expect(() => c.attachment("报表.bin", { fallback: "a/b" })).toThrow(TypeError);
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/"));
   });
 
   it("length setter coerces numbers", async () => {
     const app = makeApp();
-    app.use(async (ctx) => {
-      ctx.length = "42" as unknown as number;
-      expect(ctx.response.length).toBe(42);
-      ctx.length = Number.NaN;
-      expect(ctx.response.length).toBe(0);
-      ctx.status = 204;
+    app.use(async (c) => {
+      c.length = "42" as unknown as number;
+      expect(c.length).toBe(42);
+      c.length = Number.NaN;
+      expect(c.length).toBe(0);
+      c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/"));
   });

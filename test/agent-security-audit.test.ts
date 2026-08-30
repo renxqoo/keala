@@ -1,27 +1,26 @@
 /**
  * Agent security audit: attack tests for vulnerabilities found during the
  * threat-model pass and locks for the semantics they were verified against.
+ * Migrated to the v2 API (createApp from core/app, app.onError, Runtime
+ * object for the remote address).
  *
  * Fixed vulnerabilities covered here:
  *  1. parseQuery was O(n^2) on keys-only query strings (per-segment
  *     `indexOf("=")` rescans to the end of the string) — remote DoS.
  *  2. Plain-object dictionary lookups with untrusted MIME/charset tokens
  *     returned `Object.prototype` / the `Function` constructor instead of a
- *     string, crashing type negotiation (`ctx.is()` / `ctx.accepts()`) and
- *     leaking non-string Content-Type values from `ctx.attachment()`.
+ *     string, crashing `c.is()` / `c.accepts()` and leaking non-string
+ *     Content-Type values from `c.attachment()`.
  *  3. `serializeCookie` did not validate `sameSite`/`priority`, allowing
  *     attribute injection (`; Path=/pwned`) and CRLF response splitting via
- *     cookie options, with the CRLF form escaping `app.handle` entirely
- *     (respond() throws outside dispatch's try/catch).
+ *     cookie options, with the CRLF form escaping `app.handle` entirely.
  *  4. `cookies.get(name, { signed: true })` failed OPEN (returned the raw
- *     attacker-controlled value) when no signing keys were configured; Koa's
- *     `cookies` package throws instead.
+ *     attacker-controlled value) when no signing keys were configured.
  *
  * Locked semantics (Koa/reference parity, intentionally unchanged):
  *  - x-forwarded-* is fully untrusted while app.proxy is false.
- *  - No Unicode normalization (NFKC/fullwidth) is applied anywhere: a
- *    fullwidth "proto" key never collapses into `__proto__`.
- *  - Duplicate Cookie names: last one wins.
+ *  - No Unicode normalization (NFKC/fullwidth) anywhere: a fullwidth "proto"
+ *    key never collapses into `__proto__`. Duplicate Cookie names: last wins.
  *  - `sign` output is base64url (`[A-Za-z0-9_-]`), rotation order matches
  *    Keygrip (sign with first key, verify with any), and the base64url
  *    decoder is lenient enough to also accept standard-base64 signatures.
@@ -29,8 +28,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import type { Context } from "../src/context/context.ts";
+import { createApp } from "../src/core/app.ts";
+import type { Context } from "../src/core/context/context.ts";
 import {
   createCookies,
   parseCookies,
@@ -120,12 +119,12 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
     expect(extensionFromMime(token)).toBe(null);
   });
 
-  it("end-to-end: ctx.is() with an attacker-controlled token never 500s", async () => {
+  it("end-to-end: c.is() with an attacker-controlled token never 500s", async () => {
     const app = createApp(quiet);
     const errors: string[] = [];
-    app.on("error", (e) => errors.push(e.message));
-    app.use((ctx) => {
-      ctx.body = `is:${String(ctx.is((ctx.query["f"] as string) ?? "json"))}`;
+    app.onError((e) => errors.push(e.message));
+    app.use((c) => {
+      c.body = `is:${String(c.is((c.query["f"] as string) ?? "json"))}`;
     });
     for (const token of PROTO_TOKENS) {
       const res = await drive(app, `http://localhost:3000/?f=${encodeURIComponent(token)}`, {
@@ -139,9 +138,9 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
 
   it("end-to-end: attachment() never emits a non-string Content-Type", async () => {
     const app = createApp(quiet);
-    app.use((ctx) => {
-      ctx.attachment(ctx.query["name"] as string);
-      ctx.body = "data";
+    app.use((c) => {
+      c.attachment(c.query["name"] as string);
+      c.body = "data";
     });
     for (const token of PROTO_TOKENS) {
       const res = await drive(
@@ -194,10 +193,10 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
   it("end-to-end: an injected option becomes a clean 500 with no Set-Cookie on the wire", async () => {
     const app = createApp(quiet);
     const seen: string[] = [];
-    app.on("error", (e: Error) => seen.push(`${e.constructor.name}:${e.message}`));
-    app.use((ctx) => {
-      ctx.cookies.set("sid", "v", { sameSite: "Strict; Path=/pwned" } as never);
-      ctx.body = "unreachable";
+    app.onError((e: Error) => seen.push(`${e.constructor.name}:${e.message}`));
+    app.use((c) => {
+      c.cookies.set("sid", "v", { sameSite: "Strict; Path=/pwned" } as never);
+      c.body = "unreachable";
     });
     const res = await drive(app, "http://localhost:3000/");
     expect(res.status).toBe(500);
@@ -211,9 +210,9 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
 
   it("end-to-end: legitimate cookies carry exactly the requested attributes", async () => {
     const app = createApp(quiet);
-    app.use((ctx) => {
-      ctx.cookies.set("ok", "1", { sameSite: "strict", httpOnly: true });
-      ctx.body = "ok";
+    app.use((c) => {
+      c.cookies.set("ok", "1", { sameSite: "strict", httpOnly: true });
+      c.body = "ok";
     });
     const res = await drive(app, "http://localhost:3000/");
     expect(res.headers.getSetCookie()).toEqual(["ok=1; SameSite=Strict; HttpOnly"]);
@@ -307,9 +306,9 @@ describe("audit: x-forwarded-* trust chain", () => {
   it("with proxy=false no forwarded header influences ip/protocol/host", async () => {
     const app = createApp(quiet);
     let captured: Context | undefined;
-    app.use((ctx) => {
-      captured = ctx;
-      ctx.status = 204;
+    app.use((c) => {
+      captured = c;
+      c.body = "ok";
     });
     await drive(app, "http://localhost:3000/", {
       headers: { ...forwarded, Host: "real.example.com" },
@@ -324,9 +323,9 @@ describe("audit: x-forwarded-* trust chain", () => {
   it("case/spelling variants of forwarded headers are gated identically", async () => {
     const app = createApp(quiet);
     let captured: Context | undefined;
-    app.use((ctx) => {
-      captured = ctx;
-      ctx.status = 204;
+    app.use((c) => {
+      captured = c;
+      c.body = "ok";
     });
     await drive(app, "http://localhost:3000/", {
       headers: {
@@ -344,11 +343,13 @@ describe("audit: x-forwarded-* trust chain", () => {
   it("with proxy=true the socket address is still preferred over the header", async () => {
     const app = createApp({ ...quiet, proxy: true });
     let captured: Context | undefined;
-    app.use((ctx) => {
-      captured = ctx;
-      ctx.status = 204;
+    app.use((c) => {
+      captured = c;
+      c.body = "ok";
     });
-    await app.handle(new Request("http://localhost:3000/", { headers: forwarded }), "203.0.113.9");
+    await app.handle(new Request("http://localhost:3000/", { headers: forwarded }), {
+      remote: "203.0.113.9",
+    });
     // ips[0] (leftmost forwarded entry) is koa's `ip` semantics under proxy.
     expect(captured?.ip).toBe("1.2.3.4");
     expect(captured?.ips).toEqual(["1.2.3.4", "5.6.7.8"]);
@@ -359,9 +360,9 @@ describe("audit: x-forwarded-* trust chain", () => {
   it("maxIpsCount truncates the forwarded list from the right", async () => {
     const app = createApp({ ...quiet, proxy: true, maxIpsCount: 1 });
     let captured: Context | undefined;
-    app.use((ctx) => {
-      captured = ctx;
-      ctx.status = 204;
+    app.use((c) => {
+      captured = c;
+      c.body = "ok";
     });
     await drive(app, "http://localhost:3000/", { headers: forwarded });
     expect(captured?.ips).toEqual(["5.6.7.8"]);
@@ -381,9 +382,9 @@ describe("audit: unicode confusion (no normalization bypass)", () => {
     expect(FULLWIDTH_PROTO.normalize("NFKC")).toBe("__proto__");
     const app = createApp(quiet);
     let keyCount = -1;
-    app.use((ctx) => {
-      keyCount = Object.keys(ctx.query).length;
-      ctx.body = "ok";
+    app.use((c) => {
+      keyCount = Object.keys(c.query).length;
+      c.body = "ok";
     });
     const res = await drive(
       app,
@@ -397,9 +398,9 @@ describe("audit: unicode confusion (no normalization bypass)", () => {
   it("fullwidth period in a path never folds into a traversal dot", async () => {
     const app = createApp(quiet);
     let path = "";
-    app.use((ctx) => {
-      path = ctx.path;
-      ctx.body = "ok";
+    app.use((c) => {
+      path = c.path;
+      c.body = "ok";
     });
     // %EF%BC%8E is U+FF0E FULLWIDTH FULL STOP.
     await drive(app, "http://localhost:3000/a%EF%BC%8E%EF%BC%8E/b");
@@ -471,15 +472,15 @@ describe("audit: error path contract", () => {
   it("a throwing cookies.set() surfaces as a resolved 500 response", async () => {
     const app = createApp(quiet);
     let emitted = 0;
-    app.on("error", () => {
+    app.onError(() => {
       emitted++;
     });
-    app.use((ctx) => {
-      ctx.cookies.set("sid", "v\r\nSet-Cookie: evil=1");
-      ctx.body = "unreachable";
+    app.use((c) => {
+      c.cookies.set("sid", "v\r\nSet-Cookie: evil=1");
+      c.body = "unreachable";
     });
     // Must resolve (never reject) — before the option fixes, a crafted option
-    // could push the throw past dispatch into respond(), escaping app.handle.
+    // could push the throw past dispatch into the finalizer, escaping app.handle.
     const res = await drive(app, "http://localhost:3000/");
     expect(res.status).toBe(500);
     expect(emitted).toBe(1);
@@ -488,10 +489,10 @@ describe("audit: error path contract", () => {
 
   it("an invalid cookie name is rejected before any header is stored", async () => {
     const app = createApp(quiet);
-    app.on("error", () => {});
-    app.use((ctx) => {
-      expect(() => ctx.cookies.set("bad name", "v")).toThrow(TypeError);
-      ctx.status = 204;
+    app.onError(() => {});
+    app.use((c) => {
+      expect(() => c.cookies.set("bad name", "v")).toThrow(TypeError);
+      c.body = "ok";
     });
     const res = await drive(app, "http://localhost:3000/");
     expect(res.headers.getSetCookie()).toEqual([]);
