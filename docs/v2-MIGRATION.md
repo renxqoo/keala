@@ -79,7 +79,8 @@
 3. **routes 表裸键语义（实测确认）**：裸键 Response 条目对 POST/DELETE/… 全部返回沉没响应；`{ GET: value }` 作用域化后非 GET 落回 fetch → JS 路由 405，与镜像一致。`{dir}` 裸前缀 404 落回 fetch（镜像 twin 路由补齐后两运行时一致），子目录 301 与 Range 为原生独有（PARITY 记账）。
 4. **skip 裁决终态**：T2（同位置 param 正则合并）为唯一永久 skip；另 2 例为 `skipIf(!isBun)` GC 围栏（真实 Bun 下执行）。0 静默 skip。
 5. **parseListenArgs 白名单缺陷**：选项对象形态曾静默丢弃 `nativeRoutes`/`websocket`/`onServeError`——已修复并入测试。
-6. **基准方法学修正（2026-08-31）**：逐服务器顺序执行的基准存在高达 ±25% 的顺序偏差——ABAB 交叉复测证明早前 "vs hono 1.06x~1.29x" 的头条数字落在噪声带内（真实结论：HTTP 统计平局；进程内 379ns vs 379ns 精确打平）。`bench/run.mjs` 已改为全服务器驻留、场景内轮转交错（4 轮），ratio 行附带双方波动带；`verify-baseline.ts` 改为批次级交错。vs koa 3.0–3.5x / 1000 路由 15x 的差距远超噪声带，结论不变。
+6. **compress 默认实现改 Web 标准（2026-08-31，perf/compression-stream 分支验证后合并）**：当初选 node:zlib 的依据是“Bun.gzip 异步版不存在 + node:zlib 异步路径高效”——后半句是未经实测的假设。A/B 实测（端到端走完整框架）：Bun 上 CompressionStream 顺序快 2.7–3.6x（8.7–11.8 vs 31.5µs/10KB 体）、并发平局、idle 省 ~2MB（zlib 桥不再加载）；Node 顺序 +11µs（可选组件，无感）、并发反快 44%。验证：gunzipSync 独立实现交叉解压、1MiB 多 chunk 重组、500 路并发 unhandledRejection 围栏、100k 请求 0.0 B/req 泄漏、双运行时 1223/1206 全绿。
+7. **基准方法学修正（2026-08-31）**：逐服务器顺序执行的基准存在高达 ±25% 的顺序偏差——ABAB 交叉复测证明早前 "vs hono 1.06x~1.29x" 的头条数字落在噪声带内（真实结论：HTTP 统计平局；进程内 379ns vs 379ns 精确打平）。`bench/run.mjs` 已改为全服务器驻留、场景内轮转交错（4 轮），ratio 行附带双方波动带；`verify-baseline.ts` 改为批次级交错。vs koa 3.0–3.5x / 1000 路由 15x 的差距远超噪声带，结论不变。
 
 ## 5. 总验收清单（P4 出口）
 
