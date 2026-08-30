@@ -199,7 +199,12 @@ describe("csrfTokenGuard middleware", () => {
   it("invalid/expired/tampered token → 403", async () => {
     const { app, service } = guardedApp();
     const valid = service.issue();
-    const flipped = `${valid.slice(0, -1)}${valid.endsWith("A") ? "B" : "A"}`;
+    // Flip a MIDDLE character: on the native Bun.CSRF branch the LAST
+    // base64 character can be a padding no-op (31% of tokens measured on
+    // Bun 1.4.0 — flipping it leaves the MAC input bytes unchanged), which
+    // made this test flaky ~1/3 of runs on the real Bun runtime.
+    const mid = Math.floor(valid.length / 2);
+    const flipped = valid.slice(0, mid) + (valid[mid] === "A" ? "B" : "A") + valid.slice(mid + 1);
     const cases = ["garbage", service.issue("other-session"), flipped];
     for (const token of cases) {
       const res = await app.handle(
