@@ -57,3 +57,34 @@ export {
 export { startBunServer, type ServerHandle, type ServeImplementation } from "./adapters/bun.ts";
 export { compilePattern, type CompiledSegment, type PatternIR } from "./router/pattern.ts";
 export type { AppOptions, HeaderValue, ListenOptions, ResponseBody, Runtime } from "./types.ts";
+
+export {
+  createBodyParser,
+  readBodyLimited,
+  type BodyParserOptions,
+  type RequestBodyFacade,
+} from "./components/body-parser.ts";
+export { validator, type StandardSchema } from "./components/validator.ts";
+export {
+  stream,
+  streamText,
+  streamSSE,
+  type StreamWriter,
+  type SSEWriter,
+  type SSEMessage,
+  type StreamSSEOptions,
+} from "./components/streams.ts";
+export {
+  secureHeaders,
+  requestId,
+  timing,
+  logger,
+  type SecureHeadersOptions,
+  type LoggerOptions,
+} from "./components/headers.ts";
+export { cors, csrf, type CorsOptions } from "./components/cors.ts";
+export { etag, compress } from "./components/etag.ts";
+export { bodyLimit, timeout } from "./components/limits.ts";
+export { serveStatic, type ServeStaticOptions } from "./components/serve-static.ts";
+export { html, raw, escapeHtml } from "./components/html.ts";
+export type { Component } from "./types.ts";

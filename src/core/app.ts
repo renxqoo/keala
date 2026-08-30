@@ -12,15 +12,18 @@
  * that references the `Bun` global, so the core also runs under Node (tests).
  */
 
-import type { AppOptions, ListenOptions, Runtime } from "../types.ts";
+import type {
+  AppOptions,
+  Component as AppOptionsComponent,
+  ListenOptions,
+  Runtime,
+} from "../types.ts";
 import { getPath } from "../utils/url.ts";
-import { isHttpError, normalizeError } from "../http/errors.ts";
-import { isValidErrorStatus, statusMessage } from "../http/status.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import { baseContextProto, createContext, type Context } from "./context/context.ts";
-import { compose, NOOP_TAIL } from "./compose.ts";
-import { finalize } from "./respond.ts";
+import { compose } from "./compose.ts";
+import { dispatchChain, finalizeGuarded, parseListenArgs } from "./dispatch.ts";
 import { createEmitter, type Listener } from "./emitter.ts";
 import {
   type Chain,
@@ -30,6 +33,7 @@ import {
   matchRoute,
   rebuildChains,
   registerDef,
+  normalizePrefix,
   urlFor,
   routePathOf,
   type RouteDef,
@@ -44,14 +48,22 @@ import { startBunServer, type ServerHandle } from "../adapters/bun.ts";
 export type ErrorListener = (error: Error, c: Context) => void;
 export type NotFoundHandler = (c: Context) => Response | void;
 
+/** Bun-native websocket event handlers (the `ws` argument IS Bun's socket). */
+export interface WebSocketHandlers {
+  open?: (ws: unknown, c: Context) => void | Promise<void>;
+  message?: (ws: unknown, message: string | ArrayBuffer, c: Context) => void | Promise<void>;
+  close?: (ws: unknown, code: number, reason: string, c: Context) => void | Promise<void>;
+  drain?: (ws: unknown, c: Context) => void | Promise<void>;
+}
+
 export interface Application {
   /** Subscribe to framework errors (typed hook). */
   onError(handler: ErrorListener): Application;
   emit(event: string, ...args: unknown[]): boolean;
   off(event: string, listener: (...args: unknown[]) => void): void;
   listenerCount(event: string): number;
-  /** Register global middleware (compiled into every route chain). */
-  use(...middleware: RouteHandler[]): Application;
+  /** Register global middleware or a component (compiled into every route chain). */
+  use(...middleware: (RouteHandler | AppOptionsComponent)[]): Application;
   /** Register a route. Named form: get(name, path, ...handlers). */
   get(path: string, ...handlers: RouteHandler[]): Application;
   get(name: string, path: string, ...handlers: RouteHandler[]): Application;
@@ -73,6 +85,10 @@ export interface Application {
   on(method: string, path: string, ...handlers: RouteHandler[]): Application;
   /** Per-parameter middleware, run by every route that captures `name`. */
   param(name: string, middleware: RouteHandler): Application;
+  /** WebSocket route: upgraded through the runtime server at request time. */
+  ws(path: string, handlers: WebSocketHandlers): Application;
+  /** Registered websocket routes (consumed by the Bun adapter). */
+  readonly wsRoutes: ReadonlyMap<string, WebSocketHandlers>;
   /** Merge a sub-router's routes (or another app's) under a prefix. */
   mount(prefix: string, sub: Router | Application): Application;
   /** Redirect route (GET): app.redirect("/a", "/b", 302). */
@@ -111,142 +127,19 @@ export interface Application {
   readonly proxy: boolean;
   readonly silent: boolean;
   readonly keys: SigningKeys | undefined;
+  readonly onStreamError: AppOptions["onStreamError"];
 }
-
-interface ParsedListen {
-  listen: ListenOptions;
-  hostname?: string;
-  onListen?: () => void;
-}
-
-const parseListenArgs = (args: readonly unknown[]): ParsedListen => {
-  const parsed: ParsedListen = { listen: {} };
-  for (const arg of args) {
-    if (typeof arg === "function") parsed.onListen = arg as () => void;
-    else if (typeof arg === "number") parsed.listen.port = arg;
-    else if (typeof arg === "string") {
-      // "3000" is a port; anything else is a hostname.
-      if (/^\d+$/.test(arg.trim())) parsed.listen.port = Number(arg);
-      else parsed.hostname = arg;
-    } else if (typeof arg === "object" && arg !== null) {
-      const opts = arg as ListenOptions & { hostname?: string };
-      if (opts.hostname !== undefined) parsed.hostname = opts.hostname;
-      if (opts.port !== undefined) parsed.listen.port = opts.port;
-      if (opts.reusePort !== undefined) parsed.listen.reusePort = opts.reusePort;
-      if (opts.idleTimeout !== undefined) parsed.listen.idleTimeout = opts.idleTimeout;
-      if (opts.maxRequestBodySize !== undefined) {
-        parsed.listen.maxRequestBodySize = opts.maxRequestBodySize;
-      }
-      if (opts.development !== undefined) parsed.listen.development = opts.development;
-    }
-  }
-  return parsed;
-};
-
-/** Node-style plain errors may carry `.status` or `.statusCode`. */
-const errorStatusCode = (error: Error): number => {
-  const candidate = (error as Partial<Error & { status: number; statusCode: number }>).status;
-  const code = (error as Partial<{ statusCode: number }>).statusCode;
-  return isValidErrorStatus(candidate as number)
-    ? (candidate as number)
-    : isValidErrorStatus(code as number)
-      ? (code as number)
-      : 500;
-};
-
-/**
- * Finalize behind the never-reject guard: a failing finalizer (unserializable
- * bodies, throwing not-found handlers, bad headers) answers 500 instead of
- * rejecting past `app.handle`.
- */
-const finalizeGuarded = (app: Application, c: Context): Response | Promise<Response> => {
-  try {
-    const out = finalize(app, c);
-    if (out instanceof Promise) {
-      return out.catch((err: unknown) => errorResponse(app, c, err));
-    }
-    return out;
-  } catch (err) {
-    return errorResponse(app, c, err);
-  }
-};
-
-/** Run the compiled chain and finalize; never rethrows to the caller. */
-const dispatchChain = (
-  app: Application,
-  c: Context,
-  chain: Chain,
-): Response | Promise<Response> => {
-  let settled: Promise<void> | void;
-  try {
-    settled = chain(c, NOOP_TAIL);
-  } catch (err) {
-    return errorResponse(app, c, err);
-  }
-  // The finalizer itself can fail (unserializable bodies, bad headers) — it
-  // must answer 500, never reject past app.handle. It stays synchronous on
-  // every hot path (only committed-Response-under-HEAD goes async), so fully
-  // synchronous middleware chains settle without a single extra promise.
-  const finish = (): Response | Promise<Response> => finalizeGuarded(app, c);
-  // Fully synchronous middleware chains settle without a single promise.
-  if (settled !== undefined && typeof (settled as PromiseLike<void>).then === "function") {
-    return (settled as Promise<void>).then(finish, (err: unknown) => errorResponse(app, c, err));
-  }
-  return finish();
-};
-
-const errorResponse = async (app: Application, c: Context, err: unknown): Promise<Response> => {
-  try {
-    return await buildErrorResponse(app, c, err);
-  } catch {
-    return new Response("Internal Server Error", {
-      status: 500,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
-  }
-};
-
-const buildErrorResponse = (
-  app: Application,
-  c: Context,
-  err: unknown,
-): Response | Promise<Response> => {
-  const error = normalizeError(err);
-  app.onerror(error, c);
-
-  // A stale committed response must not shadow the error.
-  c._res = undefined;
-  // Koa's onerror contract: a failed response starts from a clean header set
-  // (set-cookie survives — deliberate, tested divergence from koa).
-  const record = c.headersRecord;
-  if (record !== null) {
-    for (const key of Object.keys(record)) {
-      if (key !== "set-cookie") delete record[key];
-    }
-  }
-  c.bodyValue = null;
-  c.messageValue = "";
-  c.flags = 0;
-  if (isHttpError(error)) {
-    for (const [field, value] of Object.entries(error.headers ?? {})) {
-      // The error path must never throw; skip headers that fail validation.
-      try {
-        c.set(field, Array.isArray(value) ? value : String(value));
-      } catch {
-        // Invalid header from an error object — drop it silently.
-      }
-    }
-  }
-  const status = isHttpError(error) ? error.status : errorStatusCode(error);
-  c.status = status;
-  const exposed = isHttpError(error) ? error.expose === true : false;
-  const message = exposed ? error.message : statusMessage(status) || "Internal Server Error";
-  c.set("Content-Type", "text/plain; charset=utf-8");
-  c.body = message;
-  return finalizeGuarded(app, c);
-};
 
 const defaultNotFound: NotFoundHandler = () => undefined;
+
+/** A component is any object exposing `install(app)`; middleware is not one. */
+const componentInstallerOf = (value: unknown): ((app: Application) => void) | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const install = (value as { install?: unknown }).install;
+  return typeof install === "function"
+    ? (value as { install: (a: Application) => void }).install
+    : null;
+};
 
 const routeShortcut = (
   app: Application,
@@ -286,12 +179,14 @@ export const createApp = (options: AppOptions = {}): Application => {
   });
   let globalChain: Chain | null = null;
   let notFoundHandler: NotFoundHandler = defaultNotFound;
+  const wsRoutes = new Map<string, WebSocketHandlers>();
 
   const app: Application = {
     env: options.env ?? process.env["NODE_ENV"] ?? "development",
     proxy: settings.proxy,
     silent: options.silent ?? false,
     keys: options.keys,
+    onStreamError: options.onStreamError,
     settings,
     router,
     get stack(): readonly RouteDef[] {
@@ -300,14 +195,22 @@ export const createApp = (options: AppOptions = {}): Application => {
     get globalMiddleware(): readonly RouteHandler[] {
       return globalMw;
     },
+    get wsRoutes(): ReadonlyMap<string, WebSocketHandlers> {
+      return wsRoutes;
+    },
     get notFoundHandler(): NotFoundHandler {
       return notFoundHandler;
     },
 
     use(...args) {
       for (const mw of args) {
+        const installer = componentInstallerOf(mw);
+        if (installer !== null) {
+          installer(app);
+          continue;
+        }
         if (typeof mw !== "function") {
-          throw new TypeError("app.use() requires a middleware function");
+          throw new TypeError("app.use() requires a middleware function or component");
         }
         globalMw.push(mw);
       }
@@ -344,6 +247,44 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
     on(method, path, ...handlers) {
       registerDef(router, method, path, handlers, undefined, globalMw);
+      return app;
+    },
+
+    ws(path, handlers) {
+      const routeKey = normalizePrefix(path) || "/";
+      wsRoutes.set(routeKey, handlers);
+      // The upgrade happens on ANY method hit; register ALL so method-based
+      // 405s never interfere with connection upgrades.
+      registerDef(
+        router,
+        "ALL",
+        routeKey,
+        [
+          (c) => {
+            const server = c.runtime?.server as
+              | { upgrade?(req: Request, opts?: { data?: unknown }): boolean }
+              | undefined;
+            if (server === undefined || typeof server?.upgrade !== "function") {
+              c.throw(501, "websocket upgrades require a Bun server runtime", {
+                expose: true,
+              });
+            }
+            // The context rides the socket data so ws handlers receive `c`.
+            const ok = (server as { upgrade(r: Request, o: { data: unknown }): boolean }).upgrade(
+              c.raw,
+              { data: { wsKey: routeKey, ctx: c } },
+            );
+            if (!ok) {
+              c.throw(400, "websocket upgrade rejected");
+            }
+            // Hijacked connection — Bun ignores the fetch return value, and
+            // the fetch spec forbids constructing a 101 Response anyway.
+            return new Response(null);
+          },
+        ],
+        undefined,
+        globalMw,
+      );
       return app;
     },
 
@@ -416,6 +357,20 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     decorate(key, value) {
+      // A `{ get }` object installs a lazy accessor (components use this for
+      // request-side facades); anything else is a plain value.
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as { get?: unknown }).get === "function"
+      ) {
+        Object.defineProperty(contextProto, key, {
+          get: (value as { get(): unknown }).get,
+          configurable: true,
+          enumerable: false,
+        });
+        return app;
+      }
       Object.defineProperty(contextProto, key, {
         value,
         writable: true,

@@ -176,7 +176,9 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     return false;
   },
   get status(): number {
-    return this.statusValue;
+    // A committed Response (return style) is the response — post-next
+    // middleware must observe its status, not the stale state default.
+    return this._res !== undefined ? this._res.status : this.statusValue;
   },
   set status(code: number) {
     if (typeof code !== "number" || !Number.isInteger(code) || code < 200 || code > 599) {

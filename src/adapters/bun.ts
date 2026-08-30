@@ -6,7 +6,8 @@
  * side-effect free. The serve implementation is injectable for unit tests.
  */
 
-import type { Application } from "../core/app.ts";
+import type { Application, WebSocketHandlers } from "../core/app.ts";
+import type { Context } from "../core/context/context.ts";
 import type { ListenOptions } from "../types.ts";
 
 /** Minimal structural type of the Bun server handle we expose to users. */
@@ -58,6 +59,40 @@ export const startBunServer = (
     port: options.port ?? 3000,
     fetch,
   };
+  const wsRoutes = app.wsRoutes;
+  if (wsRoutes.size > 0) {
+    const config = (options.websocket ?? {}) as Record<string, unknown>;
+    interface WsData {
+      wsKey?: string;
+      ctx?: Context;
+    }
+    const entryFor = (ws: unknown): { handlers: WebSocketHandlers; ctx?: Context } | undefined => {
+      const data = (ws as { data?: WsData }).data;
+      if (data?.wsKey === undefined) return undefined;
+      const handlers = wsRoutes.get(data.wsKey);
+      return handlers === undefined ? undefined : { handlers, ctx: data.ctx };
+    };
+    serveOptions["websocket"] = {
+      ...config,
+      open: (ws: unknown): void => {
+        const entry = entryFor(ws);
+        if (entry !== undefined) void entry.handlers.open?.(ws, entry.ctx as Context);
+      },
+      message: (ws: unknown, message: string | ArrayBuffer): void => {
+        const entry = entryFor(ws);
+        if (entry !== undefined) void entry.handlers.message?.(ws, message, entry.ctx as Context);
+      },
+      close: (ws: unknown, code: number, reason: string): void => {
+        const entry = entryFor(ws);
+        if (entry !== undefined)
+          void entry.handlers.close?.(ws, code, reason, entry.ctx as Context);
+      },
+      drain: (ws: unknown): void => {
+        const entry = entryFor(ws);
+        if (entry !== undefined) void entry.handlers.drain?.(ws, entry.ctx as Context);
+      },
+    };
+  }
   if (options.hostname !== undefined) serveOptions["hostname"] = options.hostname;
   if (options.reusePort !== undefined) serveOptions["reusePort"] = options.reusePort;
   if (options.idleTimeout !== undefined) serveOptions["idleTimeout"] = options.idleTimeout;

@@ -193,6 +193,39 @@ const jsonInit = (body: object, init: ResponseInit): Response =>
  * Build the Response from response state. `head` drops the body after
  * backfilling Content-Length — koa computes it from the would-be body.
  */
+/**
+ * Opt-in stream error observation: re-pump the body through a guard so a
+ * producer failure reaches the app hook (the client just sees the stream end).
+ */
+const observedStream = (
+  body: ReadableStream,
+  onError: (error: Error, c: Context) => void,
+  c: Context,
+): ReadableStream =>
+  new ReadableStream({
+    async start(controller) {
+      try {
+        const reader = body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+        controller.close();
+      } catch (err) {
+        onError(err instanceof Error ? err : new Error(String(err)), c);
+        try {
+          controller.error(err);
+        } catch {
+          // consumer already closed the stream
+        }
+      }
+    },
+    cancel(reason) {
+      void body.cancel(reason);
+    },
+  });
+
 const fromState = (c: Context, head: boolean): Response => {
   const status = c.statusValue;
   const custom = c.messageValue;
@@ -234,6 +267,11 @@ const fromState = (c: Context, head: boolean): Response => {
       }
     }
     body = null;
+  }
+
+  // Opt-in error observation for streaming bodies (see AppOptions).
+  if (body instanceof ReadableStream && c.appValue.onStreamError !== undefined) {
+    body = observedStream(body, c.appValue.onStreamError, c);
   }
 
   const multiValue =

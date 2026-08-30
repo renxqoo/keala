@@ -41,4 +41,7 @@ export interface ContextState {
   // lazy facades
   stateValue: Record<string, unknown> | null;
   cookiesValue: unknown;
+  // bodyParser memoization and the validator output slot are NOT own fields:
+  // they appear (hidden-class transition) only on requests that read or
+  // validate a body, keeping the no-body hot path's object minimal.
 }

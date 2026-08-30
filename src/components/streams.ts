@@ -1,0 +1,185 @@
+/**
+ * Streaming helpers: `stream`, `streamText` and `streamSSE`.
+ *
+ * All three return a Response built around a ReadableStream the callback
+ * writes into. The writer exposes `desiredSize` for backpressure awareness
+ * and `onAbort` for client-disconnect cleanup; SSE adds field sanitization
+ * (event/id can never smuggle CR/LF) and an optional heartbeat comment that
+ * keeps idle connections alive under Bun's default 10s idleTimeout.
+ */
+
+import type { Context } from "../core/context/context.ts";
+
+export interface StreamWriter {
+  /** Enqueue one chunk. Returns the controller's desiredSize afterwards. */
+  write(chunk: string | Uint8Array): void;
+  /** Close the stream; further writes throw. */
+  close(): void;
+  /** Backpressure signal: negative when the consumer is behind. */
+  readonly desiredSize: number | null;
+  /** Register cleanup for client disconnects (stream cancel). */
+  onAbort(fn: () => void): void;
+}
+
+interface WriterInternal extends StreamWriter {
+  _aborts: (() => void)[];
+}
+
+const makeStream = (
+  start: (writer: WriterInternal) => Promise<void> | void,
+  onError?: (error: unknown) => void,
+): Response => {
+  const aborts: (() => void)[] = [];
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const encoder = new TextEncoder();
+  const writer: WriterInternal = {
+    _aborts: aborts,
+    write(chunk) {
+      controllerRef?.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);
+    },
+    close() {
+      try {
+        controllerRef?.close();
+      } catch {
+        // already closed by the consumer — nothing to do
+      }
+    },
+    get desiredSize() {
+      return controllerRef?.desiredSize ?? null;
+    },
+    onAbort(fn) {
+      aborts.push(fn);
+    },
+  };
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controllerRef = controller;
+      try {
+        await start(writer);
+        writer.close();
+      } catch (err) {
+        onError?.(err);
+        // The client must never see the internal error text.
+        try {
+          controller.error(err);
+        } catch {
+          // consumer already closed us
+        }
+      }
+    },
+    cancel(reason) {
+      controllerRef = null;
+      for (const fn of aborts.splice(0)) {
+        try {
+          fn();
+        } catch {
+          // cleanup handlers must not break the cancel path
+        }
+      }
+      void reason;
+    },
+  });
+  return new Response(body, {
+    headers: { "content-type": "application/octet-stream", "x-content-type-options": "nosniff" },
+  });
+};
+
+/** Generic streaming response (binary chunks). */
+export const stream = (
+  _c: Context,
+  start: (writer: StreamWriter) => Promise<void> | void,
+): Response => makeStream(start);
+
+/** Text streaming response. */
+export const streamText = (
+  _c: Context,
+  start: (writer: StreamWriter) => Promise<void> | void,
+): Response => {
+  const res = makeStream(start);
+  return new Response(res.body, {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+};
+
+export interface SSEMessage {
+  event?: string;
+  data: unknown;
+  id?: string;
+  retry?: number;
+}
+
+export interface SSEWriter {
+  send(message: SSEMessage): void;
+  /** Raw comment line (keepalives). */
+  comment(text: string): void;
+  onAbort(fn: () => void): void;
+  readonly desiredSize: number | null;
+}
+
+export interface StreamSSEOptions {
+  /** Heartbeat comment interval in ms (0 disables). Default 5000 — Bun's
+   *  idleTimeout kills silent SSE connections at 10s by default. */
+  heartbeat?: number;
+}
+
+/** Serialize one event per the SSE wire format (multi-line data supported). */
+const sseFrame = (message: SSEMessage): string => {
+  const sanitize = (value: string): string => value.replaceAll(/[\r\n]/g, " ");
+  let frame = "";
+  if (message.event !== undefined) frame += `event: ${sanitize(message.event)}\n`;
+  if (message.id !== undefined) frame += `id: ${sanitize(message.id)}\n`;
+  if (message.retry !== undefined && Number.isFinite(message.retry)) {
+    frame += `retry: ${Math.trunc(message.retry)}\n`;
+  }
+  const data =
+    typeof message.data === "string" ? message.data : (JSON.stringify(message.data) ?? "null");
+  for (const line of data.split("\n")) frame += `data: ${line}\n`;
+  return `${frame}\n`;
+};
+
+/** Server-Sent Events response with sanitization, heartbeat and abort cleanup. */
+export const streamSSE = (
+  _c: Context,
+  start: (sse: SSEWriter) => Promise<void> | void,
+  options: StreamSSEOptions = {},
+): Response => {
+  const heartbeat = options.heartbeat ?? 5000;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const res = makeStream(
+    async (writer) => {
+      const sse: SSEWriter = {
+        send: (message) => writer.write(sseFrame(message)),
+        comment: (text) => writer.write(`: ${text.replaceAll(/[\r\n]/g, " ")}\n\n`),
+        onAbort: (fn) => writer.onAbort(fn),
+        get desiredSize() {
+          return writer.desiredSize;
+        },
+      };
+      if (heartbeat > 0) {
+        timer = setInterval(() => {
+          // A heartbeat on a closed controller must never crash the process.
+          try {
+            writer.write(": ping\n\n");
+          } catch {
+            if (timer !== null) clearInterval(timer);
+          }
+        }, heartbeat);
+      }
+      writer.onAbort(() => {
+        if (timer !== null) clearInterval(timer);
+      });
+      await start(sse);
+      if (timer !== null) clearInterval(timer);
+    },
+    () => {
+      if (timer !== null) clearInterval(timer);
+    },
+  );
+  return new Response(res.body, {
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    },
+  });
+};

@@ -27,6 +27,16 @@ export interface ResponseInitLike {
   headers?: Record<string, HeaderValue>;
 }
 
+/**
+ * Pluggable component: installs capabilities onto an app at setup time.
+ * Middleware functions and components share `app.use(...)` — anything with an
+ * `install(app)` method is treated as a component.
+ */
+export interface Component {
+  readonly name: string;
+  install(app: unknown): void;
+}
+
 /** Per-request runtime injection channel (server handle, env, remote addr). */
 export interface Runtime {
   /** Bun server handle — enables `c.ip` via `requestIP` and websocket upgrades. */
@@ -52,6 +62,12 @@ export interface AppOptions {
   env?: string;
   /** Silence error logging when no `error` listener is registered. */
   silent?: boolean;
+  /**
+   * Opt-in stream error observation: when set, state-mode stream bodies are
+   * re-pumped through a guard so consumer/producer failures reach this hook
+   * instead of vanishing. Costs one wrapper per streaming response.
+   */
+  onStreamError?: (error: Error, c: import("./core/context/context.ts").Context) => void;
 }
 
 export interface ListenOptions {
@@ -63,4 +79,6 @@ export interface ListenOptions {
   development?: boolean;
   /** Sink static, unauthenticated routes into Bun's native routing table. */
   nativeRoutes?: boolean;
+  /** Bun websocket tuning (maxPayloadLength, backpressureLimit, idleTimeout…). */
+  websocket?: Record<string, unknown>;
 }
