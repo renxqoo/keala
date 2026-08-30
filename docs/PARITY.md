@@ -1,3 +1,33 @@
+# bun-koa v2 — deliberate divergences (supersedes the v1 koa-parity ledger below)
+
+The v2 rewrite intentionally drops the koa three-object context in favor of
+one flat context (see docs/v2-DESIGN.md). Semantics that CHANGED on purpose:
+
+| Area                     | v1 (koa-compatible)                                            | v2                                                                                                      |
+| ------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Content-type             | auto `text/plain; charset=utf-8` / markup sniff to `text/html` | D1: no framework CT for string bodies (runtime provides `text/plain`); `c.html()`/`c.type` for explicit |
+| `c.body = object`        | serialized eagerly; getter returns the string                  | stored as object; getter returns the object; `Response.json` finalization                               |
+| Response sugar           | —                                                              | `c.text/json/html(body, status?, headers?)` return-style; staged `c.status` honored (hono parity)       |
+| Router                   | `app.use(router.routes()).use(allowedMethods())`               | top-level routing; 405/Allow/OPTIONS/501 built into dispatch                                            |
+| Post-commit writes       | dropped                                                        | rule-4 merge into the committed Response (with content-type preservation)                               |
+| Floating `next()`        | unhandled rejection risk                                       | silently contained (process-safety; documented)                                                         |
+| `server.update()`        | fictional API (never existed in Bun)                           | `server.reload()`                                                                                       |
+| Extension layer          | `app.request/response/context` prototypes                      | `app.decorate(key, value)` on a per-app derived prototype                                               |
+| pooling / currentContext | opt-in                                                         | removed from core (guarded pooling is a P3 component)                                                   |
+
+Retained koa semantics (locked by tests): onion `await next()`, `c.throw`/
+`c.assert`, signed cookies with key rotation, lazy query/cookies/ip, error
+contract (expose gate, header reset keeping set-cookie, 5xx message hiding),
+status/body state machine (204 coercion, JSON `null` literal, HEAD
+Content-Length backfill), url rewrite cache-invalidation chain, proxy trust
+gates, content negotiation, attachment GHSA fix, redirect encodeurl+escape.
+
+Still-open divergence: `[T2]` — a `:id(\d+)` route registered before a plain
+`:id` route at the same position keeps its regex for both (trie merges param
+slots). Locked as a skip in `test/agent-redteam.test.ts`.
+
+---
+
 # Official test-suite parity matrix
 
 Exhaustive per-file audit against the official suites cloned into `.parity/`:
