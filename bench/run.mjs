@@ -7,9 +7,14 @@
 // per-scenario ratios — see bench/analysis.md.
 //
 // Usage: node bench/run.mjs [connections] [durationSeconds]
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import autocannon from "autocannon";
+
+// Server labels derive the runtime versions from the actual binaries, so
+// the report never claims a runtime it did not use.
+const NODE_LABEL = `node ${process.versions.node.split(".")[0]}`;
+const BUN_LABEL = `bun ${execSync("bun --version", { encoding: "utf8" }).trim()}`;
 
 const CONNECTIONS = Number(process.argv[2] ?? 200);
 const DURATION = Number(process.argv[3] ?? 8);
@@ -19,8 +24,8 @@ const SERVERS = [
   { name: "raw Bun.serve (bun 1.4)", cmd: ["bun", "bench/server-raw.ts"], port: 4104 },
   { name: "bun-koa (bun 1.4)", cmd: ["bun", "bench/server-bun-koa.ts"], port: 4103 },
   { name: "hono 4 (bun 1.4)", cmd: ["bun", "bench/server-hono.ts"], port: 4102 },
-  { name: "koa 3 (node 22)", cmd: ["node", "bench/server-koa.mjs"], port: 4101 },
-  { name: "fastify 5 (node 22)", cmd: ["node", "bench/server-fastify.mjs"], port: 4105 },
+  { name: `koa 3 (${NODE_LABEL})`, cmd: ["node", "bench/server-koa.mjs"], port: 4101 },
+  { name: `fastify 5 (${NODE_LABEL})`, cmd: ["node", "bench/server-fastify.mjs"], port: 4105 },
   { name: "koa 3 (bun 1.4)", cmd: ["bun", "bench/server-koa.mjs"], port: 4106 },
   { name: "fastify 5 (bun 1.4)", cmd: ["bun", "bench/server-fastify.mjs"], port: 4107 },
 ];
@@ -50,9 +55,14 @@ const SCALE_SERVERS = [
     scale: true,
   },
   { name: "hono 4 (bun 1.4)", cmd: ["bun", "bench/server-hono-scale.ts"], port: 4112, scale: true },
-  { name: "koa 3 (node 22)", cmd: ["node", "bench/server-koa-scale.mjs"], port: 4111, scale: true },
   {
-    name: "fastify 5 (node 22)",
+    name: `koa 3 (${NODE_LABEL})`,
+    cmd: ["node", "bench/server-koa-scale.mjs"],
+    port: 4111,
+    scale: true,
+  },
+  {
+    name: `fastify 5 (${NODE_LABEL})`,
     cmd: ["node", "bench/server-fastify-scale.mjs"],
     port: 4115,
     scale: true,
@@ -205,7 +215,7 @@ const main = async () => {
     lines.push(
       "- Ratio lines carry each side's run-to-run noise (±spread); a ratio inside the noise band is a TIE, not a win",
     );
-    lines.push("- Runtimes: Bun 1.4 (raw / bun-koa / hono) vs Node.js 22 (koa / fastify)");
+    lines.push(`- Runtimes: ${BUN_LABEL} (raw / bun-koa / hono) vs ${NODE_LABEL} (koa / fastify)`);
     lines.push("- Loopback HTTP/1.1 keep-alive; identical response shapes on every framework");
     lines.push("");
 

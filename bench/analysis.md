@@ -44,6 +44,30 @@ answered in-process: 379ns vs raw's 243ns per request, same as hono's.
 costs more per lookup at 1000 entries than a hash-map + trie dispatch. The
 explanation is a hypothesis, the measurement is not.
 
+## Cross-machine replication (dedicated idle Intel machine)
+
+A second, interference-free machine (Intel i5-8257U 4-core, macOS 15.7,
+Bun 1.4.0, all background VMs stopped) re-ran the batch-interleaved
+in-process baseline:
+
+| scenario          |           bun-koa |            hono 4 | ratio |
+| ----------------- | ----------------: | ----------------: | ----: |
+| text, in-process  | 2,118 ns (472k/s) | 2,089 ns (479k/s) | 0.99x |
+| param, in-process | 2,757 ns (363k/s) | 2,703 ns (370k/s) | 0.98x |
+
+The parity conclusion replicates on completely different hardware at a
+completely different absolute speed (Apple Silicon: 379ns tie; Intel:
+~2.1µs, 5.5x slower absolute, same tie). Framework overhead is equal within
+~1.5% on both machines.
+
+The HTTP layer on that machine was DISCARDED (not published as data): a
+4-core CPU cannot host autocannon workers + servers without contention —
+run-to-run spreads of ±31–214% even in pairwise 2-server form, plus
+autocannon's warmup timer goes negative when worker spawn exceeds the
+warmup window on slow hardware. HTTP numbers in this report are from the
+8-core Apple Silicon machine only; the in-process tables are the
+cross-machine evidence.
+
 ## Reproduce
 
 ```sh
