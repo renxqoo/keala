@@ -314,7 +314,7 @@ describe("error path lifecycle", () => {
     // src/core/app.ts buildErrorResponse).
     const errors: unknown[] = [];
     const app = createApp(quiet);
-    app.on("error", (e) => errors.push(e));
+    app.onError((e) => errors.push(e));
     app.use(async (c) => {
       c.set("X-Custom", "leak");
       c.append("Set-Cookie", "sid=dead; Path=/");
@@ -333,7 +333,7 @@ describe("error path lifecycle", () => {
 
   it("语义锁定: upstream middleware may recover after a downstream error", async () => {
     const app = createApp(quiet);
-    app.on("error", () => {});
+    app.onError(() => {});
     app.use(async (c, next) => {
       try {
         await next();
@@ -353,7 +353,7 @@ describe("error path lifecycle", () => {
   it("语义锁定: when a request throws twice, the surviving error wins exactly once", async () => {
     const messages: string[] = [];
     const app = createApp(quiet);
-    app.on("error", (e: Error) => messages.push(e.message));
+    app.onError((e: Error) => messages.push(e.message));
     app.use(async (_c, next) => {
       try {
         await next();
@@ -372,7 +372,7 @@ describe("error path lifecycle", () => {
 
   it("语义锁定: an error listener that throws never escapes app.handle", async () => {
     const app = createApp(quiet);
-    app.on("error", () => {
+    app.onError(() => {
       throw new Error("listener exploded");
     });
     app.use(async () => {
@@ -388,7 +388,7 @@ describe("error path lifecycle", () => {
     // the 405/Allow fixup and the error path owns the response, exactly like
     // @koa/router under koa-compose.
     const app = createApp(quiet);
-    app.on("error", () => {});
+    app.onError(() => {});
     app.get("/get-only", () => {
       throw createError(410, "gone");
     });
@@ -402,7 +402,7 @@ describe("error path lifecycle", () => {
   // leak onto the error response's status line.
   it("语义锁定: the error response does not inherit the failed response's custom statusText", async () => {
     const app = createApp(quiet);
-    app.on("error", () => {});
+    app.onError(() => {});
     app.use(async (c) => {
       c.status = 500;
       c.message = "Custom Phrase";

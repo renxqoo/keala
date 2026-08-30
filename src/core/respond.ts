@@ -160,7 +160,7 @@ const fromState = (c: Context, head: boolean): Response => {
   const status = c.statusValue;
   const custom = c.messageValue;
   let body: Context["bodyValue"] = c.bodyValue;
-  const record = c.headersRecord;
+  let record = c.headersRecord;
 
   if (isEmptyStatus(status)) {
     if (record !== null) {

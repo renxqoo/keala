@@ -166,14 +166,17 @@ const dispatchChain = (
   } catch (err) {
     return errorResponse(app, c, err);
   }
+  // The finalizer itself can fail (unserializable bodies, bad headers) — it
+  // must answer 500, never reject past app.handle.
+  const finish = (): Promise<Response> =>
+    finalize(app, c).catch((err: unknown) => errorResponse(app, c, err));
   // Fully synchronous middleware chains settle without a single promise.
   if (settled !== undefined && typeof (settled as PromiseLike<void>).then === "function") {
-    return (settled as Promise<void>).then(
-      () => finalize(app, c),
-      (err: unknown) => errorResponse(app, c, err),
+    return (settled as Promise<void>).then(finish, (err: unknown) =>
+      errorResponse(app, c, err),
     );
   }
-  return finalize(app, c);
+  return finish();
 };
 
 const errorResponse = async (app: Application, c: Context, err: unknown): Promise<Response> => {

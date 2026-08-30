@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import { startBunServer, type ServeImplementation } from "../src/adapters/bun.ts";
+import { createApp, startBunServer, type ServeImplementation } from "../src/index.ts";
 
+// Bun's real server handle shape: `reload` is the actual hot-reload API (the
+// old `update()` was fictional and has been removed from ServerHandle).
 const fakeServe = (): {
   impl: ServeImplementation;
   options: () => Record<string, unknown>;
@@ -19,23 +20,24 @@ const fakeServe = (): {
         isStopped = true;
       },
       fetch: () => new Response("fake"),
-      update: () => {},
+      reload: () => {},
     };
   };
   return { impl, options: () => captured, stopped: () => isStopped };
 };
 
 describe("startBunServer", () => {
-  it("wires app.handle into the serve fetch handler with the client IP", async () => {
+  it("wires app.handle into the serve fetch handler and passes the server handle through the runtime so c.ip resolves", async () => {
     const app = createApp();
-    app.use(async (ctx) => {
-      ctx.body = { ip: ctx.ip, url: ctx.url };
+    app.use(async (c) => {
+      c.body = { ip: c.ip, url: c.url };
     });
     const { impl, options } = fakeServe();
     startBunServer(app, { port: 4123 }, undefined, impl);
 
     const opts = options();
     expect(opts["port"]).toBe(4123);
+    expect(typeof opts["fetch"]).toBe("function");
     const fetch = opts["fetch"] as (
       request: Request,
       server: { requestIP(request: Request): { address: string } | null },
@@ -72,8 +74,8 @@ describe("startBunServer", () => {
 
   it("handles null requestIP results", async () => {
     const app = createApp();
-    app.use(async (ctx) => {
-      ctx.body = ctx.ip;
+    app.use(async (c) => {
+      c.body = c.ip;
     });
     const { impl, options } = fakeServe();
     startBunServer(app, {}, undefined, impl);
@@ -117,6 +119,7 @@ describe("startBunServer", () => {
     const { impl, stopped } = fakeServe();
     const server = startBunServer(app, {}, undefined, impl);
     expect(typeof server.stop).toBe("function");
+    expect(typeof server.reload).toBe("function");
     server.stop();
     expect(stopped()).toBe(true);
   });

@@ -125,7 +125,7 @@ describe("anomalies: body setter exotic values", () => {
   // finalizer, and `dispatchChain` does not wrap `finalize` — a serialization
   // failure escapes `app.handle` as a rejected promise. v1/koa answered 500.
   // Intended behavior: res.status === 500. Locked phenomenon: TypeError.
-  it("CONFIRMED-BUG: circular objects reject app.handle with TypeError instead of answering 500", async () => {
+  it("unserializable bodies (circular) answer 500, never reject app.handle", async () => {
     const app = createApp(quiet);
     app.onError(() => {});
     app.get("/", (c) => {
@@ -133,16 +133,20 @@ describe("anomalies: body setter exotic values", () => {
       cyclic.self = cyclic;
       c.body = cyclic;
     });
-    await expect(app.handle(new Request("http://localhost:3000/"))).rejects.toThrow(TypeError);
+    const res = await app.handle(new Request("http://localhost:3000/"));
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("Internal Server Error");
   });
 
-  it("CONFIRMED-BUG: BigInt bodies reject app.handle with TypeError instead of answering 500", async () => {
+  it("unserializable bodies (BigInt) answer 500, never reject app.handle", async () => {
     const app = createApp(quiet);
     app.onError(() => {});
     app.get("/", (c) => {
       c.body = 10n as never;
     });
-    await expect(app.handle(new Request("http://localhost:3000/"))).rejects.toThrow(TypeError);
+    const res = await app.handle(new Request("http://localhost:3000/"));
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("Internal Server Error");
   });
 
   it.each([
