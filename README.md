@@ -52,6 +52,59 @@ api.get("/orgs/:oid", (c) => c.text("org"));
 app.mount("/api", api);
 ```
 
+## Components (P2): everything pluggable, zero cost until used
+
+```ts
+import {
+  createBodyParser,
+  validator,
+  cors,
+  csrf,
+  etag,
+  compress,
+  secureHeaders,
+  timing,
+  requestId,
+  logger,
+  bodyLimit,
+  timeout,
+  serveStatic,
+  streamSSE,
+  html,
+  raw,
+} from "bun-koa";
+
+app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // c.req.json()/text()/formData()…
+app.use(cors({ origin: ["https://app.site"], allowCredentials: true }));
+app.use(secureHeaders());
+
+app.post("/users", validator(schema), (c) => c.json(c.valid)); // Standard Schema
+app.get("/feed", (c) =>
+  streamSSE(c, async (sse) => {
+    sse.send({ data: tick() });
+  }),
+);
+app.get("/page/:slug", (c) => c.html(html`<h1>${c.params.slug}</h1>`)); // auto-escaped
+app.ws("/chat", {
+  open(ws) {
+    /* native Bun socket */
+  },
+  message(ws, data) {},
+});
+```
+
+| Component                             | Highlights                                                                                                                                                      |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createBodyParser`                    | one bounded memoized read; every reader re-validates ITS limit (413); malformed JSON/formData → exposed 400                                                     |
+| `validator`                           | Standard Schema (zod 4 / valibot / typebox); issues → 400; result on `c.valid`                                                                                  |
+| `cors` / `csrf`                       | credentials require an origin whitelist; `Vary: Origin` never erasable; `Origin: null` rejected; genuine preflights (with `Access-Control-Request-Method`) only |
+| `etag` / `compress`                   | weak tags + 304 (If-None-Match precedence per RFC 9110); async gzip, injected for tests                                                                         |
+| `serveStatic`                         | decode → normalize → containment; null bytes 400; ANY symlink component denied (dirs included); index containment re-checked                                    |
+| `streamSSE` / `stream` / `streamText` | CRLF/CR-sanitized frames, heartbeat vs Bun's 10s idle timeout, `onAbort`, backpressure signal                                                                   |
+| `html` + `raw()`                      | tag-template escaping; trust marker is a Symbol — unforgeable through JSON                                                                                      |
+| `bodyLimit` / `timeout`               | declared-length fast 413; wall-clock 504 with floating-promise containment                                                                                      |
+| `app.ws`                              | native `server.upgrade`; events dispatched per route with the request context                                                                                   |
+
 ## The context: one flat object
 
 Every request allocates exactly one context. Request and response live on the
