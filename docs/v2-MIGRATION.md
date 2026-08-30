@@ -82,6 +82,7 @@
 6. **compress 默认实现改 Web 标准（2026-08-31，perf/compression-stream 分支验证后合并）**：当初选 node:zlib 的依据是“Bun.gzip 异步版不存在 + node:zlib 异步路径高效”——后半句是未经实测的假设。A/B 实测（端到端走完整框架）：Bun 上 CompressionStream 顺序快 2.7–3.6x（8.7–11.8 vs 31.5µs/10KB 体）、并发平局、idle 省 ~2MB（zlib 桥不再加载）；Node 顺序 +11µs（可选组件，无感）、并发反快 44%。验证：gunzipSync 独立实现交叉解压、1MiB 多 chunk 重组、500 路并发 unhandledRejection 围栏、100k 请求 0.0 B/req 泄漏、双运行时 1223/1206 全绿。
 7. **目录三分 + Component→Plugin + 通配子路径 exports（2026-08-31，refactor/middleware-plugins-helpers 分支）**：`components/` 按生命周期拆为 `middleware/`（每请求管道件，16 个工厂）、`plugins/`（装配期 install 协议，body-parser）、`helpers/`（handler 内工具：streams/html/password）；`auth.ts` 拆分为 guards（middleware）+ 密码工具（helpers，两半零代码依赖）；`csrf-token.ts` 整文件留于 middleware（guard 与 service 共享类型、成对配置）。`interface Component` → `Plugin`（vite/eslint/Fastify decorate 同形术语）。package.json 增加通配子路径 exports（`./middleware/*` 等）——未来新文件自动获得子路径，零维护。决策依据：hono 按调用位置分层（76 子路径第一手核验）、koa 生态装配层猴补反面证据（koa-session/koa-views 改 app.context）、Fastify 类型化 plugin 先例；零行为变更约束（双运行时测试数与重构前逐字一致为合并条件）。
 8. **基准方法学修正（2026-08-31）**：逐服务器顺序执行的基准存在高达 ±25% 的顺序偏差——ABAB 交叉复测证明早前 "vs hono 1.06x~1.29x" 的头条数字落在噪声带内（真实结论：HTTP 统计平局；进程内 379ns vs 379ns 精确打平）。`bench/run.mjs` 已改为全服务器驻留、场景内轮转交错（4 轮），ratio 行附带双方波动带；`verify-baseline.ts` 改为批次级交错。vs koa 3.0–3.5x / 1000 路由 15x 的差距远超噪声带，结论不变。
+9. **Bun.CSRF 尾字符无效位实测（2026-08-31）**：Bun 1.4.0 的 `Bun.CSRF` token 末位 base64 字符有 31% 概率是 padding 无效位——翻转后解码字节与 MAC 输入完全不变，verify 依然通过（200 次实测 61 次）。这曾使 csrf 篡改测试在真 Bun 门禁上 ~1/3 概率闪失败；修复为测试改翻中间字符（必为有效位）。框架篡改防御无缺陷（有效位篡改全部被拒）。
 
 ## 5. 总验收清单（P4 出口）
 
