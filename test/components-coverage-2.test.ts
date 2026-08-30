@@ -93,7 +93,10 @@ describe("coverage: cors preflight extras", () => {
     const pre = await app.handle(
       new Request("http://localhost:3000/x", {
         method: "OPTIONS",
-        headers: { origin: "https://app.site" },
+        headers: {
+          origin: "https://app.site",
+          "access-control-request-method": "GET",
+        },
       }),
     );
     expect(pre.status).toBe(204);

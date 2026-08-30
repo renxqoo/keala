@@ -74,6 +74,10 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     if (info.isDirectory()) {
       if (indexName === false) throw createError(404);
       filePath = resolve(absolute, indexName as string);
+      // A configured index ("../../x") must never escape the root.
+      if (filePath !== root && !filePath.startsWith(`${root}/`)) {
+        throw createError(403, "path traversal rejected", { expose: true });
+      }
       try {
         info = await stat(filePath);
       } catch {
@@ -81,9 +85,18 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       }
     }
     if (options.followSymlinks !== true) {
-      const link = await lstat(absolute).catch(() => null);
-      if (link !== null && link.isSymbolicLink()) {
-        throw createError(403, "symlinks are not followed", { expose: true });
+      // ANY symlink component under root — a linked directory just as much
+      // as a linked file — is denied, even when it points back inside root.
+      // (root itself may legitimately be a symlink.)
+      const parts = absolute.slice(root.length + 1).split("/");
+      let walked = root;
+      for (const part of parts) {
+        walked = `${walked}/${part}`;
+        const link = await lstat(walked).catch(() => null);
+        if (link === null) throw createError(404);
+        if (link.isSymbolicLink()) {
+          throw createError(403, "symlinks are not followed", { expose: true });
+        }
       }
     }
 
@@ -97,9 +110,16 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     };
     if (mime !== null) headers["content-type"] = mime;
 
+    // RFC 9110: If-None-Match decides when present — a mismatch serves 200
+    // (If-Modified-Since is only consulted without it); "*" matches anything.
     const ifNone = c.get("if-none-match");
-    if (ifNone.length > 0 && ifNone.includes(etag.slice(2))) {
-      return new Response(null, { status: 304, headers });
+    if (ifNone.length > 0) {
+      const matched =
+        ifNone.trim() === "*" ||
+        ifNone
+          .split(",")
+          .some((candidate) => candidate.trim().replace(/^W\//, "") === etag.slice(2));
+      return new Response(null, { status: matched ? 304 : 200, headers });
     }
     const ifModified = c.get("if-modified-since");
     if (ifModified.length > 0 && Date.parse(ifModified) >= info.mtime.getTime() - 999) {

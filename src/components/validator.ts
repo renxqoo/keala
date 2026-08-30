@@ -64,7 +64,9 @@ export const validator = (schema: StandardSchema): RouteHandler => {
 
   return async (c, next) => {
     ensureGetter(c);
-    const bytes = await readBodyLimited(c, KIB * KIB);
+    // Align with the app's bodyParser limit when installed; default 1MB.
+    const limit = (c as { bodyJsonLimit?: number }).bodyJsonLimit ?? KIB * KIB;
+    const bytes = await readBodyLimited(c, limit);
     let parsed: unknown;
     if (bytes.byteLength === 0) {
       parsed = null;

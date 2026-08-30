@@ -48,9 +48,9 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
   return async (c, next) => {
     const origin = c.get("origin");
     const allowed = origin.length > 0 && isAllowed(origin, originAllow);
-    if (origin.length > 0) c.set("Vary", "Origin");
 
-    if (c.method === "OPTIONS") {
+    const preflight = c.method === "OPTIONS" && c.get("access-control-request-method").length > 0;
+    if (preflight) {
       if (!allowed) {
         if (options.reject !== undefined) return options.reject(origin);
         c.status = 403;
@@ -62,6 +62,7 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
       if (options.allowCredentials === true) c.set("Access-Control-Allow-Credentials", "true");
       if (maxAge !== undefined) c.set("Access-Control-Max-Age", String(Math.trunc(maxAge)));
       // Preflight answers carry no body and never cookies.
+      c.vary("Origin");
       c.status = 204;
       return;
     }
@@ -74,6 +75,19 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
 
     await next();
 
+    // Append semantics AFTER the handler: its own `Vary` values must never
+    // erase Origin (cache poisoning surface on reflected ACAO responses).
+    // With a committed Response the staged record is empty, so the committed
+    // header value joins the combined set explicitly.
+    const committedVary = c._res?.headers.get("vary") ?? "";
+    const existing = c.resHeader("Vary") || committedVary;
+    const tokens = existing
+      .split(",")
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
+    const lower = new Set(tokens.map((token) => token.toLowerCase()));
+    if (!lower.has("origin")) tokens.push("Origin");
+    c.set("Vary", tokens.join(", "));
     if (allowed) {
       c.set("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
       if (exposeHeaders !== undefined) c.set("Access-Control-Expose-Headers", exposeHeaders);
@@ -95,6 +109,11 @@ export const csrf = (): RouteHandler => {
     if (SAFE.has(c.method)) return next();
     const originHeader = c.get("origin");
     const source = originHeader.length > 0 ? originHeader : c.get("referer");
+    // Sandboxed iframes and privacy extensions send the literal "null" —
+    // it is never a same-origin signal.
+    if (source === "null") {
+      throw createError(403, "cross-site request rejected", { expose: true });
+    }
     if (source.length === 0) {
       throw createError(403, "missing Origin/Referer for a state-changing request", {
         expose: true,

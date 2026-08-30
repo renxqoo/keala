@@ -133,7 +133,12 @@ const sseFrame = (message: SSEMessage): string => {
   }
   const data =
     typeof message.data === "string" ? message.data : (JSON.stringify(message.data) ?? "null");
-  for (const line of data.split("\n")) frame += `data: ${line}\n`;
+  // Real line breaks (\r\n, \n) split data lines; a LONE \r is also a spec
+  // line terminator — neutralize it so it can never forge event/id/retry
+  // fields downstream of a parser that treats it as a break.
+  for (const line of data.split(/\r\n|\n/).map((part) => part.replaceAll("\r", " "))) {
+    frame += `data: ${line}\n`;
+  }
   return `${frame}\n`;
 };
 

@@ -35,8 +35,10 @@ interface BodyCacheState {
 }
 
 const cacheOf = (c: Context): BodyCacheState =>
-  ((c as { bodyCache?: BodyCacheState }).bodyCache ??=
-    { bytes: null, facade: null } as BodyCacheState);
+  ((c as { bodyCache?: BodyCacheState }).bodyCache ??= {
+    bytes: null,
+    facade: null,
+  } as BodyCacheState);
 
 /**
  * Read the request body once, bounded. Content-Length above the limit fails
@@ -45,8 +47,12 @@ const cacheOf = (c: Context): BodyCacheState =>
 export const readBodyLimited = async (c: Context, limit: number): Promise<Uint8Array> => {
   const cache = cacheOf(c);
   if (cache.bytes !== null) {
-    // A previous read with a smaller limit must still hold.
-    return cache.bytes as Promise<Uint8Array>;
+    // The body is already consumed — but THIS reader's limit still applies.
+    const bytes = await cache.bytes;
+    if (bytes.byteLength > limit) {
+      throw createError(413, `request body exceeds the ${limit} byte limit`, { expose: true });
+    }
+    return bytes;
   }
   const declared = c.reqLength;
   if (declared !== undefined && declared > limit) {
@@ -104,9 +110,19 @@ export const createBodyParser = (options: BodyParserOptions = {}): Component => 
   const textLimit = options.textLimit ?? options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const formLimit = options.formLimit ?? DEFAULT_FORM_LIMIT;
 
+  if (
+    (options.jsonLimit !== undefined && options.jsonLimit < 0) ||
+    (options.textLimit !== undefined && options.textLimit < 0) ||
+    (options.formLimit !== undefined && options.formLimit < 0)
+  ) {
+    throw new TypeError("bodyParser limits must be non-negative");
+  }
   return {
     name: "bodyParser",
     install(app: Application): void {
+      // The effective json limit, published so co-installed readers (the
+      // validator) enforce exactly what the app configured.
+      app.decorate("bodyJsonLimit", jsonLimit);
       app.decorate("req", {
         get(this: Context): RequestBodyFacade {
           const cache = cacheOf(this);
@@ -127,11 +143,17 @@ export const createBodyParser = (options: BodyParserOptions = {}): Component => 
             blob: async () => new Blob([await read(jsonLimit)]),
             formData: async () => {
               const bytes = await read(formLimit);
-              return new Response(bytes, {
-                headers: {
-                  "content-type": this.header("content-type") || "application/octet-stream",
-                },
-              }).formData() as Promise<FormData>;
+              try {
+                return (await new Response(bytes, {
+                  headers: {
+                    "content-type": this.header("content-type") || "application/octet-stream",
+                  },
+                }).formData()) as FormData;
+              } catch {
+                throw createError(400, "request body is not decodable form data", {
+                  expose: true,
+                });
+              }
             },
           };
           return cache.facade;

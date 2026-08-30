@@ -18,19 +18,30 @@ export const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (ch) => ESCAPE[ch] as string);
 
 /** Mark a fragment as trusted — interpolated verbatim by `html`. */
-export const raw = (value: string): { readonly __raw: string } => ({ __raw: value });
+/** Unforgeable trust marker (Symbols never survive JSON or cloning). */
+const RAW = Symbol("bk-raw");
 
-const isRaw = (value: unknown): value is { __raw: string } =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as { __raw?: unknown }).__raw === "string";
+/** Mark a fragment as trusted — interpolated verbatim by `html`. */
+export const raw = (value: string): { readonly [RAW]: string } => ({ [RAW]: value });
+
+interface RawValue {
+  [RAW]: string;
+}
+
+const isRaw = (value: unknown): value is RawValue =>
+  typeof value === "object" && value !== null && typeof (value as RawValue)[RAW] === "string";
 
 const renderValue = (value: unknown): string => {
-  if (isRaw(value)) return value.__raw;
+  if (isRaw(value)) return value[RAW];
   if (typeof value === "string") return escapeHtml(value);
   if (value === null || value === undefined) return "";
   if (Array.isArray(value)) return value.map(renderValue).join("");
-  return escapeHtml(String(value));
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return escapeHtml(String(value));
+  }
+  // Plain objects (JSON bodies and friends) render as escaped JSON — a
+  // forged `__raw` key is data here, never a trust marker.
+  return escapeHtml(JSON.stringify(value) ?? "null");
 };
 
 export const html = (strings: TemplateStringsArray, ...values: unknown[]): string => {
