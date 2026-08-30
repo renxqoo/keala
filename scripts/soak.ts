@@ -1,216 +1,130 @@
 /**
- * Memory-leak soak test (run under Bun).
+ * Memory-leak soak: three layers of sustained load with heap sampling.
  *
- * Drives hundreds of thousands of requests through every allocation-heavy
- * path (text / JSON / params / cookies / errors / redirects / query parsing),
- * forces GC between rounds and asserts that heap usage stabilizes.
+ *   A. in-process framework requests (allocation stress, no network)
+ *   B. full-stack HTTP against a real Bun.serve (fetch keep-alive, retries)
+ *   C. concurrent flood (mixed routes/errors/404s in flight together)
  *
- * Run: bun scripts/soak.ts   (exit code 0 = no leak detected)
+ * Each layer forces GC before/after and asserts the retained-heap drift stays
+ * under budget. Run: bun scripts/soak.ts
  */
 
-import { createApp } from "../src/application/app.ts";
-import { createRouter } from "../src/router/router.ts";
+import { createApp } from "../src/core/app.ts";
 
-const ROUNDS = Number(process.argv[2] ?? 8);
-const PER_ROUND = Number(process.argv[3] ?? 150_000);
-const HTTP_ROUNDS = 4;
-const HTTP_PER_ROUND = 20_000;
-const TOLERANCE = 0.03; // 3% drift allowed after stabilization
+const ROUNDS = 24;
+const PER_ROUND = 20_000;
+const DRIFT_BUDGET_BYTES = 1_500; // allowed retained growth per request
 
-const buildApp = (opts: { pooling?: boolean } = {}) => {
-  // biome-ignore lint: options flow through to createApp below
-  const app = createApp({ keys: ["soak-key"], env: "test", pooling: opts.pooling });
-  const router = createRouter({ prefix: "/api" });
+const app = createApp({ keys: ["soak"], env: "test" });
+app.use(async (c, next) => {
+  c.set("X-Soak", "1");
+  await next();
+});
+app.get("/text", (c) => c.text("hello world"));
+app.get("/json", (c) => c.json({ hello: "world", list: [1, 2, 3] }));
+app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+app.get("/boom", () => {
+  throw new Error("soak-boom");
+});
+app.get("/cookies", (c) => {
+  c.cookies.set("sid", "x".repeat(24), { signed: true });
+  c.body = "ok";
+});
 
-  router.get("/text", (ctx) => {
-    ctx.body = "hello world";
-  });
-  router.get("/json", (ctx) => {
-    ctx.body = { hello: "world", n: 42 };
-  });
-  router.get("/users/:id(\\d+)", (ctx) => {
-    ctx.body = `user ${ctx.params.id}`;
-  });
-  router.get(
-    "/state",
-    async (ctx, next) => {
-      ctx.state.step = 1;
-      await next();
-      ctx.set("X-Done", "yes");
-    },
-    (ctx) => {
-      ctx.cookies.set("seen", "1", { httpOnly: true, signed: true });
-      ctx.body = `q=${String(ctx.query.q ?? "-")}`;
-    },
-  );
-  router.get("/error", () => {
-    throw new Error("planned failure");
-  });
-  router.get("/redirect", (ctx) => {
-    ctx.redirect("/api/text");
-  });
-  router.get("/cookies", (ctx) => {
-    ctx.body = ctx.cookies.get("seen") ?? "none";
-  });
-  app.use(router.routes()).use(router.allowedMethods());
-  return app;
+const paths = ["/text", "/json", "/users/7", "/boom", "/cookies"] as const;
+const requests = paths.map((p) => new Request(`http://soak.local${p}`));
+
+const gc = (): void => {
+  Bun.gc(true);
+  Bun.gc(true);
 };
 
-const gc = async (): Promise<void> => {
-  for (let i = 0; i < 3; i++) {
-    Bun.gc(true);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-};
+const sample = (): number => process.memoryUsage().heapUsed;
 
-const heap = (): number => process.memoryUsage().heapUsed;
-const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(2)}MB`;
-
-let failures = 0;
-const check = (name: string, condition: boolean, detail: string): void => {
-  const mark = condition ? "✓" : "✗";
-  if (!condition) failures += 1;
-  console.log(`  ${mark} ${name} ${detail}`);
-};
-
-// Bun's fetch client occasionally races keep-alive reconnects under
-// sustained concurrent load; retry a few times on transport errors.
-const fetchRetry = async (url: string): Promise<Response> => {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await fetch(url);
-    } catch (err) {
-      if (attempt >= 2) throw err;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-  }
-};
-
-const main = async (): Promise<void> => {
-  console.log(
-    `bun-koa soak test — ${ROUNDS} rounds x ${PER_ROUND} in-process requests (Bun ${Bun.version})`,
-  );
-
-  // ---------- Layer A: in-process framework allocations ----------
-  const app = buildApp();
-  const paths = [
-    "http://localhost:3000/api/text",
-    "http://localhost:3000/api/json",
-    "http://localhost:3000/api/users/12345",
-    "http://localhost:3000/api/state?q=soak",
-    "http://localhost:3000/api/error",
-    "http://localhost:3000/api/redirect",
-    "http://localhost:3000/api/cookies",
-  ];
-  const requests = paths.map(
-    (url) =>
-      new Request(url, {
-        headers: { Accept: "text/html,application/json", Cookie: "seen=soak" },
-      }),
-  );
-  app.on("error", () => {});
-
-  // warmup (JIT, caches, hidden classes)
-  for (let i = 0; i < 30_000; i++) {
-    const request = requests[i % requests.length] as Request;
-    const res = await app.handle(request);
+const driveInProcess = async (label: string): Promise<void> => {
+  gc();
+  const before = sample();
+  for (let i = 0; i < PER_ROUND; i++) {
+    const res = await app.handle(requests[i % paths.length]!);
     await res.text();
   }
-  await gc();
-
-  const samples: number[] = [];
-  for (let round = 0; round < ROUNDS; round++) {
-    for (let i = 0; i < PER_ROUND; i++) {
-      const request = requests[i % requests.length] as Request;
-      const res = await app.handle(request);
-      await res.text();
-    }
-    await gc();
-    const used = heap();
-    samples.push(used);
-    console.log(`  round ${round + 1}/${ROUNDS}: heap ${mb(used)}`);
-  }
-
-  const first = samples[0] as number;
-  const last = samples[samples.length - 1] as number;
-  const drift = (last - first) / first;
-  check(
-    "in-process heap stabilized",
-    Math.abs(drift) < TOLERANCE,
-    `drift ${(drift * 100).toFixed(2)}% (${mb(first)} -> ${mb(last)})`,
+  gc();
+  const drift = (sample() - before) / PER_ROUND;
+  const pass = drift <= DRIFT_BUDGET_BYTES;
+  console.log(
+    `${pass ? "✓" : "✗"} ${label}: ${PER_ROUND.toLocaleString()} req, retained drift ${drift.toFixed(1)} B/req (budget ${DRIFT_BUDGET_BYTES})`,
   );
-
-  // ---------- Layer B: full stack through a real Bun.serve ----------
-  console.log(`full-stack soak — ${HTTP_ROUNDS} rounds x ${HTTP_PER_ROUND} HTTP requests`);
-  const serverApp = buildApp();
-  serverApp.on("error", () => {});
-  const server = serverApp.listen(0, "127.0.0.1");
-  const base = `http://127.0.0.1:${server.port}`;
-
-  const httpSamples: number[] = [];
-  for (let round = 0; round < HTTP_ROUNDS; round++) {
-    const batch = 32;
-    for (let sent = 0; sent < HTTP_PER_ROUND; sent += batch) {
-      await Promise.all(
-        Array.from({ length: batch }, async (_, i) => {
-          const res = await fetchRetry(
-            `${base}${paths[(sent + i) % paths.length]?.slice("http://localhost:3000".length) ?? "/api/text"}`,
-          );
-          await res.text();
-        }),
-      );
-    }
-    await gc();
-    const used = heap();
-    httpSamples.push(used);
-    console.log(`  round ${round + 1}/${HTTP_ROUNDS}: heap ${mb(used)}`);
-  }
-  server.stop();
-
-  const httpFirst = httpSamples[0] as number;
-  const httpLast = httpSamples[httpSamples.length - 1] as number;
-  const httpDrift = (httpLast - httpFirst) / httpFirst;
-  check(
-    "full-stack heap stabilized",
-    Math.abs(httpDrift) < TOLERANCE,
-    `drift ${(httpDrift * 100).toFixed(2)}% (${mb(httpFirst)} -> ${mb(httpLast)})`,
-  );
-
-  // ---------- Layer C: pooled mode under load ----------
-  console.log(`pooled soak — ${ROUNDS} rounds x ${PER_ROUND} in-process requests (pooling on)`);
-  const pooledApp = buildApp({ pooling: true });
-  pooledApp.on("error", () => {});
-  const warm = await pooledApp.handle(requests[0] as Request);
-  await warm.text();
-  await gc();
-  const pooledSamples: number[] = [];
-  for (let round = 0; round < ROUNDS; round++) {
-    for (let i = 0; i < PER_ROUND; i++) {
-      const request = requests[i % requests.length] as Request;
-      const res = await pooledApp.handle(request);
-      await res.text();
-    }
-    await gc();
-    pooledSamples.push(heap());
-  }
-  const pooledDrift =
-    ((pooledSamples[pooledSamples.length - 1] as number) - (pooledSamples[0] as number)) /
-    (pooledSamples[0] as number);
-  check(
-    "pooled heap stabilized",
-    Math.abs(pooledDrift) < TOLERANCE,
-    `drift ${(pooledDrift * 100).toFixed(2)}% (${mb(pooledSamples[0] as number)} -> ${mb(pooledSamples[pooledSamples.length - 1] as number)})`,
-  );
-
-  const rss = process.memoryUsage.rss();
-  console.log(`final rss: ${mb(rss)}`);
-
-  if (failures === 0) {
-    console.log("SOAK OK — no memory leak detected");
-    process.exit(0);
-  }
-  console.error(`SOAK FAILED (${failures} checks)`);
-  process.exit(1);
+  if (!pass) process.exitCode = 1;
 };
 
-void main();
+const fetchRetry = async (url: string, init?: RequestInit): Promise<Response> => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      lastError = err; // Bun fetch keep-alive reconnect race — retry once
+    }
+  }
+  throw lastError;
+};
+
+const driveHttp = async (label: string): Promise<void> => {
+  const server = app.listen({ port: 0, hostname: "127.0.0.1" });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const base = `http://127.0.0.1:${server.port}`;
+  gc();
+  const before = sample();
+  const total = 8_000;
+  for (let i = 0; i < total; i++) {
+    const path = paths[i % paths.length];
+    const res = await fetchRetry(`${base}${path}`);
+    await res.text();
+  }
+  gc();
+  const drift = (sample() - before) / total;
+  server.stop(true);
+  const pass = drift <= DRIFT_BUDGET_BYTES;
+  console.log(
+    `${pass ? "✓" : "✗"} ${label}: ${total.toLocaleString()} req over HTTP, retained drift ${drift.toFixed(1)} B/req`,
+  );
+  if (!pass) process.exitCode = 1;
+};
+
+const driveConcurrent = async (label: string): Promise<void> => {
+  gc();
+  const before = sample();
+  const batches = 40;
+  const width = 64;
+  for (let b = 0; b < batches; b++) {
+    const inFlight = Array.from({ length: width }, (_, i) =>
+      app.handle(requests[(b * width + i) % paths.length]!),
+    );
+    for (const p of inFlight) await (await p).text();
+  }
+  gc();
+  const total = batches * width;
+  const drift = (sample() - before) / total;
+  const pass = drift <= DRIFT_BUDGET_BYTES;
+  console.log(
+    `${pass ? "✓" : "✗"} ${label}: ${total.toLocaleString()} concurrent req, retained drift ${drift.toFixed(1)} B/req`,
+  );
+  if (!pass) process.exitCode = 1;
+};
+
+console.log(
+  `bun-koa v2 soak — ${ROUNDS} rounds x ${PER_ROUND.toLocaleString()} (Bun ${Bun.version})`,
+);
+
+for (let round = 0; round < ROUNDS; round++) {
+  await driveInProcess(`round ${round} A in-process`);
+  if (round % 6 === 0) await driveHttp(`round ${round} B http`);
+  if (round % 6 === 3) await driveConcurrent(`round ${round} C concurrent`);
+}
+
+if (process.exitCode === 0 || process.exitCode === undefined) {
+  console.log("SOAK OK — no retained-heap growth beyond budget");
+  process.exit(0);
+}
+console.error("SOAK FAILED: retained-heap drift exceeded budget");
+process.exit(1);

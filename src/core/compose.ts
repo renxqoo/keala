@@ -60,9 +60,16 @@ const makeLevel =
         throw new Error("next() called multiple times in the same middleware");
       }
       advanced = true;
-      // Sync middleware may settle without a promise; the cast keeps `Next`
-      // honest without wrapping every hop in `Promise.resolve`.
-      return downstream(c, tail) as Promise<void>;
+      const downstreamResult = downstream(c, tail);
+      if (downstreamResult !== undefined && typeof downstreamResult.then === "function") {
+        // A handler that returns WITHOUT awaiting its next() leaves this
+        // promise floating; a late rejection there would otherwise surface as
+        // a process-level unhandledRejection under Bun.serve. Observe it
+        // silently — the response has already been committed by design.
+        // (Synchronous chains return undefined here and pay nothing.)
+        void (downstreamResult as Promise<void>).catch(() => undefined);
+      }
+      return downstreamResult as Promise<void>;
     });
     if (result instanceof Promise) {
       return result.then((settled) => {

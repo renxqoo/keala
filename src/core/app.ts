@@ -154,6 +154,23 @@ const errorStatusCode = (error: Error): number => {
       : 500;
 };
 
+/**
+ * Finalize behind the never-reject guard: a failing finalizer (unserializable
+ * bodies, throwing not-found handlers, bad headers) answers 500 instead of
+ * rejecting past `app.handle`.
+ */
+const finalizeGuarded = (app: Application, c: Context): Response | Promise<Response> => {
+  try {
+    const out = finalize(app, c);
+    if (out instanceof Promise) {
+      return out.catch((err: unknown) => errorResponse(app, c, err));
+    }
+    return out;
+  } catch (err) {
+    return errorResponse(app, c, err);
+  }
+};
+
 /** Run the compiled chain and finalize; never rethrows to the caller. */
 const dispatchChain = (
   app: Application,
@@ -170,17 +187,7 @@ const dispatchChain = (
   // must answer 500, never reject past app.handle. It stays synchronous on
   // every hot path (only committed-Response-under-HEAD goes async), so fully
   // synchronous middleware chains settle without a single extra promise.
-  const finish = (): Response | Promise<Response> => {
-    try {
-      const out = finalize(app, c);
-      if (out instanceof Promise) {
-        return out.catch((err: unknown) => errorResponse(app, c, err));
-      }
-      return out;
-    } catch (err) {
-      return errorResponse(app, c, err);
-    }
-  };
+  const finish = (): Response | Promise<Response> => finalizeGuarded(app, c);
   // Fully synchronous middleware chains settle without a single promise.
   if (settled !== undefined && typeof (settled as PromiseLike<void>).then === "function") {
     return (settled as Promise<void>).then(finish, (err: unknown) => errorResponse(app, c, err));
@@ -236,7 +243,7 @@ const buildErrorResponse = (
   const message = exposed ? error.message : statusMessage(status) || "Internal Server Error";
   c.set("Content-Type", "text/plain; charset=utf-8");
   c.body = message;
-  return finalize(app, c);
+  return finalizeGuarded(app, c);
 };
 
 const defaultNotFound: NotFoundHandler = () => undefined;
@@ -268,7 +275,9 @@ export const createApp = (options: AppOptions = {}): Application => {
   const emitter = createEmitter();
   const globalMw: RouteHandler[] = [];
   const router = createRouterState();
-  const contextProto = baseContextProto;
+  // Derived per app: decorate() writes land here, never on the shared base
+  // prototype — one app's extensions must not leak into another's contexts.
+  const contextProto: object = Object.create(baseContextProto);
   const settings: RequestSettings = Object.freeze({
     proxy: options.proxy ?? false,
     proxyIpHeader: options.proxyIpHeader ?? "x-forwarded-for",
@@ -352,6 +361,9 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     mount(prefix, sub) {
+      if (sub === app) {
+        throw new TypeError("app.mount() cannot mount an app into itself");
+      }
       // "/" (and "") mount at the root without doubling slashes.
       const base =
         prefix === "/" || prefix === ""
@@ -359,7 +371,9 @@ export const createApp = (options: AppOptions = {}): Application => {
           : prefix.endsWith("/") && prefix.length > 1
             ? prefix.slice(0, -1)
             : prefix;
-      const defs = isRouter(sub) ? sub.defs : sub.router.defs;
+      // Snapshot: registering into this app must not alias the live array
+      // being iterated (self-referential mounts would otherwise grow forever).
+      const defs = [...(isRouter(sub) ? sub.defs : sub.router.defs)];
       const paramMiddlewares = isRouter(sub) ? sub.paramMiddlewares : sub.router.paramMiddlewares;
       // A mounted app (or router) carries its own middleware ahead of its routes.
       const subGlobal = isRouter(sub) ? sub.middleware : sub.globalMiddleware;
@@ -431,7 +445,7 @@ export const createApp = (options: AppOptions = {}): Application => {
       }
       // No handler: global middleware still runs (koa contract), then the
       // finalizer decides between 405/501/OPTIONS and not-found.
-      if (globalChain === null) return finalize(app, c);
+      if (globalChain === null) return finalizeGuarded(app, c);
       return dispatchChain(app, c, globalChain);
     },
 

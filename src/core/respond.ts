@@ -88,14 +88,14 @@ const methodNotAllowed = (c: Context): Response | null => {
   return null;
 };
 
-/** Rule 4: headers written after a committed Response merge into it. */
-const mergeIntoCommitted = (res: Response, record: HeaderMap): Response => {
-  const headers = new Headers();
-  for (const [key, value] of res.headers.entries()) {
-    if (key === "set-cookie") continue; // appended individually below
-    headers.set(key, value);
-  }
-  for (const cookie of res.headers.getSetCookie()) headers.append("set-cookie", cookie);
+/**
+ * Rule 4: headers written after a committed Response merge into it. The
+ * rebuild feeds `res.body` (a stream) to the constructor, which loses the
+ * runtime's body-type content-type inference — restore it by sniffing the
+ * payload when no content-type survives anywhere.
+ */
+const mergeIntoCommitted = async (res: Response, record: HeaderMap): Promise<Response> => {
+  const headers = await mergedResponseHeaders(res);
   // Deferred writes win on collision — they are the user's latest intent.
   for (const key of Object.keys(record)) {
     const value = record[key] as string | string[];
@@ -106,6 +106,36 @@ const mergeIntoCommitted = (res: Response, record: HeaderMap): Response => {
     }
   }
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+};
+
+/** Response headers for a rebuild; sniffs a text body when content-type is absent. */
+const mergedResponseHeaders = async (res: Response): Promise<Headers> => {
+  const headers = new Headers();
+  for (const [key, value] of res.headers.entries()) {
+    if (key === "set-cookie") continue; // appended individually below
+    headers.set(key, value);
+  }
+  for (const cookie of res.headers.getSetCookie()) headers.append("set-cookie", cookie);
+  if (headers.get("content-type") === null) {
+    const sniffed = await sniffContentType(res);
+    if (sniffed !== null) headers.set("content-type", sniffed);
+  }
+  return headers;
+};
+
+/**
+ * A bare `new Response(string)` gets `text/plain` from the runtime only while
+ * the body is still a string; rebuilding from the stream turns it into
+ * `application/octet-stream`. Sniff the payload to decide (rare path — only
+ * post-commit header writes land here).
+ */
+const sniffContentType = async (res: Response): Promise<string | null> => {
+  try {
+    const text = await res.clone().text();
+    return text.includes("\uFFFD") ? "application/octet-stream" : "text/plain; charset=utf-8";
+  } catch {
+    return null; // unreadable body — let the runtime decide
+  }
 };
 
 /**
@@ -130,6 +160,13 @@ const committedHead = async (res: Response): Promise<Response> => {
   const length = await committedLength(res);
   const headers = new Headers(res.headers);
   if (length !== null) headers.set("content-length", String(length));
+  if (headers.get("content-type") === null) {
+    // Rebuilding from the stream loses the runtime's text inference (see
+    // mergeIntoCommitted) — HEAD responses deserve the same content-type the
+    // GET body would have carried.
+    const sniffed = await sniffContentType(res);
+    if (sniffed !== null) headers.set("content-type", sniffed);
+  }
   return new Response(null, { status: res.status, statusText: res.statusText, headers });
 };
 
@@ -247,7 +284,16 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
   const committed = c._res;
   if (committed !== undefined) {
     const record = c.headersRecord;
-    if (record !== null && countOf(record) > 0) return mergeIntoCommitted(committed, record);
+    // Late c.set() writes merge into the committed Response (rule 4) — and a
+    // HEAD request still drops the body with a backfilled Content-Length.
+    // Rare paths (post-commit header writes, committed HEAD) go async; the
+    // common committed case returns synchronously.
+    if (record !== null && countOf(record) > 0) {
+      const head = c.method === "HEAD";
+      return mergeIntoCommitted(committed, record).then((merged) =>
+        head && merged.body !== null ? committedHead(merged) : merged,
+      );
+    }
     if (c.method === "HEAD" && committed.body !== null) return committedHead(committed);
     return committed;
   }
@@ -257,7 +303,7 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
     if (rejected !== null) return head ? stripBody(rejected) : rejected;
     const notFound = app.notFoundHandler(c);
     if (notFound instanceof Response)
-      return head && notFound.body !== null ? stripBody(notFound) : notFound;
+      return head && notFound.body !== null ? committedHead(notFound) : notFound;
   }
   return fromState(c, head);
 };

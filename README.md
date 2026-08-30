@@ -1,111 +1,154 @@
-# bun-koa
+# bun-koa v2
 
-**Koa-compatible onion-model framework for [Bun 1.4+](https://bun.sh).** Same
-middleware you know from Koa — `app.use`, `ctx.body`, `ctx.throw`, signed
-cookies, content negotiation, `@koa/router`-style routing — rebuilt on
-Bun's native `fetch` handler and **precompiled** middleware chains.
+**High-performance onion-model web framework for [Bun 1.4+](https://bun.sh).**
+Hono's speed and feature surface, Koa's middleware ergonomics — one flat
+context per request, top-level routing, precompiled middleware chains, and a
+bare-`Response` fast path. Zero runtime dependencies; the core is
+runtime-free and also runs under Node for testing.
 
-Zero runtime dependencies. **1.8x faster than Koa on Node**, at parity with
-(or slightly ahead of) Hono while keeping the full Koa API.
+**In-process throughput vs Hono (Bun 1.4, Apple Silicon): text 1.08x, param
+routes 1.04x** — while carrying lazy content negotiation, signed cookies,
+405/Allow synthesis and the full onion model. See `bench/BENCH.md`.
 
 ```bash
 bun add bun-koa
 ```
 
 ```ts
-import { createApp, createRouter } from "bun-koa";
+import { createApp } from "bun-koa";
 
 const app = createApp({ keys: ["signing-secret"] });
 
-// Koa-style onion middleware
-app.use(async (ctx, next) => {
+// Global onion middleware — compiled into every route chain once
+app.use(async (c, next) => {
   const start = Date.now();
   await next();
-  ctx.set("X-Response-Time", `${Date.now() - start}ms`);
+  c.set("X-Response-Time", `${Date.now() - start}ms`);
 });
 
-const router = createRouter({ prefix: "/api" });
+// Return style (hono-like): fastest path
+app.get("/users/:id(\\d+)", (c) => c.json({ id: c.params.id }));
 
-router.get("/users/:id(\\d+)", (ctx) => {
-  ctx.body = { id: Number(ctx.params.id) };
+// State style (koa-like): c.body / c.status / c.set
+app.get("/page", (c) => {
+  c.type = "text/html";
+  c.body = "<b>hi</b>";
 });
 
-app.use(router.routes()).use(router.allowedMethods());
-
-export default app.listen(3000);
+app.listen(3000);
 ```
 
-## Opt-in context pooling
+Route groups mount by table merge (404s fall through to the parent):
 
 ```ts
-const app = createApp({ pooling: true });
+import { createRouter } from "bun-koa";
+
+const api = createRouter({ prefix: "/v1" });
+api.param("oid", async (c, next) => {
+  /* org guard */ await next();
+});
+api.get("/orgs/:oid", (c) => c.text("org"));
+
+app.mount("/api", api);
 ```
 
-Recycles the three per-request context objects (~+5% throughput in
-microbenchmarks). Only enable it when no middleware stores `ctx` beyond the
-request lifetime (timers, background promises, external stores) — a recycled
-context is rewritten by the next request. Default stays off; the zero-promise
-sync fast path and all semantics are identical either way.
+## The context: one flat object
+
+Every request allocates exactly one context. Request and response live on the
+same object; everything lazy (`query`, `cookies`, `ip`, `state`) materializes
+on first touch.
+
+| Request side                                  | Response side                                  | Sugar (return style)             |
+| --------------------------------------------- | ---------------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/query`                 | `c.status/body/message/type/length`            | `c.text(str, status?, headers?)` |
+| `c.get(name)` / `c.header(name)`              | `c.set/append/remove/vary/has/resHeader`       | `c.json(obj, status?, headers?)` |
+| `c.params` `c.query` `c.ip/ips/host/hostname` | `c.etag/lastModified/attachment/redirect/back` | `c.html(str, status?, headers?)` |
+| `c.accepts*/is/fresh/stale/charset`           | `c.cookies` (signed, key rotation)             | `c.throw/assert`                 |
+
+Dual-mode rules in one line each: **a returned `Response` commits; `c.*`
+writes are staged; the last committer wins; untouched requests hit
+`app.notFound`**. A matched path without the method answers 405 + `Allow`
+(OPTIONS gets 200 + `Allow`, unknown methods 501).
+
+## Migrating from v1 / koa
+
+| v1 (koa-style)                                          | v2                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------- |
+| `ctx.request.get("x")`                                  | `c.get("x")`                                            |
+| `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                         |
+| `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n` (same)                    |
+| `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`                 |
+| `app.use(router.routes()).use(router.allowedMethods())` | `app.get(...)` directly, or `app.mount(prefix, router)` |
+| `new Koa({ proxy: true })`                              | `createApp({ proxy: true })`                            |
+| `ctx.state.user`                                        | `c.state.user` (same)                                   |
+| `ctx.cookies.get/set`                                   | `c.cookies.get/set` (same, signed + keys)               |
+
+Deliberate v2 divergences (see `docs/v2-DESIGN.md` §0): string bodies carry no
+framework-set `content-type` (the runtime provides `text/plain`; use `c.type`
+or the sugar for explicit types); markup sniffing is gone; object bodies keep
+their object shape on `c.body` reads.
 
 ## Why it's fast
 
-| Koa (Node)                                        | bun-koa (Bun)                                       |
-| ------------------------------------------------- | --------------------------------------------------- |
-| Recompiles dispatch closure **per request**       | Chain compiled **once** at `use()` time             |
-| Every middleware hop wrapped in `Promise.resolve` | Fully-sync chains return with **zero promises**     |
-| `req`/`res` objects + header re-serialization     | Web `Request`/`Response` passed through natively    |
-| Eager body/URL work                               | Query, cookies, client IP, `ctx.state` are **lazy** |
-| Router regex walk                                 | Static routes = one `Map` hash hit; params via trie |
-
-Full numbers, methodology and a reproduction script: [bench/BENCH.md](bench/BENCH.md).
-
-- **vs Koa 3 + @koa/router (Node 22): 1.8x** (text / JSON / params / middleware)
-- **vs Hono 4 (Bun): 0.99–1.02x** over HTTP; framework overhead at parity or better,
-  and the 3-middleware onion scenario edges ahead (precompiled chains vs
-  per-request composition).
+| Koa (Node)                                        | bun-koa v2 (Bun)                                                                 |
+| ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Recompiles dispatch closure **per request**       | Chain compiled **once** at registration time                                     |
+| Every middleware hop wrapped in `Promise.resolve` | Fully-sync chains return with **zero promises**                                  |
+| `req`/`res` objects + header re-serialization     | Web `Request`/`Response` passed through natively                                 |
+| Eager body/URL work                               | Query, cookies, client IP, `state` are **lazy**                                  |
+| Router regex walk                                 | Static = one `Map` hit; simple params = compiled matcher; everything else = trie |
+| Three context objects per request                 | **One** flat context object                                                      |
+| Router runs as an onion layer                     | Routing happens **before** the chain (hono model)                                |
+| Response rebuilt with header maps                 | Bare `new Response(body)` fast path; `Response.json` for objects                 |
 
 ## API
 
 ### Application
 
-| Member                           | Description                                                                                                                 |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `createApp(options?)`            | Factory (no classes anywhere). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent` |
-| `app.use(...mw)`                 | Register middleware; chain recompiles automatically                                                                         |
-| `app.handle(request, remote?)`   | Fetch-style handler `(Request) => Response \| Promise<Response>`                                                            |
-| `app.listen(port?, host?, cb?)`  | Boots `Bun.serve`; returns the Bun `Server`                                                                                 |
-| `app.on("error", fn)`            | Central error hook; `silent`/`env: "test"` suppress default logging                                                         |
-| `app.callback()`, `app.toJSON()` | Koa-compatible helpers                                                                                                      |
+| Member                                                                         | Description                                                                                                                 |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `createApp(options?)`                                                          | Factory (no classes anywhere). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent` |
+| `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                  |
+| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                           |
+| `app.on(method, path, ...handlers)`                                            | Any method, any case                                                                                                        |
+| `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                               |
+| `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                             |
+| `app.handle(request, runtime?)`                                                | Fetch-style handler; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                             |
+| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`)                                                               |
+| `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                          |
+| `app.decorate(key, value)`                                                     | Extend every context (setup time)                                                                                           |
+| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)` | Redirect routes and named-URL building                                                                                      |
+| `app.callback()`, `app.toJSON()`                                               | Adapters and introspection                                                                                                  |
 
 ### Context
 
-Everything Koa's context delegates, with the same semantics:
+One flat object — request side, response side and sugar share it:
 
-- Request: `method url path query querystring search host hostname protocol
-secure ip ips subdomains origin href fresh stale idempotent charset length
-type header headers get is accepts acceptsEncodings acceptsCharsets
-acceptsLanguages originalUrl` (`url` is settable for re-routing)
+- Request: `raw method url path query querystring search originalUrl URL host
+hostname protocol secure ip ips subdomains origin href fresh stale idempotent
+charset reqType reqLength headers get/header is accepts acceptsEncodings
+acceptsCharsets acceptsLanguages params state` (`url`/`path`/`query` are
+  settable; rewrites invalidate the caches exactly like koa)
 - Response: `status message body type length etag lastModified attachment
-redirect set append remove vary headerSent responseHeaders`
-- `ctx.state`, `ctx.cookies`, `ctx.throw(status, msg?, props?)`,
-  `ctx.assert(cond, status, ...)`, `ctx.params` (set by the router)
+redirect back set append remove vary has resHeader cookies`
+- Sugar: `text/json/html(body, status?, headers?)` — return them straight from
+  the handler
+- `c.throw(status, msg?, props?)`, `c.assert(cond, status, ...)`
 
 ### Cookies
 
-`ctx.cookies.get(name, { signed })` / `ctx.cookies.set(name, value, options)`
-with `maxAge expires path domain secure httpOnly sameSite partitioned priority
+`c.cookies.get(name, { signed })` / `c.cookies.set(name, value, options)` with
+`maxAge expires path domain secure httpOnly sameSite partitioned priority
 overwrite signed`. Signing is HMAC-SHA256 with key rotation (Keygrip format:
-`value.signature`).
+`value.signature`); signed reads fail closed without configured keys.
 
 ### Router
 
-`createRouter({ prefix })` with the `@koa/router` surface: `get post put patch
-delete head options all register use prefix param redirect route url routes
-allowedMethods`. Patterns: `:name`, `:name(\\d+)` (custom regex), `:name?`
-(optional), `*` (wildcard tail). HEAD falls back to GET handlers
-(Express-style). `allowedMethods()` answers 405 + `Allow` (501 for unknown
-verbs). Nested routers: `parent.use("/mount", child.routes())` mounts with
-koa-mount semantics.
+`createRouter({ prefix })` groups routes for `app.mount`. Patterns: `:name`,
+`:name(\\d+)` (custom regex), `:name?` (optional), `*` (wildcard tail).
+Matching priority static > param > wildcard; HEAD falls back to GET handlers
+(Express-style); 405 + `Allow`, OPTIONS 200, and 501 for unknown verbs are
+built into dispatch — no `allowedMethods()` middleware needed.
 
 ## Quality gates
 

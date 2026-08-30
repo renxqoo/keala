@@ -89,10 +89,17 @@ export const compilePattern = (path: string): PatternIR => {
   }
   let dynamic = 0;
   let simple = true;
+  let sawDynamic = false;
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i] as CompiledSegment;
-    if (segment.kind === "static") continue;
+    if (segment.kind === "static") {
+      // A static segment AFTER a dynamic one breaks the fast-matcher shape
+      // (the matcher assumes only params follow the static head).
+      if (sawDynamic) simple = false;
+      continue;
+    }
     dynamic++;
+    sawDynamic = true;
     if (segment.kind === "wildcard" || segment.optional || segment.pattern !== null || i === 0) {
       simple = false;
     }

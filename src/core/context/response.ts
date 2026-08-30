@@ -112,6 +112,48 @@ const clearTouchedLength = (c: ContextState): void => {
 };
 
 /**
+ * The sugar helpers CONSUME the staged headers: whatever c.set()/c.cookies
+ * wrote before the return is delivered inside the built Response, and the
+ * staging record is cleared so the finalizer does not merge it a second time.
+ * Only writes staged AFTER the sugar return hit the rule-4 merge path.
+ */
+const consumeStaged = (
+  c: ContextState,
+  headers: Record<string, HeaderValue> | undefined,
+): Record<string, HeaderValue> | undefined => {
+  const merged = mergedHeadersOf(c, headers);
+  if (merged !== undefined && c.headersRecord !== null) c.headersRecord = null;
+  return merged;
+};
+
+/**
+ * A ResponseInit headers value that preserves array entries (multi-value
+ * headers like set-cookie) — record inits would join them into one line.
+ */
+const headersInitOf = (
+  merged: Record<string, HeaderValue>,
+): Headers | Record<string, HeaderValue> => {
+  let hasArray = false;
+  for (const key of Object.keys(merged)) {
+    if (Array.isArray(merged[key])) {
+      hasArray = true;
+      break;
+    }
+  }
+  if (!hasArray) return merged;
+  const headers = new Headers();
+  for (const key of Object.keys(merged)) {
+    const value = merged[key] as HeaderValue;
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(key, item);
+    } else {
+      headers.set(key, value);
+    }
+  }
+  return headers;
+};
+
+/**
  * Merge the context's state-mode headers with per-call headers for the sugar
  * helpers. Undefined when neither exists (the bare fast path).
  */
@@ -208,8 +250,12 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
         this.flags |= 1;
       }
       for (const key of value.headers.keys()) {
+        // set-cookie is multi-value: get() would join values with ", " and
+        // collapse distinct cookies — append each individually.
+        if (key === "set-cookie") continue;
         this.set(key, value.headers.get(key) ?? "");
       }
+      for (const cookie of value.headers.getSetCookie()) this.append("Set-Cookie", cookie);
       this.bodyValue = value.body;
       return;
     }
@@ -409,32 +455,44 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     return Array.isArray(raw) ? raw.join(", ") : raw;
   },
   text(body: string, status?: number, headers?: Record<string, HeaderValue>): Response {
-    const merged = mergedHeadersOf(this, headers);
-    if (merged === undefined && status === undefined) return new Response(body);
-    const st = status ?? 200;
+    const merged = consumeStaged(this, headers);
+    // An explicitly staged c.status wins over the default (hono parity).
+    const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
+    if (merged === undefined && status === undefined && staged === undefined) {
+      return new Response(body);
+    }
+    const st = status ?? staged ?? 200;
     if (merged === undefined) return new Response(body, { status: st });
     if (merged["content-type"] === undefined) merged["content-type"] = TEXT_PLAIN;
-    return new Response(body, { status: st, headers: merged });
+    return new Response(body, { status: st, headers: headersInitOf(merged) });
   },
   json(body: unknown, status?: number, headers?: Record<string, HeaderValue>): Response {
-    const merged = mergedHeadersOf(this, headers);
+    const merged = consumeStaged(this, headers);
     // Response.json sets `application/json` and serializes natively — 74ns
     // cheaper than stringify + record init (see docs/v2-AUDIT.md).
-    if (merged === undefined && status === undefined) return Response.json(body);
+    const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
+    if (merged === undefined && status === undefined && staged === undefined) {
+      return Response.json(body);
+    }
     return Response.json(
       body,
       merged === undefined
-        ? { status }
-        : { ...(status === undefined ? {} : { status }), headers: merged },
+        ? { status: status ?? staged }
+        : {
+            ...(status === undefined && staged === undefined ? {} : { status: status ?? staged }),
+            headers: headersInitOf(merged),
+          },
     );
   },
   html(body: string, status?: number, headers?: Record<string, HeaderValue>): Response {
-    const merged = mergedHeadersOf(this, headers);
+    const merged = consumeStaged(this, headers);
     const withType =
       merged === undefined
         ? { "content-type": TEXT_HTML }
         : { ...merged, "content-type": TEXT_HTML };
-    if (status === undefined) return new Response(body, { headers: withType });
-    return new Response(body, { status, headers: withType });
+    const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
+    const st = status ?? staged;
+    if (st === undefined) return new Response(body, { headers: headersInitOf(withType) });
+    return new Response(body, { status: st, headers: headersInitOf(withType) });
   },
 };

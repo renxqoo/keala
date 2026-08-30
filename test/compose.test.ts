@@ -76,8 +76,8 @@ describe("compose: dual-mode commit rules", () => {
     const c = ctx();
     const run = compose<TestCtx>([
       () => new Response("blocked", { status: 403 }),
-      (c) => {
-        c.log.push("never");
+      (down) => {
+        down.log.push("never");
       },
     ]);
     await run(c, NOOP_TAIL);

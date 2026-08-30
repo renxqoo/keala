@@ -5,8 +5,8 @@
  * Run: bun scripts/smoke.ts   (exit code 0 = all checks passed)
  */
 
-import { createApp } from "../src/application/app.ts";
-import { createRouter } from "../src/router/router.ts";
+import { createApp } from "../src/core/app.ts";
+import { createRouter } from "../src/router/group.ts";
 
 let failures = 0;
 const check = (name: string, condition: boolean, detail = ""): void => {
@@ -19,104 +19,118 @@ const check = (name: string, condition: boolean, detail = ""): void => {
 };
 
 const app = createApp({ keys: ["smoke-secret"], env: "production" });
-const router = createRouter({ prefix: "/api" });
+const api = createRouter({ prefix: "/api" });
 
-router.param("id", async (ctx, next) => {
-  if (!/^\d+$/.test(ctx.params["id"] ?? "")) {
-    ctx.throw(400, "invalid id");
+api.param("id", async (c, next) => {
+  if (!/^\d+$/.test(c.params?.["id"] ?? "")) {
+    c.throw(400, "invalid id");
   }
   await next();
 });
 
-router.get("/users/:id", async (ctx) => {
-  ctx.cookies.set("last", ctx.params["id"] as string, { httpOnly: true, signed: true });
-  ctx.body = { id: Number(ctx.params["id"]) };
+api.get("/users/:id", async (c) => {
+  c.cookies.set("last", c.params?.["id"] ?? "", { signed: true, httpOnly: true });
+  c.body = { id: Number(c.params?.["id"]) };
 });
 
-router.get("/hello", async (ctx) => {
-  ctx.type = "text/plain";
-  ctx.body = "hello world";
+api.get("/hello", (c) => c.text("hello world"));
+api.get("/boom", () => {
+  throw new Error("boom");
 });
-
-router.get("/boom", async () => {
-  throw new Error("unexpected");
+api.post("/users", (c) => {
+  c.status = 201;
+  c.set("Location", "/api/users/42");
+  c.body = { created: true };
 });
+api.get("/query", (c) =>
+  c.json({ q: c.query["q"] ?? null, n: (c.query["n"] as string[])?.length ?? 0 }),
+);
+api.get("/teapot", (c) => c.throw(418, "short and stout"));
 
-router.post("/users", async (ctx) => {
-  ctx.status = 201;
-  ctx.body = { created: true };
-});
-
-app.use(async (ctx, next) => {
-  const started = Date.now();
+app.use(async (c, next) => {
+  const start = Date.now();
   await next();
-  ctx.set("X-Response-Time", `${Date.now() - started}`);
+  c.set("X-Response-Time", `${Date.now() - start}ms`);
 });
+app.mount("/", api);
+app.get("/redirect", (c) => {
+  c.status = 302;
+  c.redirect("/api/hello");
+});
+app.notFound((c) => c.text("nothing here", 404));
 
-app.use(router.routes()).use(router.allowedMethods());
+const server = app.listen({ port: 0, hostname: "127.0.0.1" });
+await new Promise((resolve) => setTimeout(resolve, 50));
+const base = `http://127.0.0.1:${server.port}`;
 
-const server = app.listen(0, () => undefined);
-const base = `http://localhost:${server.port}`;
+const get = async (path: string, init?: RequestInit): Promise<Response> =>
+  fetch(`${base}${path}`, init);
 
-const main = async (): Promise<void> => {
-  console.log(`bun-koa smoke test on ${base} (Bun ${Bun.version})`);
+{
+  const res = await get("/api/hello");
+  const body = await res.text();
+  check("text route", res.status === 200 && body === "hello world", `${res.status} ${body}`);
+  const ct = res.headers.get("content-type") ?? "";
+  check("runtime content-type over HTTP", ct.startsWith("text/plain"), ct);
+  check("onion middleware header", res.headers.get("x-response-time") !== null);
+}
 
-  const hello = await fetch(`${base}/api/hello`);
-  check("GET /api/hello status", hello.status === 200);
-  check("GET /api/hello body", (await hello.text()) === "hello world");
-  check("timing header present", hello.headers.get("x-response-time") !== null);
+{
+  const res = await get("/api/users/42");
+  const body = (await res.json()) as { id: number };
+  check("param + json + signed cookie", res.status === 200 && body.id === 42, JSON.stringify(body));
+  const cookie = res.headers.getSetCookie()[0] ?? "";
+  check("signed set-cookie", cookie.includes("last=") && cookie.includes("."), cookie);
+  const verified = await get("/api/query?n=1&n=2&q=x");
+  const q = (await verified.json()) as { q: string | null; n: number };
+  check("multi-value query", q.q === "x" && q.n === 2, JSON.stringify(q));
+}
 
-  const user = await fetch(`${base}/api/users/42`);
-  const userJson = (await user.json()) as { id: number };
-  check("GET /api/users/42 status", user.status === 200);
-  check("param middleware + JSON body", userJson.id === 42);
-  const setCookie = user.headers.getSetCookie()[0] ?? "";
-  check("signed cookie set", setCookie.startsWith("last=") && setCookie.includes("."), setCookie);
-
-  const roundTrip = await fetch(`${base}/api/users/1`, {
-    headers: { Cookie: setCookie.split(";")[0] ?? "" },
-  });
-  await roundTrip.json();
-  check("cookie round-trip verified", roundTrip.status === 200);
-
-  const created = await fetch(`${base}/api/users`, { method: "POST" });
-  check("POST /api/users -> 201", created.status === 201);
-
-  const bad = await fetch(`${base}/api/users/abc`);
+{
+  const res = await get("/api/users/not-a-number");
+  check("param middleware 400", res.status === 400, String(res.status));
+  const boom = await get("/api/boom");
+  const text = await boom.text();
   check(
-    "invalid param -> 400 + exposed message",
-    bad.status === 400 && (await bad.text()) === "invalid id",
+    "unhandled error → opaque 500",
+    boom.status === 500 && text === "Internal Server Error",
+    `${boom.status} ${text}`,
   );
-
-  const method = await fetch(`${base}/api/hello`, { method: "DELETE" });
+  const teapot = await get("/api/teapot");
   check(
-    "405 with Allow",
-    method.status === 405 && (method.headers.get("allow") ?? "").includes("GET"),
+    "exposed 4xx message",
+    teapot.status === 418 && (await teapot.text()) === "short and stout",
   );
+}
 
-  const missing = await fetch(`${base}/api/nope`);
-  check("unknown route -> 404", missing.status === 404);
-
-  const serverError = await fetch(`${base}/api/boom`);
-  const serverBody = await serverError.text();
+{
+  const created = await get("/api/users", { method: "POST" });
   check(
-    "500 hides internals in production",
-    serverError.status === 500 && serverBody === "Internal Server Error",
+    "POST + Location + 201",
+    created.status === 201 && created.headers.get("location") === "/api/users/42",
   );
-
-  const head = await fetch(`${base}/api/hello`, { method: "HEAD" });
+  const wrong = await get("/api/users", { method: "DELETE" });
+  check("405 + Allow", wrong.status === 405 && (wrong.headers.get("allow") ?? "").includes("POST"));
+  const options = await get("/api/users", { method: "OPTIONS" });
+  check("OPTIONS 200 + Allow", options.status === 200);
+  const head = await get("/api/hello", { method: "HEAD" });
   check(
-    "HEAD has no body but keeps length",
+    "HEAD drops body, keeps CL",
     head.status === 200 && head.headers.get("content-length") === "11",
   );
+  const redirect = await get("/redirect", { redirect: "manual" });
+  check(
+    "redirect 302",
+    redirect.status === 302 && redirect.headers.get("location") === "/api/hello",
+  );
+  const missing = await get("/definitely-not-here");
+  check("custom notFound", missing.status === 404 && (await missing.text()) === "nothing here");
+}
 
-  server.stop();
-  if (failures === 0) {
-    console.log("SMOKE OK");
-    process.exit(0);
-  }
-  console.error(`SMOKE FAILED (${failures} checks)`);
-  process.exit(1);
-};
-
-void main();
+server.stop(true);
+if (failures === 0) {
+  console.log("SMOKE OK");
+  process.exit(0);
+}
+console.error(`SMOKE FAILED: ${failures} check(s)`);
+process.exit(1);

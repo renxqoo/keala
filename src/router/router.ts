@@ -109,10 +109,14 @@ export const normalizePrefix = (prefix: string): string => {
  */
 const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): RouteTarget => {
   if (ir.isStatic) {
-    let target = state.staticMap.get(fullPath);
+    // Key by the DECODED path — the trie's static children key decoded
+    // segments, and the exact-match Map must agree with it (patterns like
+    // "/foo%20bar" and "/foo bar" share one route, just like in the trie).
+    const key = fullPath.indexOf("%") !== -1 ? decodeSegments(fullPath) : fullPath;
+    let target = state.staticMap.get(key);
     if (target === undefined) {
       target = createTarget();
-      state.staticMap.set(fullPath, target);
+      state.staticMap.set(key, target);
     }
     return target;
   }
@@ -239,6 +243,13 @@ export interface RouteMatch {
   params: Record<string, string> | null;
 }
 
+/** Decode every segment of a path independently (%2F stays one segment). */
+const decodeSegments = (path: string): string =>
+  path
+    .split("/")
+    .map((segment) => decodeSegment(segment))
+    .join("/");
+
 /** Try the fast matcher for a bucket; provably equivalent to the trie walk. */
 const fastMatch = (bucket: Bucket, path: string): RouteMatch | null => {
   const fast = bucket.fast;
@@ -273,9 +284,19 @@ const fastMatch = (bucket: Bucket, path: string): RouteMatch | null => {
 };
 
 export const matchRoute = (state: RouterState, path: string): RouteMatch | null => {
+  // Static candidates mirror the trie exactly: raw, trailing-slash-stripped,
+  // then the decoded variants of both (%2F stays one segment per decode).
   let target = state.staticMap.get(path);
-  if (target === undefined && path.length > 1 && path.endsWith("/")) {
-    target = state.staticMap.get(path.slice(0, -1));
+  const stripped = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  if (target === undefined && stripped !== path) {
+    target = state.staticMap.get(stripped);
+  }
+  if (target === undefined && path.indexOf("%") !== -1) {
+    const decoded = decodeSegments(path);
+    target = state.staticMap.get(decoded);
+    if (target === undefined && stripped !== path) {
+      target = state.staticMap.get(decodeSegments(stripped));
+    }
   }
   if (target !== undefined) return { target, params: null };
   if (!state.hasDynamic) return null;
