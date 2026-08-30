@@ -1,310 +1,270 @@
+/**
+ * Hybrid router through the app surface: static Map path, bucket fast
+ * matchers, trie fallback, 405/Allow/OPTIONS/501, duplicates, mounts,
+ * named-route URL building, redirects and param middleware.
+ */
+
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import { createRouter } from "../src/router/router.ts";
+import { createApp } from "../src/core/app.ts";
+import { createRouter } from "../src/router/group.ts";
 
-const harness = () => {
-  const app = createApp();
-  const router = createRouter();
-  return { app, router };
+const quiet = { env: "test" } as const;
+const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
+
+const appWith = (setup: (app: ReturnType<typeof createApp>) => void) => {
+  const app = createApp(quiet);
+  setup(app);
+  return (path: string, init?: RequestInit) => app.handle(req(path, init));
 };
 
-const run = async (
-  setup: (router: ReturnType<typeof createRouter>) => void,
-  url: string,
-  init?: RequestInit,
-): Promise<Response> => {
-  const { app, router } = harness();
-  setup(router);
-  app.use(router.routes()).use(router.allowedMethods());
-  return app.handle(new Request(`http://localhost:3000${url}`, init));
-};
-
-describe("router", () => {
-  it("dispatches static routes per method", async () => {
-    const res = await run((router) => {
-      router.get("/health", (ctx) => {
-        ctx.body = "get";
-      });
-      router.post("/health", (ctx) => {
-        ctx.body = "post";
-      });
-    }, "/health");
-    expect(await res.text()).toBe("get");
-    const post = await run(
-      (router) => {
-        router.post("/health", (ctx) => {
-          ctx.body = "post";
-        });
-      },
-      "/health",
-      { method: "POST" },
-    );
-    expect(await post.text()).toBe("post");
+describe("router: matching layers", () => {
+  it("static paths hit the exact Map (including trailing-slash retry)", async () => {
+    const request = appWith((app) => {
+      app.get("/page", (c) => c.text("page"));
+    });
+    expect((await request("/page")).status).toBe(200);
+    expect((await request("/page/")).status).toBe(200);
+    expect((await request("/pages")).status).toBe(404);
   });
 
-  it("dispatches all remaining verbs through the method shortcuts", async () => {
-    const verbs = ["put", "patch", "delete", "head", "options"] as const;
-    for (const verb of verbs) {
-      const res = await run(
-        (router) => {
-          router[verb]("/x", (ctx) => {
-            ctx.body = verb;
-          });
-        },
-        "/x",
-        { method: verb.toUpperCase() },
-      );
-      expect(res.status).toBe(200);
+  it("simple param routes take the bucket fast matcher", async () => {
+    const request = appWith((app) => {
+      app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+    });
+    expect(await (await request("/users/42")).text()).toBe("user 42");
+    expect((await request("/users")).status).toBe(404);
+    expect((await request("/users/1/posts")).status).toBe(404);
+    expect((await request("/users/")).status).toBe(404);
+  });
+
+  it("multi-pattern buckets fall back to the trie with static-over-param order", async () => {
+    const request = appWith((app) => {
+      app.get("/shop/*", (c) => c.text("wildcard"));
+      app.get("/shop/:name", (c) => c.text(`param:${c.params?.["name"]}`));
+      app.get("/shop/new", (c) => c.text("static"));
+      app.get("/shop/:name/price", (c) => c.text(`price:${c.params?.["name"]}`));
+    });
+    expect(await (await request("/shop/new")).text()).toBe("static");
+    expect(await (await request("/shop/abc")).text()).toBe("param:abc");
+    expect(await (await request("/shop/abc/price")).text()).toBe("price:abc");
+    expect(await (await request("/shop/a/b/c")).text()).toBe("wildcard");
+  });
+
+  it("complex shapes (optionals, patterns, wildcards) always work", async () => {
+    const request = appWith((app) => {
+      app.get("/files/:name?", (c) => c.text(c.params?.["name"] ?? "index"));
+      app.get("/n/:num(\\d+)", (c) => c.text(c.params?.["num"] ?? ""));
+      app.get("/hex/:h([0-9a-f]+)", (c) => c.text(c.params?.["h"] ?? ""));
+    });
+    expect(await (await request("/files")).text()).toBe("index");
+    expect(await (await request("/files/f.txt")).text()).toBe("f.txt");
+    expect((await request("/n/abc")).status).toBe(404);
+    expect(await (await request("/n/77")).text()).toBe("77");
+    expect(await (await request("/hex/deadbeef")).text()).toBe("deadbeef");
+    expect((await request("/hex/XYZ")).status).toBe(404);
+  });
+
+  it("encoding: captured params decode; %2F stays one segment; case-sensitive", async () => {
+    const request = appWith((app) => {
+      app.get("/users/:name", (c) => c.text(c.params?.["name"] ?? ""));
+      app.get("/Case", (c) => c.text("exact"));
+    });
+    expect(await (await request("/users/%E4%B8%AD")).text()).toBe("中");
+    expect(await (await request("/users/a%20b")).text()).toBe("a b");
+    expect(await (await request("/users/%2F")).text()).toBe("/");
+    expect(await (await request("/users/a+b")).text()).toBe("a+b");
+    expect((await request("/case")).status).toBe(404);
+    expect((await request("/Case")).status).toBe(200);
+  });
+
+  it("fast-matcher static heads match on segment boundaries only", async () => {
+    const request = appWith((app) => {
+      app.get("/v1/users/:id", (c) => c.text(`u:${c.params?.["id"]}`));
+      app.get("/v1/u/:x/:y", (c) => c.text(`${c.params?.["x"]}/${c.params?.["y"]}`));
+    });
+    expect(await (await request("/v1/users/7")).text()).toBe("u:7");
+    // prefix "/v1/users" must not capture "/v1/usersXYZ/5"
+    expect((await request("/v1/usersXYZ/5")).status).toBe(404);
+    // prefix "/v1/u" must not capture "/v1/ux/1" (boundary violation)
+    expect((await request("/v1/ux/1")).status).toBe(404);
+    expect(await (await request("/v1/u/1/2")).text()).toBe("1/2");
+  });
+});
+
+describe("router: methods, 405/Allow/501/OPTIONS", () => {
+  const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
+
+  it.each(methods)("%s-only routes answer 405 to the others", async (method) => {
+    const request = appWith((app) => {
+      app.on(method.toLowerCase(), "/only", (c) => c.text(method));
+    });
+    const hit = await request("/only", { method });
+    expect(hit.status).toBe(200);
+    for (const other of methods) {
+      if (other === method || other === "OPTIONS") continue;
+      if (method === "GET" && other === "HEAD") continue; // HEAD falls back to GET
+      const miss = await request("/only", { method: other });
+      expect(miss.status).toBe(405);
+      expect(miss.headers.get("allow")).toContain(method);
+    }
+    const options = await request("/only", { method: "OPTIONS" });
+    expect(options.status).toBe(200);
+    // An explicit OPTIONS route answers itself; the synthesized Allow only
+    // appears when no OPTIONS handler exists.
+    if (method !== "OPTIONS") expect(options.headers.get("allow")).toContain(method);
+  });
+
+  it.each(["PROPFIND", "MKCOL", "REPORT", "CHECKOUT"])("%s yields 501", async (method) => {
+    const request = appWith((app) => {
+      app.get("/x", (c) => c.text("x"));
+    });
+    expect((await request("/x", { method })).status).toBe(501);
+  });
+
+  it("GET routes advertise HEAD in Allow (koa-router convention)", async () => {
+    const request = appWith((app) => {
+      app.get("/g", (c) => c.text("g"));
+    });
+    const miss = await request("/g", { method: "DELETE" });
+    expect(miss.headers.get("allow")).toBe("HEAD, GET");
+  });
+
+  it("an explicit OPTIONS route handles the request itself", async () => {
+    const request = appWith((app) => {
+      app.options("/o", (c) => c.text("custom-options"));
+    });
+    const res = await request("/o", { method: "OPTIONS" });
+    expect(await res.text()).toBe("custom-options");
+  });
+
+  it("lowercase method registration is accepted (app.on)", async () => {
+    const request = appWith((app) => {
+      app.on("post", "/lc", (c) => c.text("posted"));
+    });
+    expect((await request("/lc", { method: "POST" })).status).toBe(200);
+  });
+
+  it("all() answers every method", async () => {
+    const request = appWith((app) => {
+      app.all("/any", (c) => c.text("any"));
+    });
+    for (const method of ["GET", "POST", "PUT", "DELETE"]) {
+      expect((await request("/any", { method })).status).toBe(200);
     }
   });
+});
 
-  it("extracts params and runs multiple handlers per route", async () => {
-    const res = await run((router) => {
-      router.get(
-        "/users/:id",
-        async (ctx, next) => {
-          ctx.state["seen"] = true;
-          await next();
-        },
-        async (ctx) => {
-          ctx.body = { id: ctx.params["id"], seen: ctx.state["seen"] };
-        },
-      );
-    }, "/users/77");
-    expect(await res.json()).toEqual({ id: "77", seen: true });
-  });
-
-  it("runs param middleware before route handlers", async () => {
-    const res = await run((router) => {
-      router.param("id", async (ctx, next) => {
-        ctx.state["param"] = ctx.params["id"];
+describe("router: registration behaviors", () => {
+  it("duplicate path+method registrations chain in registration order", async () => {
+    const request = appWith((app) => {
+      app.get("/dup", async (c, next) => {
+        c.set("X-First", "1");
         await next();
       });
-      router.get("/users/:id", (ctx) => {
-        ctx.body = { param: ctx.state["param"] };
-      });
-    }, "/users/9");
-    expect(await res.json()).toEqual({ param: "9" });
-  });
-
-  it("returns 405 with Allow for known methods, 501 for unknown", async () => {
-    const router = createRouter();
-    router.get("/thing", (ctx) => {
-      ctx.body = "thing";
+      app.get("/dup", (c) => c.text("second"));
     });
-    router.post("/thing", (ctx) => {
-      ctx.body = "created";
-    });
-    const app = createApp();
-    app.use(router.routes()).use(router.allowedMethods());
-
-    const wrong = await app.handle(
-      new Request("http://localhost:3000/thing", { method: "DELETE" }),
-    );
-    expect(wrong.status).toBe(405);
-    expect(wrong.headers.get("allow")).toBe("HEAD, GET, POST");
-
-    const unknown = await app.handle(
-      new Request("http://localhost:3000/thing", { method: "PROPFIND" }),
-    );
-    expect(unknown.status).toBe(501);
+    const res = await request("/dup");
+    expect(res.headers.get("x-first")).toBe("1");
+    expect(await res.text()).toBe("second");
   });
 
-  it("throws on 405/501 when option is set", async () => {
-    const router = createRouter();
-    router.get("/only-get", (ctx) => {
-      ctx.body = "ok";
-    });
-    const app = createApp({ env: "test" });
-    app.use(router.routes()).use(router.allowedMethods({ throw: true }));
-    const res = await app.handle(new Request("http://localhost:3000/only-get", { method: "POST" }));
-    expect(res.status).toBe(405);
-  });
-
-  it("serves HEAD requests through GET handlers", async () => {
-    const res = await run(
-      (router) => {
-        router.get("/file", (ctx) => {
-          ctx.type = "text/plain";
-          ctx.body = "payload";
-        });
-      },
-      "/file",
-      { method: "HEAD" },
-    );
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-length")).toBe("7");
-    expect(await res.text()).toBe("");
-  });
-
-  it("falls through to 404 when nothing matches", async () => {
-    const res = await run((router) => {
-      router.get("/known", (ctx) => {
-        ctx.body = "ok";
-      });
-    }, "/unknown");
-    expect(res.status).toBe(404);
-  });
-
-  it("router.all matches every method", async () => {
-    for (const method of ["GET", "POST", "PUT", "DELETE"]) {
-      const res = await run(
-        (router) => {
-          router.all("/any", (ctx) => {
-            ctx.body = method;
-          });
+  it("route handlers run as an onion in registration order", async () => {
+    const order: string[] = [];
+    const request = appWith((app) => {
+      app.get(
+        "/chain",
+        async (_c, next) => {
+          order.push("mw1-before");
+          await next();
+          order.push("mw1-after");
         },
-        "/any",
-        { method },
+        async (_c, next) => {
+          order.push("mw2-before");
+          await next();
+          order.push("mw2-after");
+        },
+        (c) => {
+          order.push("leaf");
+          c.body = "done";
+        },
       );
-      expect(res.status).toBe(200);
-    }
+    });
+    await request("/chain");
+    expect(order).toEqual(["mw1-before", "mw2-before", "leaf", "mw2-after", "mw1-after"]);
   });
 
-  it("supports prefixes via option and prefix()", async () => {
-    const res = await run((router) => {
-      router.get("/ping", (ctx) => {
-        ctx.body = "pong";
-      });
-      router.prefix("/api");
-    }, "/api/ping");
-    expect(await res.text()).toBe("pong");
-
-    const direct = await run((router) => {
-      router.get("/ping", (ctx) => {
-        ctx.body = "pong";
-      });
-    }, "/ping");
-    expect(direct.status).toBe(200);
+  it("named routes build URLs (encoding, optionals, wildcards)", () => {
+    const app = createApp(quiet);
+    app.get("user", "/users/:id(\\d+)", () => undefined);
+    app.get("file", "/files/:name?", () => undefined);
+    app.get("wild", "/w/*", () => undefined);
+    expect(app.url("user", { id: "1" })).toBe("/users/1");
+    expect(app.url("file", {})).toBe("/files");
+    expect(app.url("file", { name: "中文.txt" })).toBe("/files/%E4%B8%AD%E6%96%87.txt");
+    expect(app.url("wild", { wildcard: "a/b" })).toBe("/w/a/b");
+    expect(() => app.url("user", {})).toThrow(/Missing required parameter/);
+    expect(() => app.url("ghost", {})).toThrow(/No route registered/);
   });
 
-  it("rebuilds param middleware and method tables after prefix()", async () => {
-    const router = createRouter();
-    router.param("id", async (ctx, next) => {
-      ctx.set("X-Param-Mw", "ran");
+  it("app.redirect emits a GET redirect route (param substitution included)", async () => {
+    const app = createApp(quiet);
+    app.get("/users/:id", (c) => c.text("u"));
+    app.redirect("/u/:id", "/users/:id", 302);
+    const res = await app.handle(req("/u/9"));
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/users/9");
+  });
+});
+
+describe("router: groups and mounts", () => {
+  it("prefix groups, nesting and fallthrough", async () => {
+    const app = createApp(quiet);
+    const users = createRouter();
+    users.get("/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+    users.get("/", (c) => c.text("index"));
+    app.mount("/v1/users", users);
+    app.get("/v1/admin/panel", (c) => c.text("panel"));
+    expect(await (await app.handle(req("/v1/users/42"))).text()).toBe("user 42");
+    expect(await (await app.handle(req("/v1/users"))).text()).toBe("index");
+    expect(await (await app.handle(req("/v1/admin/panel"))).text()).toBe("panel");
+    expect((await app.handle(req("/v1/missing"))).status).toBe(404);
+    expect((await app.handle(req("/users"))).status).toBe(404);
+  });
+
+  it("router.use middleware applies to the group's routes only", async () => {
+    const app = createApp(quiet);
+    const api = createRouter();
+    api.use(async (c, next) => {
+      c.set("X-Api", "1");
       await next();
     });
-    router.get("/users/:id(\\d+)", (ctx) => {
-      ctx.body = ctx.params["id"];
+    api.get("/inside", (c) => c.text("in"));
+    app.mount("/api", api);
+    app.get("/outside", (c) => c.text("out"));
+    expect((await app.handle(req("/api/inside"))).headers.get("x-api")).toBe("1");
+    expect((await app.handle(req("/outside"))).headers.get("x-api")).toBeNull();
+  });
+
+  it("router.param middleware applies to capturing routes in the group", async () => {
+    const app = createApp(quiet);
+    const api = createRouter();
+    api.param("oid", async (c, next) => {
+      c.set("X-Org", c.params?.["oid"] ?? "");
+      await next();
     });
-    router.post("/users/:id(\\d+)", (ctx) => {
-      ctx.body = "posted";
-    });
-    router.prefix("/v2");
-    const app = createApp();
-    app.use(router.routes()).use(router.allowedMethods());
-    const got = await app.handle(new Request("http://localhost:3000/v2/users/5"));
-    expect(await got.text()).toBe("5");
-    expect(got.headers.get("x-param-mw")).toBe("ran");
-    const posted = await app.handle(
-      new Request("http://localhost:3000/v2/users/5", { method: "POST" }),
-    );
-    expect(await posted.text()).toBe("posted");
+    api.get("/orgs/:oid", (c) => c.text("org"));
+    api.get("/others/:x", (c) => c.text("other"));
+    app.mount("/api", api);
+    const res = await app.handle(req("/api/orgs/acme"));
+    expect(res.headers.get("x-org")).toBe("acme");
+    expect((await app.handle(req("/api/others/1"))).headers.get("x-org")).toBeNull();
   });
 
-  it("mounts middleware with optional path prefixes", async () => {
-    const res = await run((router) => {
-      router.use(async (ctx, next) => {
-        ctx.set("X-Global", "1");
-        await next();
-      });
-      router.use("/admin", async (ctx, next) => {
-        ctx.set("X-Admin", "1");
-        await next();
-      });
-      router.get("/admin/panel", (ctx) => {
-        ctx.body = "panel";
-      });
-      router.get("/public", (ctx) => {
-        ctx.body = "public";
-      });
-    }, "/admin/panel");
-    expect(res.headers.get("x-admin")).toBe("1");
-    const pub = await run((router) => {
-      router.use("/admin", async (ctx, next) => {
-        ctx.set("X-Admin", "1");
-        await next();
-      });
-      router.get("/public", (ctx) => {
-        ctx.body = "public";
-      });
-    }, "/public");
-    expect(pub.headers.get("x-admin")).toBe(null);
-  });
-
-  it("nests routers via use(prefix, childRoutes)", async () => {
-    const child = createRouter();
-    child.get("/items/:sku", (ctx) => {
-      ctx.body = { sku: ctx.params["sku"] };
-    });
-    const parent = createRouter();
-    parent.use("/shop", child.routes());
-    const app = createApp();
-    app.use(parent.routes()).use(parent.allowedMethods());
-    const res = await app.handle(new Request("http://localhost:3000/shop/items/abc"));
-    expect(await res.json()).toEqual({ sku: "abc" });
-  });
-
-  it("registers redirects", async () => {
-    const res = await run((router) => {
-      router.redirect("/old", "/new");
-    }, "/old");
-    expect(res.status).toBe(301);
-    expect(res.headers.get("location")).toBe("/new");
-  });
-
-  it("redirects with params and custom codes", async () => {
-    const res = await run((router) => {
-      router.redirect("/u/:id", "/users/:id", 302);
-    }, "/u/42");
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/users/42");
-  });
-
-  it("supports named routes and url building", () => {
-    const router = createRouter({ prefix: "/api" });
-    router.get("user", "/users/:id(\\d+)", (ctx) => void ctx);
-    router.get("file", "/files/:name?", (ctx) => void ctx);
-    expect(router.url("user", { id: "42" })).toBe("/api/users/42");
-    expect(router.url("file", {})).toBe("/api/files");
-    expect(router.url("file", { name: "a b.txt" })).toBe("/api/files/a%20b.txt");
-    expect(router.route("user")?.path).toBe("/api/users/:id(\\d+)");
-    expect(() => router.url("missing")).toThrow(Error);
-  });
-
-  it("register accepts custom names and validates input", () => {
-    const router = createRouter();
-    router.register("get", "/ok", [(ctx) => void ctx], { name: "ok" });
-    expect(router.stack.length).toBe(1);
-    expect(() => router.register("BOGUS", "/x", [])).toThrow(TypeError);
-    expect(() => router.register("get", "/x", [null as unknown as () => void])).toThrow(TypeError);
-    expect(() => router.use(...([] as unknown as [() => void]))).toThrow(TypeError);
-    expect(() => router.param("", (ctx) => void ctx)).toThrow(TypeError);
-    expect(() => router.param("x", undefined as unknown as () => void)).toThrow(TypeError);
-    expect(() => createRouter().get("bad-path", (ctx) => void ctx)).toThrow(TypeError);
-  });
-
-  it("shares state up the onion across router and route handlers", async () => {
-    const order: string[] = [];
-    const res = await run((router) => {
-      router.use(async (_ctx, next) => {
-        order.push("router-mw");
-        await next();
-      });
-      router.get(
-        "/flow",
-        async (_ctx, next) => {
-          order.push("route-a");
-          await next();
-        },
-        async (ctx) => {
-          order.push("route-b");
-          ctx.body = "flow";
-        },
-      );
-    }, "/flow");
-    expect(await res.text()).toBe("flow");
-    expect(order).toEqual(["router-mw", "route-a", "route-b"]);
+  it("an array of routes shares handlers", async () => {
+    const app = createApp(quiet);
+    for (const path of ["/a", "/b"]) app.get(path, (c) => c.text(`hit:${c.path}`));
+    expect(await (await app.handle(req("/a"))).text()).toBe("hit:/a");
+    expect(await (await app.handle(req("/b"))).text()).toBe("hit:/b");
   });
 });

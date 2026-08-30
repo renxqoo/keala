@@ -71,6 +71,8 @@ export interface Application {
   all(name: string, path: string, ...handlers: RouteHandler[]): Application;
   /** Register with an explicit method (any case). */
   on(method: string, path: string, ...handlers: RouteHandler[]): Application;
+  /** Per-parameter middleware, run by every route that captures `name`. */
+  param(name: string, middleware: RouteHandler): Application;
   /** Merge a sub-router's routes (or another app's) under a prefix. */
   mount(prefix: string, sub: Router | Application): Application;
   /** Redirect route (GET): app.redirect("/a", "/b", 302). */
@@ -101,6 +103,8 @@ export interface Application {
   readonly notFoundHandler: NotFoundHandler;
   /** Registered route definitions (inspection/tests). */
   readonly stack: readonly RouteDef[];
+  /** Global middleware stack (consumed whole by `mount`). */
+  readonly globalMiddleware: readonly RouteHandler[];
   readonly router: RouterState;
   readonly settings: RequestSettings;
   readonly env: string;
@@ -172,9 +176,9 @@ const dispatchChain = (
   return finalize(app, c);
 };
 
-const errorResponse = (app: Application, c: Context, err: unknown): Response => {
+const errorResponse = async (app: Application, c: Context, err: unknown): Promise<Response> => {
   try {
-    return buildErrorResponse(app, c, err);
+    return await buildErrorResponse(app, c, err);
   } catch {
     return new Response("Internal Server Error", {
       status: 500,
@@ -183,7 +187,11 @@ const errorResponse = (app: Application, c: Context, err: unknown): Response => 
   }
 };
 
-const buildErrorResponse = (app: Application, c: Context, err: unknown): Response => {
+const buildErrorResponse = async (
+  app: Application,
+  c: Context,
+  err: unknown,
+): Promise<Response> => {
   const error = normalizeError(err);
   app.onerror(error, c);
 
@@ -216,7 +224,7 @@ const buildErrorResponse = (app: Application, c: Context, err: unknown): Respons
   const message = exposed ? error.message : statusMessage(status) || "Internal Server Error";
   c.set("Content-Type", "text/plain; charset=utf-8");
   c.body = message;
-  return finalize(app, c);
+  return await finalize(app, c);
 };
 
 const defaultNotFound: NotFoundHandler = () => undefined;
@@ -268,6 +276,9 @@ export const createApp = (options: AppOptions = {}): Application => {
     get stack(): readonly RouteDef[] {
       return router.defs;
     },
+    get globalMiddleware(): readonly RouteHandler[] {
+      return globalMw;
+    },
     get notFoundHandler(): NotFoundHandler {
       return notFoundHandler;
     },
@@ -315,16 +326,31 @@ export const createApp = (options: AppOptions = {}): Application => {
       return app;
     },
 
+    param(name, middleware) {
+      if (typeof name !== "string" || name.length === 0) {
+        throw new TypeError("app.param() requires a parameter name");
+      }
+      if (typeof middleware !== "function") {
+        throw new TypeError("app.param() requires a middleware function");
+      }
+      router.paramMiddlewares.set(name, middleware);
+      // Existing routes capturing this param pick it up on rebuild.
+      rebuildChains(router, globalMw);
+      return app;
+    },
+
     mount(prefix, sub) {
       const base = prefix.length > 1 && prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
       const defs = isRouter(sub) ? sub.defs : sub.router.defs;
       const paramMiddlewares = isRouter(sub) ? sub.paramMiddlewares : sub.router.paramMiddlewares;
+      // A mounted app carries its own global middleware ahead of its routes.
+      const subGlobal = isRouter(sub) ? [] : sub.globalMiddleware;
       for (const [name, handler] of paramMiddlewares) {
         if (!router.paramMiddlewares.has(name)) router.paramMiddlewares.set(name, handler);
       }
       for (const def of defs) {
         const path = `${base}${def.path}` || "/";
-        registerDef(router, def.method, path, def.handlers, def.name, globalMw);
+        registerDef(router, def.method, path, [...subGlobal, ...def.handlers], def.name, globalMw);
       }
       return app;
     },

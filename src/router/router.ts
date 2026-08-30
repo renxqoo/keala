@@ -63,8 +63,8 @@ export const EMPTY_PARAMS: Record<string, string> = Object.freeze(Object.create(
 
 /** A fast matcher for a bucket with exactly one simple-shape pattern. */
 interface FastMatcher {
-  /** Length of "/firstSegment" this matcher skips (decoded first segment). */
-  prefixLength: number;
+  /** The pattern's full static head ("/v1/users") skipped before captures. */
+  prefix: string;
   names: readonly string[];
   target: RouteTarget;
 }
@@ -130,12 +130,24 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
   bucket.fast =
     bucket.count === 1 && ir.isSimple
       ? {
-          prefixLength: first.value.length + 1,
+          // Full static head ("/v1/users"), not just the first segment — the
+          // matcher must skip every leading static before captures begin.
+          prefix: staticHeadOf(ir.segments),
           names: paramNamesOf(ir.segments),
           target: node.target,
         }
       : null;
   return node.target;
+};
+
+/** Concatenate the leading static segments into a path prefix. */
+const staticHeadOf = (segments: readonly CompiledSegment[]): string => {
+  let prefix = "";
+  for (const segment of segments) {
+    if (segment.kind !== "static") break;
+    prefix += `/${segment.value}`;
+  }
+  return prefix;
 };
 
 const paramChainFor = (
@@ -231,7 +243,12 @@ export interface RouteMatch {
 const fastMatch = (bucket: Bucket, path: string): RouteMatch | null => {
   const fast = bucket.fast;
   if (fast === null) return null;
-  const rest = path.slice(fast.prefixLength);
+  const prefix = fast.prefix;
+  // The static head must match exactly AND on a segment boundary — otherwise
+  // fall through to the trie (which resolves the rest of the shapes).
+  if (!path.startsWith(prefix)) return null;
+  const rest = path.slice(prefix.length);
+  if (rest.charCodeAt(0) !== 47 /* "/" */) return null;
   const names = fast.names;
   // Single-param specialization: exactly one capture means the remainder is
   // one non-empty, slash-free segment — no split allocation needed.

@@ -108,9 +108,30 @@ const mergeIntoCommitted = (res: Response, record: HeaderMap): Response => {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 };
 
-/** Drop the body of a committed/notFound Response for HEAD requests. */
+/**
+ * Drop the body of a committed/notFound Response for HEAD requests,
+ * backfilling Content-Length from the would-be body (koa contract).
+ */
 const stripBody = (res: Response): Response =>
   new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
+
+/** Content-Length of a committed body when cheaply computable. */
+const committedLength = async (res: Response): Promise<number | null> => {
+  if (res.headers.get("content-length") !== null) return null;
+  try {
+    return byteLengthOf(await res.clone().text());
+  } catch {
+    return null;
+  }
+};
+
+/** HEAD view of a committed Response: no body, Content-Length backfilled. */
+const committedHead = async (res: Response): Promise<Response> => {
+  const length = await committedLength(res);
+  const headers = new Headers(res.headers);
+  if (length !== null) headers.set("content-length", String(length));
+  return new Response(null, { status: res.status, statusText: res.statusText, headers });
+};
 
 type BodyData = string | Uint8Array | ReadableStream | Blob | null;
 
@@ -218,12 +239,12 @@ const fromState = (c: Context, head: boolean): Response => {
  * Terminal conversion — can never throw past `app.handle` (the app wraps this
  * in a try/catch that falls back to a static 500).
  */
-export const finalize = (app: Application, c: Context): Response => {
+export const finalize = async (app: Application, c: Context): Promise<Response> => {
   const committed = c._res;
   if (committed !== undefined) {
     const record = c.headersRecord;
     if (record !== null && countOf(record) > 0) return mergeIntoCommitted(committed, record);
-    if (c.method === "HEAD" && committed.body !== null) return stripBody(committed);
+    if (c.method === "HEAD" && committed.body !== null) return committedHead(committed);
     return committed;
   }
   const head = c.method === "HEAD";

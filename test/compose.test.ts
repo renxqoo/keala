@@ -1,158 +1,160 @@
+/**
+ * Composition semantics: precompiled levels, the dual-mode commit rules
+ * (docs/v2-DESIGN.md §4), double-next guard and misuse detection.
+ */
+
 import { describe, expect, it } from "vitest";
 
-import { compose, NOOP_TAIL, type Middleware } from "../src/application/compose.ts";
+import { compose, direct, NOOP_TAIL, type MiddlewareContext } from "../src/core/compose.ts";
 
-interface TestCtx {
-  state: Record<string, unknown>;
+interface TestCtx extends MiddlewareContext {
+  log: string[];
 }
 
-const recorder = (): { order: string[]; track: (label: string) => void } => {
-  const order: string[] = [];
-  return { order, track: (label: string) => order.push(label) };
-};
+const ctx = (): TestCtx => ({ state: Object.create(null), _res: undefined, log: [] });
 
-const doubleNext: Middleware<TestCtx> = async (_ctx, next) => {
-  await next();
-  await next();
-};
-
-describe("compose", () => {
-  it("executes middleware in onion order", async () => {
-    const { order, track } = recorder();
-    const a: Middleware<TestCtx> = async (_ctx, next) => {
-      track("a:before");
-      await next();
-      track("a:after");
-    };
-    const b: Middleware<TestCtx> = async (_ctx, next) => {
-      track("b:before");
-      await next();
-      track("b:after");
-    };
-    const chain = compose<TestCtx>([a, b]);
-    await chain({ state: {} }, NOOP_TAIL);
-    expect(order).toEqual(["a:before", "b:before", "b:after", "a:after"]);
+describe("compose: execution order", () => {
+  it("runs levels outside-in and inside-out around next()", async () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      async (c, next) => {
+        c.log.push("1-before");
+        await next();
+        c.log.push("1-after");
+      },
+      async (c, next) => {
+        c.log.push("2-before");
+        await next();
+        c.log.push("2-after");
+      },
+    ]);
+    await run(c, NOOP_TAIL);
+    expect(c.log).toEqual(["1-before", "2-before", "2-after", "1-after"]);
   });
 
-  it("supports synchronous middleware", async () => {
-    const { order, track } = recorder();
-    const chain = compose<TestCtx>([
-      (_ctx, next) => {
-        track("sync:before");
+  it("a fully synchronous chain settles without a single promise", () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      (c, next) => {
+        c.log.push("a");
         return next();
       },
-      async () => {
-        track("core");
+      (c) => {
+        c.log.push("b");
       },
     ]);
-    await chain({ state: {} }, NOOP_TAIL);
-    expect(order).toEqual(["sync:before", "core"]);
+    const settled = run(c, NOOP_TAIL);
+    expect(settled).toBeUndefined(); // no promise allocated on the sync path
+    expect(c.log).toEqual(["a", "b"]);
   });
 
-  it("rejects non-function middleware", () => {
-    expect(() => compose([undefined as unknown as Middleware<TestCtx>])).toThrow(TypeError);
-    expect(() => compose([42 as unknown as Middleware<TestCtx>])).toThrow(
-      "Middleware must be composed of functions",
-    );
-  });
-
-  it("throws when next() is called twice in the same middleware", async () => {
-    const chain = compose<TestCtx>([doubleNext, async () => {}]);
-    await expect(chain({ state: {} }, NOOP_TAIL)).rejects.toThrow(
-      "next() called multiple times in the same middleware",
-    );
-  });
-
-  it("passes the tail straight through a single-middleware chain", async () => {
-    let tailCalls = 0;
-    const seen: string[] = [];
-    const chain = compose<TestCtx>([
-      async (ctx, next) => {
-        seen.push(`mid:${Object.keys(ctx.state).length}`);
+  it("double next() in the same middleware throws", async () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      async (_c, next) => {
+        await next();
         await next();
       },
     ]);
-    await chain({ state: {} }, async () => {
-      tailCalls += 1;
+    await expect(run(c, NOOP_TAIL)).rejects.toThrow("next() called multiple times");
+  });
+
+  it("non-function middleware rejects at composition time", () => {
+    expect(() => compose([undefined as unknown as () => void])).toThrow(TypeError);
+  });
+});
+
+describe("compose: dual-mode commit rules", () => {
+  it("rule 1 — a leaf Response return commits", async () => {
+    const c = ctx();
+    const run = compose<TestCtx>([() => new Response("leaf")]);
+    await run(c, NOOP_TAIL);
+    expect(c._res?.status).toBe(200);
+  });
+
+  it("rule 1 — returning BEFORE next() short-circuits the downstream", async () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      () => new Response("blocked", { status: 403 }),
+      (c) => {
+        c.log.push("never");
+      },
+    ]);
+    await run(c, NOOP_TAIL);
+    expect(c.log).toEqual([]);
+    expect(c._res?.status).toBe(403);
+  });
+
+  it("rule 2 — returning AFTER next() overrides the downstream response", async () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      async (_c, next) => {
+        await next();
+        return new Response("outer", { status: 201 });
+      },
+      () => new Response("inner"),
+    ]);
+    await run(c, NOOP_TAIL);
+    expect(c._res?.status).toBe(201);
+    expect(await (c._res as Response).text()).toBe("outer");
+  });
+
+  it("rule 3 — an undefined middleware return keeps the downstream response", async () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      async (_c, next) => {
+        await next();
+      },
+      () => new Response("inner"),
+    ]);
+    await run(c, NOOP_TAIL);
+    expect(await (c._res as Response).text()).toBe("inner");
+  });
+
+  it("rule 4 — a thenable return is a loud sync TypeError", () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      // The handler returns a thenable without awaiting it — misuse.
+      () => ({ then: () => undefined }) as unknown as Response,
+    ]);
+    expect(() => run(c, NOOP_TAIL)).toThrow("await it inside the handler");
+  });
+
+  it("rule 4 — a rejected-promise-returning handler surfaces the rejection", async () => {
+    const c = ctx();
+    const run = compose<TestCtx>([
+      async () => Promise.reject(new Error("bad")) as unknown as Promise<Response>,
+    ]);
+    await expect(run(c, NOOP_TAIL)).rejects.toThrow("bad");
+  });
+
+  it("rule 4 — non-Response returns throw synchronously (misuse detection)", () => {
+    const c = ctx();
+    const run = compose<TestCtx>([() => "oops" as unknown as Response]);
+    expect(() => run(c, NOOP_TAIL)).toThrow("only Response, undefined or null");
+  });
+});
+
+describe("direct: single-handler fast path", () => {
+  it("commits a Response return without any wrapper level", async () => {
+    const c = ctx();
+    const run = direct<TestCtx>(() => new Response("solo", { status: 202 }));
+    await run(c, NOOP_TAIL);
+    expect(c._res?.status).toBe(202);
+  });
+
+  it("leaves the slot untouched on a void return", async () => {
+    const c = ctx();
+    const run = direct<TestCtx>(() => undefined);
+    await run(c, NOOP_TAIL);
+    expect(c._res).toBeUndefined();
+  });
+
+  it("propagates sync throws to the caller", () => {
+    const c = ctx();
+    const run = direct<TestCtx>(() => {
+      throw new Error("bang");
     });
-    expect(tailCalls).toBe(1);
-    expect(seen).toEqual(["mid:0"]);
-  });
-
-  it("propagates upstream errors through the chain", async () => {
-    const sawError: string[] = [];
-    const chain = compose<TestCtx>([
-      async (_ctx, next) => {
-        try {
-          await next();
-        } catch (err) {
-          sawError.push((err as Error).message);
-          throw err;
-        }
-      },
-      async () => {
-        throw new Error("boom");
-      },
-    ]);
-    await expect(chain({ state: {} }, NOOP_TAIL)).rejects.toThrow("boom");
-    expect(sawError).toEqual(["boom"]);
-  });
-
-  it("runs the tail when the stack is empty", async () => {
-    let tailRan = false;
-    const chain = compose<TestCtx>([]);
-    await chain({ state: {} }, async () => {
-      tailRan = true;
-    });
-    expect(tailRan).toBe(true);
-  });
-
-  it("invokes the tail exactly once after all middleware", async () => {
-    let tailCount = 0;
-    const chain = compose<TestCtx>([
-      async (_ctx, next) => {
-        await next();
-      },
-    ]);
-    await chain({ state: {} }, async () => {
-      tailCount += 1;
-    });
-    expect(tailCount).toBe(1);
-  });
-
-  it("guards nested chains independently (router pattern)", async () => {
-    const { order, track } = recorder();
-    const inner = compose<TestCtx>([
-      async (_ctx, next) => {
-        track("inner");
-        await next();
-      },
-    ]);
-    const outer = compose<TestCtx>([
-      async (_ctx, next) => {
-        track("outer:before");
-        await inner({ state: {} }, next);
-        track("outer:after");
-      },
-    ]);
-    await outer({ state: {} }, NOOP_TAIL);
-    expect(order).toEqual(["outer:before", "inner", "outer:after"]);
-  });
-
-  it("awaits async work between layers", async () => {
-    const stamps: number[] = [];
-    const chain = compose<TestCtx>([
-      async (_ctx, next) => {
-        stamps.push(1);
-        await next();
-        stamps.push(3);
-      },
-      async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        stamps.push(2);
-      },
-    ]);
-    await chain({ state: {} }, NOOP_TAIL);
-    expect(stamps).toEqual([1, 2, 3]);
+    expect(() => run(c, NOOP_TAIL)).toThrow("bang");
   });
 });

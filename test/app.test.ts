@@ -1,198 +1,297 @@
+/**
+ * Application pipeline: top-level routing, global middleware on unmatched
+ * paths, dual-mode finalization, not-found, error contract, decorate,
+ * listen-args parsing and the runtime injection channel.
+ */
+
 import { describe, expect, it, vi } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import { createError } from "../src/http/errors.ts";
-import { createRouter } from "../src/router/router.ts";
+import { createApp } from "../src/core/app.ts";
+import { createRouter } from "../src/router/group.ts";
+import { startBunServer, type ServerHandle } from "../src/adapters/bun.ts";
+import type { Application } from "../src/core/app.ts";
 
-describe("application", () => {
-  it("registers middleware and returns itself", () => {
-    const app = createApp();
-    expect(app.use(async () => {})).toBe(app);
-    expect(() => app.use(null as unknown as () => void)).toThrow(TypeError);
+const quiet = { env: "test" } as const;
+const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
+
+describe("app pipeline", () => {
+  it("matches routes top-level and returns their response", async () => {
+    const app = createApp(quiet);
+    app.get("/x", (c) => c.text("x"));
+    const res = await app.handle(req("/x"));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("x");
   });
 
-  it("serves 404 for unhandled requests", async () => {
-    const app = createApp();
-    const res = await app.handle(new Request("http://localhost:3000/"));
+  it("global middleware runs for UNMATCHED paths (koa contract)", async () => {
+    const app = createApp(quiet);
+    app.use((c, next) => {
+      c.set("X-Global", "1");
+      return next();
+    });
+    app.get("/known", (c) => c.text("ok"));
+    const miss = await app.handle(req("/unknown"));
+    expect(miss.headers.get("x-global")).toBe("1");
+    expect(miss.status).toBe(404);
+    const hit = await app.handle(req("/known"));
+    expect(hit.headers.get("x-global")).toBe("1");
+    expect(await hit.text()).toBe("ok");
+  });
+
+  it("global middleware runs for unmatched METHODS too, and may respond", async () => {
+    const app = createApp(quiet);
+    app.use(async (_c, next) => {
+      await next(); // observability only — never touches the response state
+    });
+    app.get("/only", (c) => c.text("get"));
+    const res = await app.handle(req("/only", { method: "POST" }));
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toContain("GET");
+  });
+
+  it("state mode: c.body/c.status/c.set flow into the response", async () => {
+    const app = createApp(quiet);
+    app.get("/s", (c) => {
+      c.status = 201;
+      c.set("X-Made", "yes");
+      c.body = "made";
+    });
+    const res = await app.handle(req("/s"));
+    expect(res.status).toBe(201);
+    expect(res.headers.get("x-made")).toBe("yes");
+    expect(await res.text()).toBe("made");
+  });
+
+  it("dual mode: a committed Response wins over concurrent state, and later c.set merges in", async () => {
+    const app = createApp(quiet);
+    app.get("/d", (c) => {
+      void c.set("X-Before", "1");
+      return c.text("returned");
+    });
+    const res = await app.handle(req("/d"));
+    expect(await res.text()).toBe("returned");
+    expect(res.headers.get("x-before")).toBe("1");
+  });
+
+  it("bare fast path: 200 + no custom headers carries no explicit content-type", async () => {
+    const app = createApp(quiet);
+    app.get("/bare", (c) => c.text("plain"));
+    const res = await app.handle(req("/bare"));
+    expect(res.status).toBe(200);
+    // D1: the FRAMEWORK adds no content-type. Bun's Response implementation
+    // attaches `text/plain;charset=UTF-8` itself; undici (Node) leaves it
+    // unset — both are runtime behavior, not framework behavior.
+    const ct = res.headers.get("content-type");
+    expect(ct === null || ct === "text/plain;charset=UTF-8").toBe(true);
+  });
+
+  it("c.json returns application/json through the native static", async () => {
+    const app = createApp(quiet);
+    app.get("/j", (c) => c.json({ ok: true }));
+    const res = await app.handle(req("/j"));
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(await res.text()).toBe('{"ok":true}');
+  });
+
+  it("state-mode object bodies serialize via Response.json semantics", async () => {
+    const app = createApp(quiet);
+    app.get("/o", (c) => {
+      c.body = { n: 1 };
+    });
+    const res = await app.handle(req("/o"));
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(await res.text()).toBe('{"n":1}');
+  });
+
+  it("notFound customizes the untouched-404 response", async () => {
+    const app = createApp(quiet);
+    app.notFound((c) => c.text("nothing here", 404, { "x-kind": "custom" }));
+    const res = await app.handle(req("/nope"));
     expect(res.status).toBe(404);
-    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(res.headers.get("x-kind")).toBe("custom");
+    expect(await res.text()).toBe("nothing here");
   });
 
-  it("callback() mirrors handle()", async () => {
-    const app = createApp();
-    app.use(async (ctx) => {
-      ctx.body = "via callback";
+  it("matched route with an untouched response still 404s (koa)", async () => {
+    const app = createApp(quiet);
+    app.get("/empty", () => undefined);
+    const res = await app.handle(req("/empty"));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
+  });
+
+  it("errors never escape app.handle and follow the expose gate", async () => {
+    const app = createApp(quiet);
+    app.get("/500", () => {
+      throw new Error("secret");
     });
-    const handler = app.callback();
-    const res = await handler(new Request("http://localhost:3000/"));
-    expect(await res.text()).toBe("via callback");
+    app.get("/400", (c) => c.throw(400, "visible"));
+    const five = await app.handle(req("/500"));
+    expect(five.status).toBe(500);
+    expect(await five.text()).toBe("Internal Server Error");
+    const four = await app.handle(req("/400"));
+    expect(four.status).toBe(400);
+    expect(await four.text()).toBe("visible");
   });
 
-  it("recompiles the chain when middleware is added later", async () => {
-    const app = createApp();
-    app.use(async (ctx, next) => {
-      ctx.body = "first";
+  it("onError hears errors; silent apps log nothing on 5xx", async () => {
+    const error = vi.fn();
+    const app = createApp({ env: "test", silent: true });
+    app.onError(error);
+    app.get("/e", () => {
+      throw new Error("boom");
+    });
+    await app.handle(req("/e"));
+    expect(error).toHaveBeenCalledTimes(1);
+    expect((error.mock.calls[0] as unknown as [Error])[0].message).toBe("boom");
+  });
+
+  it("HEAD reuses the GET handler, drops the body, backfills Content-Length", async () => {
+    const app = createApp(quiet);
+    app.get("/h", (c) => c.text("hello"));
+    const res = await app.handle(new Request("http://localhost:3000/h", { method: "HEAD" }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-length")).toBe("5");
+    expect(await res.text()).toBe("");
+  });
+
+  it("late app.use() recomposes existing route chains", async () => {
+    const app = createApp(quiet);
+    app.get("/late", (c) => c.text("core"));
+    app.use(async (c, next) => {
+      c.set("X-Late", "1");
       await next();
     });
-    expect(await (await app.handle(new Request("http://x/"))).text()).toBe("first");
-    app.use(async (ctx, next) => {
+    const res = await app.handle(req("/late"));
+    expect(res.headers.get("x-late")).toBe("1");
+    expect(await res.text()).toBe("core");
+  });
+
+  it("decorate extends every context", async () => {
+    const app = createApp(quiet);
+    app.decorate("user", () => "u1");
+    app.get("/who", (c) => c.text((c as unknown as { user: () => string }).user()));
+    const res = await app.handle(req("/who"));
+    expect(await res.text()).toBe("u1");
+  });
+
+  it("runtime.remote resolves c.ip exactly once (lazy memo)", async () => {
+    const app = createApp(quiet);
+    let calls = 0;
+    const remote = () => {
+      calls += 1;
+      return "9.9.9.9";
+    };
+    app.get("/ip", (c) => c.text(`${c.ip}|${c.ip}`));
+    const res = await app.handle(req("/ip"), { remote });
+    expect(await res.text()).toBe("9.9.9.9|9.9.9.9");
+    expect(calls).toBe(1);
+  });
+
+  it("callback() wraps handle 1:1", async () => {
+    const app = createApp(quiet);
+    app.get("/cb", (c) => c.text("cb"));
+    const res = await app.callback()(req("/cb"));
+    expect(await res.text()).toBe("cb");
+  });
+});
+
+describe("app: mounting", () => {
+  it("mounts a router under a prefix with 404 fallthrough", async () => {
+    const app = createApp(quiet);
+    const api = createRouter({ prefix: "/v1" });
+    api.get("/ping", (c) => c.text("pong"));
+    app.mount("/api", api);
+    app.get("/root", (c) => c.text("root"));
+    expect(await (await app.handle(req("/api/v1/ping"))).text()).toBe("pong");
+    expect((await app.handle(req("/api/v1/missing"))).status).toBe(404);
+    expect(await (await app.handle(req("/root"))).text()).toBe("root");
+  });
+
+  it("mounts another app's routes with its global middleware prepended", async () => {
+    const sub = createApp(quiet);
+    sub.use((c, next) => {
+      c.set("X-Sub", "1");
+      return next();
+    });
+    sub.get("/inner", (c) => c.text("inner"));
+    const app = createApp(quiet);
+    app.mount("/sub", sub);
+    const res = await app.handle(req("/sub/inner"));
+    expect(await res.text()).toBe("inner");
+    expect(res.headers.get("x-sub")).toBe("1");
+  });
+});
+
+describe("app: registration validation", () => {
+  it("rejects unknown methods, non-function handlers and empty stacks", () => {
+    const app = createApp(quiet);
+    expect(() => app.on("NOTAMETHOD", "/x", () => undefined)).toThrow(TypeError);
+    expect(() => app.get("/x", "nope" as unknown as () => void)).toThrow(TypeError);
+    expect(() => app.get("/x")).toThrow(/at least one handler/);
+  });
+
+  it("named routes resolve through url()/route()", () => {
+    const app = createApp(quiet);
+    app.get("user", "/users/:id(\\d+)", () => undefined);
+    expect(app.url("user", { id: "7" })).toBe("/users/7");
+    expect(app.route("user")).toBe("/users/:id(\\d+)");
+    expect(app.route("missing")).toBeUndefined();
+    expect(() => app.url("user", {})).toThrow(/Missing required parameter/);
+  });
+
+  it("app.param middleware runs for routes capturing the param", async () => {
+    const app = createApp(quiet);
+    app.param("pid", async (c, next) => {
+      c.set("X-Param", c.params?.["pid"] ?? "");
       await next();
-      ctx.set("X-Second", "yes");
     });
-    const res = await app.handle(new Request("http://x/"));
-    expect(res.headers.get("x-second")).toBe("yes");
+    app.get("/p/:pid", (c) => c.text("done"));
+    app.get("/q/:other", (c) => c.text("other"));
+    const res = await app.handle(req("/p/77"));
+    expect(res.headers.get("x-param")).toBe("77");
+    const other = await app.handle(req("/q/1"));
+    expect(other.headers.get("x-param")).toBeNull();
   });
+});
 
-  it("emits error events with context", async () => {
-    const app = createApp({ env: "test" });
-    const listener = vi.fn();
-    app.on("error", listener);
-    app.use(async () => {
-      throw new Error("middleware failure");
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(500);
-    expect(listener).toHaveBeenCalledTimes(1);
-    const [error, ctx] = listener.mock.calls[0] as [Error, { url: string }];
-    expect(error.message).toBe("middleware failure");
-    expect(ctx.url).toBe("/");
-  });
-
-  it("returns exposed 4xx messages and hides 5xx messages", async () => {
-    const app = createApp({ env: "test" });
-    app.use(async (ctx) => {
-      ctx.throw(404, "no such user");
-    });
-    const notFound = await app.handle(new Request("http://localhost:3000/"));
-    expect(notFound.status).toBe(404);
-    expect(await notFound.text()).toBe("no such user");
-
-    const server = createApp({ env: "test" });
-    server.use(async () => {
-      throw createError(502, "upstream secret");
-    });
-    const badGateway = await server.handle(new Request("http://localhost:3000/"));
-    expect(badGateway.status).toBe(502);
-    expect(await badGateway.text()).toBe("Bad Gateway");
-  });
-
-  it("normalizes non-Error throwables", async () => {
-    const app = createApp({ env: "test" });
-    app.on("error", (err) => {
-      expect(err).toBeInstanceOf(Error);
-    });
-    app.use(async () => {
-      throw "just a string";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(500);
-  });
-
-  it("applies error headers", async () => {
-    const app = createApp({ env: "test" });
-    app.use(async () => {
-      throw createError(429, "slow down", { headers: { "Retry-After": "30" } });
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(429);
-    expect(res.headers.get("retry-after")).toBe("30");
-  });
-
-  it("silences console output when silent or test env", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const loud = createApp({ env: "development" });
-    loud.use(async () => {
-      throw new Error("loud");
-    });
-    await loud.handle(new Request("http://localhost:3000/"));
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-
-    const quiet = createApp({ silent: true });
-    quiet.use(async () => {
-      throw new Error("quiet");
-    });
-    await quiet.handle(new Request("http://localhost:3000/"));
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    errorSpy.mockRestore();
-  });
-
-  it("supports once and off listeners", async () => {
-    const app = createApp({ env: "test" });
-    const onceListener = vi.fn();
-    app.once("error", onceListener);
-    app.use(async () => {
-      throw new Error("a");
-    });
-    await app.handle(new Request("http://localhost:3000/"));
-    await app.handle(new Request("http://localhost:3000/"));
-    expect(onceListener).toHaveBeenCalledTimes(1);
-
-    const offListener = vi.fn();
-    const unsub = app.on("error", offListener);
-    unsub();
-    await app.handle(new Request("http://localhost:3000/"));
-    expect(offListener).not.toHaveBeenCalled();
-
-    const removed = vi.fn();
-    app.on("error", removed);
-    app.off("error", removed);
-    await app.handle(new Request("http://localhost:3000/"));
-    expect(removed).not.toHaveBeenCalled();
-    expect(app.listenerCount("error")).toBe(0);
-  });
-
-  it("toJSON exposes settings", () => {
-    const app = createApp({ proxy: true, env: "production" });
-    expect(app.toJSON()).toEqual({ subdomainOffset: 2, proxy: true, env: "production" });
-  });
-
-  it("forwards error events through emit/onerror", () => {
-    const app = createApp();
+describe("app: listen", () => {
+  it("parses port/hostname/onListen argument shapes", async () => {
+    const made: Record<string, unknown>[] = [];
+    const serveImpl = (options: Record<string, unknown>): ServerHandle => {
+      made.push(options);
+      return {
+        port: options["port"] as number,
+        hostname: "127.0.0.1",
+        stop: () => undefined,
+        fetch: () => new Response("x"),
+        reload: () => undefined,
+      };
+    };
+    const app = createApp(quiet) as Application;
+    const onListen = () => undefined;
+    startBunServer(app, { port: 4123 }, onListen, serveImpl);
+    expect(made[0]?.["port"]).toBe(4123);
+    expect(typeof made[0]?.["fetch"]).toBe("function");
+    // the fetch handler wires the runtime server channel
+    const fetch = made[0]?.["fetch"] as (
+      request: Request,
+      server: unknown,
+    ) => Response | Promise<Response>;
     const seen: unknown[] = [];
-    app.on("custom", (value) => seen.push(value));
-    app.emit("custom", 1);
-    expect(seen).toEqual([1]);
-    expect(app.emit("nobody-listens", 2)).toBe(false);
+    const fakeServer = {
+      requestIP: (r: Request) => {
+        seen.push(r);
+        return { address: "1.2.3.4" };
+      },
+    };
+    app.get("/ip", (c) => c.text(c.ip));
+    const res = await fetch(req("/ip"), fakeServer);
+    expect(await res.text()).toBe("1.2.3.4");
   });
 
-  it("runs a full router app end to end", async () => {
-    const app = createApp();
-    const router = createRouter({ prefix: "/api" });
-    router.get("/users/:id", async (ctx) => {
-      ctx.body = { id: ctx.params["id"] };
-    });
-    router.post("/users", async (ctx) => {
-      ctx.status = 201;
-      ctx.body = { created: true };
-    });
-    app.use(router.routes()).use(router.allowedMethods());
-
-    const got = await app.handle(new Request("http://localhost:3000/api/users/42"));
-    expect(await got.json()).toEqual({ id: "42" });
-
-    const created = await app.handle(
-      new Request("http://localhost:3000/api/users", { method: "POST" }),
-    );
-    expect(created.status).toBe(201);
-
-    const missing = await app.handle(new Request("http://localhost:3000/api/nope"));
-    expect(missing.status).toBe(404);
-  });
-
-  it("mutating middleware continue upstream after next()", async () => {
-    const app = createApp();
-    const order: string[] = [];
-    app.use(async (_ctx, next) => {
-      order.push("one:before");
-      await next();
-      order.push("one:after");
-    });
-    app.use(async (ctx) => {
-      order.push("two");
-      ctx.body = "done";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(await res.text()).toBe("done");
-    expect(order).toEqual(["one:before", "two", "one:after"]);
+  it("throws outside Bun when no serve implementation exists", () => {
+    const app = createApp(quiet);
+    expect(() => startBunServer(app, {})).toThrow(/Bun\.serve/);
   });
 });
