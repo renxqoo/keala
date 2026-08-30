@@ -72,6 +72,14 @@
 - @koa/router 形状类 6 例（agent-parity-gaps-2）：随 D 归档消失。
 - 其余 skip 在 P4 总验收时逐条裁决为"修复解跳 / 显式挂账"，0 静默 skip。
 
+## 4.5 P4 过程审计记录（v2.0.0 发布前）
+
+1. **`bun x vitest run` 的真相**：vitest 的 worker 是 fork 出的 Node 子进程——该命令并未在真实 Bun 运行时里跑用例（两侧 skip 计数同为 3 是证据）。真实 Bun 覆盖由三条通道补齐：`scripts/smoke.ts`（真实 Bun.serve + live HTTP，含 pbkdf2/CSRF 原生路径、routes 表方法作用域实测）、`scripts/example-check.ts`（示例全表面 live HTTP）、`test/native-bridge.test.ts`（桩掉 Bun 全局后动态 import，双运行时覆盖原生分支）。
+2. **Bun 1.4.0 平台缺陷（实测确认）**：`Bun.password.verify` 对自家 argon2id/bcrypt 哈希抛 `UnsupportedAlgorithm`；`node:crypto.scrypt` 回调 reject `undefined`。两者都不能作为默认。v2 默认口令哈希为 WebCrypto PBKDF2-SHA-256（600k 迭代、常数时间比较、迭代数限界 1k–5M 防验证炸弹），`bunPasswordHasher()` 显式选择 argon2id。
+3. **routes 表裸键语义（实测确认）**：裸键 Response 条目对 POST/DELETE/… 全部返回沉没响应；`{ GET: value }` 作用域化后非 GET 落回 fetch → JS 路由 405，与镜像一致。`{dir}` 裸前缀 404 落回 fetch（镜像 twin 路由补齐后两运行时一致），子目录 301 与 Range 为原生独有（PARITY 记账）。
+4. **skip 裁决终态**：T2（同位置 param 正则合并）为唯一永久 skip；另 2 例为 `skipIf(!isBun)` GC 围栏（真实 Bun 下执行）。0 静默 skip。
+5. **parseListenArgs 白名单缺陷**：选项对象形态曾静默丢弃 `nativeRoutes`/`websocket`/`onServeError`——已修复并入测试。
+
 ## 5. 总验收清单（P4 出口）
 
 1. 性能：G1-G12 全过（相对比值口径）；BENCH.md 用新方法学重测（机器/Bun 版本/日期），含 v2/hono/raw + 1000 路由 + HTTP + p99 + 内存

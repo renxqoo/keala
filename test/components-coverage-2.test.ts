@@ -144,6 +144,7 @@ describe("coverage: adapter drain + router mount through dispatch", () => {
     });
     const websocket = made[0]?.["websocket"] as Record<string, (ws: unknown) => void>;
     websocket["drain"]?.({ data: { wsKey: "/w", ctx: { path: "/w" } } });
+    await new Promise((r) => setTimeout(r, 0)); // handlers dispatch on a microtask
     expect(drained).toEqual(["/w"]);
   });
 

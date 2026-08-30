@@ -10,6 +10,7 @@ import { createApp } from "../src/core/app.ts";
 import {
   basicAuth,
   bearerAuth,
+  bunPasswordHasher,
   hashPassword,
   verifyPassword,
   type PasswordHasher,
@@ -171,34 +172,51 @@ describe("password hashing (runtime-adaptive)", () => {
     expect(await verifyPassword(hash, "wrong")).toBe(false);
   });
 
-  it("produces the runtime-native format (argon2 on Bun, scrypt elsewhere)", async () => {
+  it("produces the portable pbkdf2 format on every runtime", async () => {
     const hash = await hashPassword("pw");
-    if (typeof Bun !== "undefined") {
-      expect(hash.startsWith("$argon2")).toBe(true);
-    } else {
-      expect(hash.startsWith("scrypt$")).toBe(true);
+    expect(hash.startsWith("pbkdf2$")).toBe(true);
+  });
+
+  it("bunPasswordHasher() is an explicit opt-in with loud failure modes", async () => {
+    if (typeof Bun === "undefined") {
+      expect(() => bunPasswordHasher()).toThrow(/Bun runtime/);
+      return;
+    }
+    if (typeof Bun.password !== "object") {
+      expect(() => bunPasswordHasher()).toThrow(/Bun\.password/);
+      return;
+    }
+    const hasher = bunPasswordHasher();
+    const hash = await hashPassword("pw", hasher);
+    // Where Bun.password works it round-trips; where the native verify is
+    // broken (Bun 1.4.0 on some platforms) it throws Bun's own descriptive
+    // error — never a silent false.
+    try {
+      expect(await verifyPassword(hash, "pw", hasher)).toBe(true);
+    } catch (error) {
+      expect((error as Error).message).toMatch(/Password verification failed/);
     }
   });
 
-  it("scrypt fallback hashes verify under Bun too (cross-format)", async () => {
-    if (typeof Bun === "undefined") return; // fallback IS the default here
-    const scryptOnly: PasswordHasher = {
-      async hash(password) {
-        return `scrypt$16384$8$1$${Buffer.from("salt").toString("base64")}$${Buffer.from(password).toString("base64")}`;
-      },
-      async verify() {
-        return false;
-      },
-    };
-    const hash = await hashPassword("pw", scryptOnly);
-    expect(await verifyPassword(hash, "pw")).toBe(true);
-    expect(await verifyPassword(hash, "other")).toBe(false);
+  it("pbkdf2 hashes reject iteration-count tampering and bounds violations", async () => {
+    const hash = await hashPassword("pw");
+    const [, iterations, salt, key] = hash.split("$") as [string, string, string, string];
+    for (const bad of ["0", "999", "5000001", "abc"]) {
+      expect(await verifyPassword(`pbkdf2$${bad}$${salt}$${key}`, "pw")).toBe(false);
+    }
+    expect(await verifyPassword(`pbkdf2$${iterations}$${salt}$${key}`, "pw")).toBe(true);
   });
 
   it("rejects malformed hashes with false, never a crash", async () => {
-    const corrupt = ["", "not-a-hash", "scrypt$", "scrypt$a$b$c$d$e", "scrypt$x$1$1$AAAA$BBBB"];
-    if (typeof Bun !== "undefined") corrupt.push("$argon2id$garbage");
-    for (const bad of corrupt) {
+    for (const bad of [
+      "",
+      "not-a-hash",
+      "pbkdf2$",
+      "pbkdf2$a$b$c$d$e",
+      "scrypt$16384$8$1$AAAA$BBBB",
+      "pbkdf2$1000$",
+      "pbkdf2$1000$not-base64-$$$",
+    ]) {
       expect(await verifyPassword(bad, "pw")).toBe(false);
     }
   });
@@ -210,9 +228,10 @@ describe("password hashing (runtime-adaptive)", () => {
     expect(await verifyPassword("$argon2id$" + "x".repeat(600), "pw")).toBe(false);
   });
 
-  it("argon2 hashes under Node without Bun.password throw loudly, not false", async () => {
-    if (typeof Bun !== "undefined") return;
-    await expect(verifyPassword("$argon2id$v=19$abc$def", "pw")).rejects.toThrow(/Bun\.password/);
+  it("PHC-format hashes throw loudly without an explicit hasher (all runtimes)", async () => {
+    await expect(verifyPassword("$argon2id$v=19$abc$def", "pw")).rejects.toThrow(
+      /bunPasswordHasher|explicitly/,
+    );
   });
 
   it("an injected hasher drives both directions", async () => {

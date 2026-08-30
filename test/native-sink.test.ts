@@ -7,6 +7,10 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+// globalThis.Bun is non-writable AND non-configurable on the real Bun
+// runtime — these suites stub it, so they run on the Node gate only (the
+// real-runtime equivalents live in scripts/smoke.ts).
+const REAL_BUN = typeof Bun !== "undefined";
 
 import { createApp, startBunServer, type ServeImplementation } from "../src/index.ts";
 import { buildNativeRoutes } from "../src/core/sink.ts";
@@ -248,42 +252,45 @@ describe("sink: native routes table (adapter)", () => {
     expect(() => app.reloadNativeRoutes()).toThrow(/app\.listen/);
   });
 
-  it("sinking after listen() hot-reloads the table; reloadNativeRoutes works", async () => {
-    const originalBun = (globalThis as { Bun?: unknown }).Bun;
-    const reloads: unknown[] = [];
-    const impl: ServeImplementation = (_options) => {
-      return {
-        port: 0,
-        hostname: "localhost",
-        stop: () => undefined,
-        fetch: () => new Response("fake"),
-        reload: (next) => reloads.push(next),
+  it.skipIf(REAL_BUN)(
+    "sinking after listen() hot-reloads the table; reloadNativeRoutes works",
+    async () => {
+      const originalBun = (globalThis as { Bun?: unknown }).Bun;
+      const reloads: unknown[] = [];
+      const impl: ServeImplementation = (_options) => {
+        return {
+          port: 0,
+          hostname: "localhost",
+          stop: () => undefined,
+          fetch: () => new Response("fake"),
+          reload: (next) => reloads.push(next),
+        };
       };
-    };
-    (globalThis as { Bun?: unknown }).Bun = { serve: impl };
-    try {
-      const app = createApp(quiet);
-      const server = app.listen(0);
-      expect(reloads.length).toBe(0);
-      app.sink("/health", new Response("ok"));
-      expect(reloads.length).toBe(1);
-      expect((reloads[0] as Record<string, unknown>)["routes"]).toBeDefined();
-      app.reloadNativeRoutes();
-      expect(reloads.length).toBe(2);
-      server.stop();
+      (globalThis as { Bun?: unknown }).Bun = { serve: impl };
+      try {
+        const app = createApp(quiet);
+        const server = app.listen(0);
+        expect(reloads.length).toBe(0);
+        app.sink("/health", new Response("ok"));
+        expect(reloads.length).toBe(1);
+        expect((reloads[0] as Record<string, unknown>)["routes"]).toBeDefined();
+        app.reloadNativeRoutes();
+        expect(reloads.length).toBe(2);
+        server.stop();
 
-      // The opt-out is sticky: sinks after listen({nativeRoutes: false})
-      // must NOT silently install a native table later.
-      const optOut = createApp(quiet);
-      const optServer = optOut.listen({ port: 0, nativeRoutes: false });
-      optOut.sink("/ping", new Response("pong"));
-      expect(reloads.length).toBe(2); // no new reload
-      expect(() => optOut.reloadNativeRoutes()).toThrow(/nativeRoutes: false/);
-      expect((await optOut.handle(req("/ping"))).status).toBe(200); // JS mirror still serves
-      optServer.stop();
-    } finally {
-      if (originalBun === undefined) delete (globalThis as { Bun?: unknown }).Bun;
-      else (globalThis as { Bun?: unknown }).Bun = originalBun;
-    }
-  });
+        // The opt-out is sticky: sinks after listen({nativeRoutes: false})
+        // must NOT silently install a native table later.
+        const optOut = createApp(quiet);
+        const optServer = optOut.listen({ port: 0, nativeRoutes: false });
+        optOut.sink("/ping", new Response("pong"));
+        expect(reloads.length).toBe(2); // no new reload
+        expect(() => optOut.reloadNativeRoutes()).toThrow(/nativeRoutes: false/);
+        expect((await optOut.handle(req("/ping"))).status).toBe(200); // JS mirror still serves
+        optServer.stop();
+      } finally {
+        if (originalBun === undefined) delete (globalThis as { Bun?: unknown }).Bun;
+        else (globalThis as { Bun?: unknown }).Bun = originalBun;
+      }
+    },
+  );
 });

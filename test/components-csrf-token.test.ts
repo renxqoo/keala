@@ -6,6 +6,11 @@
 
 import { describe, expect, it } from "vitest";
 
+// globalThis.Bun is non-writable AND non-configurable on the real Bun
+// runtime — these suites stub it, so they run on the Node gate only (the
+// real-runtime equivalents live in scripts/smoke.ts).
+const REAL_BUN = typeof Bun !== "undefined";
+
 import { createApp } from "../src/core/app.ts";
 import { csrfToken, csrfTokenGuard } from "../src/components/csrf-token.ts";
 import { createHmac, randomBytes } from "node:crypto";
@@ -90,7 +95,7 @@ describe("csrfToken service", () => {
     }
   });
 
-  it("fallback: every signed field is tamper-evident", () => {
+  it.skipIf(REAL_BUN)("fallback: every signed field is tamper-evident", () => {
     const sign = (nonce: string, issuedAt: string, ttl: string): string =>
       createHmac("sha256", "fallback-secret")
         .update(`csrf1\u0000\u0000${nonce}\u0000${issuedAt}\u0000${ttl}`)
@@ -118,7 +123,7 @@ describe("csrfToken service", () => {
     expect(fallbackService.verify(`t1.nonce.${issued}.86400000.${boundMac}`, "y")).toBe(false);
   });
 
-  it("fallback: a future-issued token is rejected without skew allowance", () => {
+  it.skipIf(REAL_BUN)("fallback: a future-issued token is rejected without skew allowance", () => {
     const future = Date.now() + 60_000;
     const mac = createHmac("sha256", "fallback-secret")
       .update(`csrf1\u0000\u0000nonce\u0000${future}\u000086400000`)
@@ -126,16 +131,19 @@ describe("csrfToken service", () => {
     expect(fallbackService.verify(`t1.nonce.${future}.86400000.${mac}`)).toBe(false);
   });
 
-  it("fallback: same-secret longer-TTL cross-service tokens are rejected", async () => {
-    const lax = csrfToken({ secret: "shared", expiresIn: 3_600_000 });
-    const strict = csrfToken({ secret: "shared", expiresIn: 50 });
-    const token = lax.issue();
-    await new Promise((r) => setTimeout(r, 80));
-    expect(strict.verify(token)).toBe(false); // TTL capped by THIS service
-    expect(lax.verify(token)).toBe(true);
-  });
+  it.skipIf(REAL_BUN)(
+    "fallback: same-secret longer-TTL cross-service tokens are rejected",
+    async () => {
+      const lax = csrfToken({ secret: "shared", expiresIn: 3_600_000 });
+      const strict = csrfToken({ secret: "shared", expiresIn: 50 });
+      const token = lax.issue();
+      await new Promise((r) => setTimeout(r, 80));
+      expect(strict.verify(token)).toBe(false); // TTL capped by THIS service
+      expect(lax.verify(token)).toBe(true);
+    },
+  );
 
-  it("fallback: MACs without the csrf1 domain separator never verify", () => {
+  it.skipIf(REAL_BUN)("fallback: MACs without the csrf1 domain separator never verify", () => {
     const issued = Date.now().toString();
     const foreign = createHmac("sha256", "fallback-secret")
       .update(`\u0000\u0000nonce\u0000${issued}\u000086400000`)
@@ -258,7 +266,7 @@ describe("csrfTokenGuard middleware", () => {
   });
 });
 
-describe("csrfToken cross-backend consistency", () => {
+describe.skipIf(REAL_BUN)("csrfToken cross-backend consistency", () => {
   it("a Bun-native service and a fallback service reject each other's tokens", () => {
     if (!NATIVE) return;
     const native = csrfToken({ secret: "same" });

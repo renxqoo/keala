@@ -19,7 +19,7 @@
 
 import type { Application } from "./app.ts";
 import type { Context } from "./context/context.ts";
-import { byteLengthOf } from "./context/response.ts";
+import { byteLengthOf } from "../utils/url.ts";
 import { isEmptyStatus, statusMessage } from "../http/status.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
@@ -126,16 +126,55 @@ const mergedResponseHeaders = async (res: Response): Promise<Headers> => {
 /**
  * A bare `new Response(string)` gets `text/plain` from the runtime only while
  * the body is still a string; rebuilding from the stream turns it into
- * `application/octet-stream`. Sniff the payload to decide (rare path — only
- * post-commit header writes land here).
+ * `application/octet-stream`. Sniff a bounded PREFIX to decide (rare path —
+ * only post-commit header writes land here). A prefix is enough: sniffing
+ * exists to catch binary payloads, and buffering whole multi-MB bodies for a
+ * header decision is a memory-amplification vector.
  */
-const sniffContentType = async (res: Response): Promise<string | null> => {
+const SNIFF_BUDGET = 8192;
+/** HEAD Content-Length backfill budget — larger bodies simply omit the header. */
+const HEAD_LENGTH_BUDGET = 1 << 20;
+
+const boundedRead = async (
+  res: Response,
+  budget: number,
+): Promise<{ bytes: Uint8Array; truncated: boolean } | null> => {
   try {
-    const text = await res.clone().text();
-    return text.includes("\uFFFD") ? "application/octet-stream" : "text/plain; charset=utf-8";
+    const reader = res.clone().body?.getReader();
+    if (reader === undefined) return null;
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    let truncated = false;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+      if (total > budget) {
+        truncated = true;
+        // NEVER await cancel(): on a cloned (teed) body under undici the
+        // cancel promise never settles — awaiting it hangs the request.
+        void reader.cancel().catch(() => undefined);
+        break;
+      }
+    }
+    const merged = new Uint8Array(total);
+    let at = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, at);
+      at += chunk.byteLength;
+    }
+    return { bytes: merged, truncated };
   } catch {
     return null; // unreadable body — let the runtime decide
   }
+};
+
+const sniffContentType = async (res: Response): Promise<string | null> => {
+  const read = await boundedRead(res, SNIFF_BUDGET);
+  if (read === null) return null;
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(read.bytes);
+  return text.includes("\uFFFD") ? "application/octet-stream" : "text/plain; charset=utf-8";
 };
 
 /**
@@ -145,14 +184,12 @@ const sniffContentType = async (res: Response): Promise<string | null> => {
 const stripBody = (res: Response): Response =>
   new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
 
-/** Content-Length of a committed body when cheaply computable. */
+/** Exact Content-Length of a committed body, bounded — no whole-body reads. */
 const committedLength = async (res: Response): Promise<number | null> => {
   if (res.headers.get("content-length") !== null) return null;
-  try {
-    return byteLengthOf(await res.clone().text());
-  } catch {
-    return null;
-  }
+  const read = await boundedRead(res, HEAD_LENGTH_BUDGET);
+  if (read === null || read.truncated) return null;
+  return read.bytes.byteLength;
 };
 
 /** HEAD view of a committed Response: no body, Content-Length backfilled. */

@@ -16,6 +16,7 @@ import {
   validateHeaderName,
   validateHeaderValue,
 } from "../../utils/text.ts";
+import { byteLengthOf, encodeUrlValue } from "../../utils/url.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestApi } from "./request.ts";
 
@@ -48,45 +49,12 @@ export interface ResponseApi {
   html(body: string, status?: number, headers?: Record<string, HeaderValue>): Response;
 }
 
-const TEXT_PLAIN = "text/plain; charset=utf-8";
-const TEXT_HTML = "text/html; charset=utf-8";
-
-/**
- * Koa's `encodeurl`: percent-encode characters unsafe in a Location header
- * (non-ASCII, controls, space, `"`, `'`, `<`, `>`, `` ` ``) while leaving
- * existing percent-escapes untouched.
- */
-export const encodeUrlValue = (url: string): string => {
-  let out = "";
-  for (let i = 0; i < url.length;) {
-    const code = url.charCodeAt(i);
-    if (code === 37 && /[0-9a-fA-F]{2}/.test(url.slice(i + 1, i + 3))) {
-      out += url.slice(i, i + 3);
-      i += 3;
-      continue;
-    }
-    const ch = url[i] as string;
-    const unsafe =
-      code > 0x7e ||
-      code < 0x21 ||
-      ch === '"' ||
-      ch === "'" ||
-      ch === "<" ||
-      ch === ">" ||
-      ch === "`";
-    out += unsafe ? `%${code.toString(16).toUpperCase().padStart(2, "0")}` : ch;
-    i += 1;
-  }
-  return out;
-};
-
-/** UTF-8 byte length with an ASCII fast path. */
-export const byteLengthOf = (value: string): number => {
-  for (let i = 0; i < value.length; i++) {
-    if (value.charCodeAt(i) > 0x7f) return Buffer.byteLength(value);
-  }
-  return value.length;
-};
+/** Materialize the lazy header record on first response write. */
+// Prototype-less by design: inherited keys (`constructor`, `__proto__`)
+// must never surface as header values or accept prototype writes — an
+// app echoing user-controlled names through c.append() would otherwise
+// corrupt internal state.
+const recordOf = (c: ContextState): HeaderMap => (c.headersRecord ??= Object.create(null));
 
 const normalizeDispositionType = (type: string | undefined): string => {
   if (type === undefined) return "attachment";
@@ -101,9 +69,12 @@ const basenameOf = (filename: string): string => {
   return slash === -1 ? filename : filename.slice(slash + 1);
 };
 
-/** Materialize the lazy header record on first response write. */
-const recordOf = (c: ContextState): HeaderMap => (c.headersRecord ??= {});
+const TEXT_PLAIN = "text/plain; charset=utf-8";
+const TEXT_HTML = "text/html; charset=utf-8";
 
+/**
+ * Koa's `encodeurl`, UTF-8 correct: percent-encode characters unsafe in a
+ * Location header (non-ASCII, controls, space, `"`, `'`, `<`, `>`, `` ` ``)
 /** Any explicit Content-Length is stale once a body lands (koa recomputes). */
 const clearTouchedLength = (c: ContextState): void => {
   if (c.headersRecord?.["content-length"] !== undefined) {
@@ -416,6 +387,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
   },
   append(field: string, value: HeaderValue) {
     const name = field.toLowerCase();
+    if (name !== "content-type" && name !== "content-length") validateHeaderName(name);
     const next = typeof value === "string" ? [value] : [...value];
     for (const entry of next) validateHeaderValue(name, entry);
     const existing = this.headersRecord?.[name];

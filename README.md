@@ -112,8 +112,10 @@ app.listen({ port: 3000 }); // routes table embedded at boot
 app.sink("/ping", new Response("pong")); // later sink → server.reload()
 app.reloadNativeRoutes(); // or rebuild the table explicitly
 
-// Passwords: Bun.password (argon2id) with a node:crypto scrypt fallback.
-const hash = await hashPassword(pw); // $argon2id… / scrypt$…
+// Passwords: WebCrypto PBKDF2-SHA-256 default (portable across Bun/Node —
+// Bun 1.4.0's own Bun.password.verify and node:crypto.scrypt are broken on
+// some platforms). bunPasswordHasher() opts into argon2id explicitly.
+const hash = await hashPassword(pw); // pbkdf2$600000$…
 await verifyPassword(hash, pw); // true/false, fails closed on corrupt data
 
 // Signed CSRF tokens: Bun.CSRF natively, HMAC fallback on Node.

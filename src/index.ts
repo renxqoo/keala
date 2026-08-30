@@ -93,6 +93,8 @@ export { cache, type ResponseCacheOptions } from "./components/cache.ts";
 export {
   basicAuth,
   bearerAuth,
+  bunPasswordHasher,
+  pbkdf2PasswordHasher,
   hashPassword,
   verifyPassword,
   type BasicAuthOptions,

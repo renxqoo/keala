@@ -27,12 +27,40 @@ const SCENARIOS = [
   { label: "3 middlewares", path: "/mw" },
 ];
 
+// The scale scenario runs on DEDICATED server processes: 1000 extra routes
+// on the shared servers would poison the base scenarios (koa's linear layer
+// walk collapses, raw's routes-table misses pay a lookup cost).
+const SCALE_SCENARIO = { label: "1000-route scale (late)", path: "/route-999" };
+const SCALE_SERVERS = [
+  {
+    name: "raw Bun.serve (bun 1.4)",
+    cmd: ["bun", "bench/server-raw-scale.ts"],
+    port: 4114,
+    scale: true,
+  },
+  {
+    name: "bun-koa (bun 1.4)",
+    cmd: ["bun", "bench/server-bun-koa-scale.ts"],
+    port: 4113,
+    scale: true,
+  },
+  { name: "hono 4 (bun 1.4)", cmd: ["bun", "bench/server-hono-scale.ts"], port: 4112, scale: true },
+  { name: "koa 3 (node 22)", cmd: ["node", "bench/server-koa-scale.mjs"], port: 4111, scale: true },
+  {
+    name: "fastify 5 (node 22)",
+    cmd: ["node", "bench/server-fastify-scale.mjs"],
+    port: 4115,
+    scale: true,
+  },
+];
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const waitReady = async (port) => {
+const waitReady = async (port, scale = false) => {
+  const probe = scale ? "/route-0" : "/text";
   for (let i = 0; i < 150; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/text`);
+      const res = await fetch(`http://127.0.0.1:${port}${probe}`);
       if (res.ok) return;
     } catch {
       // retry
@@ -53,6 +81,10 @@ const fire = (url) =>
     connections: CONNECTIONS,
     duration: DURATION,
     pipelining: 1,
+    // 4 client workers: a single autocannon process saturates near ~177k
+    // req/s on this machine and flattens every Bun framework to 1.00x —
+    // without workers the CLIENT is the bottleneck, not the servers.
+    workers: 4,
     warmup: { connections: CONNECTIONS, duration: 2 },
   });
 
@@ -83,22 +115,23 @@ const main = async () => {
   const latency = [];
   const memory = [];
 
-  for (const instance of SERVERS) {
+  for (const instance of [...SERVERS, ...SCALE_SERVERS]) {
+    const scenarios = instance.scale ? [SCALE_SCENARIO] : SCENARIOS;
     const child = spawn(instance.cmd[0], [...instance.cmd.slice(1), String(instance.port)], {
       stdio: ["ignore", "ignore", "inherit"],
     });
     try {
-      await waitReady(instance.port);
+      await waitReady(instance.port, instance.scale);
       await sleep(400);
       const idle = await sampleMemory(instance.port);
 
-      for (const scenario of SCENARIOS) {
+      for (const scenario of scenarios) {
         await fetch(`http://127.0.0.1:${instance.port}${scenario.path}`).then((r) => r.text());
       }
       const beforeSteady = await sampleMemory(instance.port);
 
       const peaks = [];
-      for (const scenario of SCENARIOS) {
+      for (const scenario of scenarios) {
         const rpsRuns = [];
         const p50Runs = [];
         const p99Runs = [];

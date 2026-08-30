@@ -108,6 +108,7 @@ describe("adapter websocket dispatcher", () => {
     websocket["close"]?.(wsA, 1000, "done");
     websocket["open"]?.(wsB);
     websocket["open"]?.(wsGhost); // unknown key — silently ignored
+    await new Promise((r) => setTimeout(r, 0)); // handlers dispatch on a microtask
 
     expect(events).toEqual(["a-open:sock-a:/a", "a-msg:hello", "a-close:1000", "b-open"]);
   });

@@ -328,6 +328,7 @@ describe("redteam P2: websocket (green)", () => {
       }
     ).websocket?.open;
     dispatch?.({ data: { wsKey: "/ws/:id", ctx } });
+    await new Promise((r) => setTimeout(r, 0)); // handlers dispatch on a microtask
     expect(seen2).toEqual(["42"]);
     // unknown keys are silent no-ops
     expect(() => dispatch?.({ data: { wsKey: "/missing", ctx: undefined } })).not.toThrow();

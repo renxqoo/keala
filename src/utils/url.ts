@@ -59,3 +59,51 @@ export const parseHostHeader = (host: string): { hostname: string; port: string 
   if (colon === -1) return { hostname: host, port: "" };
   return { hostname: host.slice(0, colon), port: host.slice(colon + 1) };
 };
+
+/**
+ * Koa's `encodeurl`, UTF-8 correct: percent-encode characters unsafe in a
+ * Location header (non-ASCII, controls, space, `"`, `'`, `<`, `>`, `` ` ``)
+ * as their UTF-8 BYTE sequence (code-point iteration — encoding UTF-16
+ * code units would emit latin-1 `%E9` and malformed surrogate escapes)
+ * while leaving existing percent-escapes untouched.
+ */
+
+const urlEncoder = new TextEncoder();
+
+export const encodeUrlValue = (url: string): string => {
+  let out = "";
+  for (let i = 0; i < url.length;) {
+    if (url.charCodeAt(i) === 37 && /[0-9a-fA-F]{2}/.test(url.slice(i + 1, i + 3))) {
+      out += url.slice(i, i + 3);
+      i += 3;
+      continue;
+    }
+    const point = url.codePointAt(i) as number;
+    const ch = String.fromCodePoint(point);
+    const unsafe =
+      point > 0x7e ||
+      point < 0x21 ||
+      ch === '"' ||
+      ch === "'" ||
+      ch === "<" ||
+      ch === ">" ||
+      ch === "`";
+    if (unsafe) {
+      for (const byte of urlEncoder.encode(ch)) {
+        out += `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
+      }
+    } else {
+      out += ch;
+    }
+    i += point > 0xffff ? 2 : 1;
+  }
+  return out;
+};
+
+/** UTF-8 byte length with an ASCII fast path. */
+export const byteLengthOf = (value: string): number => {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 0x7f) return Buffer.byteLength(value);
+  }
+  return value.length;
+};

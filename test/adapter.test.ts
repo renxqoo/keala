@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+// globalThis.Bun is non-writable AND non-configurable on the real Bun
+// runtime — these suites stub it, so they run on the Node gate only (the
+// real-runtime equivalents live in scripts/smoke.ts).
+const REAL_BUN = typeof Bun !== "undefined";
 
 import { createApp, startBunServer, type ServeImplementation } from "../src/index.ts";
 
@@ -103,7 +107,7 @@ describe("startBunServer", () => {
     expect(options()["port"]).toBe(3000);
   });
 
-  it("throws a clear error without Bun and no injected implementation", () => {
+  it.skipIf(REAL_BUN)("throws a clear error without Bun and no injected implementation", () => {
     const app = createApp();
     const realBun = (globalThis as { Bun?: unknown }).Bun;
     delete (globalThis as { Bun?: unknown }).Bun;
@@ -163,7 +167,7 @@ describe("startBunServer", () => {
     expect(await res.text()).toBe("boom");
   });
 
-  it("dispatches websocket error events to the owning route", () => {
+  it("dispatches websocket error events to the owning route", async () => {
     const app = createApp();
     const seen: Array<{ code: unknown; ctx: unknown }> = [];
     app.ws("/chat", {
@@ -180,6 +184,7 @@ describe("startBunServer", () => {
     >;
     const error = wsHandlers["error"] as (ws: unknown, err: Error) => void;
     error({ data: { wsKey: "/chat", ctx: { path: "/chat" } } }, new Error("socket died"));
+    await new Promise((r) => setTimeout(r, 0)); // handlers dispatch on a microtask
     expect(seen).toEqual([{ code: new Error("socket died"), ctx: "/chat" }]);
   });
 
@@ -202,7 +207,7 @@ describe("startBunServer", () => {
   });
 });
 
-describe("app.listen argument parsing", () => {
+describe.skipIf(REAL_BUN)("app.listen argument parsing", () => {
   const { impl } = fakeServe();
   const originalBun = (globalThis as { Bun?: unknown }).Bun;
 

@@ -11,6 +11,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+// Every test here stubs globalThis.Bun — impossible on the real Bun runtime
+// (non-writable, non-configurable global). The Node gate runs this file in
+// full; the real-runtime equivalents live in scripts/smoke.ts.
+const REAL_BUN = typeof Bun !== "undefined";
+
 import { createApp } from "../src/core/app.ts";
 import { streamSSE, disableIdleTimeout } from "../src/components/streams.ts";
 import type { Context } from "../src/core/context/context.ts";
@@ -41,7 +46,7 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe("serve-static × Bun.file body", () => {
+describe.skipIf(REAL_BUN)("serve-static × Bun.file body", () => {
   it("serves file bodies through Bun.file when the runtime provides it", async () => {
     await withBun(
       {
@@ -59,21 +64,21 @@ describe("serve-static × Bun.file body", () => {
   });
 });
 
-describe("auth × Bun.password detection", () => {
-  it("rejects a malformed Bun.password shape and falls back to scrypt", async () => {
+describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
+  it("ignores a malformed Bun.password shape and uses the portable pbkdf2 default", async () => {
     await withBun({ password: { hash: "not-a-function" } }, async () => {
       const { hashPassword, verifyPassword } = await import("../src/components/auth.ts");
       const hash = await hashPassword("pw");
-      expect(hash.startsWith("scrypt$")).toBe(true);
+      expect(hash.startsWith("pbkdf2$")).toBe(true);
       expect(await verifyPassword(hash, "pw")).toBe(true);
     });
     await withBun({ password: "string-not-object" }, async () => {
       const { hashPassword } = await import("../src/components/auth.ts");
-      expect((await hashPassword("pw")).startsWith("scrypt$")).toBe(true);
+      expect((await hashPassword("pw")).startsWith("pbkdf2$")).toBe(true);
     });
   });
 
-  it("uses Bun.password when present and well-formed", async () => {
+  it("uses Bun.password when explicitly injected and well-formed", async () => {
     const hashes: string[] = [];
     await withBun(
       {
@@ -86,18 +91,27 @@ describe("auth × Bun.password detection", () => {
         },
       },
       async () => {
-        const { hashPassword, verifyPassword } = await import("../src/components/auth.ts");
-        const hash = await hashPassword("pw");
+        const { hashPassword, verifyPassword, bunPasswordHasher } =
+          await import("../src/components/auth.ts");
+        const native = bunPasswordHasher();
+        const hash = await hashPassword("pw", native);
         expect(hash).toBe("stubbed:pw");
-        expect(await verifyPassword(hash, "pw")).toBe(true);
-        expect(await verifyPassword(hash, "other")).toBe(false);
+        expect(await verifyPassword(hash, "pw", native)).toBe(true);
+        expect(await verifyPassword(hash, "other", native)).toBe(false);
         expect(hashes).toEqual(["pw"]);
       },
     );
   });
+
+  it("bunPasswordHasher() reports malformed Bun.password shapes loudly", async () => {
+    await withBun({ password: { hash: () => "x" } }, async () => {
+      const { bunPasswordHasher } = await import("../src/components/auth.ts");
+      expect(() => bunPasswordHasher()).toThrow(/malformed Bun\.password/);
+    });
+  });
 });
 
-describe("csrfToken × Bun.CSRF wrapping", () => {
+describe.skipIf(REAL_BUN)("csrfToken × Bun.CSRF wrapping", () => {
   it("delegates issue/verify with the full option set and short-circuits garbage", async () => {
     const generateCalls: unknown[] = [];
     const verifyCalls: unknown[] = [];

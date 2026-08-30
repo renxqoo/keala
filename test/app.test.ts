@@ -89,7 +89,8 @@ describe("app pipeline", () => {
     const app = createApp(quiet);
     app.get("/j", (c) => c.json({ ok: true }));
     const res = await app.handle(req("/j"));
-    expect(res.headers.get("content-type")).toBe("application/json");
+    // Bun's Response.json adds ;charset=utf-8 in-process; undici does not.
+    expect((res.headers.get("content-type") ?? "").split(";")[0]).toBe("application/json");
     expect(await res.text()).toBe('{"ok":true}');
   });
 
@@ -99,7 +100,7 @@ describe("app pipeline", () => {
       c.body = { n: 1 };
     });
     const res = await app.handle(req("/o"));
-    expect(res.headers.get("content-type")).toBe("application/json");
+    expect((res.headers.get("content-type") ?? "").split(";")[0]).toBe("application/json");
     expect(await res.text()).toBe('{"n":1}');
   });
 
@@ -291,8 +292,11 @@ describe("app: listen", () => {
     expect(await res.text()).toBe("1.2.3.4");
   });
 
-  it("throws outside Bun when no serve implementation exists", () => {
-    const app = createApp(quiet);
-    expect(() => startBunServer(app, {})).toThrow(/Bun\.serve/);
-  });
+  it.skipIf(typeof Bun !== "undefined")(
+    "throws outside Bun when no serve implementation exists",
+    () => {
+      const app = createApp(quiet);
+      expect(() => startBunServer(app, {})).toThrow(/Bun\.serve/);
+    },
+  );
 });

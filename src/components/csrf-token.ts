@@ -41,11 +41,15 @@ const DEFAULT_TTL = 86_400_000;
 const MAX_TOKEN_LENGTH = 4096;
 
 // t1.<nonce>.<issuedAtMs>.<ttlMs>.<mac> — every field except the format tag
-// is covered by the MAC, and the session binding joins the MAC input. The
-// "csrf1" domain separator keeps tokens useless to any other HMAC consumer
-// sharing the same secret.
+// is covered by the MAC. The sessionId is base64url-encoded into the MAC
+// input: it is caller-controlled, and a raw NUL in it could otherwise make
+// two different (sessionId, nonce) splits produce the SAME MAC string
+// (session-binding bypass). The "csrf1" domain separator keeps tokens
+// useless to any other HMAC consumer sharing the same secret.
+const sessionIdTag = (sessionId: string): string =>
+  Buffer.from(sessionId, "utf8").toString("base64url");
 const macInput = (sessionId: string, nonce: string, issuedAt: string, ttl: string): string =>
-  `csrf1\u0000${sessionId}\u0000${nonce}\u0000${issuedAt}\u0000${ttl}`;
+  `csrf1\u0000${sessionIdTag(sessionId)}\u0000${nonce}\u0000${issuedAt}\u0000${ttl}`;
 
 interface NativeCsrf {
   generate(secret: string, options?: Record<string, unknown>): string;
@@ -116,6 +120,9 @@ export const csrfToken = (options: CsrfTokenOptions): CsrfTokenService => {
       if (typeof token !== "string" || token.length === 0 || token.length > MAX_TOKEN_LENGTH) {
         return false;
       }
+      // A literal NUL can only come from a delimiter-shifting forgery
+      // attempt — real fields (base64url, digits) never contain one.
+      if (token.includes("\0")) return false;
       const parts = token.split(".");
       if (parts.length !== 5 || parts[0] !== "t1") return false;
       const [tag, nonce, issuedAtText, ttlText, macText] = parts as [

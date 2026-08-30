@@ -29,7 +29,7 @@ describe("coverage: final sugar shapes", () => {
     });
     const res = await app.handle(req("/h"));
     expect(res.headers.get("x-rec")).toBe("1");
-    expect(res.headers.get("content-type")).toBe("application/json");
+    expect((res.headers.get("content-type") ?? "").split(";")[0]).toBe("application/json");
   });
 
   it("html without status and html with status both pin text/html", async () => {

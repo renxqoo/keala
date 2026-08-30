@@ -93,28 +93,40 @@ export const startBunServer = (
       const handlers = wsRoutes.get(data.wsKey);
       return handlers === undefined ? undefined : { handlers, ctx: data.ctx };
     };
+    // A rejecting async ws handler must never become an unhandledRejection
+    // (a process-killer under Bun.serve) — rejections route to the app's
+    // error hook, mirroring the HTTP chain's floating-next containment.
+    const dispatch = (run: () => unknown): void => {
+      void Promise.resolve()
+        .then(run)
+        .catch((error: unknown) =>
+          app.onerror(error instanceof Error ? error : new Error(String(error))),
+        );
+    };
     serveOptions["websocket"] = {
       ...config,
       open: (ws: unknown): void => {
         const entry = entryFor(ws);
-        if (entry !== undefined) void entry.handlers.open?.(ws, entry.ctx as Context);
+        if (entry !== undefined) dispatch(() => entry.handlers.open?.(ws, entry.ctx as Context));
       },
       message: (ws: unknown, message: string | ArrayBuffer): void => {
         const entry = entryFor(ws);
-        if (entry !== undefined) void entry.handlers.message?.(ws, message, entry.ctx as Context);
+        if (entry !== undefined)
+          dispatch(() => entry.handlers.message?.(ws, message, entry.ctx as Context));
       },
       close: (ws: unknown, code: number, reason: string): void => {
         const entry = entryFor(ws);
         if (entry !== undefined)
-          void entry.handlers.close?.(ws, code, reason, entry.ctx as Context);
+          dispatch(() => entry.handlers.close?.(ws, code, reason, entry.ctx as Context));
       },
       drain: (ws: unknown): void => {
         const entry = entryFor(ws);
-        if (entry !== undefined) void entry.handlers.drain?.(ws, entry.ctx as Context);
+        if (entry !== undefined) dispatch(() => entry.handlers.drain?.(ws, entry.ctx as Context));
       },
       error: (ws: unknown, error: Error): void => {
         const entry = entryFor(ws);
-        if (entry !== undefined) void entry.handlers.error?.(ws, error, entry.ctx as Context);
+        if (entry !== undefined)
+          dispatch(() => entry.handlers.error?.(ws, error, entry.ctx as Context));
       },
     };
   }

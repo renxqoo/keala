@@ -45,7 +45,7 @@ describe("coverage: response sugar combinations", () => {
     const j = await app.handle(req("/j"));
     expect(j.status).toBe(202);
     expect(j.headers.get("x-j")).toBe("1");
-    expect(j.headers.get("content-type")).toBe("application/json");
+    expect((j.headers.get("content-type") ?? "").split(";")[0]).toBe("application/json");
     expect(await j.text()).toBe('{"ok":true}');
     const h = await app.handle(req("/h"));
     expect(h.headers.get("content-type")).toContain("text/html");

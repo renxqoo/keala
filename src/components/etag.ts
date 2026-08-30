@@ -7,6 +7,8 @@
  * streams pass through untouched.
  */
 
+import { gzip as gzipCallback } from "node:zlib";
+
 import type { RouteHandler } from "../router/router.ts";
 
 const wyhashOf = (bytes: Uint8Array): string | null => {
@@ -43,6 +45,7 @@ const tagOf = (body: unknown): string | null => {
 const matches = (etag: string, header: string): boolean => {
   for (const candidate of header.split(",")) {
     let value = candidate.trim();
+    if (value === "*") return true; // RFC 9110 §13.1.2 — matches any representation
     if (value.startsWith("W/")) value = value.slice(2);
     let expected = etag;
     if (expected.startsWith("W/")) expected = expected.slice(2);
@@ -73,29 +76,26 @@ export const etag = (): RouteHandler => {
 };
 
 export interface CompressOptions {
-  /** Injectable gzip for tests; defaults to Bun.gzip when present. */
+  /** Injectable gzip for tests; defaults to async node:zlib gzip (works on
+   *  Bun and Node — Bun 1.4 ships only the synchronous Bun.gzipSync). */
   gzip?: (input: Uint8Array) => Promise<Uint8Array>;
 }
+
+const zlibGzip = (input: Uint8Array): Promise<Uint8Array> =>
+  new Promise((resolve, reject) => {
+    gzipCallback(input, (error, output) => (error === null ? resolve(output) : reject(error)));
+  });
 
 /**
  * compress — gzip for state-mode string/JSON bodies.
  *
  * Streams and committed responses pass through (CompressionStream piping is
- * future work). Uses async `Bun.gzip` — never the synchronous variant, which
- * would block the event loop.
+ * future work). The default gzip runs asynchronously — never the
+ * synchronous variants (Bun.gzipSync / zlib.gzipSync), which block the
+ * event loop.
  */
 export const compress = (options: CompressOptions = {}): RouteHandler => {
-  const gzip =
-    options.gzip ??
-    (globalThis as unknown as { Bun?: { gzip?: (input: Uint8Array) => Promise<Uint8Array> } }).Bun
-      ?.gzip;
-  if (typeof gzip !== "function") {
-    // No native gzip available: pass the body through, still vary.
-    return async (c, next) => {
-      await next();
-      c.append("Vary", "Accept-Encoding");
-    };
-  }
+  const gzip = options.gzip ?? zlibGzip;
   const accepts = (header: string): boolean => {
     for (const part of header.split(",")) {
       if (part.trim().split(";")[0]?.trim() === "gzip") return true;

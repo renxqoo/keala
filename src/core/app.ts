@@ -277,6 +277,14 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     ws(path, handlers) {
+      if (poolingEnabled) {
+        // The socket keeps this request's context alive for the connection
+        // lifetime; pooling retires and recycles it under the next request
+        // (writes throw, reads leak foreign request state). Incompatible.
+        throw new TypeError(
+          "app.ws() cannot run with pooling: true — sockets retain contexts beyond the request lifetime",
+        );
+      }
       const routeKey = normalizePrefix(path) || "/";
       wsRoutes.set(routeKey, handlers);
       // The upgrade happens on ANY method hit; register ALL so method-based

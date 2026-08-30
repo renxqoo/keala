@@ -6,6 +6,11 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+// globalThis.Bun is non-writable AND non-configurable on the real Bun
+// runtime — these suites stub it, so they run on the Node gate only (the
+// real-runtime equivalents live in scripts/smoke.ts).
+const REAL_BUN = typeof Bun !== "undefined";
+
 import { createApp } from "../src/core/app.ts";
 import { createRouter } from "../src/router/group.ts";
 import { createEmitter } from "../src/core/emitter.ts";
@@ -68,7 +73,7 @@ describe("coverage: listen argument parsing", () => {
     reload: () => undefined,
   });
 
-  it("accepts numeric string ports, hostnames and option objects", () => {
+  it.skipIf(REAL_BUN)("accepts numeric string ports, hostnames and option objects", () => {
     const made: Record<string, unknown>[] = [];
     const impl = (options: Record<string, unknown>): ServerHandle => {
       made.push(options);

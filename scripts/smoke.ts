@@ -5,8 +5,12 @@
  * Run: bun scripts/smoke.ts   (exit code 0 = all checks passed)
  */
 
+import { dirname } from "node:path";
+
 import { createApp } from "../src/core/app.ts";
 import { createRouter } from "../src/router/group.ts";
+
+const root = dirname(new URL(import.meta.url).pathname);
 
 let failures = 0;
 const check = (name: string, condition: boolean, detail = ""): void => {
@@ -125,6 +129,39 @@ const get = async (path: string, init?: RequestInit): Promise<Response> =>
   );
   const missing = await get("/definitely-not-here");
   check("custom notFound", missing.status === 404 && (await missing.text()) === "nothing here");
+}
+
+// --- Bun-native branches (real runtime, not the stubbed bridge tests) -----
+if (typeof Bun !== "undefined") {
+  const nativeApp = createApp({ env: "production" });
+  const { hashPassword, verifyPassword, csrfToken } = await import("../src/index.ts");
+  const hash = await hashPassword("smoke-pw");
+  check(
+    "pbkdf2 round-trip (real Bun)",
+    hash.startsWith("pbkdf2$") &&
+      (await verifyPassword(hash, "smoke-pw")) &&
+      !(await verifyPassword(hash, "other")),
+  );
+  const tokens = csrfToken({ secret: "smoke-secret" });
+  const token = tokens.issue("s1");
+  check(
+    "csrfToken native path (real Bun)",
+    tokens.verify(token, "s1") && !tokens.verify(token, "s2"),
+  );
+
+  // The native routes table, served by a REAL Bun.serve: method scoping
+  // (non-GET must fall through to fetch) and dir serving with Range.
+  nativeApp.sink("/n/*", { dir: root });
+  nativeApp.sink("/ping", new Response("pong"));
+  const nativeServer = nativeApp.listen({ port: 3191, hostname: "127.0.0.1" });
+  const nb = "http://127.0.0.1:3191";
+  const pong = await fetch(`${nb}/ping`);
+  check("native table GET /ping", pong.status === 200 && (await pong.text()) === "pong");
+  const post = await fetch(`${nb}/ping`, { method: "POST" });
+  check("native table POST /ping falls through to 405", post.status === 405);
+  const file = await fetch(`${nb}/n/smoke.ts`);
+  check("native {dir} serves files", file.status === 200 && (await file.text()).includes("SMOKE"));
+  nativeServer.stop(true);
 }
 
 server.stop(true);

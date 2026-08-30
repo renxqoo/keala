@@ -132,7 +132,10 @@ describe("matrix: missing body per status family (koa respond semantics)", () =>
     expect(await res.text()).toBe(expected);
     // v1 asserted "text/plain; charset=utf-8" set by the framework; v2/D1
     // relies on the runtime, which provides a text/plain variant here.
-    expect(res.headers.get("content-type")).toContain("text/plain");
+    const ct = res.headers.get("content-type") ?? "";
+    // D1: absent in-process under Bun (added at send time) or a text/plain
+    // variant under Node — never anything else.
+    expect(ct === "" || ct.startsWith("text/plain")).toBe(true);
   });
 });
 
@@ -245,8 +248,11 @@ describe("matrix: content-type behavior per body kind (v2/D1)", () => {
     const res = await respondWith((c) => {
       c.body = "just text";
     });
-    expect(res.headers.get("content-type")).toContain("text/plain");
-    expect(res.headers.get("content-type")).not.toContain("text/html");
+    const ct = res.headers.get("content-type") ?? "";
+    // D1: absent in-process under Bun (added at send time) or a text/plain
+    // variant under Node — never anything else.
+    expect(ct === "" || ct.startsWith("text/plain")).toBe(true);
+    expect(ct).not.toContain("text/html");
     expect(await res.text()).toBe("just text");
   });
 
@@ -254,8 +260,11 @@ describe("matrix: content-type behavior per body kind (v2/D1)", () => {
     const res = await respondWith((c) => {
       c.body = "<p>x</p>";
     });
-    expect(res.headers.get("content-type")).toContain("text/plain");
-    expect(res.headers.get("content-type")).not.toContain("text/html");
+    const ct = res.headers.get("content-type") ?? "";
+    // D1: absent in-process under Bun (added at send time) or a text/plain
+    // variant under Node — never anything else.
+    expect(ct === "" || ct.startsWith("text/plain")).toBe(true);
+    expect(ct).not.toContain("text/html");
     expect(await res.text()).toBe("<p>x</p>");
   });
 

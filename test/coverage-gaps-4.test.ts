@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+// globalThis.Bun is non-writable AND non-configurable on the real Bun
+// runtime — these suites stub it, so they run on the Node gate only (the
+// real-runtime equivalents live in scripts/smoke.ts).
+const REAL_BUN = typeof Bun !== "undefined";
+
 import { createApp } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
 
@@ -25,7 +30,7 @@ describe("branch coverage: final round", () => {
     expect(res.status).toBe(500);
   });
 
-  it("listen('3000', 'localhost') parses string port and hostname", () => {
+  it.skipIf(REAL_BUN)("listen('3000', 'localhost') parses string port and hostname", () => {
     const originalBun = (globalThis as { Bun?: unknown }).Bun;
     let captured: Record<string, unknown> = {};
     (globalThis as { Bun?: unknown }).Bun = {

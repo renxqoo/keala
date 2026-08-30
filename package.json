@@ -1,7 +1,7 @@
 {
   "name": "bun-koa",
-  "version": "1.0.0",
-  "description": "High-performance Koa-compatible onion-model framework for Bun 1.4+. Zero dependencies, pre-compiled middleware chains, static-route fast path. Faster than Hono on Bun.",
+  "version": "2.0.0",
+  "description": "High-performance onion-model web framework for Bun 1.4+. Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking (Bun.serve routes table), Bun.password/Bun.CSRF components. At parity or faster than Hono on Bun.",
   "license": "MIT",
   "files": [
     "dist",
@@ -21,20 +21,21 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc --noEmit && bun build src/index.ts --target bun --outdir dist --dts",
+    "build": "tsc --noEmit && bun build src/index.ts --target bun --outdir dist && tsc -p tsconfig.build.json && find dist -name '*.d.ts' -exec sed -i '' 's/\\.ts\\\"/.js\\\"/g' {} +",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "vitest run",
-    "test:bun": "bun x vitest run",
+    "test:bun": "bun --bun x vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "bench": "node bench/run.mjs",
     "smoke": "bun scripts/smoke.ts",
     "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage",
-    "soak": "bun scripts/soak.ts"
+    "soak": "bun scripts/soak.ts",
+    "example:check": "bun scripts/example-check.ts"
   },
   "devDependencies": {
     "@koa/router": "^15.7.0",

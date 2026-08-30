@@ -113,6 +113,11 @@ const initContext = (c: Context): Context => {
   c._res = undefined;
   c.stateValue = null;
   c.cookiesValue = null;
+  // Component memo slots: undefined clears any own property a previous
+  // request created (body bytes / validated value must never survive a
+  // pool recycle — cross-request disclosure).
+  c.bodyCache = undefined;
+  c.validValue = undefined;
   return c;
 };
 

@@ -100,12 +100,8 @@ describe("coverage: compress decision tree", () => {
     });
     const accepted = { headers: { "accept-encoding": "gzip" } } as RequestInit;
     const big = await app.handle(new Request("http://localhost:3000/big", accepted));
-    const isBun = typeof Bun !== "undefined";
-    if (isBun) {
-      expect(big.headers.get("content-encoding")).toBe("gzip");
-    } else {
-      expect(big.headers.get("content-encoding")).toBeNull();
-    }
+    // node:zlib gzip runs on Bun and Node alike.
+    expect(big.headers.get("content-encoding")).toBe("gzip");
     const streamed = await app.handle(new Request("http://localhost:3000/stream", accepted));
     expect(streamed.headers.get("content-encoding")).toBeNull();
     // no gzip acceptance -> passthrough
