@@ -14,6 +14,13 @@ one flat context (see docs/v2-DESIGN.md). Semantics that CHANGED on purpose:
 | `server.update()`        | fictional API (never existed in Bun)                           | `server.reload()`                                                                                       |
 | Extension layer          | `app.request/response/context` prototypes                      | `app.decorate(key, value)` on a per-app derived prototype                                               |
 | pooling / currentContext | opt-in                                                         | removed from core (guarded pooling is a P3 component)                                                   |
+| Native route sinking     | —                                                              | `app.sink(path, Response \| { dir })`: JS mirror + Bun `routes` table (P3)                              |
+| Static file bodies       | buffered `readFile`                                            | `new Response(Bun.file(p))` under Bun (sendfile/auto-CL/Range); buffered under Node                     |
+| SSE idle connections     | heartbeat only                                                 | `streamSSE` also calls `server.timeout(req, 0)` (official remedy); `disableIdleTimeout(c)` exported     |
+| CSRF                     | Origin/Referer only                                            | plus `csrfToken()` (Bun.CSRF native, HMAC fallback) + `csrfTokenGuard` header middleware                |
+| Password hashing         | —                                                              | `hashPassword`/`verifyPassword` (Bun.password argon2id; node:crypto scrypt fallback)                    |
+| WS error event           | —                                                              | `ws.error(ws, err, c)` handler wired through the adapter                                                |
+| Serve error callback     | —                                                              | `Bun.serve({error})` default → app error hook + plain 500; `onServeError` overrides                     |
 
 Retained koa semantics (locked by tests): onion `await next()`, `c.throw`/
 `c.assert`, signed cookies with key rotation, lazy query/cookies/ip, error
@@ -25,6 +32,19 @@ gates, content negotiation, attachment GHSA fix, redirect encodeurl+escape.
 Still-open divergence: `[T2]` — a `:id(\d+)` route registered before a plain
 `:id` route at the same position keeps its regex for both (trie merges param
 slots). Locked as a skip in `test/agent-redteam.test.ts`.
+
+Native-sink notes: native entries are emitted as `{ GET: value }` — a bare
+key answers POST/DELETE/… with the sunk response on Bun 1.4 (verified by
+probe), while the mirror is GET-only; method scoping makes non-GET fall
+through to `fetch` where the router answers 405 identically. The `{dir}` JS
+mirror keeps serveStatic semantics (symlink denial, ETag/304) while the
+native `{dir}` route adds trailing-slash 301s for subdirectories and Range
+requests the mirror does not implement — `listen({nativeRoutes: false})`
+forces JS-only serving when byte-parity matters more than the fast path
+(and stays sticky across later `sink()` calls / `reloadNativeRoutes()`).
+Bun 1.4 utility surface deliberately NOT adopted: HTMLRewriter, Glob, Semver,
+TOML/YAML/JSON5 parsers, Image, Color, Secrets — app-level tools with no role
+in the framework core.
 
 ---
 

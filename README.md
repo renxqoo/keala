@@ -60,6 +60,12 @@ import {
   validator,
   cors,
   csrf,
+  csrfToken,
+  csrfTokenGuard,
+  basicAuth,
+  bearerAuth,
+  hashPassword,
+  verifyPassword,
   etag,
   compress,
   secureHeaders,
@@ -92,6 +98,36 @@ app.ws("/chat", {
   message(ws, data) {},
 });
 ```
+
+## Bun-native fast paths (P3)
+
+```ts
+// app.sink() — served from Bun's native routing table (zero JS per
+// request), mirrored as ordinary routes so app.handle() works everywhere.
+// Requires an app without global/param middleware (the native table
+// bypasses them — sink() and app.use(fn) enforce that loudly).
+app.sink("/health", new Response("ok")); // static response, reused natively
+app.sink("/assets/*", { dir: "./public" }); // directory tree (index/Range)
+app.listen({ port: 3000 }); // routes table embedded at boot
+app.sink("/ping", new Response("pong")); // later sink → server.reload()
+app.reloadNativeRoutes(); // or rebuild the table explicitly
+
+// Passwords: Bun.password (argon2id) with a node:crypto scrypt fallback.
+const hash = await hashPassword(pw); // $argon2id… / scrypt$…
+await verifyPassword(hash, pw); // true/false, fails closed on corrupt data
+
+// Signed CSRF tokens: Bun.CSRF natively, HMAC fallback on Node.
+const tokens = csrfToken({ secret: process.env.CSRF_SECRET! });
+app.use(csrfTokenGuard({ service: tokens, sessionId: (c) => sessionCookie(c) }));
+app.get("/form", (c) => c.html(formWithHidden(tokens.issue(sessionCookie(c)))));
+```
+
+`basicAuth`/`bearerAuth` middleware parse and challenge (RFC 7617/6750);
+verification always delegates to your `verify` callback. `serveStatic`
+bodies are `new Response(Bun.file(path))` under Bun (sendfile, auto
+Content-Length, Range) and buffered under Node. `streamSSE` disables the
+per-request idle timeout via `server.timeout(req, 0)` — Bun's official SSE
+remedy — on top of the heartbeat.
 
 | Component                             | Highlights                                                                                                                                                      |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -167,7 +203,8 @@ their object shape on `c.body` reads.
 | `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                               |
 | `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                             |
 | `app.handle(request, runtime?)`                                                | Fetch-style handler; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                             |
-| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`)                                                               |
+| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler          |
+| `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                |
 | `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                          |
 | `app.decorate(key, value)`                                                     | Extend every context (setup time)                                                                                           |
 | `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)` | Redirect routes and named-URL building                                                                                      |

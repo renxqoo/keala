@@ -4,13 +4,69 @@
  */
 
 import type { Application } from "./app.ts";
-import type { Chain } from "../router/router.ts";
+import type { Chain, RouteHandler, RouterState } from "../router/router.ts";
+import { registerDef } from "../router/router.ts";
 import { NOOP_TAIL } from "./compose.ts";
 import type { Context } from "./context/context.ts";
 import { finalize } from "./respond.ts";
 import { isHttpError, normalizeError } from "../http/errors.ts";
 import { isValidErrorStatus, statusMessage } from "../http/status.ts";
 import type { ListenOptions } from "../types.ts";
+
+/** A component is any object exposing `install(app)`; middleware is not one. */
+export const componentInstallerOf = (value: unknown): ((app: Application) => void) | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const install = (value as { install?: unknown }).install;
+  return typeof install === "function"
+    ? (value as { install: (a: Application) => void }).install
+    : null;
+};
+
+/** Shared body of the app.get/post/… shortcuts (named and unnamed forms). */
+export const routeShortcut = (
+  app: Application,
+  router: RouterState,
+  globalMw: RouteHandler[],
+  method: string,
+  args: unknown[],
+): Application => {
+  const [first, second, ...rest] = args as [string, string | RouteHandler, ...RouteHandler[]];
+  if (typeof first !== "string") {
+    throw new TypeError("Route registration requires a path string");
+  }
+  if (typeof second === "string") {
+    registerDef(router, method, second, rest as RouteHandler[], first, globalMw);
+  } else if (typeof second === "function") {
+    registerDef(router, method, first, [second, ...rest], undefined, globalMw);
+  } else {
+    throw new TypeError("Route registration requires at least one handler");
+  }
+  return app;
+};
+
+/**
+ * The handler behind every `app.ws()` route: upgrades through the runtime
+ * server handle. The context rides the socket data so ws event handlers
+ * receive `c`; Bun ignores the fetch return value and the spec forbids a
+ * 101 Response, so a null Response stands in.
+ */
+export const wsUpgradeHandler =
+  (wsKey: string): RouteHandler =>
+  (c) => {
+    const server = c.runtime?.server as
+      | { upgrade?(req: Request, opts?: { data?: unknown }): boolean }
+      | undefined;
+    if (server === undefined || typeof server?.upgrade !== "function") {
+      c.throw(501, "websocket upgrades require a Bun server runtime", { expose: true });
+    }
+    const ok = (server as { upgrade(r: Request, o: { data: unknown }): boolean }).upgrade(c.raw, {
+      data: { wsKey, ctx: c },
+    });
+    if (!ok) {
+      c.throw(400, "websocket upgrade rejected");
+    }
+    return new Response(null);
+  };
 
 /** Node-style plain errors may carry `.status` or `.statusCode`. */
 const errorStatusCode = (error: Error): number => {
@@ -151,6 +207,9 @@ export const parseListenArgs = (args: readonly unknown[]): ParsedListen => {
         parsed.listen.maxRequestBodySize = opts.maxRequestBodySize;
       }
       if (opts.development !== undefined) parsed.listen.development = opts.development;
+      if (opts.nativeRoutes !== undefined) parsed.listen.nativeRoutes = opts.nativeRoutes;
+      if (opts.websocket !== undefined) parsed.listen.websocket = opts.websocket;
+      if (opts.onServeError !== undefined) parsed.listen.onServeError = opts.onServeError;
     }
   }
   return parsed;

@@ -84,6 +84,9 @@ export interface RouterState {
   trieRoot: TrieNode;
   hasDynamic: boolean;
   prefix: string;
+  /** Paths sunk into the native routing table — later JS registrations
+   *  overlapping them throw (the native table would silently shadow them). */
+  sunkPaths: Set<string>;
 }
 
 export const createRouterState = (prefix = ""): RouterState => ({
@@ -95,6 +98,7 @@ export const createRouterState = (prefix = ""): RouterState => ({
   trieRoot: createNode(),
   hasDynamic: false,
   prefix: normalizePrefix(prefix),
+  sunkPaths: new Set(),
 });
 
 export const normalizePrefix = (prefix: string): string => {
@@ -230,6 +234,15 @@ export const registerDef = (
     handlers,
     name,
   };
+  if (state.sunkPaths.size > 0) {
+    for (const sunk of state.sunkPaths) {
+      if (pathsConflict(def.path, sunk)) {
+        throw new TypeError(
+          `route ${upper} ${def.path} overlaps natively-sunk ${sunk} — the Bun routing table would silently shadow it`,
+        );
+      }
+    }
+  }
   state.defs.push(def);
   if (name !== undefined) state.named.set(name, def);
   bindDef(state, def, globalMw);
@@ -237,6 +250,24 @@ export const registerDef = (
 
 const normalizePath = (path: string): string =>
   path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+
+const firstSegmentOf = (path: string): string =>
+  path.endsWith("/*") ? path.slice(0, -2) : path.replace(/\/+$/, "") || "/";
+
+/**
+ * Boundary-aware path overlap: two paths conflict when they are the same
+ * route, or when a wildcard prefix subtree of one contains the other.
+ */
+export const pathsConflict = (a: string, b: string): boolean => {
+  const aBase = firstSegmentOf(a);
+  const bBase = firstSegmentOf(b);
+  if (aBase === bBase) return true;
+  const aWild = a.endsWith("/*");
+  const bWild = b.endsWith("/*");
+  if (aWild && bBase.startsWith(`${aBase}/`)) return true;
+  if (bWild && aBase.startsWith(`${bBase}/`)) return true;
+  return false;
+};
 
 export interface RouteMatch {
   target: RouteTarget;

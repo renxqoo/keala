@@ -10,6 +10,17 @@
 
 import type { Context } from "../core/context/context.ts";
 
+/**
+ * Disable Bun's per-request idle timeout (`server.timeout(req, 0)`) for a
+ * long-lived response. No-op without a Bun server handle (Node, tests).
+ */
+export const disableIdleTimeout = (c: Context): void => {
+  const server = c.runtime?.server as
+    | { timeout?(request: Request, seconds: number): void }
+    | undefined;
+  server?.timeout?.(c.raw, 0);
+};
+
 export interface StreamWriter {
   /** Enqueue one chunk. Returns the controller's desiredSize afterwards. */
   write(chunk: string | Uint8Array): void;
@@ -144,10 +155,12 @@ const sseFrame = (message: SSEMessage): string => {
 
 /** Server-Sent Events response with sanitization, heartbeat and abort cleanup. */
 export const streamSSE = (
-  _c: Context,
+  c: Context,
   start: (sse: SSEWriter) => Promise<void> | void,
   options: StreamSSEOptions = {},
 ): Response => {
+  // The official SSE remedy: Bun drops idle connections after 10s by default.
+  disableIdleTimeout(c);
   const heartbeat = options.heartbeat ?? 5000;
   let timer: ReturnType<typeof setInterval> | null = null;
   const res = makeStream(

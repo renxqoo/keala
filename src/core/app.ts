@@ -7,9 +7,9 @@
  * converts the context state into a web `Response`. Global middleware runs
  * for unmatched paths and unmatched methods too — koa's observable contract.
  *
- * `app.handle` is a standard fetch handler: `(request, runtime?) => Response`,
- * which is exactly what `Bun.serve` wants. The Bun adapter is the only module
- * that references the `Bun` global, so the core also runs under Node (tests).
+ * `app.handle` is a fetch handler — exactly what `Bun.serve` wants. The Bun
+ * adapter is the only module referencing the `Bun` global; the core also
+ * runs under Node (tests).
  */
 
 import type {
@@ -24,7 +24,14 @@ import type { RequestSettings } from "./context/settings.ts";
 import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
 import { createPool } from "./context/pool.ts";
 import { compose } from "./compose.ts";
-import { dispatchChain, finalizeGuarded, parseListenArgs } from "./dispatch.ts";
+import {
+  componentInstallerOf,
+  dispatchChain,
+  finalizeGuarded,
+  parseListenArgs,
+  routeShortcut,
+  wsUpgradeHandler,
+} from "./dispatch.ts";
 import { createEmitter, type Listener } from "./emitter.ts";
 import {
   type Chain,
@@ -45,6 +52,7 @@ import { compilePattern } from "../router/pattern.ts";
 import { createRouter, isRouter } from "../router/group.ts";
 import type { Router } from "../router/group.ts";
 import { startBunServer, type ServerHandle } from "../adapters/bun.ts";
+import { buildNativeRoutes, registerSink, type NativeSinkEntry } from "./sink.ts";
 
 export type ErrorListener = (error: Error, c: Context) => void;
 export type NotFoundHandler = (c: Context) => Response | void;
@@ -55,6 +63,7 @@ export interface WebSocketHandlers {
   message?: (ws: unknown, message: string | ArrayBuffer, c: Context) => void | Promise<void>;
   close?: (ws: unknown, code: number, reason: string, c: Context) => void | Promise<void>;
   drain?: (ws: unknown, c: Context) => void | Promise<void>;
+  error?: (ws: unknown, error: Error, c: Context) => void | Promise<void>;
 }
 
 export interface Application {
@@ -84,6 +93,16 @@ export interface Application {
   all(name: string, path: string, ...handlers: RouteHandler[]): Application;
   /** Register with an explicit method (any case). */
   on(method: string, path: string, ...handlers: RouteHandler[]): Application;
+  /**
+   * Sink a static route into Bun's native routing table (mirrored as a JS
+   * route). Requires an app without global/param middleware — the native
+   * table bypasses them. See src/core/sink.ts.
+   */
+  sink(path: string, response: Response | { dir: string }): Application;
+  /** Registered native sinks (consumed by the Bun adapter at listen()). */
+  readonly nativeSinks: ReadonlyMap<string, NativeSinkEntry>;
+  /** Rebuild the native routes table on the running server (Bun only). */
+  reloadNativeRoutes(): void;
   /** Per-parameter middleware, run by every route that captures `name`. */
   param(name: string, middleware: RouteHandler): Application;
   /** WebSocket route: upgraded through the runtime server at request time. */
@@ -133,36 +152,6 @@ export interface Application {
 
 const defaultNotFound: NotFoundHandler = () => undefined;
 
-/** A component is any object exposing `install(app)`; middleware is not one. */
-const componentInstallerOf = (value: unknown): ((app: Application) => void) | null => {
-  if (typeof value !== "object" || value === null) return null;
-  const install = (value as { install?: unknown }).install;
-  return typeof install === "function"
-    ? (value as { install: (a: Application) => void }).install
-    : null;
-};
-
-const routeShortcut = (
-  app: Application,
-  router: RouterState,
-  globalMw: RouteHandler[],
-  method: string,
-  args: unknown[],
-): Application => {
-  const [first, second, ...rest] = args as [string, string | RouteHandler, ...RouteHandler[]];
-  if (typeof first !== "string") {
-    throw new TypeError("Route registration requires a path string");
-  }
-  if (typeof second === "string") {
-    registerDef(router, method, second, rest as RouteHandler[], first, globalMw);
-  } else if (typeof second === "function") {
-    registerDef(router, method, first, [second, ...rest], undefined, globalMw);
-  } else {
-    throw new TypeError("Route registration requires at least one handler");
-  }
-  return app;
-};
-
 export { createRouter, isRouter };
 
 export const createApp = (options: AppOptions = {}): Application => {
@@ -181,6 +170,11 @@ export const createApp = (options: AppOptions = {}): Application => {
   let globalChain: Chain | null = null;
   let notFoundHandler: NotFoundHandler = defaultNotFound;
   const wsRoutes = new Map<string, WebSocketHandlers>();
+  const nativeSinks = new Map<string, NativeSinkEntry>();
+  let serverHandle: ServerHandle | null = null;
+  // Sticky: a listen({nativeRoutes: false}) opt-out must survive later
+  // sink() calls (they must not silently install a native table).
+  let nativeRoutesEnabled = true;
   // Guarded pooling (opt-in): settled contexts retire through a prototype
   // swap; late writes throw instead of corrupting the next request. Built
   // after `app` exists (the pool captures it); handle() runs later still.
@@ -204,6 +198,9 @@ export const createApp = (options: AppOptions = {}): Application => {
     get wsRoutes(): ReadonlyMap<string, WebSocketHandlers> {
       return wsRoutes;
     },
+    get nativeSinks(): ReadonlyMap<string, NativeSinkEntry> {
+      return nativeSinks;
+    },
     get notFoundHandler(): NotFoundHandler {
       return notFoundHandler;
     },
@@ -217,6 +214,11 @@ export const createApp = (options: AppOptions = {}): Application => {
         }
         if (typeof mw !== "function") {
           throw new TypeError("app.use() requires a middleware function or component");
+        }
+        if (nativeSinks.size > 0) {
+          throw new TypeError(
+            "app.use(fn) cannot run alongside sunk routes — the native routing table bypasses global middleware",
+          );
         }
         globalMw.push(mw);
       }
@@ -256,41 +258,30 @@ export const createApp = (options: AppOptions = {}): Application => {
       return app;
     },
 
+    sink(path, response) {
+      registerSink(router, nativeSinks, path, response, globalMw);
+      if (serverHandle !== null && nativeRoutesEnabled) {
+        serverHandle.reload({ routes: buildNativeRoutes(nativeSinks) });
+      }
+      return app;
+    },
+
+    reloadNativeRoutes() {
+      if (serverHandle === null) {
+        throw new Error("reloadNativeRoutes() requires a running server started via app.listen()");
+      }
+      if (!nativeRoutesEnabled) {
+        throw new Error("reloadNativeRoutes() is disabled by listen({ nativeRoutes: false })");
+      }
+      serverHandle.reload({ routes: buildNativeRoutes(nativeSinks) });
+    },
+
     ws(path, handlers) {
       const routeKey = normalizePrefix(path) || "/";
       wsRoutes.set(routeKey, handlers);
       // The upgrade happens on ANY method hit; register ALL so method-based
       // 405s never interfere with connection upgrades.
-      registerDef(
-        router,
-        "ALL",
-        routeKey,
-        [
-          (c) => {
-            const server = c.runtime?.server as
-              | { upgrade?(req: Request, opts?: { data?: unknown }): boolean }
-              | undefined;
-            if (server === undefined || typeof server?.upgrade !== "function") {
-              c.throw(501, "websocket upgrades require a Bun server runtime", {
-                expose: true,
-              });
-            }
-            // The context rides the socket data so ws handlers receive `c`.
-            const ok = (server as { upgrade(r: Request, o: { data: unknown }): boolean }).upgrade(
-              c.raw,
-              { data: { wsKey: routeKey, ctx: c } },
-            );
-            if (!ok) {
-              c.throw(400, "websocket upgrade rejected");
-            }
-            // Hijacked connection — Bun ignores the fetch return value, and
-            // the fetch spec forbids constructing a 101 Response anyway.
-            return new Response(null);
-          },
-        ],
-        undefined,
-        globalMw,
-      );
+      registerDef(router, "ALL", routeKey, [wsUpgradeHandler(routeKey)], undefined, globalMw);
       return app;
     },
 
@@ -300,6 +291,11 @@ export const createApp = (options: AppOptions = {}): Application => {
       }
       if (typeof middleware !== "function") {
         throw new TypeError("app.param() requires a middleware function");
+      }
+      if (nativeSinks.size > 0) {
+        throw new TypeError(
+          "app.param() cannot run alongside sunk routes — the native routing table bypasses param middleware",
+        );
       }
       router.paramMiddlewares.set(name, middleware);
       // Existing routes capturing this param pick it up on rebuild.
@@ -322,6 +318,11 @@ export const createApp = (options: AppOptions = {}): Application => {
       // being iterated (self-referential mounts would otherwise grow forever).
       const defs = [...(isRouter(sub) ? sub.defs : sub.router.defs)];
       const paramMiddlewares = isRouter(sub) ? sub.paramMiddlewares : sub.router.paramMiddlewares;
+      if (nativeSinks.size > 0 && paramMiddlewares.size > 0) {
+        throw new TypeError(
+          "app.mount() cannot introduce param middleware alongside sunk routes — the native routing table bypasses it",
+        );
+      }
       // A mounted app (or router) carries its own middleware ahead of its routes.
       const subGlobal = isRouter(sub) ? sub.middleware : sub.globalMiddleware;
       for (const [name, handler] of paramMiddlewares) {
@@ -418,7 +419,6 @@ export const createApp = (options: AppOptions = {}): Application => {
 
       pool ??= createPool(app, contextProto);
       if (!poolingEnabled) return dispatchOf();
-      pool ??= createPool(app, contextProto);
       // Guarded lifecycle: settle (sync or async), then retire to the pool —
       // a late write on the retired context throws instead of corrupting it.
       const activePool = pool;
@@ -436,11 +436,13 @@ export const createApp = (options: AppOptions = {}): Application => {
 
     listen(...args) {
       const { listen, hostname, onListen } = parseListenArgs(args);
-      return startBunServer(
+      nativeRoutesEnabled = listen.nativeRoutes !== false;
+      serverHandle = startBunServer(
         app,
         { ...listen, ...(hostname !== undefined ? { hostname } : {}) },
         onListen,
       );
+      return serverHandle;
     },
 
     onerror(error, c) {

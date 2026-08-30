@@ -123,6 +123,83 @@ describe("startBunServer", () => {
     server.stop();
     expect(stopped()).toBe(true);
   });
+
+  it("wires a default serve error handler that routes through app.onerror", async () => {
+    const errors: Error[] = [];
+    const app = createApp();
+    app.onError((err) => errors.push(err));
+    const { impl, options } = fakeServe();
+    startBunServer(app, {}, undefined, impl);
+    const onError = options()["error"] as (error: Error) => Response;
+    const boom = new Error("stream exploded");
+    const res = onError(boom);
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("Internal Server Error");
+    expect(errors).toEqual([boom]);
+  });
+
+  it("a throwing error listener never breaks the serve error callback", async () => {
+    const app = createApp();
+    app.onError(() => {
+      throw new Error("listener bug");
+    });
+    const { impl, options } = fakeServe();
+    startBunServer(app, {}, undefined, impl);
+    const res = (options()["error"] as (error: Error) => Response)(new Error("x"));
+    expect(res.status).toBe(500);
+  });
+
+  it("honors a custom onServeError", async () => {
+    const app = createApp();
+    const { impl, options } = fakeServe();
+    startBunServer(
+      app,
+      { onServeError: () => new Response("boom", { status: 599 }) },
+      undefined,
+      impl,
+    );
+    const res = (options()["error"] as (error: Error) => Response)(new Error("x"));
+    expect(res.status).toBe(599);
+    expect(await res.text()).toBe("boom");
+  });
+
+  it("dispatches websocket error events to the owning route", () => {
+    const app = createApp();
+    const seen: Array<{ code: unknown; ctx: unknown }> = [];
+    app.ws("/chat", {
+      error: (ws, err, c) => {
+        seen.push({ code: err, ctx: (c as { path: string }).path });
+        void ws;
+      },
+    });
+    const { impl, options } = fakeServe();
+    startBunServer(app, {}, undefined, impl);
+    const wsHandlers = options()["websocket"] as Record<
+      string,
+      (ws: unknown, ...rest: unknown[]) => void
+    >;
+    const error = wsHandlers["error"] as (ws: unknown, err: Error) => void;
+    error({ data: { wsKey: "/chat", ctx: { path: "/chat" } } }, new Error("socket died"));
+    expect(seen).toEqual([{ code: new Error("socket died"), ctx: "/chat" }]);
+  });
+
+  it("websocket error for an unknown route data key is a no-op", () => {
+    const app = createApp();
+    app.ws("/chat", {
+      error: () => {
+        throw new Error("must not run");
+      },
+    });
+    const { impl, options } = fakeServe();
+    startBunServer(app, {}, undefined, impl);
+    const wsHandlers = options()["websocket"] as Record<string, (ws: unknown) => void>;
+    expect(() =>
+      (wsHandlers["error"] as (ws: unknown, err: Error) => void)(
+        { data: { wsKey: "/nope" } },
+        new Error("x"),
+      ),
+    ).not.toThrow();
+  });
 });
 
 describe("app.listen argument parsing", () => {

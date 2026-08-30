@@ -69,6 +69,7 @@ export {
   stream,
   streamText,
   streamSSE,
+  disableIdleTimeout,
   type StreamWriter,
   type SSEWriter,
   type SSEMessage,
@@ -89,3 +90,21 @@ export { serveStatic, type ServeStaticOptions } from "./components/serve-static.
 export { html, raw, escapeHtml } from "./components/html.ts";
 export type { Component } from "./types.ts";
 export { cache, type ResponseCacheOptions } from "./components/cache.ts";
+export {
+  basicAuth,
+  bearerAuth,
+  hashPassword,
+  verifyPassword,
+  type BasicAuthOptions,
+  type BearerAuthOptions,
+  type PasswordHasher,
+} from "./components/auth.ts";
+export {
+  csrfToken,
+  csrfTokenGuard,
+  type CsrfTokenOptions,
+  type CsrfTokenService,
+  type CsrfTokenGuardOptions,
+  type CsrfAlgorithm,
+} from "./components/csrf-token.ts";
+export type { NativeSinkEntry, NativeStaticSink, NativeDirSink } from "./core/sink.ts";

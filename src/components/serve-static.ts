@@ -10,6 +10,13 @@ import { createError } from "../http/errors.ts";
 import type { RouteHandler } from "../router/router.ts";
 import { mimeFromExtension } from "../utils/mime.ts";
 
+// Bun.file bodies are zero-copy (sendfile) with automatic Content-Length and
+// Range handling; Node keeps the buffered readFile path.
+const bunFile =
+  typeof Bun !== "undefined" && typeof Bun.file === "function"
+    ? (path: string): Blob => Bun.file(path) as unknown as Blob
+    : null;
+
 export interface ServeStaticOptions {
   /** Root directory; every resolved path must stay inside it. */
   root: string;
@@ -125,6 +132,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     if (ifModified.length > 0 && Date.parse(ifModified) >= info.mtime.getTime() - 999) {
       return new Response(null, { status: 304, headers });
     }
+    if (bunFile !== null) return new Response(bunFile(filePath), { headers });
     const bytes = await readFile(filePath).catch(() => null);
     if (bytes === null) throw createError(404);
     return new Response(new Uint8Array(bytes), { headers });

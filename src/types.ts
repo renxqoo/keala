@@ -87,4 +87,9 @@ export interface ListenOptions {
   nativeRoutes?: boolean;
   /** Bun websocket tuning (maxPayloadLength, backpressureLimit, idleTimeout…). */
   websocket?: Record<string, unknown>;
+  /**
+   * Server-level error handler (`Bun.serve({error})`): fetch failures and
+   * streaming-body crashes. Default: app error hook + plain 500.
+   */
+  onServeError?: (error: Error) => Response;
 }

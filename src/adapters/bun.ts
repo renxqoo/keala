@@ -8,6 +8,7 @@
 
 import type { Application, WebSocketHandlers } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
+import { buildNativeRoutes } from "../core/sink.ts";
 import type { ListenOptions } from "../types.ts";
 
 /** Minimal structural type of the Bun server handle we expose to users. */
@@ -30,6 +31,18 @@ const defaultServeImplementation = (): ServeImplementation | undefined =>
   typeof Bun !== "undefined" && typeof Bun.serve === "function"
     ? (Bun.serve as unknown as ServeImplementation)
     : undefined;
+
+const defaultServeError =
+  (app: Application) =>
+  (error: Error): Response => {
+    // A throwing error listener must not break Bun's error callback itself.
+    try {
+      app.onerror(error);
+    } catch {
+      // the listener's failure is its own problem; the 500 still goes out
+    }
+    return new Response("Internal Server Error", { status: 500 });
+  };
 
 /**
  * Start a Bun server for the app. Returns the Bun `Server`.
@@ -58,7 +71,15 @@ export const startBunServer = (
   const serveOptions: Record<string, unknown> = {
     port: options.port ?? 3000,
     fetch,
+    // Server-level failures (fetch threw, streaming body crashed) route
+    // through the app's error hook and answer a plain 500.
+    error: options.onServeError ?? defaultServeError(app),
   };
+  // Sunk routes ride the native routing table — matched before `fetch`,
+  // with zero JS per request. `nativeRoutes: false` forces JS-only serving.
+  if (options.nativeRoutes !== false && app.nativeSinks.size > 0) {
+    serveOptions["routes"] = buildNativeRoutes(app.nativeSinks);
+  }
   const wsRoutes = app.wsRoutes;
   if (wsRoutes.size > 0) {
     const config = (options.websocket ?? {}) as Record<string, unknown>;
@@ -90,6 +111,10 @@ export const startBunServer = (
       drain: (ws: unknown): void => {
         const entry = entryFor(ws);
         if (entry !== undefined) void entry.handlers.drain?.(ws, entry.ctx as Context);
+      },
+      error: (ws: unknown, error: Error): void => {
+        const entry = entryFor(ws);
+        if (entry !== undefined) void entry.handlers.error?.(ws, error, entry.ctx as Context);
       },
     };
   }
