@@ -1,14 +1,19 @@
-// Benchmark orchestrator: spawns each server, drives load with autocannon,
-// samples latency and memory, aggregates medians and writes bench/BENCH.md.
+// Benchmark orchestrator — ABAB-INTERLEAVED methodology.
+//
+// All servers are spawned up front. Within each scenario, every server fires
+// once per round in ROTATING order (round r starts at server r), so no
+// framework is systematically measured first or last. Sequential per-server
+// measurement (the previous methodology) showed order bias of up to ±25% on
+// per-scenario ratios — see bench/analysis.md.
 //
 // Usage: node bench/run.mjs [connections] [durationSeconds]
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import autocannon from "autocannon";
 
-const CONNECTIONS = Number(process.argv[2] ?? 100);
+const CONNECTIONS = Number(process.argv[2] ?? 200);
 const DURATION = Number(process.argv[3] ?? 8);
-const RUNS = 3;
+const ROUNDS = 4;
 
 const SERVERS = [
   { name: "raw Bun.serve (bun 1.4)", cmd: ["bun", "bench/server-raw.ts"], port: 4104 },
@@ -93,9 +98,17 @@ const median = (values) => {
   return sorted[Math.floor(sorted.length / 2)] ?? sorted[0];
 };
 
+/** (max - min) / median as a whole-percent string — the run-to-run noise band. */
+const spreadOf = (values) => {
+  if (values.length < 2) return "±0%";
+  const med = median(values);
+  if (med === 0) return "±0%";
+  return `±${Math.round(((Math.max(...values) - Math.min(...values)) / med) * 100)}%`;
+};
+
 const fmtBytes = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 
-/** Periodically sample server memory until `stop.done` flips. */
+/** Sample a server's memory while its own fire window is running. */
 const trackPeak = async (port, stop) => {
   let peak = { rss: 0, heapUsed: 0 };
   while (!stop.done) {
@@ -111,136 +124,159 @@ const trackPeak = async (port, stop) => {
 };
 
 const main = async () => {
-  const throughput = [];
-  const latency = [];
-  const memory = [];
+  const allServers = [...SERVERS, ...SCALE_SERVERS];
+  const children = [];
+  const ready = new Map(); // port -> { instance, idle }
 
-  for (const instance of [...SERVERS, ...SCALE_SERVERS]) {
-    const scenarios = instance.scale ? [SCALE_SCENARIO] : SCENARIOS;
-    const child = spawn(instance.cmd[0], [...instance.cmd.slice(1), String(instance.port)], {
-      stdio: ["ignore", "ignore", "inherit"],
-    });
-    try {
+  try {
+    for (const instance of allServers) {
+      const child = spawn(instance.cmd[0], [...instance.cmd.slice(1), String(instance.port)], {
+        stdio: ["ignore", "ignore", "inherit"],
+      });
+      children.push(child);
       await waitReady(instance.port, instance.scale);
-      await sleep(400);
-      const idle = await sampleMemory(instance.port);
+      ready.set(instance.port, { instance, idle: null });
+    }
+    // Idle memory AFTER every server is up, so all idle samples share the
+    // same machine state.
+    for (const [port, entry] of ready) {
+      entry.idle = await sampleMemory(port);
+    }
 
-      for (const scenario of scenarios) {
-        await fetch(`http://127.0.0.1:${instance.port}${scenario.path}`).then((r) => r.text());
-      }
-      const beforeSteady = await sampleMemory(instance.port);
+    // results keyed by instance identity (port) — display names are NOT
+    // unique: the base and scale servers share them.
+    const results = new Map();
+    const peaks = new Map();
+    const record = (instance, label, fields) => {
+      const byServer = results.get(instance) ?? new Map();
+      results.set(instance, byServer);
+      const entry = byServer.get(label) ?? { rps: [], p50: [], p99: [] };
+      byServer.set(label, entry);
+      entry.rps.push(fields.rps);
+      entry.p50.push(fields.p50);
+      entry.p99.push(fields.p99);
+    };
 
-      const peaks = [];
-      for (const scenario of scenarios) {
-        const rpsRuns = [];
-        const p50Runs = [];
-        const p99Runs = [];
-        for (let run = 0; run < RUNS; run++) {
+    const allScenarios = [
+      ...SCENARIOS.map((scenario) => ({ scenario, servers: SERVERS })),
+      { scenario: SCALE_SCENARIO, servers: SCALE_SERVERS },
+    ];
+
+    for (const { scenario, servers } of allScenarios) {
+      for (let round = 0; round < ROUNDS; round++) {
+        // Rotate the starting server every round — no framework is
+        // systematically measured in the hottest or coolest slot.
+        const order = [
+          ...servers.slice(round % servers.length),
+          ...servers.slice(0, round % servers.length),
+        ];
+        for (const instance of order) {
           const stop = { done: false };
           const peakPromise = trackPeak(instance.port, stop);
           const result = await fire(`http://127.0.0.1:${instance.port}${scenario.path}`);
           stop.done = true;
           const peak = await peakPromise;
-          peaks.push(peak);
-          rpsRuns.push(result.requests.average);
-          p50Runs.push(result.latency.p50 ?? result.latency.average);
-          p99Runs.push(result.latency.p99 ?? result.latency.max);
+          const prev = peaks.get(instance.port) ?? { rss: 0, heapUsed: 0 };
+          peaks.set(instance.port, {
+            rss: Math.max(prev.rss, peak.rss),
+            heapUsed: Math.max(prev.heapUsed, peak.heapUsed),
+          });
+          record(instance, scenario.label, {
+            rps: result.requests.average,
+            p50: result.latency.p50 ?? result.latency.average,
+            p99: result.latency.p99 ?? result.latency.max,
+          });
+          process.stdout.write(`.`);
         }
-        throughput.push({
-          server: instance.name,
-          scenario: scenario.label,
-          rps: Math.round(median(rpsRuns)),
-        });
-        latency.push({
-          server: instance.name,
-          scenario: scenario.label,
-          p50: median(p50Runs),
-          p99: median(p99Runs),
-        });
       }
-
-      const afterSteady = await sampleMemory(instance.port);
-      memory.push({
-        server: instance.name,
-        idle,
-        steady: afterSteady,
-        peak: peaks.reduce(
-          (acc, mu) => ({
-            rss: Math.max(acc.rss, mu.rss),
-            heapUsed: Math.max(acc.heapUsed, mu.heapUsed),
-          }),
-          { rss: idle.rss, heapUsed: idle.heapUsed },
-        ),
-      });
-      void beforeSteady;
-    } finally {
-      child.kill("SIGKILL");
-      await sleep(200);
+      process.stdout.write(`\n${scenario.label} done\n`);
     }
-  }
 
-  const lines = [];
-  lines.push("# bun-koa performance report", "");
-  lines.push(`Generated: ${new Date().toISOString()}`);
-  lines.push("");
-  lines.push("- Load tool: autocannon");
-  lines.push(
-    `- Connections: ${CONNECTIONS}, duration: ${DURATION}s per run, median of ${RUNS} runs`,
-  );
-  lines.push("- Runtimes: Bun 1.4 (raw / bun-koa / hono) vs Node.js 22 (koa / fastify)");
-  lines.push("- Loopback HTTP/1.1 keep-alive; identical response shapes on every framework");
-  lines.push("");
+    const lines = [];
+    lines.push("# bun-koa performance report", "");
+    lines.push(`Generated: ${new Date().toISOString()}`, "");
+    lines.push("- Load tool: autocannon (4 client workers — one process saturates at ~177k req/s)");
+    lines.push(
+      `- Connections: ${CONNECTIONS}, duration: ${DURATION}s per fire, ${ROUNDS} interleaved rounds`,
+    );
+    lines.push(
+      "- **ABAB-interleaved**: all servers resident; within each scenario every server fires once per round in rotating order",
+    );
+    lines.push(
+      "- Ratio lines carry each side's run-to-run noise (±spread); a ratio inside the noise band is a TIE, not a win",
+    );
+    lines.push("- Runtimes: Bun 1.4 (raw / bun-koa / hono) vs Node.js 22 (koa / fastify)");
+    lines.push("- Loopback HTTP/1.1 keep-alive; identical response shapes on every framework");
+    lines.push("");
 
-  const byScenario = new Map();
-  for (const row of throughput) {
-    const list = byScenario.get(row.scenario) ?? [];
-    list.push(row);
-    byScenario.set(row.scenario, list);
-  }
-  for (const [scenario, entries] of byScenario) {
-    lines.push(`## ${scenario}`, "");
-    lines.push("| Framework | Runtime | req/s |");
-    lines.push("| --- | --- | ---: |");
-    for (const entry of entries) {
-      lines.push(
-        `| ${entry.server.split(" (")[0]} | ${entry.server.match(/\((.*)\)/)?.[1] ?? ""} | ${entry.rps.toLocaleString("en-US")} |`,
+    for (const { scenario } of allScenarios) {
+      lines.push(`## ${scenario.label}`, "");
+      lines.push("| Framework | Runtime | req/s | noise |");
+      lines.push("| --- | --- | ---: | ---: |");
+      // Only the servers that actually serve this scenario (fixes duplicate
+      // rows from the name collision between base and scale instances).
+      const serving = allServers.filter(
+        (instance) => (instance.scale ?? false) === (scenario === SCALE_SCENARIO),
       );
+      const entries = [];
+      for (const instance of serving) {
+        const byServer = results.get(instance);
+        const entry = byServer?.get(scenario.label);
+        if (entry === undefined) continue;
+        entries.push({ instance, entry });
+        lines.push(
+          `| ${instance.name.split(" (")[0]}${instance.scale ? " (scale)" : ""} | ${instance.name.match(/\((.*)\)/)?.[1] ?? ""} | ${Math.round(median(entry.rps)).toLocaleString("en-US")} | ${spreadOf(entry.rps)} |`,
+        );
+      }
+      const ours = entries.find((e) => e.instance.name.startsWith("bun-koa"));
+      for (const other of ["koa 3", "fastify 5", "hono 4", "raw Bun"]) {
+        const ref = entries.find((e) => e.instance.name.startsWith(other) && e !== ours);
+        if (ours && ref && ref !== ours) {
+          const ratio = median(ours.entry.rps) / median(ref.entry.rps);
+          lines.push(
+            `- bun-koa vs ${other}: **${ratio.toFixed(2)}x** (${spreadOf(ours.entry.rps)} / ${spreadOf(ref.entry.rps)})`,
+          );
+        }
+      }
+      lines.push("");
     }
-    const ours = entries.find((e) => e.server.startsWith("bun-koa"));
-    for (const other of ["koa 3", "fastify 5", "hono 4", "raw Bun"]) {
-      const ref = entries.find((e) => e.server.startsWith(other));
-      if (ours && ref && ref !== ours) {
-        lines.push(`- bun-koa vs ${other}: **${(ours.rps / ref.rps).toFixed(2)}x**`);
+
+    lines.push("## Latency under load (median of interleaved rounds)", "");
+    lines.push("| Framework | scenario | p50 (ms) | p99 (ms) |");
+    lines.push("| --- | --- | ---: | ---: |");
+    for (const instance of allServers) {
+      const byServer = results.get(instance);
+      if (byServer === undefined) continue;
+      for (const [label, entry] of byServer) {
+        lines.push(
+          `| ${instance.name.split(" (")[0]}${instance.scale ? " (scale)" : ""} | ${label} | ${median(entry.p50).toFixed(1)} | ${median(entry.p99).toFixed(1)} |`,
+        );
       }
     }
     lines.push("");
-  }
 
-  lines.push("## Latency under load (median of runs)", "");
-  lines.push("| Framework | scenario | p50 (ms) | p99 (ms) |");
-  lines.push("| --- | --- | ---: | ---: |");
-  for (const row of latency) {
-    lines.push(
-      `| ${row.server.split(" (")[0]} | ${row.scenario} | ${row.p50.toFixed(1)} | ${row.p99.toFixed(1)} |`,
+    lines.push("## Memory footprint (sampled via /debug/memory)", "");
+    lines.push("| Framework | idle RSS | steady RSS | peak RSS | idle heap | steady heap |");
+    lines.push("| --- | ---: | ---: | ---: | ---: | ---: |");
+    for (const instance of allServers) {
+      const entry = ready.get(instance.port);
+      const peak = peaks.get(instance.port);
+      if (entry === undefined || peak === undefined) continue;
+      const steady = await sampleMemory(instance.port);
+      lines.push(
+        `| ${instance.name.split(" (")[0]}${instance.scale ? " (scale)" : ""} | ${fmtBytes(entry.idle.rss)} | ${fmtBytes(steady.rss)} | ${fmtBytes(Math.max(peak.rss, steady.rss))} | ${fmtBytes(entry.idle.heapUsed)} | ${fmtBytes(steady.heapUsed)} |`,
+      );
+    }
+    lines.push("");
+
+    const analysis = await readFile(new URL("./analysis.md", import.meta.url), "utf8").catch(
+      () => "",
     );
+    await writeFile(new URL("./BENCH.md", import.meta.url), lines.join("\n") + analysis, "utf8");
+    console.log("\nWrote bench/BENCH.md");
+  } finally {
+    for (const child of children) child.kill("SIGKILL");
   }
-  lines.push("");
-
-  lines.push("## Memory footprint (sampled via /debug/memory)", "");
-  lines.push("| Framework | idle RSS | steady RSS | peak RSS | idle heap | steady heap |");
-  lines.push("| --- | ---: | ---: | ---: | ---: | ---: |");
-  for (const row of memory) {
-    lines.push(
-      `| ${row.server.split(" (")[0]} | ${fmtBytes(row.idle.rss)} | ${fmtBytes(row.steady.rss)} | ${fmtBytes(row.peak.rss)} | ${fmtBytes(row.idle.heapUsed)} | ${fmtBytes(row.steady.heapUsed)} |`,
-    );
-  }
-  lines.push("");
-
-  const analysis = await readFile(new URL("./analysis.md", import.meta.url), "utf8").catch(
-    () => "",
-  );
-  await writeFile(new URL("./BENCH.md", import.meta.url), lines.join("\n") + analysis, "utf8");
-  console.log("\nWrote bench/BENCH.md");
 };
 
 main().catch((err) => {

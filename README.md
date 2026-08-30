@@ -6,9 +6,12 @@ context per request, top-level routing, precompiled middleware chains, and a
 bare-`Response` fast path. Zero runtime dependencies; the core is
 runtime-free and also runs under Node for testing.
 
-**In-process throughput vs Hono (Bun 1.4, Apple Silicon): text 1.08x, param
-routes 1.04x** — while carrying lazy content negotiation, signed cookies,
-405/Allow synthesis and the full onion model. See `bench/BENCH.md`.
+**Performance: statistical parity with Hono** (ABAB-interleaved HTTP ratios
+all inside run noise; batch-interleaved in-process baseline ties exactly at
+379ns/request) — **3.0–3.5x faster than Koa 3** (15x at 1000 routes), at the
+lowest peak memory of the compared frameworks, while carrying lazy content
+negotiation, signed cookies, 405/Allow synthesis and the full onion model.
+See `bench/BENCH.md`.
 
 ```bash
 bun add bun-koa

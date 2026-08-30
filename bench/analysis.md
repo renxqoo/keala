@@ -1,55 +1,53 @@
 ---
 
-## bun-koa vs hono: faceoff (2026-08-30 re-measurement)
+## Reading this data honestly (ABAB-interleaved, 2026-08-31)
 
-HTTP numbers above (200 connections, 4 autocannon workers — a single client
-process saturates near 177k req/s on this machine and hides all differences).
-In-process faceoff from `bun bench/verify-baseline.ts` on the same machine,
-same day:
+Methodology note: the previous report measured each server sequentially and
+its per-scenario ratios carried up to ±25% order bias. All numbers here are
+ABAB-interleaved — every server resident, firing in rotating order, 4 rounds
+per scenario, ratio lines annotated with each side's run-to-run spread.
 
-| scenario          |         bun-koa |          hono 4 | ratio |
-| ----------------- | --------------: | --------------: | ----: |
-| text, in-process  | 2,822,002 req/s | 2,759,667 req/s | 1.02x |
-| param, in-process | 2,157,885 req/s | 2,217,797 req/s | 0.97x |
+**bun-koa vs hono 4: statistical parity.**
 
-**Where bun-koa wins (HTTP, this run)**
+| scenario              |       bun-koa |        hono 4 |     ratio | verdict       |
+| --------------------- | ------------: | ------------: | --------: | ------------- |
+| text                  |  228,432 ±13% |  194,448 ±23% |     1.17x | inside noise  |
+| JSON                  |  231,280 ±13% |  211,968 ±16% |     1.09x | inside noise  |
+| param                 |  243,536 ±15% |  242,000 ±21% |     1.01x | tie           |
+| 3 middlewares         |  206,224 ±15% |  195,056 ±10% |     1.06x | inside noise  |
+| 1000-route scale      |   229,136 ±6% |   239,856 ±6% |     0.96x | inside noise  |
+| **in-process ns/req** | **379 / 476** | **379 / 476** | **1.00x** | **exact tie** |
 
-- Text 1.06x, JSON 1.11x, and decisively the onion scenario: **3 middlewares
-  1.29x** (189k vs 147k) — precompiled chains beat per-request composition
-  once more than one middleware runs.
-- **1000-route scale 1.03x** — and both frameworks beat raw Bun.serve's
-  native routes table (242k/235k vs 173k): at 1000 entries Bun's table
-  lookup costs more than a hash-map + trie dispatch.
-- Memory: steady heap 2.9MB vs hono 3.4MB; RSS 38.4MB vs 43.5MB.
+Four of five HTTP ratio medians lean bun-koa, but every one sits inside the
+run-to-run noise band — claiming a win would repeat the bias this
+methodology exists to remove. The decisive measurement is the batch-
+interleaved in-process baseline (`bun bench/verify-baseline.ts`): identical
+medians, 379ns text and 476ns param per request on BOTH frameworks. Framework
+overhead is equal; the onion model costs nothing versus hono's composition.
 
-**Where hono wins**
+**Where the gaps ARE real (far beyond any noise band):**
 
-- Param route 0.88x HTTP (208k vs 236k) — its RegExpRouter single-pass
-  capture edges the trie on this shape. In-process param is a tie (0.97x).
+- **vs koa 3 (Node 22): 3.0–3.5x** on every scenario, **15x at 1000 routes**
+  (15k vs 229k req/s — @koa/router's linear layer walk vs O(path) dispatch).
+- **vs fastify 5 (Node 22): 2.3–3.0x**, and vs their Bun-compat placements
+  (koa-on-bun 109–124k, fastify-on-bun 124–150k) still 1.5–2.1x.
+- **Peak memory**: bun-koa 48.0MB vs hono 52.6MB vs koa 98.1MB — the
+  framework with the lowest peak RSS of the group.
 
-**Ties**: text/JSON are within noise of each other everywhere; p99 identical
-(2–3ms) across the Bun trio.
+**vs raw Bun.serve: 0.89–1.05x** — parity at this client scale (4 workers
+push ~240k req/s; the ~140ns/req framework overhead measured in-process is
+~3% of the wire cost and invisible here). The framework tax question is
+answered in-process: 379ns vs raw's 243ns per request, same as hono's.
 
-## Cross-runtime: koa and fastify ON Bun
+**The 1000-route raw inversion is real and reproduced three times**
+(160k / 173k / 174k across independent runs): Bun 1.4's native routes table
+costs more per lookup at 1000 entries than a hash-map + trie dispatch. The
+explanation is a hypothesis, the measurement is not.
 
-Both run on Bun's node compatibility layer, lifted over their Node numbers —
-koa 86k→116k, fastify 114k→130k — but they sit ~25–40% below the Bun-native
-tier and pay a memory premium for the emulated node objects (koa 86MB→98MB
-steady RSS, fastify 100MB→91MB with a 144MB peak). bun-koa beats every
-cross-runtime placement in every scenario: **1.80–1.99x vs koa-on-bun** and
-**1.34–1.73x vs fastify-on-bun**.
+## Reproduce
 
-## vs koa 3 (Node 22) — the reason this framework exists
-
-**2.37x–2.68x** on throughput across scenarios, at less than half the
-memory (38MB vs 86MB steady RSS), with full onion semantics preserved.
-At 1000 routes the gap explodes to **14.5x**: @koa/router walks its layer
-stack linearly per request (16.7k req/s), the hybrid router stays O(path)
-(242k req/s).
-
-## Framework tax vs raw Bun.serve
-
-1.00x text / 0.93x JSON / 0.95x param / 0.84x middlewares — the tax for
-full Koa semantics is 0–16% depending on scenario. The 1000-route scale
-inversion (1.40x FASTER than raw) is the native routes table's own lookup
-cost at 1000 entries, not framework magic.
+```sh
+bun install
+node bench/run.mjs 200 8       # HTTP benchmark (ABAB-interleaved, 4 workers)
+bun bench/verify-baseline.ts   # in-process framework-overhead baseline
+```

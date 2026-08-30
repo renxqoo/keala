@@ -4,8 +4,8 @@
 import { createApp } from "../src/index.ts";
 import { Hono } from "hono";
 
+// Per-suite measured requests: BATCHES rounds x SUB interleaved sub-batches.
 const WARM = 300_000;
-const BATCH = 20_000;
 const BATCHES = 40;
 
 const rawHandler = (_req: Request): Response => new Response("hello world");
@@ -64,22 +64,32 @@ const drain = async (res: Response | Promise<Response>): Promise<void> => {
   await r.text();
 };
 
+// Sequential warmup brings every suite to the same JIT state first.
 for (const suite of suites) {
-  // warmup
   for (let i = 0; i < WARM; i++) await drain(suite.run(requestFor(suite.name, i)));
-  // measured batches
-  const times: number[] = [];
-  for (let b = 0; b < BATCHES; b++) {
+}
+
+// INTERLEAVED measurement: round-robin sub-batches across suites so no
+// framework benefits from being measured in a systematically different
+// machine/thermal window (order bias).
+const SUB = 5_000;
+const times = new Map<string, number[]>(suites.map((s) => [s.name, []]));
+for (let round = 0; round < BATCHES; round++) {
+  // rotate the starting suite every round
+  const order = [...suites.slice(round % suites.length), ...suites.slice(0, round % suites.length)];
+  for (const suite of order) {
     const t0 = performance.now();
-    for (let i = 0; i < BATCH; i++) await drain(suite.run(requestFor(suite.name, i)));
-    times.push(performance.now() - t0);
+    for (let i = 0; i < SUB; i++) await drain(suite.run(requestFor(suite.name, i)));
+    (times.get(suite.name) as number[]).push(performance.now() - t0);
   }
-  times.sort((a, b) => a - b);
-  const median = times[Math.floor(times.length / 2)] as number;
-  const best = times[0] as number;
-  const nsPerReq = (median / BATCH) * 1e6;
-  const rps = (BATCH / median) * 1000;
-  const rpsBest = (BATCH / best) * 1000;
+}
+for (const suite of suites) {
+  const sorted = (times.get(suite.name) as number[]).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] as number;
+  const best = sorted[0] as number;
+  const nsPerReq = (median / SUB) * 1e6;
+  const rps = (SUB / median) * 1000;
+  const rpsBest = (SUB / best) * 1000;
   console.log(
     `${suite.name.padEnd(16)} median ${nsPerReq.toFixed(0)}ns/req  ${Math.round(rps).toLocaleString()} req/s  (best ${Math.round(rpsBest).toLocaleString()})`,
   );
