@@ -167,14 +167,23 @@ const dispatchChain = (
     return errorResponse(app, c, err);
   }
   // The finalizer itself can fail (unserializable bodies, bad headers) — it
-  // must answer 500, never reject past app.handle.
-  const finish = (): Promise<Response> =>
-    finalize(app, c).catch((err: unknown) => errorResponse(app, c, err));
+  // must answer 500, never reject past app.handle. It stays synchronous on
+  // every hot path (only committed-Response-under-HEAD goes async), so fully
+  // synchronous middleware chains settle without a single extra promise.
+  const finish = (): Response | Promise<Response> => {
+    try {
+      const out = finalize(app, c);
+      if (out instanceof Promise) {
+        return out.catch((err: unknown) => errorResponse(app, c, err));
+      }
+      return out;
+    } catch (err) {
+      return errorResponse(app, c, err);
+    }
+  };
   // Fully synchronous middleware chains settle without a single promise.
   if (settled !== undefined && typeof (settled as PromiseLike<void>).then === "function") {
-    return (settled as Promise<void>).then(finish, (err: unknown) =>
-      errorResponse(app, c, err),
-    );
+    return (settled as Promise<void>).then(finish, (err: unknown) => errorResponse(app, c, err));
   }
   return finish();
 };
@@ -190,11 +199,11 @@ const errorResponse = async (app: Application, c: Context, err: unknown): Promis
   }
 };
 
-const buildErrorResponse = async (
+const buildErrorResponse = (
   app: Application,
   c: Context,
   err: unknown,
-): Promise<Response> => {
+): Response | Promise<Response> => {
   const error = normalizeError(err);
   app.onerror(error, c);
 
@@ -227,7 +236,7 @@ const buildErrorResponse = async (
   const message = exposed ? error.message : statusMessage(status) || "Internal Server Error";
   c.set("Content-Type", "text/plain; charset=utf-8");
   c.body = message;
-  return await finalize(app, c);
+  return finalize(app, c);
 };
 
 const defaultNotFound: NotFoundHandler = () => undefined;
@@ -345,7 +354,11 @@ export const createApp = (options: AppOptions = {}): Application => {
     mount(prefix, sub) {
       // "/" (and "") mount at the root without doubling slashes.
       const base =
-        prefix === "/" || prefix === "" ? "" : prefix.endsWith("/") && prefix.length > 1 ? prefix.slice(0, -1) : prefix;
+        prefix === "/" || prefix === ""
+          ? ""
+          : prefix.endsWith("/") && prefix.length > 1
+            ? prefix.slice(0, -1)
+            : prefix;
       const defs = isRouter(sub) ? sub.defs : sub.router.defs;
       const paramMiddlewares = isRouter(sub) ? sub.paramMiddlewares : sub.router.paramMiddlewares;
       // A mounted app (or router) carries its own middleware ahead of its routes.

@@ -162,14 +162,11 @@ describe("matrix: HEAD across body kinds", () => {
   });
 
   it.each(heads)(
-    "CONFIRMED-BUG: HEAD %s in bare state mode drops the backfilled Content-Length",
-    async (_label, body, _length) => {
-      // Intended (v1/koa, and the v2 design note): the same Content-Length
-      // values as above, computed from the would-be body. Locked phenomenon:
-      // fromState backfills the length into a freshly materialized
-      // headersRecord, but its local `record` stays null, so the final
-      // branch builds the Response without headers. The body is correctly
-      // empty; only the length is lost.
+    "HEAD %s in bare state mode backfills Content-Length from the would-be body",
+    async (_label, body, length) => {
+      // v1/koa contract: state-mode HEAD computes Content-Length from the
+      // would-be body and drops the body itself — including the bare path
+      // where the header record is materialized just for the backfill.
       const res = await respondWith(
         (c) => {
           c.body = body as never;
@@ -178,7 +175,7 @@ describe("matrix: HEAD across body kinds", () => {
       );
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("");
-      expect(res.headers.get("content-length")).toBe(null);
+      expect(Number(res.headers.get("content-length"))).toBe(length);
     },
   );
 

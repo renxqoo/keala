@@ -191,8 +191,10 @@ const fromState = (c: Context, head: boolean): Response => {
       else if (body !== null && typeof body === "object" && !isStreaming(body)) {
         length = byteLengthOf(JSON.stringify(body) ?? "null");
       }
-      if (length !== undefined)
-        (record ?? (c.headersRecord = {}))["content-length"] = String(length);
+      if (length !== undefined) {
+        record ??= c.headersRecord = {};
+        record["content-length"] = String(length);
+      }
     }
     body = null;
   }
@@ -223,8 +225,9 @@ const fromState = (c: Context, head: boolean): Response => {
   }
   // Headers-instance init (faster than a record init by ~60ns).
   const headers = new Headers();
-  for (const key of Object.keys(record)) {
-    const value = record[key] as string | string[];
+  const entries = record as HeaderMap;
+  for (const key of Object.keys(entries)) {
+    const value = entries[key] as string | string[];
     if (Array.isArray(value)) {
       for (const item of value) headers.append(key, item);
     } else {
@@ -240,7 +243,7 @@ const fromState = (c: Context, head: boolean): Response => {
  * Terminal conversion — can never throw past `app.handle` (the app wraps this
  * in a try/catch that falls back to a static 500).
  */
-export const finalize = async (app: Application, c: Context): Promise<Response> => {
+export const finalize = (app: Application, c: Context): Response | Promise<Response> => {
   const committed = c._res;
   if (committed !== undefined) {
     const record = c.headersRecord;

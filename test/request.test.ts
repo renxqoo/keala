@@ -46,8 +46,9 @@ describe("request facade (flat context)", () => {
     expect(ctx.query).toBe(ctx.query);
     // Koa semantics (v2 design contract #8): assigning an object rewrites the
     // query string and invalidates the parse cache — the next read re-parses
-    // the stringified form (v1's verbatim-stash deviation is gone).
-    ctx.query = { page: 2, tags: ["a", "b"] };
+    // the stringified form (v1's verbatim-stash deviation is gone). The
+    // numeric `page` exercises stringifyQuery's number coercion.
+    ctx.query = { page: 2, tags: ["a", "b"] } as unknown as Record<string, string>;
     expect(ctx.querystring).toBe("page=2&tags=a&tags=b");
     expect(ctx.query).toEqual({ page: "2", tags: ["a", "b"] });
   });

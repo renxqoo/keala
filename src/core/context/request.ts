@@ -135,10 +135,12 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return this.pathValue ?? (this.pathValue = getPath(this.url));
   },
   set path(value: string) {
-    // Koa: rewriting the pathname keeps the query string (and cache) intact.
+    // Koa: rewriting the pathname keeps the query string AND the parsed query
+    // cache (keyed by querystring) — upstream mutations stay visible.
     const url = this.url;
     const q = url.indexOf("?");
-    this.url = q === -1 ? value : `${value}${url.slice(q)}`;
+    this.urlValue = q === -1 ? value : `${value}${url.slice(q)}`;
+    this.pathValue = null;
   },
   get originalUrl(): string {
     return (this.originalUrlValue ??= `${getPath(this.rawRequest.url)}${getSearch(this.rawRequest.url)}`);
@@ -159,8 +161,8 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return (this.queryValue ??= parseQuery(this.querystring));
   },
   set query(value: QueryMap) {
-    // Koa 3: assigning an object rewrites the query string on the request.
-    this.queryValue = value;
+    // Koa 3: assigning an object rewrites the query string on the request;
+    // the next read re-parses from the rewritten URL (round-trip semantics).
     const url = this.url;
     const base = url.slice(0, url.indexOf("?") === -1 ? url.length : url.indexOf("?"));
     const serialized = stringifyQuery(value);

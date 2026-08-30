@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import type { Context } from "../src/context/context.ts";
-import { createEmitter } from "../src/application/emitter.ts";
+import { createApp } from "../src/index.ts";
+import type { Context } from "../src/core/context/context.ts";
+import { createEmitter } from "../src/core/emitter.ts";
 import {
   acceptsCharset,
   acceptsEncoding,
@@ -19,9 +19,9 @@ const probe = async (
 ): Promise<Context> => {
   const app = createApp({ proxy });
   let captured: Context | undefined;
-  app.use(async (ctx) => {
-    captured = ctx;
-    ctx.status = 204;
+  app.use(async (c) => {
+    captured = c;
+    c.body = "probed";
   });
   await app.handle(new Request(url, { headers }));
   if (captured === undefined) throw new Error("probe did not run");

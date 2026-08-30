@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import type { Context } from "../src/context/context.ts";
+import { createApp } from "../src/index.ts";
+import type { Context } from "../src/core/context/context.ts";
 
 const probe = async (url: string, headers: Record<string, string>): Promise<Context> => {
   const app = createApp();
   let captured: Context | undefined;
-  app.use(async (ctx) => {
-    captured = ctx;
-    ctx.status = 204;
+  app.use(async (c) => {
+    captured = c;
+    c.body = "probed";
   });
   await app.handle(new Request(url, { headers }));
   if (captured === undefined) throw new Error("probe did not run");
@@ -36,7 +36,7 @@ describe("branch coverage: final round", () => {
           hostname: "x",
           stop() {},
           fetch: () => new Response(),
-          update() {},
+          reload() {},
         };
       },
     };
@@ -50,10 +50,18 @@ describe("branch coverage: final round", () => {
     }
   });
 
-  it("keeps Content-Length for HEAD with binary bodies", async () => {
+  // CONFIRMED-BUG (core): the HEAD Content-Length backfill writes into a
+  // FRESHLY created header record while fromState keeps consulting the stale
+  // (null) local `record`, so the bare fast path builds `new Response(null)`
+  // and the backfilled "4" never reaches the wire — unless the request had
+  // already produced some other header. Same root cause as the HEAD lock in
+  // test/response.test.ts ("drops the body for HEAD requests").
+  // Expected (koa): HEAD of a 4-byte binary body answers with
+  // Content-Length "4".
+  it("CONFIRMED-BUG: keeps Content-Length for HEAD with binary bodies", async () => {
     const app = createApp();
-    app.use(async (ctx) => {
-      ctx.body = new Uint8Array([1, 2, 3, 4]);
+    app.use(async (c) => {
+      c.body = new Uint8Array([1, 2, 3, 4]);
     });
     const res = await app.handle(new Request("http://localhost:3000/", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -62,11 +70,11 @@ describe("branch coverage: final round", () => {
 
   it("combines custom status text with multi-value headers", async () => {
     const app = createApp();
-    app.use(async (ctx) => {
-      ctx.status = 201;
-      ctx.message = "with cookies";
-      ctx.append("Set-Cookie", ["a=1; Path=/", "b=2; Path=/"]);
-      ctx.body = "created";
+    app.use(async (c) => {
+      c.status = 201;
+      c.message = "with cookies";
+      c.append("Set-Cookie", ["a=1; Path=/", "b=2; Path=/"]);
+      c.body = "created";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(201);
@@ -78,18 +86,18 @@ describe("branch coverage: final round", () => {
     const app = createApp();
     let binaryLength: number | undefined = -1;
     let streamLength: number | undefined = -1;
-    app.use(async (ctx, next) => {
-      ctx.body = new Uint8Array([9, 9, 9]);
-      binaryLength = ctx.response.length;
+    app.use(async (c, next) => {
+      c.body = new Uint8Array([9, 9, 9]);
+      binaryLength = c.length;
       await next();
     });
-    app.use(async (ctx) => {
-      ctx.body = new ReadableStream({
+    app.use(async (c) => {
+      c.body = new ReadableStream({
         start(controller) {
           controller.close();
         },
       });
-      streamLength = ctx.response.length;
+      streamLength = c.length;
     });
     await app.handle(new Request("http://localhost:3000/"));
     expect(binaryLength).toBe(3);
@@ -111,12 +119,12 @@ describe("branch coverage: final round", () => {
   it("falls back to last-modified when etag lacks if-none-match", async () => {
     const app = createApp();
     let freshWithEtag: boolean | undefined;
-    app.use(async (ctx) => {
-      ctx.status = 200;
-      ctx.etag = "v1";
-      ctx.lastModified = new Date(Date.UTC(2024, 0, 1));
-      freshWithEtag = ctx.fresh;
-      ctx.body = "x";
+    app.use(async (c) => {
+      c.status = 200;
+      c.etag = "v1";
+      c.lastModified = new Date(Date.UTC(2024, 0, 1));
+      freshWithEtag = c.fresh;
+      c.body = "x";
     });
     await app.handle(
       new Request("http://localhost:3000/", {
@@ -129,11 +137,11 @@ describe("branch coverage: final round", () => {
   it("matches any etag against If-None-Match: *", async () => {
     const app = createApp();
     let freshStar: boolean | undefined;
-    app.use(async (ctx) => {
-      ctx.status = 200;
-      ctx.etag = "anything";
-      freshStar = ctx.fresh;
-      ctx.body = "x";
+    app.use(async (c) => {
+      c.status = 200;
+      c.etag = "anything";
+      freshStar = c.fresh;
+      c.body = "x";
     });
     await app.handle(new Request("http://localhost:3000/", { headers: { "If-None-Match": "*" } }));
     expect(freshStar).toBe(true);
@@ -142,11 +150,11 @@ describe("branch coverage: final round", () => {
   it("is stale when only if-none-match is absent and lastModified is unset", async () => {
     const app = createApp();
     let freshNoValidators: boolean | undefined;
-    app.use(async (ctx) => {
-      ctx.status = 200;
-      ctx.etag = "v1";
-      freshNoValidators = ctx.fresh;
-      ctx.body = "x";
+    app.use(async (c) => {
+      c.status = 200;
+      c.etag = "v1";
+      freshNoValidators = c.fresh;
+      c.body = "x";
     });
     await app.handle(
       new Request("http://localhost:3000/", {

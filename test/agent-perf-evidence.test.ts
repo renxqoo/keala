@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { createContext, type Context } from "../src/core/context/context.ts";
+import type { Context } from "../src/core/context/context.ts";
 
 const isBun = typeof Bun !== "undefined";
 
@@ -88,10 +88,11 @@ describe("perf evidence: structural fences", () => {
     });
     syncApp.get("/sync", (c) => c.text("ok"));
     for (let i = 0; i < 2_000; i++) await syncApp.handle(requestFor("/sync"));
+    // The zero-promise fast path: a fully synchronous chain returns the
+    // Response synchronously — not a Promise.
     const result = syncApp.handle(requestFor("/sync"));
-    expect(result).toBeInstanceOf(Promise); // handle awaits finalize internally
-    const res = await result;
-    expect(res.status).toBe(200);
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(200);
   });
 
   it("every context carries the exact same hidden-class key order", () => {

@@ -139,7 +139,8 @@ describe("same-request interleaving: query cache", () => {
     const app = createApp(quiet);
     const observed: unknown[] = [];
     app.use(async (c) => {
-      c.query = { page: 2, tags: ["a", "b"] };
+      // The numeric `page` exercises stringifyQuery's number coercion.
+      c.query = { page: 2, tags: ["a", "b"] } as unknown as Record<string, string>;
       observed.push(c.querystring, { ...c.query });
       c.body = "ok";
     });

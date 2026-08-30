@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/application/app.ts";
-import { createError } from "../src/http/errors.ts";
+import { createApp, createRouter, createError } from "../src/index.ts";
 import { acceptsEncoding } from "../src/negotiation/accepts.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
 import {
@@ -10,8 +9,8 @@ import {
   mimeFromExtension,
   normalizeType,
 } from "../src/utils/mime.ts";
-import { compilePattern, createNode, insertPattern } from "../src/router/trie.ts";
-import { createRouter } from "../src/router/router.ts";
+import { compilePattern } from "../src/router/pattern.ts";
+import { createNode, insertPattern } from "../src/router/trie.ts";
 
 describe("branch coverage: round 3", () => {
   it("identity is refused when explicitly disabled", () => {
@@ -22,9 +21,9 @@ describe("branch coverage: round 3", () => {
 
   it("set() accepts multi-value headers", async () => {
     const app = createApp();
-    app.use(async (ctx) => {
-      ctx.set("X-Multi", ["a", "b"]);
-      ctx.body = "ok";
+    app.use(async (c) => {
+      c.set("X-Multi", ["a", "b"]);
+      c.body = "ok";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("x-multi")).toBe("a, b");
@@ -40,9 +39,9 @@ describe("branch coverage: round 3", () => {
   it("prefers x-forwarded-host when proxying", async () => {
     const app = createApp({ proxy: true });
     let host = "";
-    app.use(async (ctx) => {
-      host = ctx.host;
-      ctx.status = 204;
+    app.use(async (c) => {
+      host = c.host;
+      c.body = "ok";
     });
     await app.handle(
       new Request("http://localhost:3000/", {
@@ -63,7 +62,7 @@ describe("branch coverage: round 3", () => {
           hostname: "localhost",
           stop() {},
           fetch: () => new Response(),
-          update() {},
+          reload() {},
         };
       },
     };
@@ -92,20 +91,20 @@ describe("branch coverage: round 3", () => {
   });
 
   it("keeps undecodable static segments as-is", () => {
-    expect(compilePattern("/files/%E0%A4%A")[1]?.value).toBe("%E0%A4%A");
+    expect(compilePattern("/files/%E0%A4%A").segments[1]?.value).toBe("%E0%A4%A");
   });
 
   it("rejects conflicting param names and upgrades patterns", () => {
     const root = createNode();
-    insertPattern(root, compilePattern("/users/:id"));
-    expect(() => insertPattern(root, compilePattern("/users/:name"))).toThrow(TypeError);
-    insertPattern(root, compilePattern("/users/:id(\\d+)"));
+    insertPattern(root, compilePattern("/users/:id").segments);
+    expect(() => insertPattern(root, compilePattern("/users/:name").segments)).toThrow(TypeError);
+    insertPattern(root, compilePattern("/users/:id(\\d+)").segments);
     expect(root.children.get("users")?.param?.pattern?.test("7")).toBe(true);
   });
 
   it("url() throws when a required param is missing", () => {
     const router = createRouter();
-    router.get("user", "/users/:id", (ctx) => void ctx);
+    router.get("user", "/users/:id", (c) => void c);
     expect(() => router.url("user", {})).toThrow(/Missing required parameter/);
   });
 

@@ -111,13 +111,25 @@ describe("compose: dual-mode commit rules", () => {
     expect(await (c._res as Response).text()).toBe("inner");
   });
 
-  it("rule 4 — a thenable return is a loud sync TypeError", () => {
+  it("rule 4 — a custom thenable return is a loud TypeError", async () => {
     const c = ctx();
-    const run = compose<TestCtx>([
-      // The handler returns a thenable without awaiting it — misuse.
-      () => ({ then: () => undefined }) as unknown as Response,
-    ]);
+    // The thenable is the point of the test — constructing one on purpose.
+    // eslint-disable-next-line unicorn/no-thenable
+    const thenable: Record<string, unknown> = { then: () => undefined };
+    const run = compose<TestCtx>([() => thenable as unknown as Response]);
+    // The sync path throws synchronously; the promise path would reject.
     expect(() => run(c, NOOP_TAIL)).toThrow("await it inside the handler");
+  });
+
+  it("a returned promise resolves as the handler's own async result", async () => {
+    const c = ctx();
+    // A genuine promise return is indistinguishable from an async handler
+    // and commits normally — the misuse check only targets custom thenables.
+    const run = compose<TestCtx>([
+      () => Promise.resolve(new Response("x", { status: 299 })) as unknown as Response,
+    ]);
+    await run(c, NOOP_TAIL);
+    expect(c._res?.status).toBe(299);
   });
 
   it("rule 4 — a rejected-promise-returning handler surfaces the rejection", async () => {

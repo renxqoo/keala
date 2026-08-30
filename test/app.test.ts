@@ -255,6 +255,8 @@ describe("app: registration validation", () => {
   });
 });
 
+const noopListen = (): void => undefined;
+
 describe("app: listen", () => {
   it("parses port/hostname/onListen argument shapes", async () => {
     const made: Record<string, unknown>[] = [];
@@ -269,8 +271,7 @@ describe("app: listen", () => {
       };
     };
     const app = createApp(quiet) as Application;
-    const onListen = () => undefined;
-    startBunServer(app, { port: 4123 }, onListen, serveImpl);
+    startBunServer(app, { port: 4123 }, noopListen, serveImpl);
     expect(made[0]?.["port"]).toBe(4123);
     expect(typeof made[0]?.["fetch"]).toBe("function");
     // the fetch handler wires the runtime server channel
