@@ -137,7 +137,11 @@ describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
     });
     try {
       // Well-formed hash string; derivation fails inside verify().
-      const hash = "pbkdf2$600000$" + Buffer.from("0123456789abcdef").toString("base64") + "$" + Buffer.from("k".repeat(32)).toString("base64");
+      const hash =
+        "pbkdf2$600000$" +
+        Buffer.from("0123456789abcdef").toString("base64") +
+        "$" +
+        Buffer.from("k".repeat(32)).toString("base64");
       expect(await pbkdf2PasswordHasher().verify(hash, "pw")).toBe(false);
     } finally {
       if (descriptor !== undefined) Object.defineProperty(globalThis, "crypto", descriptor);
