@@ -218,20 +218,29 @@ describe("perf evidence: optimization-safety fences", () => {
 });
 
 describe("perf evidence: budgets (regression fences, NOT measurements)", () => {
+  const baselineResponse = (): Response => new Response("x");
+
   it("mixed bench mix stays under a generous time budget", { timeout: 30_000 }, async () => {
     const app = buildBenchApp();
     const paths = ["/text", "/json", "/users/7", "/mw"];
     const requests = paths.map((p) => requestFor(p));
     for (let i = 0; i < 4_000; i++) await app.handle(requests[i % 4]!); // warm
     const N = 20_000;
+    // Machine speed AND coverage instrumentation scale both loops alike, so
+    // the fence is the ratio against a raw-Response baseline, not an absolute.
+    const t0 = performance.now();
+    for (let i = 0; i < N; i++) baselineResponse();
+    const baselineNs = ((performance.now() - t0) * 1e6) / N;
     const start = performance.now();
     for (let i = 0; i < N; i++) {
       const res = await app.handle(requests[i % 4]!);
       if (res.status !== 200) throw new Error("unexpected status in budget loop");
     }
     const nsPerReq = ((performance.now() - start) * 1e6) / N;
-    // Reference: ~507 ns/req on Bun 1.4 / Apple Silicon. Budget: ~10x.
-    expect(nsPerReq).toBeLessThan(5_000);
+    // Reference ratio: ~5x on Bun 1.4 / Apple Silicon (framework vs raw Response).
+    // Fence: 10x headroom — passes under coverage instrumentation (~1.5x slowdown
+    // on both loops), still trips on any structural 2x regression.
+    expect(nsPerReq / baselineNs).toBeLessThan(10);
   });
 
   it.skipIf(!isBun)(

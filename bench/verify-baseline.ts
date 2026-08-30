@@ -58,7 +58,9 @@ const suites: Suite[] = [
 ];
 
 const mkText = () => new Request("http://localhost/text");
-const mkParam = (i: number) => new Request(`http://localhost/users/${i % 20}`);
+const mkParam = (i: number) => new Request(`http://localhost/users/${(i % 20) + 1}`);
+const requestFor = (name: string, i: number): Request =>
+  name.endsWith("param") ? mkParam(i) : mkText();
 
 const drain = async (res: Response | Promise<Response>): Promise<void> => {
   const r = await res;
@@ -66,22 +68,22 @@ const drain = async (res: Response | Promise<Response>): Promise<void> => {
 };
 
 for (const suite of suites) {
-  const mk = suite.name.endsWith("param") ? mkParam : mkText;
   // warmup
-  for (let i = 0; i < WARM; i++) await drain(suite.run(mk()));
+  for (let i = 0; i < WARM; i++) await drain(suite.run(requestFor(suite.name, i)));
   // measured batches
   const times: number[] = [];
   for (let b = 0; b < BATCHES; b++) {
     const t0 = performance.now();
-    for (let i = 0; i < BATCH; i++) await drain(suite.run(mk()));
+    for (let i = 0; i < BATCH; i++) await drain(suite.run(requestFor(suite.name, i)));
     times.push(performance.now() - t0);
   }
   times.sort((a, b) => a - b);
-  const median = times[Math.floor(times.length / 2)];
-  const best = times[0];
+  const median = times[Math.floor(times.length / 2)] as number;
+  const best = times[0] as number;
+  const nsPerReq = (median / BATCH) * 1e6;
   const rps = (BATCH / median) * 1000;
   const rpsBest = (BATCH / best) * 1000;
   console.log(
-    `${suite.name.padEnd(16)} median ${(median / BATCH * 1000).toFixed(0)}ns/req  ${Math.round(rps).toLocaleString()} req/s  (best ${Math.round(rpsBest).toLocaleString()})`,
+    `${suite.name.padEnd(16)} median ${nsPerReq.toFixed(0)}ns/req  ${Math.round(rps).toLocaleString()} req/s  (best ${Math.round(rpsBest).toLocaleString()})`,
   );
 }
