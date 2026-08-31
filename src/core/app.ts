@@ -381,7 +381,14 @@ export const createApp = (options: AppOptions = {}): Application => {
           );
           continue;
         }
-        registerDef(router, def.method, path, def.handlers, def.name, globalMw, subGlobal);
+        // The def's OWN prefix middleware (baked when the sub-app itself
+        // mounted a router) runs INSIDE this app's sub-global — dropping it
+        // here silently stripped every inner router's use() middleware on a
+        // nested remount. Inner first, wrapping sub-global after.
+        registerDef(router, def.method, path, def.handlers, def.name, globalMw, [
+          ...(def.prefixMiddleware ?? []),
+          ...subGlobal,
+        ]);
       }
       return app;
     },

@@ -44,6 +44,12 @@ const VALIDATOR_APPS = new WeakSet<Application>();
 const issueLines = (issues: unknown[]): string => {
   const parts: string[] = [];
   for (const issue of issues.slice(0, 10)) {
+    // Malformed entries (null, primitives) are the schema's bug — render a
+    // placeholder instead of crashing the error path into a 500.
+    if (issue === null || typeof issue !== "object") {
+      parts.push("invalid value");
+      continue;
+    }
     const message = (issue as { message?: unknown }).message;
     const path = (issue as { path?: unknown[] }).path;
     const at = Array.isArray(path) && path.length > 0 ? ` at ${path.join(".")}` : "";

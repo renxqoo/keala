@@ -155,9 +155,11 @@ const INTERNAL_SLOTS: ReadonlySet<string> = new Set([
  * no-pooling hot path measured +9% in-process per request (bench/M4).
  */
 const sweepForeignKeys = (c: Context): void => {
-  const own = c as unknown as Record<string, unknown>;
-  for (const key of Object.keys(c)) {
-    if (!INTERNAL_SLOTS.has(key)) delete own[key];
+  // Reflect.ownKeys, not Object.keys: a handler's SYMBOL-keyed property is
+  // just as much per-request data (it must never survive a recycle).
+  const own = c as unknown as Record<PropertyKey, unknown>;
+  for (const key of Reflect.ownKeys(c)) {
+    if (typeof key !== "string" || !INTERNAL_SLOTS.has(key)) delete own[key];
   }
 };
 

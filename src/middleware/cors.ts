@@ -59,6 +59,9 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
     const preflight = c.method === "OPTIONS" && c.get("access-control-request-method").length > 0;
     if (preflight) {
       if (!allowed) {
+        // The 403 exists ONLY because of the Origin header — a shared cache
+        // must key it on Origin like every other negotiated answer (below).
+        if (varyOrigin) c.vary("Origin");
         if (options.reject !== undefined) return options.reject(origin);
         c.status = 403;
         return;
@@ -75,6 +78,10 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
     }
 
     if (origin.length > 0 && !allowed) {
+      // Same invariant as above: a rejection is an origin-dependent answer.
+      // (Written BEFORE a custom reject() Response is returned, so the staged
+      // Vary rides along through the rule-4 merge onto the committed answer.)
+      if (varyOrigin) c.vary("Origin");
       if (options.reject !== undefined) return options.reject(origin);
       c.status = 403;
       return;

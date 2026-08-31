@@ -85,11 +85,13 @@ const methodNotAllowed = (c: Context): Response | null => {
 /**
  * Rule 4: post-commit mutations rewrite the committed Response. Removals
  * drop their headers, staged writes REPLACE their headers wholesale (they
- * are the user's latest intent — arrays append as exact multi-values), and a
- * post-commit `c.status`/`c.message` overrides the reason phrase. The
- * rebuild feeds `res.body` (a stream) to the constructor, which loses the
- * runtime's body-type content-type inference — restore it by sniffing the
- * payload when no content-type survives anywhere.
+ * are the user's latest intent — arrays append as exact multi-values), and
+ * post-commit `c.status`/`c.message`/`c.body` writes (flags 32/64/128 — set
+ * by the accessors only when a Response is already committed) override the
+ * status, reason phrase and body respectively. Pre-commit staging never
+ * leaks in: the commit superseded it. The rebuild feeds the body to the
+ * constructor, which loses the runtime's body-type content-type inference —
+ * restore it by sniffing the payload when no content-type survives anywhere.
  */
 const rebuildCommitted = async (c: Context, res: Response): Promise<Response> => {
   const headers = await mergedResponseHeaders(res);
@@ -121,14 +123,16 @@ const rebuildCommitted = async (c: Context, res: Response): Promise<Response> =>
       }
     }
   }
-  const statusOverridden = (c.flags & 16) !== 0 && (c.flags & 1) !== 0;
+  const statusOverridden = (c.flags & 32) !== 0;
   const status = statusOverridden ? c.statusValue : res.status;
   // Rule 4 as documented: a post-commit c.status OR c.message overrides the
-  // reason phrase — a message-only write (no status change) counts too.
+  // reason phrase — but only writes made AFTER the commit count (64). A
+  // message staged before the commit was superseded by the Response itself.
   const statusText =
-    (c.flags & 16) !== 0 && c.messageValue.length > 0 && isStatusText(c.messageValue)
-      ? c.messageValue
-      : res.statusText;
+    (c.flags & 64) !== 0 && isStatusText(c.messageValue) ? c.messageValue : res.statusText;
+  // A post-commit body write (128) replaces the committed body — the user's
+  // latest intent; anything staged before the commit rides the Response.
+  const body = (c.flags & 128) !== 0 ? bodyInitOf(c.bodyValue) : res.body;
   if (isEmptyStatus(status)) {
     // RFC 9110 §8.6: a 204/304 MUST NOT carry content-describing headers —
     // the same cleanup the state-mode path applies.
@@ -137,7 +141,7 @@ const rebuildCommitted = async (c: Context, res: Response): Promise<Response> =>
     headers.delete("transfer-encoding");
     return new Response(null, { status, statusText, headers });
   }
-  return new Response(res.body, { status, statusText, headers });
+  return new Response(body, { status, statusText, headers });
 };
 
 /** Response headers for a rebuild; sniffs a text body when content-type is absent. */
@@ -277,10 +281,12 @@ const observedStream = (
   const reader = body.getReader();
   return new ReadableStream({
     async pull(controller) {
+      // Only the READ may fail with a producer error — controller ops after a
+      // consumer cancel/close throw benign TypeErrors that must never reach
+      // the app hook (a client abort is not a producer failure).
+      let read: IteratorResult<Uint8Array, undefined>;
       try {
-        const { done, value } = await reader.read();
-        if (done) controller.close();
-        else controller.enqueue(value);
+        read = await reader.read();
       } catch (err) {
         onError(err instanceof Error ? err : new Error(String(err)), c);
         try {
@@ -288,6 +294,20 @@ const observedStream = (
         } catch {
           // consumer already closed the stream
         }
+        return;
+      }
+      if (read.done) {
+        try {
+          controller.close();
+        } catch {
+          // consumer already closed the stream
+        }
+        return;
+      }
+      try {
+        controller.enqueue(read.value);
+      } catch {
+        // consumer already closed the stream
       }
     },
     cancel(reason) {

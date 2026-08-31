@@ -86,7 +86,13 @@ const consumeStaged = (
   headers: Record<string, HeaderValue> | undefined,
 ): Record<string, HeaderValue> | undefined => {
   const merged = mergedHeadersOf(c, headers);
-  if (merged !== undefined && c.headersRecord !== null) c.headersRecord = null;
+  if (merged !== undefined && c.headersRecord !== null) {
+    // Clear IN PLACE, never swap the slot: the memoized cookies facade (and
+    // any other holder) keeps referencing THIS record object — a slot swap
+    // would detach them and silently drop every later c.cookies.set() into
+    // the orphaned record.
+    for (const key of Object.keys(c.headersRecord)) delete c.headersRecord[key];
+  }
   return merged;
 };
 

@@ -130,15 +130,13 @@ export const mergeMountedWs = (
     );
   }
   wsRoutes.set(newKey, socketHandlers);
-  registerDef(
-    router,
-    def.method,
-    path,
-    [wsUpgradeHandler(newKey)],
-    def.name,
-    globalMw,
-    subGlobal,
-  ).wsKey = newKey;
+  // Same merge contract as the non-ws mount path: the def's own prefix
+  // middleware (baked by a nested mount of the sub-app) survives the
+  // re-key, running inside the sub-app's global middleware.
+  registerDef(router, def.method, path, [wsUpgradeHandler(newKey)], def.name, globalMw, [
+    ...(def.prefixMiddleware ?? []),
+    ...subGlobal,
+  ]).wsKey = newKey;
 };
 
 /** Errors from OTHER realms (vm contexts, structured clones) fail instanceof

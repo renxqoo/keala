@@ -13,6 +13,14 @@ export interface Preference {
   value: string;
   q: number;
   order: number;
+  /**
+   * Non-q parameters on the range ("level=1"), normalized `name=value` with
+   * a lowercase name — null when absent (the hot path). Media negotiation
+   * requires every parameter to be present-and-equal on the server type
+   * (negotiator's specify()); provided values are bare types, so any range
+   * carrying parameters is inapplicable to them.
+   */
+  params: readonly string[] | null;
 }
 
 /** Split a (possibly multi-line joined) header on commas, trimming segments. */
@@ -48,14 +56,21 @@ export const parsePreferenceEntries = (header: string | null): Preference[] => {
     const value = (segments[0] ?? "").trim().toLowerCase();
     if (value.length === 0) continue;
     let q = 1;
+    let params: string[] | null = null;
     for (let i = 1; i < segments.length; i++) {
       const param = (segments[i] ?? "").trim();
       if (param.startsWith("q=") || param.startsWith("Q=")) {
         const parsed = Number.parseFloat(param.slice(2));
         if (!Number.isNaN(parsed)) q = Math.min(Math.max(parsed, 0), 1);
+        continue;
       }
+      const eq = param.indexOf("=");
+      if (eq === -1) continue;
+      const name = param.slice(0, eq).trim().toLowerCase();
+      if (name.length === 0) continue;
+      (params ??= []).push(`${name}=${param.slice(eq + 1).trim()}`);
     }
-    out.push({ value, q, order: out.length });
+    out.push({ value, q, order: out.length, params });
   }
   return out;
 };
@@ -69,8 +84,13 @@ export const parsePreferences = (header: string | null): Preference[] =>
     .filter((pref) => pref.q > 0)
     .sort((a, b) => b.q - a.q || a.order - b.order);
 
-/** Score a client media range against a concrete server type (0 = no match). */
-const mediaScore = (client: string, server: string): number => {
+/**
+ * Score a client media range against a concrete server type (0 = no match).
+ * A range carrying parameters never matches a bare server type.
+ */
+const mediaScore = (pref: Preference, server: string): number => {
+  if (pref.params !== null) return 0;
+  const client = pref.value;
   if (client === "*" || client === "*/*") return 1;
   if (client.endsWith("/*")) {
     return client.slice(0, -2) === server.split("/")[0] ? 2 : 0;
@@ -83,13 +103,15 @@ const mediaScore = (client: string, server: string): number => {
 };
 
 /** Score an encoding/charset token (exact or wildcard). */
-const tokenScore = (client: string, server: string): number => {
+const tokenScore = (pref: Preference, server: string): number => {
+  const client = pref.value;
   if (client === "*") return 1;
   return client === server ? 3 : 0;
 };
 
 /** Score a language range: exact > prefix > wildcard. */
-const languageScore = (client: string, server: string): number => {
+const languageScore = (pref: Preference, server: string): number => {
+  const client = pref.value;
   if (client === "*") return 1;
   if (client === server) return 3;
   if (client.length < server.length && server.startsWith(`${client}-`)) return 2;
@@ -101,7 +123,7 @@ interface PickOptions {
   header: string | null;
   provided: readonly string[];
   normalize: (value: string) => string;
-  score: (client: string, server: string) => number;
+  score: (pref: Preference, target: string) => number;
 }
 
 /**
@@ -109,7 +131,9 @@ interface PickOptions {
  * semantics): each provided value's quality is defined by its MOST SPECIFIC
  * matching range (RFC 7231 §5.3.2 — an exact range outranks a wildcard
  * however their q compare), and the provided values then compete on that
- * quality, tying out by header order and finally provided order.
+ * quality, tying out on match SPECIFICITY (negotiator's compareSpecs — an
+ * exactly-matched value beats a wildcard-matched rival at equal q), then
+ * header order, finally provided order.
  */
 export const pickPreference = ({
   header,
@@ -123,6 +147,7 @@ export const pickPreference = ({
   const prefs = parsePreferenceEntries(header).filter((pref) => pref.q > 0);
   let bestIndex = -1;
   let bestQ = 0;
+  let bestScore = 0;
   let bestOrder = Number.POSITIVE_INFINITY;
   for (let i = 0; i < provided.length; i++) {
     const target = normalize(provided[i] ?? "");
@@ -132,16 +157,21 @@ export const pickPreference = ({
     let match: Preference | undefined;
     let matchScore = 0;
     for (const pref of prefs) {
-      const s = score(pref.value, target);
+      const s = score(pref, target);
       if (s > matchScore) {
         matchScore = s;
         match = pref;
       }
     }
     if (match === undefined) continue;
-    if (match.q > bestQ || (match.q === bestQ && match.order < bestOrder)) {
+    if (
+      match.q > bestQ ||
+      (match.q === bestQ && matchScore > bestScore) ||
+      (match.q === bestQ && matchScore === bestScore && match.order < bestOrder)
+    ) {
       bestIndex = i;
       bestQ = match.q;
+      bestScore = matchScore;
       bestOrder = match.order;
     }
   }

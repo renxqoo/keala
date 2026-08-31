@@ -26,6 +26,14 @@ import { decodeSegment } from "./pattern.ts";
 export interface RouteTarget {
   /** method (uppercase) or "ALL" -> compiled handler chain */
   methods: Map<string, unknown>;
+  /**
+   * Raw handler layers per method, in registration order — the composition
+   * SOURCE. A duplicate path+method registration appends LAYERS here and the
+   * chain is recomposed once over `[...globalMw, ...layers]`; composing the
+   * previous CHAIN under the new one (the old model) embedded the global
+   * middleware once per duplicate and re-ran it every request.
+   */
+  layers: Map<string, unknown[]>;
   /** methods registered on this path (for the `Allow` header) */
   allowed: Set<string>;
   /** route name for `router.url(name, params)` */
@@ -67,7 +75,11 @@ export const createNode = (): TrieNode => ({
   target: null,
 });
 
-export const createTarget = (): RouteTarget => ({ methods: new Map(), allowed: new Set() });
+export const createTarget = (): RouteTarget => ({
+  methods: new Map(),
+  layers: new Map(),
+  allowed: new Set(),
+});
 
 interface ParamLink {
   name: string;
@@ -124,10 +136,16 @@ export const matchPattern = (root: TrieNode, path: string): TrieMatch | null => 
     if (index === segments.length) {
       if (node.target !== null) return { target: node.target, params: recordOf(params) };
       // A trailing wildcard with an EMPTY capture answers the bare
-      // prefix+"/" (buildURL emits exactly that for {wildcard: ""}). Gated
-      // on the raw trailing slash: "/w" itself is a different resource.
+      // prefix+"/" (buildURL emits exactly that for {wildcard: ""}) — and the
+      // ROOT wildcard ("/*") answers "/" itself: express/hono semantics, and
+      // the same round-trip contract as "/w/" below. Gated on the raw
+      // trailing slash: "/w" itself is a different resource.
       const wild = node.wildcard;
-      if (wild !== null && wild.node.target !== null && path.length > 1 && path.endsWith("/")) {
+      if (
+        wild !== null &&
+        wild.node.target !== null &&
+        (path === "/" || (path.length > 1 && path.endsWith("/")))
+      ) {
         stack.push({
           node: wild.node,
           index,

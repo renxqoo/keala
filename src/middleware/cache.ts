@@ -2,10 +2,12 @@
  * responseCache — route-level response caching (STATE REBUILD, opt-in).
  *
  * `app.get("/heavy", cache({ ttl: 60_000 }), handler)` — the middleware
- * captures eligible responses (via `clone()`, never touching the original)
- * and replays them as FRESH `Response` objects per hit. Response INSTANCES
- * are never reused: Bun consumes a body once (ERR_BODY_ALREADY_USED), so the
- * cache stores the body string/bytes plus header pairs and rebuilds.
+ * captures eligible responses (via `clone()`, never touching the original;
+ * state-mode bodies are materialized through the same finalizer the app
+ * uses, never committed early) and replays them as FRESH `Response` objects
+ * per hit. Response INSTANCES are never reused: Bun consumes a body once
+ * (ERR_BODY_ALREADY_USED), so the cache stores the body string/bytes plus
+ * header pairs and rebuilds.
  *
  * Eligibility is deliberately conservative and hardcoded: GET, status 200,
  * text-ish bodies, no set-cookie/vary, no cache-control private/no-store,
@@ -15,6 +17,7 @@
 
 import type { RouteHandler } from "../router/router.ts";
 import type { Context } from "../core/context/context.ts";
+import { finalize } from "../core/respond.ts";
 
 export interface ResponseCacheOptions {
   /** Time to live in milliseconds. Default 60_000. */
@@ -33,8 +36,9 @@ interface CacheEntry {
 
 // A response that must be revalidated before reuse must not enter a cache
 // with no validator support (RFC 9111 §5.2.2.4) — bare `no-cache` and
-// `max-age=0` both demand exactly that.
-const NO_REVALIDATE = /(?:^|,)\s*(?:no-cache|no-store|private)\s*(?:,|$)/;
+// `max-age=0` both demand exactly that. Directives are case-insensitive
+// (RFC 9111 §5.2), like every other regex here.
+const NO_REVALIDATE = /(?:^|,)\s*(?:no-cache|no-store|private)\s*(?:,|$)/i;
 const MAX_AGE_ZERO = /(?:^|,)\s*max-age\s*=\s*0\s*(?:,|$)/i;
 // A field-specific no-cache names a header the response depends on —
 // Set-Cookie responses must not be replayed from the framework cache.
@@ -65,6 +69,24 @@ const textualBody = (res: Response): Promise<string | Uint8Array | null> => {
     .catch(() => null);
 };
 
+/**
+ * A state-mode body is only capturable when it is inherently textual. A bare
+ * Uint8Array/stream/Blob carries no framework content-type (a missing CT
+ * counts as textual above) and its bytes need not be valid UTF-8 — the
+ * `.text()` capture round-trip would corrupt them on replay.
+ */
+const isTextualStateBody = (body: Context["bodyValue"]): boolean => {
+  if (typeof body === "string") return true;
+  return (
+    body !== null &&
+    typeof body === "object" &&
+    !(body instanceof Uint8Array) &&
+    !(body instanceof ReadableStream) &&
+    !(body instanceof Blob) &&
+    !(body instanceof Response)
+  );
+};
+
 export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
   const ttl = options.ttl ?? 60_000;
   const max = options.max ?? 128;
@@ -74,9 +96,14 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
   const keyOf = (c: Context): string => {
     // HEAD shares the GET entry (same representation). The request authority
     // is part of the primary key (RFC 9111): one app serving several hosts
-    // must never replay host A's answer to host B.
+    // must never replay host A's answer to host B. The parts are joined with
+    // "\n" — it can occur in neither a host header (fetch rejects CR/LF)
+    // nor a serialized URL path — an undelimited `${host}${path}` let a
+    // spoofed X-Forwarded-Host ("site/x" in proxy mode) forge ANOTHER
+    // path's key and cross-path poison the store.
     const method = c.method === "HEAD" ? "GET" : c.method;
-    return `${method}:${c.host}${c.path}${includeQuery ? `?${c.querystring}` : ""}`;
+    const target = includeQuery ? `${c.path}?${c.querystring}` : c.path;
+    return `${method}\n${c.host}\n${target}`;
   };
 
   const eligible = (c: Context, res: Response): boolean => {
@@ -138,9 +165,15 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
 
     await next();
 
-    const res = c._res;
-    if (res === undefined) return; // state-mode bodies: no committed Response to clone
     if (!mayStore) return;
+    // State-mode responses (the framework's koa-style API) commit only in the
+    // finalizer, AFTER the onion — materialize the equivalent Response here
+    // (without committing it) so eligibility and capture see the same object
+    // the finalizer will build. The discard is safe: nothing consumed the
+    // body (textualBody reads a clone), and the finalizer re-derives an
+    // identical Response from the untouched state.
+    const res = c._res ?? (await finalize(c.app, c));
+    if (c._res === undefined && !isTextualStateBody(c.bodyValue)) return;
     if (!eligible(c, res)) return;
     const body = await textualBody(res);
     if (body === null || body.length === 0) return;

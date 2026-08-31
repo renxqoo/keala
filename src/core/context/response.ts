@@ -77,6 +77,33 @@ const clearTouchedLength = (c: ContextState): void => {
   }
 };
 
+/**
+ * A relative-looking target every WHATWG client resolves to a FOREIGN
+ * authority is an open redirect (`//evil.com`, `https:/evil.com` — the same
+ * family as the `/\evil.com` form PIPE-1 closed). Resolve against the request
+ * origin; when it lands on another host, encode the leading bytes (the exact
+ * treatment `\` already gets) so the Location stays a same-origin path.
+ * Explicit `scheme://` targets never reach here — those are the developer's
+ * deliberate absolute redirects (koa parity).
+ */
+const neutralizeForeignAuthority = (host: string, raw: string): string => {
+  if (host.length === 0) return raw;
+  let resolved: URL;
+  try {
+    resolved = new URL(raw, `http://${host}/`);
+  } catch {
+    return raw;
+  }
+  if (resolved.host.length === 0 || resolved.host === host) return raw;
+  if (raw.startsWith("//")) return `/%2F${raw.slice(2)}`;
+  // Special-scheme slash forms ("https:/host"): WHATWG skips the missing
+  // slashes straight into the authority — encode the scheme colon and its
+  // slashes so the whole string becomes a relative path.
+  return raw.replace(/^[a-z][a-z0-9+.-]*:\/*/i, (head) =>
+    head.replaceAll(":", "%3A").replaceAll("/", "%2F"),
+  );
+};
+
 export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & ResponseApi = {
   get res(): Response | undefined {
     return this._res;
@@ -95,9 +122,10 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     }
     this.flags |= 1;
     // A status write AFTER a Response committed is a rewrite of that response
-    // — flag it so the finalizer rebuilds instead of returning the commit
-    // verbatim (the getter is commit-aware; the setter must be too).
-    if (this._res !== undefined) this.flags |= 16;
+    // — flag it so the finalizer rebuilds with THIS status (32) instead of
+    // returning the commit verbatim. Only a POST-commit write carries that
+    // authority: pre-commit staging was superseded by the commit itself.
+    if (this._res !== undefined) this.flags |= 16 | 32;
     if (this.statusValue !== code) this.messageValue = "";
     this.statusValue = code;
     if (isEmptyStatus(code)) {
@@ -123,15 +151,21 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     // back to the standard reason phrase), the same way non-latin-1 messages
     // already behave. Throwing would cost the entire response over a phrase.
     this.messageValue = value;
-    // A message write AFTER a Response committed is a rewrite of that
-    // response's reason phrase — flag it so the finalizer rebuilds (rule 4).
-    if (this._res !== undefined) this.flags |= 16;
+    // A message write AFTER a Response committed rewrites that response's
+    // reason phrase — flag the rebuild (16) and mark messageValue as the
+    // winning statusText (64). It must NOT hand the stale pre-commit status
+    // to the rebuild; only flag 32 does that.
+    if (this._res !== undefined) this.flags |= 16 | 64;
   },
   get body(): ResponseBody {
     return this.bodyValue;
   },
   set body(value: ResponseBody) {
     this.bodyValue = value;
+    // A body write AFTER a Response committed replaces that response's body
+    // on the rule-4 rebuild — the user's latest intent (post-commit writes
+    // were silently dropped before, shipping stale bodies).
+    if (this._res !== undefined) this.flags |= 16 | 128;
     if (value === null || value === undefined) {
       // Koa 3: clearing a JSON-typed body yields the literal "null".
       if (!isEmptyStatus(this.statusValue) && this.type === "application/json") {
@@ -295,19 +329,23 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     // Koa: absolute URLs are normalized through URL; Location is encodeurl'd
     // so non-ASCII targets never break the header.
     let target = raw;
-    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    if (/^https?:\/\//i.test(raw)) {
       try {
         target = new URL(raw).toString();
       } catch {
         target = raw;
       }
+    } else if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+      target = neutralizeForeignAuthority(this.host, raw);
     }
     this.set("Location", encodeUrlValue(target));
-    // Koa goes through the status setter: coercing to 302 resets the message.
+    // Through the status setter: a post-commit redirect must rewrite the
+    // committed Response's status too (flag 32) — the direct statusValue
+    // writes used here were invisible to the rule-4 rebuild, shipping
+    // Location on a 200 with the old body.
     if (!isRedirectStatus(this.statusValue)) {
       this.messageValue = "";
-      this.statusValue = 302;
-      this.flags |= 1;
+      this.status = 302;
     }
     if (this.accepts("html") === "html") {
       this.type = TEXT_HTML;

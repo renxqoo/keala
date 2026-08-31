@@ -34,7 +34,12 @@ export interface ContextState {
    * Bit-packed response flags — one field write instead of four.
    * 1 = explicit status, 2 = explicit null body, 4 = multi-value header,
    * 8 = content-length touched, 16 = post-commit rewrite (a committed
-   * Response must be rebuilt: status override, removal, or staged headers).
+   * Response must be rebuilt: status override, removal, or staged headers),
+   * 32 = status written AFTER the commit (statusValue wins the rebuild),
+   * 64 = message written AFTER the commit (messageValue wins the reason
+   * phrase), 128 = body written AFTER the commit (bodyValue wins the body).
+   * The post-commit flags are the ONLY rebuild inputs — anything staged
+   * before the commit was already superseded by the committed Response.
    */
   flags: number;
   /** Header names removed AFTER a Response committed (rule-4 rebuild input). */

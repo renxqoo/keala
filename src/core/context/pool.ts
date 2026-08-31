@@ -113,7 +113,21 @@ export const retireWithBody = (pool: ContextPool, c: Context, value: Response): 
     pool.release(c);
     return value;
   }
-  const reader = body.getReader();
+  // Evolving let: the reader type differs across the DOM/Bun stream libs —
+  // inferring from the assignment keeps both happy.
+  let reader;
+  try {
+    reader = body.getReader();
+  } catch {
+    // A body-locked Response is a handler bug — but the never-reject contract
+    // on app.handle is absolute: recycle the context and answer a plain 500
+    // instead of throwing out of (or rejecting) the handler pipeline.
+    pool.release(c);
+    return new Response("Internal Server Error", {
+      status: 500,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
   let retired = false;
   const retire = (): void => {
     if (!retired) {

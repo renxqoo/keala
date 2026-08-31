@@ -200,14 +200,15 @@ const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHand
     ...paramChainFor(state, ir.segments),
     ...def.handlers,
   ];
-  const chain = chainOf(handlers, globalMw);
-  // Duplicate path+method registrations chain in registration order
-  // (@koa/router runs every matching layer).
-  const previous = target.methods.get(def.method);
-  target.methods.set(
-    def.method,
-    previous === undefined ? chain : compose([previous as RouteHandler, chain as RouteHandler]),
-  );
+  // Duplicate path+method registrations append LAYERS (@koa/router runs
+  // every matching layer) and the chain is recomposed over the full layer
+  // list — the global middleware is embedded exactly once no matter how
+  // many layers the path accumulated. (Composing the previous CHAIN under
+  // the new one re-ran the global once per duplicate.)
+  const previous = target.layers.get(def.method) as RouteHandler[] | undefined;
+  const layers = previous === undefined ? handlers : [...previous, ...handlers];
+  target.layers.set(def.method, layers);
+  target.methods.set(def.method, chainOf(layers, globalMw));
   target.allowed.add(def.method);
   if (def.method === ALL) target.allowed.add("*");
   if (def.method === "GET") target.allowed.add("HEAD");
@@ -277,24 +278,40 @@ export const registerDef = (
 const normalizePath = (path: string): string =>
   path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 
-const firstSegmentOf = (path: string): string =>
-  path.endsWith("/*") ? path.slice(0, -2) : path.replace(/\/+$/, "") || "/";
+/**
+ * Canonical segment list for overlap checks: decode each RAW segment, then
+ * re-split its content — an escaped separator ("%2F") becomes a REAL segment
+ * boundary here. That is the keyspace a native routing table may match in,
+ * which is exactly the shadowing the sink guard exists to catch (a flat
+ * startsWith over canonicalKey could never see "/a%2Fb" inside "/a/*" — the
+ * re-escaped "%2F" hid the boundary). Double-encoded escapes ("%252F") stay
+ * one segment, mirroring the trie contract.
+ */
+const canonicalSegments = (path: string): string[] => {
+  const base = path.endsWith("/*") ? path.slice(0, -2) : path;
+  const parts = base.split("/").flatMap((segment) => decodeSegment(segment).split("/"));
+  parts.shift(); // the leading "" before "/"
+  if (parts.length === 1 && (parts[0] ?? "") === "") parts.length = 0;
+  return parts;
+};
+
+const startsWithSegments = (prefix: readonly string[], full: readonly string[]): boolean =>
+  prefix.length <= full.length && prefix.every((segment, i) => segment === full[i]);
 
 /**
  * Boundary-aware path overlap: two paths conflict when they are the same
- * route, or when a wildcard prefix subtree of one contains the other.
- * Comparison runs in the CANONICAL (decoded-per-segment) keyspace — the
- * staticMap registers decoded keys, so a raw "/esc%20ped" and its decoded
- * twin "/esc ped" are the same route and must be caught here too.
+ * route (wildcard and bare prefix included — a dir sink's JS twin registers
+ * the bare prefix), or when a wildcard prefix subtree of one contains the
+ * other. Comparison runs segment-wise in the decoded keyspace above.
  */
 export const pathsConflict = (a: string, b: string): boolean => {
-  const aBase = firstSegmentOf(a.includes("%") ? canonicalKey(a) : a);
-  const bBase = firstSegmentOf(b.includes("%") ? canonicalKey(b) : b);
-  if (aBase === bBase) return true;
+  const aSegs = canonicalSegments(a);
+  const bSegs = canonicalSegments(b);
+  if (aSegs.length === bSegs.length && startsWithSegments(aSegs, bSegs)) return true;
   const aWild = a.endsWith("/*");
   const bWild = b.endsWith("/*");
-  if (aWild && bBase.startsWith(`${aBase}/`)) return true;
-  if (bWild && aBase.startsWith(`${bBase}/`)) return true;
+  if (aWild && bSegs.length > aSegs.length && startsWithSegments(aSegs, bSegs)) return true;
+  if (bWild && aSegs.length > bSegs.length && startsWithSegments(bSegs, aSegs)) return true;
   return false;
 };
 
@@ -431,17 +448,23 @@ export const redirectTargetSegments = (destination: string): readonly CompiledSe
 };
 
 /**
- * A redirect destination may only reference params the SOURCE route captures
- * — a missing required param would explode as a per-request 500, violating
- * the eager-validation contract. Checked at registration.
+ * A redirect destination may only reference params the SOURCE route
+ * GUARANTEES at request time — a missing required param would explode as a
+ * per-request 500, violating the eager-validation contract. Optional source
+ * params are NOT guarantees: they can be absent, exactly like an uncaptured
+ * position. Checked at registration.
  */
 export const assertRedirectCaptures = (source: string, dest: readonly CompiledSegment[]): void => {
-  const available = new Set(paramNamesOf(compilePattern(source).segments));
+  const available = new Set(
+    compilePattern(source)
+      .segments.filter((segment) => segment.kind !== "static" && !segment.optional)
+      .map((segment) => segment.value),
+  );
   for (const segment of dest) {
     if (segment.kind === "static" || segment.optional) continue;
     if (!available.has(segment.value)) {
       throw new TypeError(
-        `redirect destination references ":${segment.value}", which ${JSON.stringify(source)} never captures`,
+        `redirect destination references ":${segment.value}", which ${JSON.stringify(source)} never captures (optionals may be absent at runtime)`,
       );
     }
   }
