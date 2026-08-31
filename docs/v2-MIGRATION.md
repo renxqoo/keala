@@ -97,6 +97,8 @@
 12. **基准方法学对照 hono 官方套件校准（2026-08-31，新增 Go 参照）**：第一手分析 hono-main/benchmarks——其 HTTP 压测仅做 hono-vs-hono PR 回归且统计最弱（无预热、runs=1、取均值、baseline 恒先跑、无噪声报告）；精华在进程内微基准（每变体每轮全新进程、奇偶轮 ABAB、median-of-p50、懒建预热、DCE 防护）。我们的 ABAB 轮换交错 + ±噪声带 + p50/p99 + RSS 三态 + raw/Go 双基线已超其 HTTP 口径。借鉴落地：压测前逐服务器×场景响应正确性断言（body+中间件头逐字节，--skip-tests 可跳）、生成报告加诚实性脚注；未采纳 bombardier/--fasthttp（客户端行为失真）、共享 CI runner（噪声）；已知局限入档：verify-baseline 为同进程批次交错（非每变体新进程），由 HTTP 横评平局交叉佐证。新增 bench/server-go（stdlib net/http，Go 1.22+ 方法路由，1000 路由 scale 变体，/debug/memory 映射 ReadMemStats+ps RSS）与 run.mjs 自动构建接入（无工具链则跳过）。
     - **验证**：Node 1274 / 真 Bun 1237 全绿；覆盖率 96.72/90.85/95.76/98.40 四项全面高于改前基线（96.3/90.83/95.51/97.95）；Bun 进程内 text 400/385ns、param 501/495ns 维持与 hono 平局；smoke/example/soak 全过（in-process 0.0 B/req）。真 Bun 全量并发下 perf-evidence 两个宽预算用例偶发抖动，隔离 7/7 绿——机器负载敏感，非回归。
 
+13. **入口面重塑（2026-08-31）**：根入口 `bun-koa` 收窄为核心（createApp/router/compose/Context/errors/cookie 签名/startBunServer——hono/fastify 同构：根=核心）；新增 `bun-koa/middleware` 聚合入口（16 个工厂一次导入，匹配"装配期一口气拿多个"的真实用法）；plugins/helpers/adapters 刻意不聚合（单成员/按需单点/互斥选择——聚合与省内存目标自相矛盾或诱导误用），通配子路径照旧。实测（Bun/AS，3 样本中位）：根导入 idle 20.4MB（原全家桶 23.1，**省 2.7MB**）；根+聚合 21.4MB；同协议 hono 根导入 29.2MB（轻 ~30%）。表面锁测试（entry-surface.test.ts）防中间件回流根 barrel。dist 打包压缩 PoC 结论：体积 −43%（324→184KB）但 idle RSS 无可测收益（JIT/arena 占大头），行业惯例库层不 minify——不做，留待应用端打包边界。此前 #7 决策的"三分层目录"升级为"三分层入口"。
+
 ## 5. 总验收清单（P4 出口）
 
 1. 性能：G1-G12 全过（相对比值口径）；BENCH.md 用新方法学重测（机器/Bun 版本/日期），含 v2/hono/raw + 1000 路由 + HTTP + p99 + 内存

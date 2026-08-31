@@ -18,6 +18,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./middleware": {
+      "types": "./dist/middleware/index.d.ts",
+      "import": "./dist/middleware/index.js"
+    },
     "./middleware/*": {
       "types": "./dist/middleware/*.d.ts",
       "import": "./dist/middleware/*.js"

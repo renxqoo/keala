@@ -9,21 +9,19 @@
  * Bun-native route sink.
  */
 
+import { createApp, createRouter } from "../src/index.ts";
 import {
   basicAuth,
-  createApp,
-  createBodyParser,
-  createRouter,
   csrfToken,
   csrfTokenGuard,
-  hashPassword,
-  html,
   secureHeaders,
   serveStatic,
-  streamSSE,
-  validator,
-  verifyPassword,
-} from "../src/index.ts";
+} from "../src/middleware/index.ts";
+import { validator } from "../src/middleware/validator.ts";
+import { createBodyParser } from "../src/plugins/body-parser.ts";
+import { hashPassword, verifyPassword } from "../src/helpers/password.ts";
+import { html } from "../src/helpers/html.ts";
+import { streamSSE } from "../src/helpers/streams.ts";
 
 const app = createApp({ keys: ["change-me"], env: "production" });
 

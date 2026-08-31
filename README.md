@@ -61,7 +61,18 @@ app.mount("/api", api);
 
 ## Middleware, plugins & helpers
 
-Three lifecycles, one `app.use()` entry:
+Three lifecycles, one `app.use()` entry. **The root entry is the core only**
+(hono/fastify-shaped) — middleware never loads unless you import it, which
+keeps `import "bun-koa"` at ~2.7MB less RSS than an everything-barrel:
+
+| Entry                         | What it gives you                                                      | Loads          |
+| ----------------------------- | ---------------------------------------------------------------------- | -------------- |
+| `bun-koa`                     | createApp / createRouter / compose / Context / errors / cookie signing | core only      |
+| `bun-koa/middleware`          | every middleware factory in one import                                 | the whole tier |
+| `bun-koa/middleware/cors`     | one factory                                                            | that file only |
+| `bun-koa/plugins/body-parser` | the body plugin (single member — no aggregate)                         | that file only |
+| `bun-koa/helpers/<name>`      | streams / html / password, à la carte                                  | that file only |
+| `bun-koa/adapters/node`       | the Node listener (bun/node are exclusive — no aggregate)              | that file only |
 
 - **middleware** — per-request pipeline functions: `app.use(cors())`
 - **plugins** — setup-time installers (`install(app)`), decorate contexts: `app.use(createBodyParser())`
@@ -69,16 +80,12 @@ Three lifecycles, one `app.use()` entry:
 
 ```ts
 import {
-  createBodyParser,
-  validator,
   cors,
   csrf,
   csrfToken,
   csrfTokenGuard,
   basicAuth,
   bearerAuth,
-  hashPassword,
-  verifyPassword,
   etag,
   compress,
   secureHeaders,
@@ -88,10 +95,12 @@ import {
   bodyLimit,
   timeout,
   serveStatic,
-  streamSSE,
-  html,
-  raw,
-} from "bun-koa";
+  validator,
+} from "bun-koa/middleware"; // the aggregate — or per file: bun-koa/middleware/cors
+import { createBodyParser } from "bun-koa/plugins/body-parser";
+import { hashPassword, verifyPassword } from "bun-koa/helpers/password";
+import { streamSSE } from "bun-koa/helpers/streams";
+import { html, raw } from "bun-koa/helpers/html";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req.json()/text()/formData()…
 // formData() is double-budgeted: formLimit bytes AND formPartLimit parts
@@ -302,7 +311,7 @@ bun run soak        # memory soak: in-process + HTTP + concurrent, heap must sta
 bun run bench       # vs hono / koa / fastify / raw / Go benchmark harness
 ```
 
-- **1274 tests green under Node and real Bun runtimes** (55 files, `bun run test`
+- **1288 tests green under Node and real Bun runtimes** (56 files, `bun run test`
   - `bun run test:bun`), including:
   * `test/adapters-node.test.ts` — the Node adapter over real sockets in BOTH
     runtimes (bridging, set-cookie fanout, streaming, HEAD, 400/500/501
@@ -340,6 +349,7 @@ src/
   http/         status table, error factory
   negotiation/  accepts/* with q-values, type-is
   router/       static Map + pattern trie (multi-variant params) + router factory
+  middleware/   per-request pipeline factories (16) + index.ts aggregate entry
   middleware/   per-request pipeline factories (16)
   plugins/      setup-time installers (body-parser)
   helpers/      in-handler utilities (streams/SSE, html, password)

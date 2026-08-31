@@ -134,7 +134,8 @@ const get = async (path: string, init?: RequestInit): Promise<Response> =>
 // --- Bun-native branches (real runtime, not the stubbed bridge tests) -----
 if (typeof Bun !== "undefined") {
   const nativeApp = createApp({ env: "production" });
-  const { hashPassword, verifyPassword, csrfToken } = await import("../src/index.ts");
+  const { hashPassword, verifyPassword } = await import("../src/helpers/password.ts");
+  const { csrfToken } = await import("../src/middleware/csrf-token.ts");
   const hash = await hashPassword("smoke-pw");
   check(
     "pbkdf2 round-trip (real Bun)",
