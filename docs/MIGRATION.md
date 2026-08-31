@@ -1,4 +1,4 @@
-# bun-koa v2 — 逐条迁移矩阵
+# bun-koa — 逐条迁移矩阵
 
 用途：P1-P4 每阶段出口的套件构成以此为准；任何"归档"处置必须先完成其中的断言普查。测试资产实测基数：**35 文件 / 1000 例（989 通过 + 11 skip）**。
 
@@ -35,13 +35,13 @@
 | security.test.ts                        |                 23 | B 改写                  | P1       | cookie jar null 原型（契约 #11）、redirect 双编码                                                                                                                             |
 | pooling.test.ts                         |                  6 | B 改写                  | P1       | P3 加 guarded 模式新例                                                                                                                                                        |
 | adapter.test.ts                         |                  8 | B 改写                  | P1       | update→reload 一并修                                                                                                                                                          |
-| router-edge.test.ts                     |                 48 | C 重写                  | P1       | **v2 路由算法规格**；含共享首段/桶回退新例                                                                                                                                    |
+| router-edge.test.ts                     |                 48 | C 重写                  | P1       | **本框架路由算法规格**；含共享首段/桶回退新例                                                                                                                                 |
 | router.test.ts / trie.test.ts           |            18 / 16 | C 重写                  | P1       | 新 API 形状                                                                                                                                                                   |
 | compose.test.ts                         |                 10 | C 重写                  | P1       | 预编译链语义保留 + 双模六规则                                                                                                                                                 |
 | app.test.ts                             |                 14 | C 重写                  | P1       | 顶层管线/未命中全局中间件/晚 use 重编                                                                                                                                         |
-| agent-redteam.test.ts                   |                 15 | C 重写                  | P1       | 其中 `[T2]` skip 在 v2 **解跳**（v2 修复 param-position pattern 共享）                                                                                                        |
+| agent-redteam.test.ts                   |                 15 | C 重写                  | P1       | 其中 `[T2]` skip **解跳**（修复 param-position pattern 共享）                                                                                                                 |
 | agent-parity-gaps*.test.ts              |            38 + 18 | C 重写 / D 归档         | P1       | gaps-2 全 18 例为 @koa/router 形状（6 例本就 skip）→ 归档                                                                                                                     |
-| agent-perf-evidence.test.ts             |                 12 | C 重写                  | P1       | G12 结构围栏按 v2 隐藏类形状重标定                                                                                                                                            |
+| agent-perf-evidence.test.ts             |                 12 | C 重写                  | P1       | G12 结构围栏按本框架隐藏类形状重标定                                                                                                                                          |
 | official-parity.test.ts                 |                 33 | D 归档 6 例 + 其余 B    | P1       | 归档：扩展层 2、toJSON 1、search/querystring setter 3；**保留**：GHSA attachment 组、onerror 5 例                                                                             |
 | koa-parity.test.ts                      |                 27 | D 归档 8-10 例 + 其余 B | P1       | 归档：toJSON 形状、query setter、router-as-middleware 形状；**必须先移植**：redirect/back 同源（含跨源 Referrer 拒绝）、web-Response 头合并走 set() 校验、etag 引号、404 默认 |
 
@@ -51,31 +51,31 @@
 
 ## 3. 11 条安全契约 → 绑定测试（重写验收清单）
 
-| #   | 契约（v1 位置）                                                      | 绑定测试                                                                    |
-| --- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| 1   | 错误路径清头 + expose 门 + error.headers 校验（app.ts:286-308）      | security-extended 386-397、official-parity onerror 5 例                     |
-| 2   | respond 空状态清头 + HEAD CL 回填 + Latin-1 守卫（respond.ts:50-97） | matrix、agent-concurrency 439                                               |
-| 3   | 裸 Response 快路径的 set-cookie/多值前置条件                         | matrix set-cookie 组（v2 新增：快路径与 flatten 等价性）                    |
-| 4   | proxy 信任门（request.ts:232-279）                                   | agent-security-audit 300-376 整节                                           |
-| 5   | trie decode 防护（trie.ts:51-59,243-246）                            | security 148-158、agent-bugs 334                                            |
-| 6   | pooling 重置契约 + 字段守恒（context.ts:334-354）                    | agent-concurrency 283（pooled 405 泄漏锁）、pooling 6 例；v2 新增字段守恒例 |
-| 7   | compose double-next 守卫                                             | compose 重写组                                                              |
-| 8   | url setter 缓存失效链（request.ts:179-231）                          | agent-bugs url 组                                                           |
-| 9   | 错误兜底永不抛出（app.ts:269-278）                                   | anomalies 非 Error 抛出组                                                   |
-| 10  | header 名/值校验（text.ts:17-45）                                    | security-extended header 组                                                 |
-| 11  | cookie jar null 原型 + 签名 timingSafeEqual                          | security 119-132、cookies 22 例                                             |
+| #   | 契约（旧实现位置）                                                   | 绑定测试                                                                 |
+| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1   | 错误路径清头 + expose 门 + error.headers 校验（app.ts:286-308）      | security-extended 386-397、official-parity onerror 5 例                  |
+| 2   | respond 空状态清头 + HEAD CL 回填 + Latin-1 守卫（respond.ts:50-97） | matrix、agent-concurrency 439                                            |
+| 3   | 裸 Response 快路径的 set-cookie/多值前置条件                         | matrix set-cookie 组（新增：快路径与 flatten 等价性）                    |
+| 4   | proxy 信任门（request.ts:232-279）                                   | agent-security-audit 300-376 整节                                        |
+| 5   | trie decode 防护（trie.ts:51-59,243-246）                            | security 148-158、agent-bugs 334                                         |
+| 6   | pooling 重置契约 + 字段守恒（context.ts:334-354）                    | agent-concurrency 283（pooled 405 泄漏锁）、pooling 6 例；新增字段守恒例 |
+| 7   | compose double-next 守卫                                             | compose 重写组                                                           |
+| 8   | url setter 缓存失效链（request.ts:179-231）                          | agent-bugs url 组                                                        |
+| 9   | 错误兜底永不抛出（app.ts:269-278）                                   | anomalies 非 Error 抛出组                                                |
+| 10  | header 名/值校验（text.ts:17-45）                                    | security-extended header 组                                              |
+| 11  | cookie jar null 原型 + 签名 timingSafeEqual                          | security 119-132、cookies 22 例                                          |
 
 ## 4. 11 个 it.skip 的归属裁决
 
-- `[T2]` param-position pattern 共享（agent-redteam）：**v2 修复解跳**（新路由 IR 按段编译，天然支持）。
-- fetch 运行时行为 N/A 类（agent-perf-evidence 等）：v2 保留 skip，标注原因。
+- `[T2]` param-position pattern 共享（agent-redteam）：**修复解跳**（新路由 IR 按段编译，天然支持）。
+- fetch 运行时行为 N/A 类（agent-perf-evidence 等）：保留 skip，标注原因。
 - @koa/router 形状类 6 例（agent-parity-gaps-2）：随 D 归档消失。
 - 其余 skip 在 P4 总验收时逐条裁决为"修复解跳 / 显式挂账"，0 静默 skip。
 
-## 4.5 P4 过程审计记录（v2.0.0 发布前）
+## 4.5 P4 过程审计记录（1.0.0 发布前）
 
 1. **`bun x vitest run` 的真相**：vitest 的 worker 是 fork 出的 Node 子进程——该命令并未在真实 Bun 运行时里跑用例（两侧 skip 计数同为 3 是证据）。真实 Bun 覆盖由三条通道补齐：`scripts/smoke.ts`（真实 Bun.serve + live HTTP，含 pbkdf2/CSRF 原生路径、routes 表方法作用域实测）、`scripts/example-check.ts`（示例全表面 live HTTP）、`test/native-bridge.test.ts`（桩掉 Bun 全局后动态 import，双运行时覆盖原生分支）。
-2. **Bun 1.4.0 平台缺陷（实测确认）**：`Bun.password.verify` 对自家 argon2id/bcrypt 哈希抛 `UnsupportedAlgorithm`；`node:crypto.scrypt` 回调 reject `undefined`。两者都不能作为默认。v2 默认口令哈希为 WebCrypto PBKDF2-SHA-256（600k 迭代、常数时间比较、迭代数限界 1k–5M 防验证炸弹），`bunPasswordHasher()` 显式选择 argon2id。
+2. **Bun 1.4.0 平台缺陷（实测确认）**：`Bun.password.verify` 对自家 argon2id/bcrypt 哈希抛 `UnsupportedAlgorithm`；`node:crypto.scrypt` 回调 reject `undefined`。两者都不能作为默认。默认口令哈希为 WebCrypto PBKDF2-SHA-256（600k 迭代、常数时间比较、迭代数限界 1k–5M 防验证炸弹），`bunPasswordHasher()` 显式选择 argon2id。
 3. **routes 表裸键语义（实测确认）**：裸键 Response 条目对 POST/DELETE/… 全部返回沉没响应；`{ GET: value }` 作用域化后非 GET 落回 fetch → JS 路由 405，与镜像一致。`{dir}` 裸前缀 404 落回 fetch（镜像 twin 路由补齐后两运行时一致），子目录 301 与 Range 为原生独有（PARITY 记账）。
 4. **skip 裁决终态**：T2（同位置 param 正则合并）为唯一永久 skip；另 2 例为 `skipIf(!isBun)` GC 围栏（真实 Bun 下执行）。0 静默 skip。
 5. **parseListenArgs 白名单缺陷**：选项对象形态曾静默丢弃 `nativeRoutes`/`websocket`/`onServeError`——已修复并入测试。
@@ -99,12 +99,14 @@
 
 13. **入口面重塑（2026-08-31）**：根入口 `bun-koa` 收窄为核心（createApp/router/compose/Context/errors/cookie 签名/startBunServer——hono/fastify 同构：根=核心）；新增 `bun-koa/middleware` 聚合入口（16 个工厂一次导入，匹配"装配期一口气拿多个"的真实用法）；plugins/helpers/adapters 刻意不聚合（单成员/按需单点/互斥选择——聚合与省内存目标自相矛盾或诱导误用），通配子路径照旧。实测（Bun/AS，3 样本中位）：根导入 idle 20.4MB（原全家桶 23.1，**省 2.7MB**）；根+聚合 21.4MB；同协议 hono 根导入 29.2MB（轻 ~30%）。表面锁测试（entry-surface.test.ts）防中间件回流根 barrel。dist 打包压缩 PoC 结论：体积 −43%（324→184KB）但 idle RSS 无可测收益（JIT/arena 占大头），行业惯例库层不 minify——不做，留待应用端打包边界。此前 #7 决策的"三分层目录"升级为"三分层入口"。
 
+14. **入口简化 + 版本叙事清理（2026-08-31）**：入口面在 #13 基础上再简化——只保留 `bun-koa/middleware`（聚合）与 `bun-koa/adapters/*` 两个独立层；plugin（body-parser）与 helpers（streams/html/password）回归根入口（实测增量 <0.5MB：根导入 20.4MB 中位 ≈ 纯核心 20.4，省掉按文件导入的仪式感）；`./plugins/*`、`./helpers/*` 子路径导出移除。同时清除 v1/v2 版本叙事——本仓库首个上线版本即 1.0.0（package.json 2.0.0→1.0.0），文档三件套改名（v2-DESIGN/AUDIT/MIGRATION→DESIGN/AUDIT/MIGRATION），redteam-v2* 测试改名，全部"v1/v2"文案改为中性的 koa/旧原型/本框架表述（保留 `/v1/` 路由夹具、`fnv1a` 哈希名、Standard Schema v1 外部规范等合法出现）。验证：双运行时 1286/1267 全绿，表面锁更新（根=34 导出：核心+plugin+helpers，无中间件），dist 双运行时导入验证，publint 干净，smoke/example/soak 全过。
+
 ## 5. 总验收清单（P4 出口）
 
-1. 性能：G1-G12 全过（相对比值口径）；BENCH.md 用新方法学重测（机器/Bun 版本/日期），含 v2/hono/raw + 1000 路由 + HTTP + p99 + 内存
+1. 性能：G1-G12 全过（相对比值口径）；BENCH.md 用新方法学重测（机器/Bun 版本/日期），含 bun-koa/hono/raw + 1000 路由 + HTTP + p99 + 内存
 2. 测试：≥900 例 + 新功能 ≥150 例；11 skip 全部裁决；170+ 安全语料全程绿
 3. 四门禁：oxfmt / oxlint 0-0 / tsc / vitest（Node + Bun 双跑）+ 覆盖率 ≥90%（排除范围显式声明）
-4. soak 三层（进程内/全栈 HTTP/pooled）漂移 <0.5%；smoke v2 化通过
-5. 文档：README（快速上手+koa→v2 映射表）、docs/v2-DESIGN、v2-MIGRATION 核销、PARITY.md 再生（含 deliberate divergences 更新）
+4. soak 三层（进程内/全栈 HTTP/pooled）漂移 <0.5%；smoke 通过
+5. 文档：README（快速上手+koa→bun-koa 映射表）、docs/DESIGN、MIGRATION 核销、PARITY.md 再生（含 deliberate divergences 更新）
 6. 发布面：package.json 2.0.0、exports/dist（bun build --dts）、示例路由冒烟
-7. 基准一键复现：`node bench/run.mjs` + `bun bench/verify-baseline.ts`（v2 化）
+7. 基准一键复现：`node bench/run.mjs` + `bun bench/verify-baseline.ts`

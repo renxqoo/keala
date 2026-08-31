@@ -1,11 +1,11 @@
-# bun-koa v2 — 审计裁决记录（2026-08-30）
+# bun-koa — 审计裁决记录（2026-08-30）
 
-四路子代理并行审计（性能/安全/功能/迁移，全部只读）+ 两项关键结论主 agent 亲手复验。本文件是 v2-DESIGN.md 修订的依据留痕。
+四路子代理并行审计（性能/安全/功能/迁移，全部只读）+ 两项关键结论主 agent 亲手复验。本文件是 DESIGN.md 修订的依据留痕。
 
 ## 亲手复验项
 
 1. **Response 实例复用不可行**：同一 Response 发第二个 HTTP 请求 → Bun 1.4.0 返回 500 `ERR_BODY_ALREADY_USED`（string body 同样触发）。推翻原方案 D；改为状态重建式缓存组件。
-2. **`server.update()` 不存在**：Bun 实际 API 为 `server.reload()`（`typeof update === "undefined"`）。v1 `src/adapters/bun.ts:18` 声明的是虚构 API。
+2. **`server.update()` 不存在**：Bun 实际 API 为 `server.reload()`（`typeof update === "undefined"`）。旧实现 `src/adapters/bun.ts:18` 声明的是虚构 API。
 3. `Bun.serve({ routes })` 可用：静态 Response 直出 + `:param` handler 均工作，静态命中不进 fetch（Bun 1.4.0）。
 
 ## 性能审计裁决
@@ -38,6 +38,6 @@
 
 - P0：目录非 git 仓库（已 `git init` 快照 `dd44353`）；四门禁原为红（已修复提交 `502f594`）；性能门禁绝对值失效（改相对比值）；P2"≥600 例"允许净删 389（改 ≥900+150）。
 - 测试资产实为 35 文件 1000 例；量化迁移 A87/B590/C200/D32-60（见 MIGRATION §2）。
-- body 消费契约与 nativeRoutes 语义上提 P1 设计；matcher 双发射 IR；漏项补入：双运行时裁决（D3）、bench 基建 v2 化、包发布面 2.0.0、PARITY.md 再生。
-- 红队账本制 + 写入白名单（仅 test/redteam-v2/）。
+- body 消费契约与 nativeRoutes 语义上提 P1 设计；matcher 双发射 IR；漏项补入：双运行时裁决（D3）、bench 基建重建、包发布面 1.0.0、PARITY.md 再生。
+- 红队账本制 + 写入白名单（仅 test/redteam/）。
 - 时间量级：P1 3-5 天、P2 3-5 天、P3 2-4 天、P4 2-3 天。

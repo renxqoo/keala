@@ -44,9 +44,9 @@ describe("request facade (flat context)", () => {
     const ctx = await probe({ url: "http://localhost:3000/?tags=a&tags=b", method: "GET" });
     expect(ctx.query).toEqual({ tags: ["a", "b"] });
     expect(ctx.query).toBe(ctx.query);
-    // Koa semantics (v2 design contract #8): assigning an object rewrites the
+    // Koa semantics (design contract #8): assigning an object rewrites the
     // query string and invalidates the parse cache — the next read re-parses
-    // the stringified form (v1's verbatim-stash deviation is gone). The
+    // the stringified form (koa's verbatim-stash deviation is gone). The
     // numeric `page` exercises stringifyQuery's number coercion.
     ctx.query = { page: 2, tags: ["a", "b"] } as unknown as Record<string, string>;
     expect(ctx.querystring).toBe("page=2&tags=a&tags=b");
@@ -63,7 +63,7 @@ describe("request facade (flat context)", () => {
     expect(ctx.get("x-custom")).toBe("yes");
     expect(ctx.get("missing")).toBe("");
     expect(ctx.header("x-custom")).toBe("yes");
-    // v2: c.headers IS the raw fetch Headers (no second facade object).
+    // c.headers IS the raw fetch Headers (no second facade object).
     expect(ctx.headers).toBe(ctx.raw.headers);
     expect(ctx.reqType).toBe("application/json");
     expect(ctx.charset).toBe("utf-8");
@@ -172,7 +172,7 @@ describe("request facade (flat context)", () => {
       captured = c;
       c.body = "ok";
     });
-    // v2: the remote address rides the runtime object instead of a bare string.
+    // the remote address rides the runtime object instead of a bare string.
     await remoteApp.handle(new Request("http://localhost:3000/"), { remote: "192.168.1.10" });
     expect(captured?.ip).toBe("192.168.1.10");
   });

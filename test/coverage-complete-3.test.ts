@@ -67,7 +67,7 @@ describe("coverage: request host edge branches", () => {
 
   it("bracketed IPv6 hosts resolve through WHATWG URL semantics", () => {
     const c = ctxFor("http://localhost:3000/x", { host: "[::1]:3000" });
-    // URL.hostname keeps the brackets for IPv6 literals (v1/koa behavior).
+    // URL.hostname keeps the brackets for IPv6 literals (koa behavior).
     expect(c.hostname).toBe("[::1]");
   });
 

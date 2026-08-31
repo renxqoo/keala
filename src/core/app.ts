@@ -1,7 +1,7 @@
 /**
  * Application factory — `createApp()`.
  *
- * Request pipeline (docs/v2-DESIGN.md §2): routing happens at the TOP of the
+ * Request pipeline (docs/DESIGN.md §2): routing happens at the TOP of the
  * pipeline (not as an onion layer), the matched route's precompiled chain
  * runs (single-handler routes skip composition entirely), and the finalizer
  * converts the context state into a web `Response`. Global middleware runs

@@ -2,7 +2,7 @@
  * Response behavior matrix: body kinds x status families x HEAD x messages,
  * plus the exact bytes/headers the runtime produces.
  *
- * v2 migration notes:
+ * migration notes:
  *  - Markup sniffing and the bytes/stream → application/octet-stream
  *    inference are gone (D1): string bodies carry no framework content-type
  *    (the runtime provides a text/plain variant); binary bodies carry none.
@@ -130,7 +130,7 @@ describe("matrix: missing body per status family (koa respond semantics)", () =>
     });
     expect(res.status).toBe(status);
     expect(await res.text()).toBe(expected);
-    // v1 asserted "text/plain; charset=utf-8" set by the framework; v2/D1
+    // koa asserted "text/plain; charset=utf-8" set by the framework; D1
     // relies on the runtime, which provides a text/plain variant here.
     const ct = res.headers.get("content-type") ?? "";
     // D1: absent in-process under Bun (added at send time) or a text/plain
@@ -167,7 +167,7 @@ describe("matrix: HEAD across body kinds", () => {
   it.each(heads)(
     "HEAD %s in bare state mode backfills Content-Length from the would-be body",
     async (_label, body, length) => {
-      // v1/koa contract: state-mode HEAD computes Content-Length from the
+      // koa contract: state-mode HEAD computes Content-Length from the
       // would-be body and drops the body itself — including the bare path
       // where the header record is materialized just for the backfill.
       const res = await respondWith(
@@ -228,7 +228,7 @@ describe("matrix: explicit Content-Length interplay", () => {
   });
 });
 
-describe("matrix: content-type behavior per body kind (v2/D1)", () => {
+describe("matrix: content-type behavior per body kind (D1)", () => {
   it.each([
     ["object", { a: 1 }],
     ["array", [1, 2]],
@@ -244,7 +244,7 @@ describe("matrix: content-type behavior per body kind (v2/D1)", () => {
     expect(await res.json()).toEqual(body);
   });
 
-  it("plain strings are served as text (sniffing removed in v2)", async () => {
+  it("plain strings are served as text (sniffing removed)", async () => {
     const res = await respondWith((c) => {
       c.body = "just text";
     });
@@ -256,7 +256,7 @@ describe("matrix: content-type behavior per body kind (v2/D1)", () => {
     expect(await res.text()).toBe("just text");
   });
 
-  it("markup strings are served as text too (v1 sniffed them to text/html)", async () => {
+  it("markup strings are served as text too (koa sniffed them to text/html)", async () => {
     const res = await respondWith((c) => {
       c.body = "<p>x</p>";
     });
@@ -268,7 +268,7 @@ describe("matrix: content-type behavior per body kind (v2/D1)", () => {
     expect(await res.text()).toBe("<p>x</p>");
   });
 
-  it("bytes and streams carry no framework content-type (inference removed in v2)", async () => {
+  it("bytes and streams carry no framework content-type (inference removed)", async () => {
     for (const body of [
       new Uint8Array(4),
       new ReadableStream({

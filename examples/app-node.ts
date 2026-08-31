@@ -10,13 +10,16 @@
  * routes would answer 501 here (ws is Bun-only) — this twin registers none.
  */
 
-import { createApp, createRouter } from "../src/index.ts";
-import { basicAuth, secureHeaders, serveStatic } from "../src/middleware/index.ts";
-import { validator } from "../src/middleware/validator.ts";
-import { createBodyParser } from "../src/plugins/body-parser.ts";
-import { hashPassword, verifyPassword } from "../src/helpers/password.ts";
-import { html } from "../src/helpers/html.ts";
-import { streamSSE } from "../src/helpers/streams.ts";
+import {
+  createApp,
+  createBodyParser,
+  createRouter,
+  hashPassword,
+  html,
+  streamSSE,
+  verifyPassword,
+} from "../src/index.ts";
+import { basicAuth, secureHeaders, serveStatic, validator } from "../src/middleware/index.ts";
 import { listen } from "../src/adapters/node.ts";
 
 const app = createApp({ keys: ["change-me"], env: "production" });
@@ -27,7 +30,7 @@ app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
 app.sink("/health", new Response("ok", { headers: { "cache-control": "no-store" } }));
 app.sink("/assets/*", { dir: "./examples/public" });
 
-app.get("/", (c) => c.html(html`<h1>bun-koa v2 · node adapter</h1>`));
+app.get("/", (c) => c.html(html`<h1>bun-koa · node adapter</h1>`));
 
 const api = createRouter({ prefix: "/api" });
 api.use(secureHeaders());

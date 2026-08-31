@@ -2,9 +2,9 @@
  * Extended security matrix: injection variants, pollution vectors, cookie
  * forgery, resource-abuse bounds and information disclosure. Every case
  * asserts both the safe outcome AND that the attack payload is absent from
- * the wire response. Migrated to the v2 API.
+ * the wire response. Migrated to the current API.
  *
- * v2 note: `c.redirect()` percent-encodes CR/LF/NUL inside the Location
+ * note: `c.redirect()` percent-encodes CR/LF/NUL inside the Location
  * value instead of throwing (koa's encodeurl leaves them for set() to
  * reject). The redirect locks below therefore assert the wire outcome —
  * single-line Location, no injected headers — which is the actual security

@@ -1,9 +1,9 @@
 /**
  * Network security test suite: injection, pollution, malformed input,
- * information disclosure and abuse resistance. Migrated to the v2 API
+ * information disclosure and abuse resistance. Migrated to the current API
  * (single context object, app-level routing, fetch finalizer).
  *
- * v2 semantic notes kept deliberate here:
+ * semantic notes kept deliberate here:
  *  - `c.redirect()` no longer throws on CR/LF: the Location value is
  *    percent-encoded (controls included), so the wire header stays a single
  *    line. The lock asserts the OUTCOME (no CRLF on the wire, no injected
@@ -36,7 +36,7 @@ describe("header injection (response splitting)", () => {
     expect(res.headers.get("set-cookie")).toBe(null);
   });
 
-  it("keeps CR/LF out of redirect Location values (v2 percent-encodes)", async () => {
+  it("keeps CR/LF out of redirect Location values (percent-encodes)", async () => {
     const app = createApp(quiet);
     app.use(async (c) => {
       c.redirect("/ok\r\nSet-Cookie: evil=1");

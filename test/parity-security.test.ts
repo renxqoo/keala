@@ -1,6 +1,6 @@
 /**
  * Security-relevant assertions ported from the archived koa/official parity
- * suites (docs/v2-MIGRATION.md §2: the parity FILES are archived, but these
+ * suites (docs/MIGRATION.md §2: the parity FILES are archived, but these
  * semantics are regression locks and stay).
  */
 
@@ -67,7 +67,7 @@ describe("ported parity security semantics", () => {
   it("web Response as body merges headers through validated set()", async () => {
     const app = createApp(quiet);
     app.get("/r", (c) => {
-      // Inner status wins (v1-locked koa semantics); headers merge via set().
+      // Inner status wins (koa semantics); headers merge via set().
       c.body = new Response("inner", {
         status: 201,
         headers: { "x-from-inner": "1", "content-type": "text/csv" },

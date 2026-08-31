@@ -55,8 +55,8 @@ describe("response facade (flat context)", () => {
     await app.handle(new Request("http://localhost:3000/"));
   });
 
-  it("delivers string bodies verbatim with a runtime text content-type (markup sniffing removed in v2)", async () => {
-    // v2 D1 divergence: c.body = string no longer sniffs markup — no
+  it("delivers string bodies verbatim with a runtime text content-type (markup sniffing removed)", async () => {
+    // D1 divergence: c.body = string no longer sniffs markup — no
     // content-type is recorded in-process and the wire type comes from the
     // fetch runtime (text/plain for strings).
     const app = makeApp();
@@ -99,7 +99,7 @@ describe("response facade (flat context)", () => {
       c.body = new Uint8Array([1, 2, 3]);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
-    // v2 D1: no octet-stream sniffing — the body passes through untouched.
+    // D1: no octet-stream sniffing — the body passes through untouched.
     expect(res.headers.get("content-type")).toBe(null);
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });

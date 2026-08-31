@@ -1,5 +1,5 @@
 /**
- * CORS — the safe defaults from the v2 security design:
+ * CORS — the safe defaults from the security design:
  *  - `allowCredentials: true` NEVER reflects arbitrary origins (whitelist only)
  *  - whitelists REFLECT the request origin, so every negotiated response
  *    carries `Vary: Origin` (a constant "*" answer never varies and omits it)

@@ -2,7 +2,7 @@
  * Anomaly-path matrix, part 2: query/URL stress, compose misuse, router
  * illegal inputs, exotic throwables and hostile requests.
  *
- * v2 migration: routing is app-level (`app.get` / `app.on` / `app.mount`);
+ * migration: routing is app-level (`app.get` / `app.on` / `app.mount`);
  * there is no `router.routes()` / `allowedMethods()` — 405/Allow/OPTIONS/501
  * are built in. A standalone router defers pattern validation to mount time,
  * so illegal-path assertions run against app-level registration (eager) and
@@ -215,7 +215,7 @@ describe("anomalies: exotic requests never crash the app", () => {
   it.each(requests)("%s yields a well-formed response", async (_label, url) => {
     const app = createApp(quiet);
     app.use((c) => {
-      // v2/D1: a string body carries no framework content-type, so the type
+      // D1: a string body carries no framework content-type, so the type
       // is set explicitly to keep the "well-formed text response" assertion.
       c.type = "text/plain";
       c.body = `hit:${c.path}`;

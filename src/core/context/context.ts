@@ -59,7 +59,7 @@ const contextApi: ThisType<Context> & {
     if (this.cookiesValue !== null) return this.cookiesValue as CookiesFacade;
     const c = this as Context;
     // The facade writes `Set-Cookie` straight into the response header record
-    // (same semantics as v1); arrays are detected by the finalizer without
+    // (same semantics as koa); arrays are detected by the finalizer without
     // needing the multi-value flag.
     const headers = (c.headersRecord ??= {});
     const cookies = createCookies({

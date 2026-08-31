@@ -7,7 +7,7 @@
  * closure (it captures the per-request context), guarded against double
  * `next()` calls with a local flag.
  *
- * Dual-mode commit rule (see docs/v2-DESIGN.md §4): when a handler settles
+ * Dual-mode commit rule (see docs/DESIGN.md §4): when a handler settles
  * with a `Response`, it is committed to the context's response slot — the
  * last committer wins, which makes "outer middleware rewriting the downstream
  * response after `await next()`" work without any runtime style detection.

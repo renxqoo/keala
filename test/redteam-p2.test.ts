@@ -1,5 +1,5 @@
 /**
- * Red-team audit — P2 component layer (see docs/v2-PARITY / commit 64d2647).
+ * Red-team audit — P2 component layer (commit 64d2647).
  *
  * Confirmed defects are locked as `it.skip` with a "CONFIRMED-BUG (P2-n)"
  * prefix: each assertion encodes the EXPECTED (fixed) behavior and fails

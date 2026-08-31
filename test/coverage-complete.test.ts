@@ -1,5 +1,5 @@
 /**
- * Branch-coverage completion for the v2 core: the shortcut verbs, mount
+ * Branch-coverage completion for the core: the shortcut verbs, mount
  * parameter merging, callback alias, listen parsing, emitter disposal, and
  * typeis wildcard shorthands.
  */

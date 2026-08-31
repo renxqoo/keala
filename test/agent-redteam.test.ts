@@ -1,12 +1,12 @@
 /**
- * RED-TEAM ALGORITHM-CORRECTNESS TESTS — BUG LEDGER, v2 re-verified.
+ * RED-TEAM ALGORITHM-CORRECTNESS TESTS — BUG LEDGER, re-verified.
  *
  * Originally authored 2026-08-30 against koa 3.2.1 / @koa/router 15.7 (every
- * `it()` encodes the CORRECT behavior and failed against the v1 core).
- * Re-verified against the v2 core (src/core/*, src/router/*) during the
+ * `it()` encodes the CORRECT behavior and failed against the prototype core).
+ * Re-verified against the core (src/core/*, src/router/*) during the
  * security-test migration. Current status:
  *
- * FIXED in v2 (now green regression locks):
+ * FIXED (now green regression locks):
  *  [T1] optional flag merges when /:id and /:id? share a position —
  *       src/router/trie.ts insertPattern() now ORs `optional` in.
  *  [T2] an earlier `:id(\d+)` route no longer constrains later `:id` routes —
@@ -26,15 +26,15 @@
  *  [P1][P2][P3] explicit-status flags survive later body assignments.
  *  [P4] a manually set Content-Length is repaired for string bodies.
  *  [P5] HEAD preserves an explicit user Content-Length.
- *  [P6] an unexpandable ctx.type never emits an invalid Content-Type (v2
+ *  [P6] an unexpandable ctx.type never emits an invalid Content-Type (D1
  *       drops the header; the runtime supplies the default — see D1).
  *
- * v2-structural divergences (old shape removed, semantic preserved):
- *  [R3] v2 has no runtime prefix()/path-scoped use(). The lock below keeps
+ * structural divergences (old shape removed, semantic preserved):
+ *  [R3] the core has no runtime prefix()/path-scoped use(). The lock below keeps
  *       the security intent: a router-scope guard still runs when the group
  *       is prefixed and mounted.
  *
- * NEW v2 core bugs found during this migration (locked as CONFIRMED-BUG):
+ * NEW core bugs found during this migration (locked as CONFIRMED-BUG):
  *  - app.mount("/", router) throws "Route path has an empty segment".
  *  - router.use() after route registration is silently ignored.
  *  - null-body finalization emits the literal text "null" (locked in
@@ -178,8 +178,8 @@ describe("red team: router", () => {
     expect(await res.text()).toBe("first,second");
   });
 
-  it("[R3] router-scope use() guards keep guarding a prefixed group (v2 shape)", async () => {
-    // v2 removed runtime prefix()/path-scoped use(); the security intent — a
+  it("[R3] router-scope use() guards keep guarding a prefixed group (current shape)", async () => {
+    // The core removed runtime prefix()/path-scoped use(); the security intent — a
     // router-level guard must never be silently skipped for its routes — is
     // preserved with a prefixed group mounted into the app.
     let guardRan = false;
@@ -244,7 +244,7 @@ describe("red team: request lazy cache", () => {
 });
 
 describe("red team: respond state machine", () => {
-  // The v1 bug (status lost → 200 "hello") IS fixed in v2, but the test
+  // The old bug (status lost → 200 "hello") IS fixed, but the test
   // cannot run: the null-body finalization CONFIRMED-BUG (see
   // test/security.test.ts) makes app.handle REJECT for any 204 under
   // Node/undici and serve the text "null" under Bun. Un-skip once
@@ -305,7 +305,7 @@ describe("red team: respond state machine", () => {
   });
 
   it("[P6] never emits an unexpandable ctx.type as the Content-Type", async () => {
-    // v2 D1: an unexpandable type drops the header entirely (the runtime
+    // D1: an unexpandable type drops the header entirely (the runtime
     // supplies the default); koa's old sniffing fallback is gone. The
     // security contract — the attacker-chosen token must not reach the wire
     // as Content-Type — is what gets locked.
@@ -319,7 +319,7 @@ describe("red team: respond state machine", () => {
   });
 });
 
-describe("CONFIRMED-BUG: v2 router core (found during this migration)", () => {
+describe("CONFIRMED-BUG: router core (found during this migration)", () => {
   it("CONFIRMED-BUG(now fixed): app.mount('/', router) must mount at root, not throw (TODO-BUG: core/app.ts mount base keeps '/' and produces '//path')", async () => {
     const app = createApp({ env: "test" });
     const router = createRouter();

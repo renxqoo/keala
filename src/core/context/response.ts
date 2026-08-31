@@ -443,7 +443,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
   json(body: unknown, status?: number, headers?: Record<string, HeaderValue>): Response {
     const merged = consumeStaged(this, headers);
     // Response.json sets `application/json` and serializes natively — 74ns
-    // cheaper than stringify + record init (see docs/v2-AUDIT.md).
+    // cheaper than stringify + record init (see docs/AUDIT.md).
     const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
     if (merged === undefined && status === undefined && staged === undefined) {
       return Response.json(body);

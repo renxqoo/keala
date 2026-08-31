@@ -1,14 +1,14 @@
 /**
- * Red-team round-2 green assets (see test/redteam-v2.test.ts for the ledger).
+ * Red-team round-2 green assets (see test/redteam.test.ts for the ledger).
  *
  * GA-1b: full-shape INTERNAL equivalence fuzz — matchRoute (staticMap + bucket
  * fast matcher + trie) vs the pure trie on the exact same pattern table,
  * asserting identical targets (via target->pattern identity derived from the
  * router's own index structures) AND identical captured params. Unlike the
- * e2e fuzz in redteam-v2-assets.test.ts this covers static tails, optionals
+ * e2e fuzz in redteam-assets.test.ts this covers static tails, optionals
  * mid-pattern, regex params and multi-wildcard tables with no URL-normalizer
  * in between. Scope: escape-free ASCII tokens — the percent-encoded-static
- * domain diverges today (locked as RT-9 in redteam-v2.test.ts).
+ * domain diverges today (locked as RT-9 in test/redteam.test.ts).
  *
  * GA-2: 500-way concurrency isolation. GA-3: 100k-request retained-heap fence
  * (Bun.gc sampling). GA-4: security quick-scan (CRLF, cookie signatures,
@@ -34,7 +34,7 @@ const quiet = { env: "test", silent: true } as const;
 const req = (url: string, init: RequestInit = {}): Request => new Request(url, init);
 const text = async (res: Response): Promise<string> => res.text();
 
-describe("redteam v2 round2 — GA-1b matchRoute equals the pure trie (internal, full shapes)", () => {
+describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, full shapes)", () => {
   let seed = 1;
   const rand = (): number => {
     seed ^= seed << 13;
@@ -199,7 +199,7 @@ describe("redteam v2 round2 — GA-1b matchRoute equals the pure trie (internal,
   });
 });
 
-describe("redteam v2 round2 — GA-2 concurrency isolation", () => {
+describe("redteam round2 — GA-2 concurrency isolation", () => {
   it("500 mixed concurrent requests answer without crosstalk", { timeout: 60_000 }, async () => {
     const app = createApp({ ...quiet, keys: ["k"] });
     app.use(async (c, next) => {
@@ -283,7 +283,7 @@ describe("redteam v2 round2 — GA-2 concurrency isolation", () => {
   });
 });
 
-describe("redteam v2 round2 — GA-3 leak fence", () => {
+describe("redteam round2 — GA-3 leak fence", () => {
   it.skipIf(typeof Bun === "undefined" || typeof Bun.gc !== "function")(
     "100k mixed requests retain under 32B/request",
     { timeout: 120_000 },
@@ -316,7 +316,7 @@ describe("redteam v2 round2 — GA-3 leak fence", () => {
   );
 });
 
-describe("redteam v2 round2 — GA-4 security quick-scan", () => {
+describe("redteam round2 — GA-4 security quick-scan", () => {
   it("CRLF in header values is rejected and answers 500 without injecting", async () => {
     const app = createApp(quiet);
     app.get("/x", (c) => {

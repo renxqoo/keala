@@ -1,13 +1,13 @@
 /**
- * bun-koa v2 — hono-fast, onion-ergonomic, Bun-native.
+ * bun-koa — hono-fast, onion-ergonomic, Bun-native.
  *
- * The ROOT entry is the core only: app factory, router, composition, context,
- * errors and cookie signing. Middleware lives at `bun-koa/middleware`
- * (aggregate) or `bun-koa/middleware/<name>` (per file); plugins and helpers
- * at `bun-koa/plugins/<name>` / `bun-koa/helpers/<name>`; the Node adapter at
- * `bun-koa/adapters/node`. Importing the core loads no middleware modules —
- * an idle `import "bun-koa"` costs ~2.6MB less than the everything-barrel it
- * replaces.
+ * The ROOT entry is the app surface: core (app factory, router, composition,
+ * context, errors, cookie signing) plus the plugin and the in-handler
+ * helpers. Middleware lives at `bun-koa/middleware` (aggregate) or
+ * `bun-koa/middleware/<name>` (per file); the Node adapter at
+ * `bun-koa/adapters/node` — those two are the only split-out tiers (the
+ * middleware tier is the heavy one; adapters are a mutually exclusive
+ * runtime choice).
  *
  * ```ts
  * import { createApp } from "bun-koa";
@@ -15,7 +15,7 @@
  *
  * const app = createApp({ keys: ["secret"] })
  *
- * app.use(cors())                              // global onion middleware
+ * app.use(cors())                                   // global onion middleware
  * app.get("/users/:id", (c) => c.json({ id: c.params.id }))   // return style
  * app.get("/page", (c) => { c.body = "hi"; c.type = "text/html" }) // state style
  *
@@ -64,3 +64,27 @@ export { compilePattern, type CompiledSegment, type PatternIR } from "./router/p
 export type { AppOptions, HeaderValue, ListenOptions, ResponseBody, Runtime } from "./types.ts";
 export type { Plugin } from "./types.ts";
 export type { NativeSinkEntry, NativeStaticSink, NativeDirSink } from "./core/sink.ts";
+export {
+  createBodyParser,
+  readBodyLimited,
+  type BodyParserOptions,
+  type RequestBodyFacade,
+} from "./plugins/body-parser.ts";
+export {
+  stream,
+  streamText,
+  streamSSE,
+  disableIdleTimeout,
+  type StreamWriter,
+  type SSEWriter,
+  type SSEMessage,
+  type StreamSSEOptions,
+} from "./helpers/streams.ts";
+export { html, raw, escapeHtml } from "./helpers/html.ts";
+export {
+  bunPasswordHasher,
+  pbkdf2PasswordHasher,
+  hashPassword,
+  verifyPassword,
+  type PasswordHasher,
+} from "./helpers/password.ts";

@@ -3,9 +3,9 @@
  * either throw a TypeError with a clear message or produce a safe result —
  * never crash the process, never leak internals, never hang.
  *
- * v2 migration: single-object Context (`c`), app-level routing, `c.set` /
+ * migration: single-object Context (`c`), app-level routing, `c.set` /
  * `c.resHeader` instead of the request/response facades. Two body-setter
- * cases are locked as CONFIRMED-BUG (see the report): v2's finalizer lets
+ * cases are locked as CONFIRMED-BUG (see the report): the finalizer lets
  * JSON serialization errors escape `app.handle` instead of answering 500
  * (cyclic/BigInt bodies — `dispatchChain` does not guard the finalize call
  * on the fulfilled path). The empty-status/HEAD locks live in matrix.test.ts.
@@ -121,9 +121,9 @@ describe("anomalies: status setter rejects the invalid matrix", () => {
 });
 
 describe("anomalies: body setter exotic values", () => {
-  // v2 core bug: `bodyInitOf(null→object)` calls JSON.stringify inside the
+  // core bug: `bodyInitOf(null→object)` calls JSON.stringify inside the
   // finalizer, and `dispatchChain` does not wrap `finalize` — a serialization
-  // failure escapes `app.handle` as a rejected promise. v1/koa answered 500.
+  // failure escapes `app.handle` as a rejected promise. koa answered 500.
   // Intended behavior: res.status === 500. Locked phenomenon: TypeError.
   it("unserializable bodies (circular) answer 500, never reject app.handle", async () => {
     const app = createApp(quiet);

@@ -1,10 +1,10 @@
 /**
- * Agent-audit regression locks (v2 API): request url/query cache chain,
+ * Agent-audit regression locks API: request url/query cache chain,
  * freshness (fresh@0.5.2 semantics), Referrer handling, redirect status
  * classification, emitter edges, router mount/trie encoding, is() array
  * form and the compose next() guard.
  *
- * v2 migration notes:
+ * migration notes:
  *  - One flat Context: no `ctx.request` / `ctx.response` facades; response
  *    headers are read via `c.resHeader`.
  *  - The app exposes onError/off/emit/listenerCount; `once` lives on the
@@ -302,7 +302,7 @@ describe("agent audit: router mount and trie encoding", () => {
     router.use(async (c, next) => {
       seen.push(`mounted:${c.url}`, `query:${JSON.stringify(c.query)}`);
       await next();
-      // v2 route-table merge semantics: no koa-mount url stripping — the
+      // route-table merge semantics: no koa-mount url stripping — the
       // mounted subtree still sees the full url.
       seen.push(`mounted-after:${c.url}`);
     });

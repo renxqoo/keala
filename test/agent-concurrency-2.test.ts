@@ -9,12 +9,12 @@
  * (file:line). "语义锁定" tests encode behavior that matches Koa (or a
  * documented deliberate deviation) and must stay green.
  *
- * v2 migration notes: the v1 CONFIRMED-BUGs around the lazy ip memoization
+ * migration notes: the inherited koa CONFIRMED-BUGs around the lazy ip memoization
  * (undefined thunk result / null requestIP result re-consulted) are fixed in
- * v2 — `ipValue` now distinguishes unresolved from resolved-empty and the
+ * The core: `ipValue` now distinguishes unresolved from resolved-empty and the
  * resolver runs exactly once. The failing-body-stream error channel is a
- * documented v2 divergence (observeStream is opt-in by design, off by
- * default; docs/v2-DESIGN.md §4) and is carried as a labeled skip until the
+ * documented divergence (observeStream is opt-in by design, off by
+ * default; docs/DESIGN.md §4) and is carried as a labeled skip until the
  * opt-in switch ships (P2).
  *
  * Koa baseline: .parity/koa/lib/{request,context,application}.js (v3.2.1).
@@ -139,7 +139,7 @@ describe("lazy singletons", () => {
     expect(await second.text()).toBe(JSON.stringify({ keys: ["n"] }));
   });
 
-  // Fixed in v2 (was a v1 CONFIRMED-BUG): the remote source is consulted ONCE
+  // Fixed (was an inherited koa CONFIRMED-BUG): the remote source is consulted ONCE
   // per request even when it resolves to nothing — `ipValue` distinguishes
   // unresolved (null) from resolved-empty (""), so a thunk returning
   // undefined is memoized after the first call.
@@ -159,7 +159,7 @@ describe("lazy singletons", () => {
     expect(calls).toBe(1);
   });
 
-  // Fixed in v2 (same root cause): a `server.requestIP` source returning null
+  // Fixed (same root cause): a `server.requestIP` source returning null
   // (Bun does this once the peer is gone) is consulted once per request, not
   // once per read.
   it("语义锁定: a requestIP host returning null is consulted exactly once", async () => {
@@ -233,10 +233,10 @@ describe("stream bodies", () => {
     expect(await res.text()).toBe("hello stream");
   });
 
-  // Documented v2 divergence (was a v1 CONFIRMED-BUG): Koa pipes the body
+  // Documented divergence (was an inherited koa CONFIRMED-BUG): Koa pipes the body
   // through `Stream.pipeline(stream, res, err => ctx.onerror(err))` so a
-  // mid-flight body failure reaches the app's error channel. v2 hands the raw
-  // stream to the fetch `Response` and — by design (docs/v2-DESIGN.md §4) —
+  // mid-flight body failure reaches the app's error channel. bun-koa hands the raw
+  // stream to the fetch `Response` and — by design (docs/DESIGN.md §4) —
   // made stream error observation an OPT-IN feature (`observeStream`, off by
   // default to save 567ns/response and restore backpressure). The opt-in
   // switch has not shipped yet (P2); until it does, this lock is explicitly

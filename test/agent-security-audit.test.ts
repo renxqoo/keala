@@ -1,7 +1,7 @@
 /**
  * Agent security audit: attack tests for vulnerabilities found during the
  * threat-model pass and locks for the semantics they were verified against.
- * Migrated to the v2 API (createApp from core/app, app.onError, Runtime
+ * Migrated to the current API (createApp from core/app, app.onError, Runtime
  * object for the remote address).
  *
  * Fixed vulnerabilities covered here:

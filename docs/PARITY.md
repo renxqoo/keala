@@ -1,9 +1,9 @@
-# bun-koa v2 — deliberate divergences (supersedes the v1 koa-parity ledger below)
+# bun-koa — deliberate divergences (supersedes the koa-parity ledger below)
 
-The v2 rewrite intentionally drops the koa three-object context in favor of
-one flat context (see docs/v2-DESIGN.md). Semantics that CHANGED on purpose:
+The rewrite intentionally drops the koa three-object context in favor of
+one flat context (see docs/DESIGN.md). Semantics that CHANGED on purpose:
 
-| Area                     | v1 (koa-compatible)                                            | v2                                                                                                                                                                                                                                                                                                         |
+| Area                     | Koa                                                            | bun-koa                                                                                                                                                                                                                                                                                                    |
 | ------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Content-type             | auto `text/plain; charset=utf-8` / markup sniff to `text/html` | D1: no framework CT for string bodies (runtime provides `text/plain`); `c.html()`/`c.type` for explicit                                                                                                                                                                                                    |
 | `c.body = object`        | serialized eagerly; getter returns the string                  | stored as object; getter returns the object; `Response.json` finalization                                                                                                                                                                                                                                  |

@@ -11,7 +11,7 @@
  *  - init with a `Headers` instance (measurably cheaper than a record init)
  *  - flattened [name, value] pairs when multi-value headers exist
  *
- * Inherited response contracts (docs/v2-MIGRATION.md §3): empty-status header
+ * Inherited response contracts (docs/MIGRATION.md §3): empty-status header
  * cleanup, HEAD Content-Length backfill (computed from the would-be body,
  * exactly like koa), non-Latin-1 statusText fallback, and the
  * set-cookie/multi-value precondition for the fast paths.

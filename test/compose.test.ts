@@ -1,6 +1,6 @@
 /**
  * Composition semantics: precompiled levels, the dual-mode commit rules
- * (docs/v2-DESIGN.md §4), double-next guard and misuse detection.
+ * (docs/DESIGN.md §4), double-next guard and misuse detection.
  */
 
 import { describe, expect, it } from "vitest";

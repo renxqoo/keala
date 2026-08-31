@@ -78,7 +78,7 @@ describe("coverage gaps", () => {
   });
 
   it("assert throws with full options and passes silently when satisfied", async () => {
-    // v2 folds the standalone httpAssert helper into `c.assert`
+    // The core folds the standalone httpAssert helper into `c.assert`
     // (createError(status, message, props) under the hood).
     const app = createApp({ env: "test" });
     let captured: unknown;

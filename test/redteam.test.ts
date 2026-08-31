@@ -1,5 +1,5 @@
 /**
- * Red-team audit locks (v2 final verification) — read-only audit, no src changes.
+ * Red-team audit locks (final verification) — read-only audit, no src changes.
  *
  * `it("CONFIRMED-BUG(now fixed) (RT-n): ...")` cases are reproduced defects, locked in
  * the skip state with the EXPECTED-CORRECT assertion inside. Unskip after fixing;
@@ -23,8 +23,8 @@
  *   RT-10 MEDIUM   sugar text/json/html discard a previously set c.status
  *   RT-11 LOW      HEAD x custom notFound handler loses the CL backfill
  *
- * Companion green assets: test/redteam-v2-assets.test.ts (e2e fuzz) and
- * test/redteam-v2-round2.test.ts (full-shape internal fuzz, concurrency,
+ * Companion green assets: test/redteam-assets.test.ts (e2e fuzz) and
+ * test/redteam-round2.test.ts (full-shape internal fuzz, concurrency,
  * leak, security) — split for the oxlint max-lines: 500 budget.
  */
 
@@ -58,7 +58,7 @@ const text = async (res: Response): Promise<string> => res.text();
 //           so these shapes still earn a fast matcher they cannot fulfill.
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-1 fast matcher ignores static tail after params", () => {
+describe("redteam — RT-1 fast matcher ignores static tail after params", () => {
   it("CONFIRMED-BUG(now fixed) (RT-1a): /users/:id/posts must not match /users/42", async () => {
     const app = createApp(quiet);
     app.get("/users/:id/posts", (c) => c.json({ route: "posts", id: c.params?.["id"] }));
@@ -106,7 +106,7 @@ describe("redteam v2 — RT-1 fast matcher ignores static tail after params", ()
 // RT-2 (HIGH): for a HEAD request over a committed Response with deferred
 // header writes (rule 4 merge), the merged response KEEPS the body and never
 // backfills Content-Length. The design doc promises "HEAD 回填 Content-Length
-// — v1 全部保留" and respond.ts implements it — but only on the record-empty
+// — koa 全部保留" and respond.ts implements it — but only on the record-empty
 // path.
 //
 // Repo:     HEAD /x, middleware does `await next(); c.set("x-late","1")`,
@@ -118,7 +118,7 @@ describe("redteam v2 — RT-1 fast matcher ignores static tail after params", ()
 //           mergeIntoCommitted itself has no HEAD handling.
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-2 HEAD x committed x deferred headers", () => {
+describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
   it("CONFIRMED-BUG(now fixed) (RT-2a): HEAD must drop the body and backfill CL after a late c.set", async () => {
     const app = createApp(quiet);
     app.use(async (c, next) => {
@@ -180,7 +180,7 @@ describe("redteam v2 — RT-2 HEAD x committed x deferred headers", () => {
 //           finalize L259 calls app.notFoundHandler(c) unguarded.
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-3 notFound throw escapes app.handle", () => {
+describe("redteam — RT-3 notFound throw escapes app.handle", () => {
   it("CONFIRMED-BUG(now fixed) (RT-3a): throwing notFound handler must answer 500, not reject", async () => {
     const app = createApp(quiet);
     app.get("/a", (c) => c.text("a"));
@@ -241,7 +241,7 @@ describe("redteam v2 — RT-3 notFound throw escapes app.handle", () => {
 //           getSetCookie() is never consulted.
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-4 c.body = Response collapses set-cookie", () => {
+describe("redteam — RT-4 c.body = Response collapses set-cookie", () => {
   it("CONFIRMED-BUG(now fixed) (RT-4a): state-assigning a Response must preserve every set-cookie", async () => {
     const app = createApp(quiet);
     app.get("/x", (c) => {
@@ -290,7 +290,7 @@ describe("redteam v2 — RT-4 c.body = Response collapses set-cookie", () => {
 //           mergeIntoCommitted) appends the original array values AGAIN.
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-5 sugar helpers corrupt multi-value headers", () => {
+describe("redteam — RT-5 sugar helpers corrupt multi-value headers", () => {
   it("CONFIRMED-BUG(now fixed) (RT-5a): cookies.set + return c.text() must yield exactly 2 set-cookie", async () => {
     const app = createApp(quiet);
     app.get("/x", (c) => {
@@ -345,7 +345,7 @@ describe("redteam v2 — RT-5 sugar helpers corrupt multi-value headers", () => 
 //           derives a per-app prototype (L271 `const contextProto = baseContextProto`).
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-6 decorate leaks across apps", () => {
+describe("redteam — RT-6 decorate leaks across apps", () => {
   it("CONFIRMED-BUG(now fixed) (RT-6a): decorate must not leak into other apps' contexts", async () => {
     const appA = createApp(quiet);
     const appB = createApp(quiet);
@@ -373,7 +373,7 @@ describe("redteam v2 — RT-6 decorate leaks across apps", () => {
 // skip lock documenting the contract.
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-7 self-mount hang", () => {
+describe("redteam — RT-7 self-mount hang", () => {
   it("CONFIRMED-BUG(now fixed) (RT-7a): app.mount(prefix, app) must throw instead of hanging", () => {
     const app = createApp(quiet);
     app.get("/a", (c) => c.text("a"));
@@ -396,7 +396,7 @@ describe("redteam v2 — RT-7 self-mount hang", () => {
 //           (Koa shares this gap — flagged for an explicit decision.)
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-8 floating next rejection", () => {
+describe("redteam — RT-8 floating next rejection", () => {
   it("CONFIRMED-BUG(now fixed) (RT-8a): late downstream rejection after early return must stay contained", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown): void => {
@@ -441,7 +441,7 @@ describe("redteam v2 — RT-8 floating next rejection", () => {
 // consult c.statusValue.
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-10 sugar discards prior c.status", () => {
+describe("redteam — RT-10 sugar discards prior c.status", () => {
   it("CONFIRMED-BUG(now fixed) (RT-10): sugar must keep a previously set c.status (hono parity)", async () => {
     const app = createApp(quiet);
     app.get("/t", (c) => {
@@ -464,7 +464,7 @@ describe("redteam v2 — RT-10 sugar discards prior c.status", () => {
 // stripBody(notFound) instead of committedHead(notFound).
 // ---------------------------------------------------------------------------
 
-describe("redteam v2 — RT-11 HEAD x notFound CL backfill", () => {
+describe("redteam — RT-11 HEAD x notFound CL backfill", () => {
   it("CONFIRMED-BUG(now fixed) (RT-11a): HEAD over a custom notFound must backfill CL", async () => {
     const app = createApp(quiet);
     app.notFound((c) => c.text("custom-nf"));

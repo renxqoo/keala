@@ -26,7 +26,7 @@ const normParams = (p: Record<string, string> | null): string => {
 import { compilePattern } from "../src/router/pattern.ts";
 import { createNode, createTarget, insertPattern, matchPattern } from "../src/router/trie.ts";
 
-describe("redteam v2 — GA-1 matchRoute equals the pure trie (trailing-param shapes)", () => {
+describe("redteam — GA-1 matchRoute equals the pure trie (trailing-param shapes)", () => {
   let seed = 1;
   const rand = (): number => {
     seed ^= seed << 13;
@@ -171,7 +171,7 @@ describe("redteam v2 — GA-1 matchRoute equals the pure trie (trailing-param sh
   }, 30_000);
 });
 
-describe("redteam v2 — RT-9 encoded static segments bypass staticMap", () => {
+describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
   it("CONFIRMED-BUG(now fixed) (RT-9a): GET /%61dmin must hit the static /admin route", async () => {
     const app = createApp(quiet);
     app.get("/admin", (c) => c.text("static-admin"));

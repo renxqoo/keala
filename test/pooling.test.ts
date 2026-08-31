@@ -1,17 +1,17 @@
 /**
- * Context recycling semantics (v2).
+ * Context recycling semantics .
  *
- * v2 removed the `pooling: true` app option — pooling is now opt-in BY THE
+ * The core removed the `pooling: true` app option — pooling is now opt-in BY THE
  * HOST via the exported `resetContext` (recycle a context object in place for
  * the next request). These tests lock the recycling contract directly:
  * a recycled context must be indistinguishable from a freshly created one
  * (design contract #6: every field reset, `routerAllowed` cleared — the
  * field-conservation lock). The app-level cases re-check the user-visible
- * guarantees the v1 pooling suite covered (isolation across serial,
- * concurrent, error and cookie/header traffic) which v2 provides by
+ * guarantees the old pooling suite covered (isolation across serial,
+ * concurrent, error and cookie/header traffic) which the core provides by
  * construction (fresh context per request).
  *
- * The v1 "pooling stays correct with currentContext enabled" case is gone:
+ * The old "pooling stays correct with currentContext enabled" case is gone:
  * `currentContext` was removed from the core along with the pool.
  */
 
@@ -41,7 +41,7 @@ const usedContext = (app = createApp({ keys: ["k"] })): Context => {
   c.message = "created";
   c.body = "payload";
   c.cookies.set("sid", "one", { signed: true });
-  // Materialize every lazy cache, then rewrite the url (drops them in v2).
+  // Materialize every lazy cache, then rewrite the url (drops them).
   void c.ip;
   void c.query;
   void c.originalUrl;
@@ -110,7 +110,7 @@ describe("resetContext recycling semantics", () => {
   });
 });
 
-describe("request isolation (fresh context per request in v2)", () => {
+describe("request isolation (fresh context per request)", () => {
   it("serial requests never observe stale state", async () => {
     const app = createApp(quiet);
     app.get("/a/:id", (c) => {

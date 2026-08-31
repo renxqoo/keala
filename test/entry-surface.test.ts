@@ -1,16 +1,18 @@
 /**
- * Entry-surface contract: the ROOT entry is the core only; middleware comes
- * from the `bun-koa/middleware` aggregate (or per-file subpaths). These locks
- * keep the split honest — a middleware re-export sneaking back into the root
- * barrel would silently re-add its idle-memory cost for every importer.
+ * Entry-surface contract: the ROOT entry carries the app surface (core, the
+ * body plugin, in-handler helpers) while middleware stays at the
+ * `bun-koa/middleware` aggregate and adapters at `bun-koa/adapters/<name>`.
+ * These locks keep the split honest — middleware sneaking back into the root
+ * barrel would re-add its idle-memory cost for every importer.
  */
 
 import { describe, expect, it } from "vitest";
 
-import * as core from "../src/index.ts";
+import * as root from "../src/index.ts";
 import * as middleware from "../src/middleware/index.ts";
 
-const CORE_EXPORTS = new Set([
+const ROOT_EXPORTS = new Set([
+  // core
   "createApp",
   "createRouter",
   "compose",
@@ -32,6 +34,21 @@ const CORE_EXPORTS = new Set([
   "statusMessage",
   "startBunServer",
   "compilePattern",
+  // plugin (the body reader)
+  "createBodyParser",
+  "readBodyLimited",
+  // helpers (in-handler utilities)
+  "stream",
+  "streamText",
+  "streamSSE",
+  "disableIdleTimeout",
+  "html",
+  "raw",
+  "escapeHtml",
+  "hashPassword",
+  "verifyPassword",
+  "bunPasswordHasher",
+  "pbkdf2PasswordHasher",
 ]);
 
 const MIDDLEWARE_FACTORIES = [
@@ -55,20 +72,14 @@ const MIDDLEWARE_FACTORIES = [
 ];
 
 describe("entry surface", () => {
-  it("the root barrel exports exactly the core surface", () => {
-    const names = Object.keys(core).sort();
-    expect(names).toEqual([...CORE_EXPORTS].sort());
+  it("the root barrel exports exactly the app surface", () => {
+    const names = Object.keys(root).sort();
+    expect(names).toEqual([...ROOT_EXPORTS].sort());
   });
 
-  it("the root barrel leaks no middleware/plugins/helpers", () => {
-    for (const name of [
-      ...MIDDLEWARE_FACTORIES,
-      "createBodyParser",
-      "streamSSE",
-      "hashPassword",
-      "html",
-    ]) {
-      expect((core as Record<string, unknown>)[name]).toBeUndefined();
+  it("the root barrel leaks no middleware", () => {
+    for (const name of MIDDLEWARE_FACTORIES) {
+      expect((root as Record<string, unknown>)[name]).toBeUndefined();
     }
   });
 

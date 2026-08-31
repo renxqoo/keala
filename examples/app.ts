@@ -1,5 +1,5 @@
 /**
- * bun-koa v2 — complete surface in one runnable file.
+ * bun-koa — complete surface in one runnable file.
  *
  *   bun examples/app.ts   → http://localhost:3000
  *
@@ -9,19 +9,23 @@
  * Bun-native route sink.
  */
 
-import { createApp, createRouter } from "../src/index.ts";
+import {
+  createApp,
+  createBodyParser,
+  createRouter,
+  hashPassword,
+  html,
+  streamSSE,
+  verifyPassword,
+} from "../src/index.ts";
 import {
   basicAuth,
   csrfToken,
   csrfTokenGuard,
   secureHeaders,
   serveStatic,
+  validator,
 } from "../src/middleware/index.ts";
-import { validator } from "../src/middleware/validator.ts";
-import { createBodyParser } from "../src/plugins/body-parser.ts";
-import { hashPassword, verifyPassword } from "../src/helpers/password.ts";
-import { html } from "../src/helpers/html.ts";
-import { streamSSE } from "../src/helpers/streams.ts";
 
 const app = createApp({ keys: ["change-me"], env: "production" });
 
@@ -42,7 +46,7 @@ app.sink("/assets/*", { dir: "./examples/public" });
 // --- routes ---------------------------------------------------------------
 app.get("/", (c) =>
   c.html(
-    html`<h1>bun-koa v2</h1>
+    html`<h1>bun-koa</h1>
       <a href="/health">/health</a> (native sink)`,
   ),
 );
@@ -109,7 +113,7 @@ app.notFound((c) => {
 
 const port = Number(process.argv[2] ?? 3100);
 const server = app.listen({ port });
-console.log(`bun-koa v2 example on ${server.hostname}:${server.port}`);
+console.log(`bun-koa example on ${server.hostname}:${server.port}`);
 console.log("  GET  /            html page");
 console.log("  GET  /health      native-sunk static response");
 console.log("  GET  /assets/*    native-sunk directory");

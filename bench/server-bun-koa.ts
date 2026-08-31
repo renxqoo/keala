@@ -1,4 +1,4 @@
-// bun-koa v2 bench server (Bun runtime) — mirrors the other bench servers.
+// bun-koa bench server (Bun runtime) — mirrors the other bench servers.
 import { createApp } from "../src/index.ts";
 
 const app = createApp();

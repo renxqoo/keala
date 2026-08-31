@@ -7,13 +7,13 @@
  * (file:line). "语义锁定" tests encode behavior that matches Koa (or a
  * documented deliberate deviation) and must stay green.
  *
- * v2 migration notes (see docs/v2-MIGRATION.md §2):
+ * migration notes (see docs/MIGRATION.md §2):
  *  - routing is app-level (`app.get` / `app.mount`); no router middleware API
  *  - `currentContext` / `pooling` app options no longer exist (removed from
  *    the core) — their tests were dropped; context recycling semantics are
  *    covered by test/pooling.test.ts against `resetContext`
- *  - the v1 CONFIRMED-BUGs around the identical-querystring no-op, the error
- *    statusText leak and the lazy ip thunk were fixed in v2 and are now
+ *  - the inherited koa CONFIRMED-BUGs around the identical-querystring no-op, the error
+ *    statusText leak and the lazy ip thunk were fixed and are now
  *    green 语义锁定 locks.
  *
  * Koa baseline: .parity/koa/lib/{request,context,application}.js (v3.2.1).
@@ -71,7 +71,7 @@ describe("same-request interleaving: query cache", () => {
   // and in-place mutations made upstream of `await next()` stay visible.
   // Repro: middleware A reads query and mutates the cached object, awaits;
   // middleware B rewrites only the path; A re-reads. Expected (Koa): the
-  // identity is preserved and the mutation is visible. Actual: v2's
+  // identity is preserved and the mutation is visible. Actual: the
   // `set path` delegates to the url setter, which unconditionally nulls
   // `queryValue`, so the re-read returns a fresh parse and the mutation is
   // silently dropped.
@@ -111,7 +111,7 @@ describe("same-request interleaving: query cache", () => {
     expect(observed).toEqual([{ a: "1" }, { c: "3" }]);
   });
 
-  // Fixed in v2 (was a v1 CONFIRMED-BUG): the querystring setter now carries
+  // Fixed (was an inherited koa CONFIRMED-BUG): the querystring setter now carries
   // Koa's same-value guard, so the cached query object survives an identical
   // assignment (src/core/context/request.ts set querystring).
   it("语义锁定: assigning an identical querystring preserves the cached query object", async () => {
@@ -131,9 +131,9 @@ describe("same-request interleaving: query cache", () => {
     expect(observed).toEqual([true, "yes"]);
   });
 
-  // v2 follows Koa here (design contract #8 lists `query` among the five
+  // bun-koa follows koa here (design contract #8 lists `query` among the five
   // cache-invalidating url writers): the assignment rewrites the query string
-  // and the next read re-parses the stringified form. v1's verbatim-stash
+  // and the next read re-parses the stringified form. koa's verbatim-stash
   // deviation is gone, so this now locks plain Koa semantics.
   it("语义锁定(koa parity): query= rewrites the query string and re-parses on read", async () => {
     const app = createApp(quiet);
@@ -275,9 +275,9 @@ describe("concurrent isolation", () => {
     }
   });
 
-  // v2's 405 bookkeeping is per-request state (`routerAllowed` on the context,
+  // the 405 bookkeeping is per-request state (`routerAllowed` on the context,
   // nulled by initContext/resetContext), so a recycled context cannot leak a
-  // foreign request's allowed-methods set — the v1 pooled leak is structurally
+  // foreign request's allowed-methods set — the old pooled leak is structurally
   // gone. The recycling contract itself is locked in test/pooling.test.ts
   // (resetContext field conservation); this locks the observable sequence.
   it("语义锁定: a 405 answer never bleeds into the next request's 404", async () => {
@@ -398,7 +398,7 @@ describe("error path lifecycle", () => {
     expect(res.headers.get("allow")).toBe(null);
   });
 
-  // Fixed in v2 (was a v1 CONFIRMED-BUG): buildErrorResponse now resets
+  // Fixed (was an inherited koa CONFIRMED-BUG): buildErrorResponse now resets
   // `messageValue`, so a custom status phrase set before the failure cannot
   // leak onto the error response's status line.
   it("语义锁定: the error response does not inherit the failed response's custom statusText", async () => {

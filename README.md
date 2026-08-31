@@ -1,4 +1,4 @@
-# bun-koa v2
+# bun-koa
 
 **High-performance onion-model web framework for [Bun 1.4+](https://bun.sh).**
 Hono's speed and feature surface, Koa's middleware ergonomics — one flat
@@ -61,18 +61,17 @@ app.mount("/api", api);
 
 ## Middleware, plugins & helpers
 
-Three lifecycles, one `app.use()` entry. **The root entry is the core only**
-(hono/fastify-shaped) — middleware never loads unless you import it, which
-keeps `import "bun-koa"` at ~2.7MB less RSS than an everything-barrel:
+Three lifecycles, one `app.use()` entry. **Only middleware and adapters are
+split out** — the middleware tier is the heavy one (~2.7MB when loaded) and
+adapters are a mutually exclusive runtime choice, so they live at their own
+subpaths while the root stays the one-import app surface:
 
-| Entry                         | What it gives you                                                      | Loads          |
-| ----------------------------- | ---------------------------------------------------------------------- | -------------- |
-| `bun-koa`                     | createApp / createRouter / compose / Context / errors / cookie signing | core only      |
-| `bun-koa/middleware`          | every middleware factory in one import                                 | the whole tier |
-| `bun-koa/middleware/cors`     | one factory                                                            | that file only |
-| `bun-koa/plugins/body-parser` | the body plugin (single member — no aggregate)                         | that file only |
-| `bun-koa/helpers/<name>`      | streams / html / password, à la carte                                  | that file only |
-| `bun-koa/adapters/node`       | the Node listener (bun/node are exclusive — no aggregate)              | that file only |
+| Entry                     | What it gives you                                                                      | Loads               |
+| ------------------------- | -------------------------------------------------------------------------------------- | ------------------- |
+| `bun-koa`                 | createApp / createRouter / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
+| `bun-koa/middleware`      | every middleware factory in one import                                                 | the middleware tier |
+| `bun-koa/middleware/cors` | one factory                                                                            | that file only      |
+| `bun-koa/adapters/node`   | the Node listener (bun/node are exclusive)                                             | that file only      |
 
 - **middleware** — per-request pipeline functions: `app.use(cors())`
 - **plugins** — setup-time installers (`install(app)`), decorate contexts: `app.use(createBodyParser())`
@@ -97,10 +96,7 @@ import {
   serveStatic,
   validator,
 } from "bun-koa/middleware"; // the aggregate — or per file: bun-koa/middleware/cors
-import { createBodyParser } from "bun-koa/plugins/body-parser";
-import { hashPassword, verifyPassword } from "bun-koa/helpers/password";
-import { streamSSE } from "bun-koa/helpers/streams";
-import { html, raw } from "bun-koa/helpers/html";
+import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "bun-koa";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req.json()/text()/formData()…
 // formData() is double-budgeted: formLimit bytes AND formPartLimit parts
@@ -186,9 +182,9 @@ writes are staged; the last committer wins; untouched requests hit
 `app.notFound`**. A matched path without the method answers 405 + `Allow`
 (OPTIONS gets 200 + `Allow`, unknown methods 501).
 
-## Migrating from v1 / koa
+## Migrating from koa
 
-| v1 (koa-style)                                          | v2                                                      |
+| Koa                                                     | bun-koa                                                 |
 | ------------------------------------------------------- | ------------------------------------------------------- |
 | `ctx.request.get("x")`                                  | `c.get("x")`                                            |
 | `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                         |
@@ -199,14 +195,14 @@ writes are staged; the last committer wins; untouched requests hit
 | `ctx.state.user`                                        | `c.state.user` (same)                                   |
 | `ctx.cookies.get/set`                                   | `c.cookies.get/set` (same, signed + keys)               |
 
-Deliberate v2 divergences (see `docs/v2-DESIGN.md` §0): string bodies carry no
+Deliberate divergences (see `docs/DESIGN.md` §0): string bodies carry no
 framework-set `content-type` (the runtime provides `text/plain`; use `c.type`
 or the sugar for explicit types); markup sniffing is gone; object bodies keep
 their object shape on `c.body` reads.
 
 ## Why it's fast
 
-| Koa (Node)                                        | bun-koa v2 (Bun)                                                                 |
+| Koa (Node)                                        | bun-koa (Bun)                                                                    |
 | ------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Recompiles dispatch closure **per request**       | Chain compiled **once** at registration time                                     |
 | Every middleware hop wrapped in `Promise.resolve` | Fully-sync chains return with **zero promises**                                  |
@@ -318,12 +314,12 @@ bun run bench       # vs hono / koa / fastify / raw / Go benchmark harness
     failure surfaces)
   * `test/security*.test.ts` + `agent-security-audit` — injection / pollution /
     disclosure / abuse / proxy-trust cases (255+ assertions)
-  * `test/redteam-v2*.test.ts` — red-team regression locks for 11 confirmed
-    bug groups found during the v2 hardening pass, plus the
+  * `test/redteam*.test.ts` — red-team regression locks for 11 confirmed
+    bug groups found during the hardening pass, plus the
     `matchRoute ≡ pure trie` equivalence fuzz (100 randomized route tables ×
     120 paths per run)
   * `test/anomalies*.test.ts`, `matrix`, `agent-bugs`, `agent-concurrency*` —
-    the full abnormal-input and state-machine matrices ported from v1
+    the full abnormal-input and state-machine matrices ported from the koa corpus
   * `test/parity-security.test.ts` — security-relevant koa parity semantics
     (GHSA-c5vw-j4hf-j526, redirect/back same-origin, expose gate…)
 - Coverage ≥90% on all four dimensions (currently ~96.7/90.9/95.8/98.4).

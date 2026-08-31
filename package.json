@@ -1,6 +1,6 @@
 {
   "name": "bun-koa",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "High-performance onion-model web framework for Bun 1.4+. Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking (Bun.serve routes table), Bun.password/Bun.CSRF components. At parity or faster than Hono on Bun.",
   "license": "MIT",
   "files": [
@@ -25,14 +25,6 @@
     "./middleware/*": {
       "types": "./dist/middleware/*.d.ts",
       "import": "./dist/middleware/*.js"
-    },
-    "./helpers/*": {
-      "types": "./dist/helpers/*.d.ts",
-      "import": "./dist/helpers/*.js"
-    },
-    "./plugins/*": {
-      "types": "./dist/plugins/*.d.ts",
-      "import": "./dist/plugins/*.js"
     },
     "./adapters/*": {
       "types": "./dist/adapters/*.d.ts",
