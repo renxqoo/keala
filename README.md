@@ -9,8 +9,12 @@ runtime-free and also runs under Node for testing.
 **Performance: statistical parity with Hono** (ABAB-interleaved HTTP ratios
 all inside run noise; batch-interleaved in-process baseline ties exactly at
 379ns/request) — **3.0–3.5x faster than Koa 3** (15x at 1000 routes), at the
-lowest peak memory of the compared frameworks, while carrying lazy content
+lowest peak memory of the compared JS frameworks, while carrying lazy content
 negotiation, signed cookies, 405/Allow synthesis and the full onion model.
+A Go `net/http` reference is included in the harness: on the comparison box
+Go leads every JS runtime (raw Bun.serve included) by ~10–15% on throughput
+and decisively on memory — the gap is the runtime's HTTP stack, not
+framework tax (bun-koa adds nothing on top of it versus hono).
 See `bench/BENCH.md`.
 
 ```bash
@@ -295,7 +299,7 @@ bun run typecheck   # TypeScript 7 native (tsc --noEmit)
 bun run verify      # all of the above in one gate
 bun run smoke       # boots a real Bun.serve and exercises every critical path
 bun run soak        # memory soak: in-process + HTTP + concurrent, heap must stabilize
-bun run bench       # vs hono / raw benchmark harness
+bun run bench       # vs hono / koa / fastify / raw / Go benchmark harness
 ```
 
 - **1274 tests green under Node and real Bun runtimes** (55 files, `bun run test`

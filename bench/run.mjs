@@ -51,9 +51,7 @@ const SERVERS = [
   { name: `fastify 5 (${NODE_LABEL})`, cmd: ["node", "bench/server-fastify.mjs"], port: 4105 },
   { name: "koa 3 (bun 1.4)", cmd: ["bun", "bench/server-koa.mjs"], port: 4106 },
   { name: "fastify 5 (bun 1.4)", cmd: ["bun", "bench/server-fastify.mjs"], port: 4107 },
-  ...(GO_AVAILABLE
-    ? [{ name: `go net/http (${GO_LABEL})`, cmd: [GO_BINARY], port: 4108 }]
-    : []),
+  ...(GO_AVAILABLE ? [{ name: `go net/http (${GO_LABEL})`, cmd: [GO_BINARY], port: 4108 }] : []),
 ];
 
 const SCENARIOS = [
