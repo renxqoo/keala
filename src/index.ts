@@ -5,7 +5,7 @@
  * context, errors, cookie signing) plus the plugin and the in-handler
  * helpers. Middleware lives at `honu/middleware` (aggregate) or
  * `honu/middleware/<name>` (per file); the Node adapter at
- * `honu/adapters/node` — those two are the only split-out tiers (the
+ * `honu/node` — those two are the only split-out tiers (the
  * middleware tier is the heavy one; adapters are a mutually exclusive
  * runtime choice).
  *

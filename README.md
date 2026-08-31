@@ -1,43 +1,25 @@
-# honu
+# Honu
 
-**High-performance onion-model web framework for [Bun 1.4+](https://bun.sh).**
-Hono's speed and feature surface, Koa's middleware ergonomics — one flat
-context per request, top-level routing, precompiled middleware chains, and a
-bare-`Response` fast path. Zero runtime dependencies; the core is
-runtime-free and also runs under Node for testing.
+English | [简体中文](./README.zh-CN.md)
 
-**Performance: statistical parity with Hono** (ABAB-interleaved HTTP ratios
-all inside run noise; batch-interleaved in-process baseline ties exactly at
-379ns/request) — **3.0–3.5x faster than Koa 3** (15x at 1000 routes), at the
-lowest peak memory of the compared JS frameworks, while carrying lazy content
-negotiation, signed cookies, 405/Allow synthesis and the full onion model.
-A Go `net/http` reference is included in the harness: on the comparison box
-Go leads every JS runtime (raw Bun.serve included) by ~10–15% on throughput
-and decisively on memory — the gap is the runtime's HTTP stack, not
-framework tax (honu adds nothing on top of it versus hono).
-See `bench/BENCH.md`.
+**The web framework that gives you Koa's ergonomics and Hono's speed — in one
+context, on [Bun 1.4+](https://bun.sh), with zero dependencies.**
 
 ```bash
 bun add honu
 ```
 
+## Quick Start
+
 ```ts
 import { Honu } from "honu";
 
-const app = new Honu({ keys: ["signing-secret"] });
+const app = new Honu();
 
-// Global onion middleware — compiled into every route chain once
-app.use(async (c, next) => {
-  const start = Date.now();
-  await next();
-  c.set("X-Response-Time", `${Date.now() - start}ms`);
-});
-
-// Return style (hono-like): fastest path
+app.get("/", (c) => c.text("hello honu")); // hono-style return
 app.get("/users/:id(\\d+)", (c) => c.json({ id: c.params.id }));
-
-// State style (koa-like): c.body / c.status / c.set
 app.get("/page", (c) => {
+  // koa-style state
   c.type = "text/html";
   c.body = "<b>hi</b>";
 });
@@ -45,7 +27,8 @@ app.get("/page", (c) => {
 app.listen(3000);
 ```
 
-Route groups mount by table merge (404s fall through to the parent):
+Routers group and mount by table merge (unmatched paths fall through to the
+parent app — no swallowed 404s):
 
 ```ts
 import { Router } from "honu";
@@ -59,6 +42,49 @@ api.get("/orgs/:oid", (c) => c.text("org"));
 app.mount("/api", api);
 ```
 
+Runs under Node too — same app, one import:
+
+```ts
+import { listen } from "honu/node";
+listen(app, 3000);
+```
+
+## Why honu
+
+- **Hono-class speed.** ABAB-interleaved HTTP benchmarks put honu at
+  statistical parity with Hono (every ratio inside run noise) and
+  **3.0–3.5x faster than Koa 3** — 15x at 1000 routes — at the lowest peak
+  memory of the compared JS frameworks, while carrying lazy content
+  negotiation, signed cookies, 405/Allow synthesis and the full onion model.
+  Chains are compiled once at registration; fully-sync middleware paths run
+  with zero promise allocations; routing happens before the onion (static =
+  one `Map` hit).
+- **Both API styles, one flat context.** `return c.json(...)` (hono) and
+  `c.body = ...; c.status = 404` (koa) mix freely — the last committer wins.
+  Every request allocates exactly one context object; `query`, `cookies`,
+  `ip`, `state` materialize on first touch.
+- **Zero runtime dependencies.** Everything is built in: CORS, CSRF, auth,
+  ETag, compression, static files, SSE, body parsing, validation (Standard
+  Schema), WebCrypto password hashing, signed cookies with key rotation.
+- **Bun-native superpaths.** `app.sink()` serves static routes straight from
+  Bun's native routing table (zero JS per request) mirrored as ordinary
+  routes; `serveStatic` uses `Bun.file` sendfile; WebSockets upgrade through
+  the native socket; `streamSSE` applies Bun's official idle-timeout remedy.
+- **Production-hardened.** **1800+ tests green under both Node and real Bun
+  runtimes** (90 files), seven red-team rounds with every defect fixed
+  test-first, differential fuzzing against the actual koa/hono/negotiator
+  packages, and a route-table equivalence fuzzer. Four quality gates
+  (fmt / lint 0 errors / tsc / dual-runtime tests) on every change.
+- **Security-first defaults.** CRLF/NUL and CTL rejection on header writes,
+  prototype-pollution-proof query/cookie maps, RFC 6265 cookie validation,
+  timing-safe signed-cookie comparison, `expose` semantics that never leak
+  stack traces in production, double-budgeted form parsing (bytes AND parts).
+
+A Go `net/http` reference ships in the harness: on the comparison box Go
+leads every JS runtime (raw Bun.serve included) by ~10–15% on throughput and
+decisively on memory — the gap is the runtime's HTTP stack, not framework tax
+(honu adds nothing on top of it versus hono). See `bench/BENCH.md`.
+
 ## Middleware, plugins & helpers
 
 Three lifecycles, one `app.use()` entry. **Only middleware and adapters are
@@ -66,12 +92,12 @@ split out** — the middleware tier is the heavy one (~2.7MB when loaded) and
 adapters are a mutually exclusive runtime choice, so they live at their own
 subpaths while the root stays the one-import app surface:
 
-| Entry                     | What it gives you                                                                      | Loads               |
-| ------------------------- | -------------------------------------------------------------------------------------- | ------------------- |
+| Entry                  | What it gives you                                                           | Loads               |
+| ---------------------- | --------------------------------------------------------------------------- | ------------------- |
 | `honu`                 | Honu / Router / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
-| `honu/middleware`      | every middleware factory in one import                                                 | the middleware tier |
-| `honu/middleware/cors` | one factory                                                                            | that file only      |
-| `honu/adapters/node`   | the Node listener (bun/node are exclusive)                                             | that file only      |
+| `honu/middleware`      | every middleware factory in one import                                      | the middleware tier |
+| `honu/middleware/cors` | one factory                                                                 | that file only      |
+| `honu/node`   | the Node listener (bun/node are exclusive)                                  | that file only      |
 
 - **middleware** — per-request pipeline functions: `app.use(cors())`
 - **plugins** — setup-time installers (`install(app)`), decorate contexts: `app.use(createBodyParser())`
@@ -184,14 +210,14 @@ writes are staged; the last committer wins; untouched requests hit
 
 ## Migrating from koa
 
-| Koa                                                     | honu                                                 |
+| Koa                                                     | honu                                                    |
 | ------------------------------------------------------- | ------------------------------------------------------- |
 | `ctx.request.get("x")`                                  | `c.get("x")`                                            |
 | `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                         |
 | `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n` (same)                    |
 | `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`                 |
 | `app.use(router.routes()).use(router.allowedMethods())` | `app.get(...)` directly, or `app.mount(prefix, router)` |
-| `new Koa({ proxy: true })`                              | `new Honu({ proxy: true })`                            |
+| `new Koa({ proxy: true })`                              | `new Honu({ proxy: true })`                             |
 | `ctx.state.user`                                        | `c.state.user` (same)                                   |
 | `ctx.cookies.get/set`                                   | `c.cookies.get/set` (same, signed + keys)               |
 
@@ -202,7 +228,7 @@ their object shape on `c.body` reads.
 
 ## Why it's fast
 
-| Koa (Node)                                        | honu (Bun)                                                                    |
+| Koa (Node)                                        | honu (Bun)                                                                       |
 | ------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Recompiles dispatch closure **per request**       | Chain compiled **once** at registration time                                     |
 | Every middleware hop wrapped in `Promise.resolve` | Fully-sync chains return with **zero promises**                                  |
@@ -217,22 +243,22 @@ their object shape on `c.body` reads.
 
 ### Application
 
-| Member                                                                         | Description                                                                                                                                                                |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Honu(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                                |
-| `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                                 |
-| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                                          |
-| `app.on(method, path, ...handlers)`                                            | Any method, any case                                                                                                                                                       |
-| `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                                                                              |
-| `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                            |
-| `app.handle(request, runtime?)`                                                | Fetch-style handler; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                                                                            |
-| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `honu/adapters/node` |
-| `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                               |
-| `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                                                                         |
-| `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                         |
-| `app.ws(path, handlers)`                                                       | WebSocket route (Bun only; a duplicate path throws at setup)                                                                                                               |
-| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)` | Redirect routes and named-URL building                                                                                                                                     |
-| `app.callback()`, `app.toJSON()`                                               | Adapters and introspection                                                                                                                                                 |
+| Member                                                                         | Description                                                                                                                                                             |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new Honu(options?)`                                                           | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                           |
+| `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                              |
+| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                                       |
+| `app.on(method, path, ...handlers)`                                            | Any method, any case                                                                                                                                                    |
+| `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                                                                           |
+| `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                         |
+| `app.handle(request, runtime?)`                                                | Fetch-style handler; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                                                                         |
+| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `honu/node` |
+| `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                            |
+| `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                                                                      |
+| `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                      |
+| `app.ws(path, handlers)`                                                       | WebSocket route (Bun only; a duplicate path throws at setup)                                                                                                            |
+| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)` | Redirect routes and named-URL building                                                                                                                                  |
+| `app.callback()`, `app.toJSON()`                                               | Adapters and introspection                                                                                                                                              |
 
 ### Context
 
@@ -275,7 +301,7 @@ on Bun:
 
 ```ts
 import { Honu } from "honu";
-import { listen } from "honu/adapters/node";
+import { listen } from "honu/node";
 
 const app = new Honu();
 app.get("/", (c) => {
@@ -307,22 +333,23 @@ bun run soak        # memory soak: in-process + HTTP + concurrent, heap must sta
 bun run bench       # vs hono / koa / fastify / raw / Go benchmark harness
 ```
 
-- **1288 tests green under Node and real Bun runtimes** (56 files, `bun run test`
-  - `bun run test:bun`), including:
-  * `test/adapters-node.test.ts` — the Node adapter over real sockets in BOTH
+- **1800+ tests green under Node and real Bun runtimes** (90 files,
+  `bun run test` + `bun run test:bun`), including:
+  - `test/adapters-node.test.ts` — the Node adapter over real sockets in BOTH
     runtimes (bridging, set-cookie fanout, streaming, HEAD, 400/500/501
     failure surfaces)
-  * `test/security*.test.ts` + `agent-security-audit` — injection / pollution /
+  - `test/security*.test.ts` + `agent-security-audit` — injection / pollution /
     disclosure / abuse / proxy-trust cases (255+ assertions)
-  * `test/redteam*.test.ts` — red-team regression locks for 11 confirmed
-    bug groups found during the hardening pass, plus the
+  - `test/redteam*.test.ts` + per-round agent lock files — regression locks
+    for every confirmed bug across seven hardening rounds (85+ defects,
+    all fixed test-first), plus the
     `matchRoute ≡ pure trie` equivalence fuzz (100 randomized route tables ×
     120 paths per run)
-  * `test/anomalies*.test.ts`, `matrix`, `agent-bugs`, `agent-concurrency*` —
+  - `test/anomalies*.test.ts`, `matrix`, `agent-bugs`, `agent-concurrency*` —
     the full abnormal-input and state-machine matrices ported from the koa corpus
-  * `test/parity-security.test.ts` — security-relevant koa parity semantics
+  - `test/parity-security.test.ts` — security-relevant koa parity semantics
     (GHSA-c5vw-j4hf-j526, redirect/back same-origin, expose gate…)
-- Coverage ≥90% on all four dimensions (currently ~96.7/90.9/95.8/98.4).
+- Coverage thresholds >90% on all four dimensions, enforced by `bun run verify`.
 - soak: 480k+ in-process requests, 32k over real HTTP and concurrent floods —
   retained-heap drift ≤ 0.1 B/req (in-process) against a 1500 B budget.
 
@@ -354,4 +381,4 @@ src/
 ```
 
 MIT license. Primary runtime Bun ≥ 1.4 (also runs under Node via
-`honu/adapters/node`).
+`honu/node`).

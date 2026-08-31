@@ -10,7 +10,7 @@
  *
  * ```ts
  * import { Honu } from "honu";
- * import { listen } from "honu/adapters/node";
+ * import { listen } from "honu/node";
  *
  * const app = new Honu();
  * app.get("/", (c) => { c.body = "hello"; });
