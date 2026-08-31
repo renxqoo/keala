@@ -9,8 +9,8 @@
  * refused before routing.
  *
  * ```ts
- * import { Honu } from "honu";
- * import { listen } from "honu/node";
+ * import { Honu } from "@renxqoo/honu";
+ * import { listen } from "@renxqoo/honu/node";
  *
  * const app = new Honu();
  * app.get("/", (c) => { c.body = "hello"; });

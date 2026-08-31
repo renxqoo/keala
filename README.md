@@ -6,13 +6,13 @@ English | [简体中文](./README.zh-CN.md)
 context, on [Bun 1.4+](https://bun.sh), with zero dependencies.**
 
 ```bash
-bun add honu
+bun add @renxqoo/honu
 ```
 
 ## Quick Start
 
 ```ts
-import { Honu } from "honu";
+import { Honu } from "@renxqoo/honu";
 
 const app = new Honu();
 
@@ -31,7 +31,7 @@ Routers group and mount by table merge (unmatched paths fall through to the
 parent app — no swallowed 404s):
 
 ```ts
-import { Router } from "honu";
+import { Router } from "@renxqoo/honu";
 
 const api = new Router({ prefix: "/v1" });
 api.param("oid", async (c, next) => {
@@ -45,7 +45,7 @@ app.mount("/api", api);
 Runs under Node too — same app, one import:
 
 ```ts
-import { listen } from "honu/node";
+import { listen } from "@renxqoo/honu/node";
 listen(app, 3000);
 ```
 
@@ -94,10 +94,10 @@ subpaths while the root stays the one-import app surface:
 
 | Entry                  | What it gives you                                                           | Loads               |
 | ---------------------- | --------------------------------------------------------------------------- | ------------------- |
-| `honu`                 | Honu / Router / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
-| `honu/middleware`      | every middleware factory in one import                                      | the middleware tier |
-| `honu/middleware/cors` | one factory                                                                 | that file only      |
-| `honu/node`   | the Node listener (bun/node are exclusive)                                  | that file only      |
+| `@renxqoo/honu`                 | Honu / Router / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
+| `@renxqoo/honu/middleware`      | every middleware factory in one import                                      | the middleware tier |
+| `@renxqoo/honu/middleware/cors` | one factory                                                                 | that file only      |
+| `@renxqoo/honu/node`   | the Node listener (bun/node are exclusive)                                  | that file only      |
 
 - **middleware** — per-request pipeline functions: `app.use(cors())`
 - **plugins** — setup-time installers (`install(app)`), decorate contexts: `app.use(createBodyParser())`
@@ -121,8 +121,8 @@ import {
   timeout,
   serveStatic,
   validator,
-} from "honu/middleware"; // the aggregate — or per file: honu/middleware/cors
-import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "honu";
+} from "@renxqoo/honu/middleware"; // the aggregate — or per file: honu/middleware/cors
+import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "@renxqoo/honu";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req.json()/text()/formData()…
 // formData() is double-budgeted: formLimit bytes AND formPartLimit parts
@@ -252,7 +252,7 @@ their object shape on `c.body` reads.
 | `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                                                                           |
 | `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                         |
 | `app.handle(request, runtime?)`                                                | Fetch-style handler; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                                                                         |
-| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `honu/node` |
+| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `@renxqoo/honu/node` |
 | `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                            |
 | `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                                                                      |
 | `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                      |
@@ -300,8 +300,8 @@ its own subpath so importing the framework never loads the node:http bridge
 on Bun:
 
 ```ts
-import { Honu } from "honu";
-import { listen } from "honu/node";
+import { Honu } from "@renxqoo/honu";
+import { listen } from "@renxqoo/honu/node";
 
 const app = new Honu();
 app.get("/", (c) => {
@@ -381,4 +381,4 @@ src/
 ```
 
 MIT license. Primary runtime Bun ≥ 1.4 (also runs under Node via
-`honu/node`).
+`@renxqoo/honu/node`).
