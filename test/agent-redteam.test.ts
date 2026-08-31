@@ -52,8 +52,12 @@ import { createNode, createTarget, insertPattern, matchPattern } from "../src/ro
 const buildTrie = (patterns: readonly string[]) => {
   const root = createNode();
   for (const pattern of patterns) {
-    const node = insertPattern(root, compilePattern(pattern).segments);
-    if (node.target === null) node.target = createTarget();
+    // insertPattern returns every terminal (optionals yield several); they
+    // all share one target.
+    const target = createTarget();
+    for (const terminal of insertPattern(root, compilePattern(pattern).segments)) {
+      if (terminal.target === null) terminal.target = target;
+    }
   }
   return root;
 };

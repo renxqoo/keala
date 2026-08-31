@@ -118,7 +118,14 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (typeof value !== "string" || value.includes("\r") || value.includes("\n")) {
       throw new TypeError("Invalid status message: CR/LF are not allowed");
     }
+    // Control characters beyond CR/LF (NUL, BEL, …) do not throw here — they
+    // make the message INELIGIBLE as statusText instead (the finalizer falls
+    // back to the standard reason phrase), the same way non-latin-1 messages
+    // already behave. Throwing would cost the entire response over a phrase.
     this.messageValue = value;
+    // A message write AFTER a Response committed is a rewrite of that
+    // response's reason phrase — flag it so the finalizer rebuilds (rule 4).
+    if (this._res !== undefined) this.flags |= 16;
   },
   get body(): ResponseBody {
     return this.bodyValue;
@@ -391,13 +398,22 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (field.includes(",") || field.includes(" ")) {
       throw new TypeError("Vary field must be a single token");
     }
-    const current = this.resHeader("Vary");
-    if (current.length === 0) {
-      this.set("Vary", field);
-      return;
+    // Seed the dedupe from EVERY source: the staging record AND a committed
+    // response's own Vary — a post-commit vary() must JOIN the committed
+    // value, never replace it (dropped Vary tokens corrupt cache variants).
+    const staged = this.headersRecord?.["vary"];
+    const stagedText =
+      staged === undefined ? "" : Array.isArray(staged) ? staged.join(", ") : staged;
+    const committedText = this._res !== undefined ? (this._res.headers.get("vary") ?? "") : "";
+    const current = stagedText.length > 0 ? stagedText : committedText;
+    const tokens = current
+      .split(",")
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
+    if (!tokens.some((token) => token.toLowerCase() === field.toLowerCase())) {
+      tokens.push(field);
     }
-    const tokens = current.split(",").map((token) => token.trim().toLowerCase());
-    if (!tokens.includes(field.toLowerCase())) this.append("Vary", field);
+    this.set("Vary", tokens.join(", "));
   },
   has(field: string): boolean {
     return this.headersRecord?.[field.toLowerCase()] !== undefined;

@@ -7,6 +7,7 @@
  */
 
 import { createError } from "../http/errors.ts";
+import { toURL } from "../utils/url.ts";
 import type { RouteHandler } from "../router/router.ts";
 
 export interface CorsOptions {
@@ -128,13 +129,25 @@ export const csrf = (): RouteHandler => {
       });
     }
     const host = c.host;
-    let originHost = "";
+    // The FULL origin decides — scheme included. Browsers treat
+    // http://host and https://host as different origins; comparing hosts
+    // alone would let a same-host-other-scheme page forge state changes.
+    let sourceOrigin = "";
     try {
-      originHost = new URL(source, `http://${host}`).host;
+      sourceOrigin = new URL(source, `http://${host}`).origin;
     } catch {
-      originHost = "";
+      sourceOrigin = "";
     }
-    if (originHost.length === 0 || originHost !== host) {
+    let expectedOrigin = "";
+    if (host.length > 0) {
+      const parsed = toURL(`${c.protocol}://${host}`);
+      if (parsed !== null) expectedOrigin = parsed.origin;
+    }
+    if (
+      sourceOrigin.length === 0 ||
+      expectedOrigin.length === 0 ||
+      sourceOrigin !== expectedOrigin
+    ) {
       throw createError(403, "cross-site request rejected", { expose: true });
     }
     return next();

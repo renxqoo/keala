@@ -82,16 +82,22 @@ describe("ported parity security semantics", () => {
     expect(await res.text()).toBe("inner");
   });
 
-  it("error responses reset headers (except set-cookie) and hide 5xx messages", async () => {
+  it("error responses hide 5xx messages; staged headers ride along (koa parity)", async () => {
+    // Verified against koa 3.2.1: headers the chain staged before the throw
+    // stay on the error response (security middleware must cover error
+    // pages); only content-DESCRIBING headers drop, and the 5xx message is
+    // never leaked.
     const app = createApp(quiet);
     app.get("/boom", (c) => {
       c.set("X-Before", "1");
+      c.set("Content-Length", "999");
       c.cookies.set("sid", "abc");
       c.throw(500, "secret details");
     });
     const res = await app.handle(new Request("http://localhost:3000/boom"));
     expect(res.status).toBe(500);
-    expect(res.headers.get("x-before")).toBeNull();
+    expect(res.headers.get("x-before")).toBe("1");
+    expect(res.headers.get("content-length")).toBeNull(); // describes the failed body
     expect(await res.text()).toBe("Internal Server Error");
     expect(res.headers.getSetCookie().length).toBe(1);
   });

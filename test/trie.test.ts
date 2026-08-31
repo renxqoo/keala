@@ -6,13 +6,25 @@
 import { describe, expect, it } from "vitest";
 
 import { compilePattern, decodeSegment, paramNamesOf } from "../src/router/pattern.ts";
-import { createNode, insertPattern, matchPattern, createTarget } from "../src/router/trie.ts";
+import {
+  createNode,
+  createTarget,
+  insertPattern,
+  matchPattern,
+  type TrieNode,
+} from "../src/router/trie.ts";
+
+const setTargets = (root: ReturnType<typeof createNode>, pattern: string) => {
+  // insertPattern returns EVERY terminal (optional params yield one per
+  // skip/consume combination) — they all share one target.
+  const terminals = insertPattern(root, compilePattern(pattern).segments);
+  const target = createTarget();
+  for (const terminal of terminals) terminal.target = target;
+};
 
 const withTarget = (pattern: string) => {
   const root = createNode();
-  const ir = compilePattern(pattern);
-  const node = insertPattern(root, ir.segments);
-  node.target = createTarget();
+  setTargets(root, pattern);
   return root;
 };
 
@@ -85,7 +97,7 @@ describe("trie matching", () => {
   it("static beats param beats wildcard at the same position", () => {
     const root = createNode();
     for (const pattern of ["/shop/*", "/shop/:name", "/shop/new"]) {
-      insertPattern(root, compilePattern(pattern).segments).target = createTarget();
+      setTargets(root, pattern);
     }
     expect(matchPattern(root, "/shop/new")?.target).toBeDefined();
     expect(matchPattern(root, "/shop/abc")?.params).toEqual({ name: "abc" });
@@ -122,13 +134,13 @@ describe("trie matching", () => {
 
   it("same-name params with different patterns stay separate variants, both reachable", () => {
     const root = createNode();
-    insertPattern(root, compilePattern("/n/:id").segments).target = createTarget();
-    insertPattern(root, compilePattern("/n/:id(\\d+)?").segments).target = createTarget();
+    setTargets(root, "/n/:id");
+    setTargets(root, "/n/:id(\\d+)?");
     const node = root.children.get("n");
     // The plain head keeps its identity — the custom pattern is a variant.
     expect(node?.param?.pattern).toBeNull();
     expect(node?.paramMore?.length).toBe(1);
-    expect(node?.paramMore?.[0]?.optional).toBe(true);
+    expect(node?.paramMore?.[0]?.skipNode).not.toBeNull();
     // Every variant's subtree stays reachable.
     expect(matchPattern(root, "/n/word")).not.toBeNull();
     expect(matchPattern(root, "/n/7")).not.toBeNull();
@@ -137,11 +149,11 @@ describe("trie matching", () => {
 
   it("identical patterns merge into one variant with sticky optionality", () => {
     const root = createNode();
-    insertPattern(root, compilePattern("/n/:id(\\d+)").segments).target = createTarget();
-    insertPattern(root, compilePattern("/n/:id(\\d+)?").segments).target = createTarget();
+    setTargets(root, "/n/:id(\\d+)");
+    setTargets(root, "/n/:id(\\d+)?");
     const node = root.children.get("n");
     expect(node?.paramMore).toBeNull();
-    expect(node?.param?.optional).toBe(true);
+    expect(node?.param?.skipNode).not.toBeNull();
     expect(matchPattern(root, "/n")).not.toBeNull();
     expect(matchPattern(root, "/n/7")).not.toBeNull();
     expect(matchPattern(root, "/n/x")).toBeNull();
@@ -151,9 +163,9 @@ describe("trie matching", () => {
 describe("variant lookup", () => {
   it("a third distinct pattern walks past the head and existing variants", () => {
     const root = createNode();
-    insertPattern(root, compilePattern("/n/:id(\\d+)").segments).target = createTarget();
-    insertPattern(root, compilePattern("/n/:id([a-z]+)").segments).target = createTarget();
-    insertPattern(root, compilePattern("/n/:id(\\w+-\\w+)").segments).target = createTarget();
+    setTargets(root, "/n/:id(\\d+)");
+    setTargets(root, "/n/:id([a-z]+)");
+    setTargets(root, "/n/:id(\\w+-\\w+)");
     expect(matchPattern(root, "/n/7")).not.toBeNull();
     expect(matchPattern(root, "/n/abc")).not.toBeNull();
     expect(matchPattern(root, "/n/a-b")).not.toBeNull();
@@ -164,9 +176,11 @@ describe("variant lookup", () => {
 describe("variant priority", () => {
   it("the FIRST-registered variant wins when several match", () => {
     const root = createNode();
-    const restrictive = insertPattern(root, compilePattern("/files/:id(\\d+)").segments);
+    const [restrictive] = insertPattern(root, compilePattern("/files/:id(\\d+)").segments) as [
+      TrieNode,
+    ];
     restrictive.target = createTarget();
-    const plain = insertPattern(root, compilePattern("/files/:id").segments);
+    const [plain] = insertPattern(root, compilePattern("/files/:id").segments) as [TrieNode];
     plain.target = createTarget();
     // "123" satisfies BOTH — the numeric (first-registered) route must own it.
     expect(matchPattern(root, "/files/123")?.target).toBe(restrictive.target);
@@ -176,11 +190,11 @@ describe("variant priority", () => {
 
   it("three variants keep registration order across the board", () => {
     const root = createNode();
-    const numeric = insertPattern(root, compilePattern("/v/:x(\\d+)").segments);
+    const [numeric] = insertPattern(root, compilePattern("/v/:x(\\d+)").segments) as [TrieNode];
     numeric.target = createTarget();
-    const alpha = insertPattern(root, compilePattern("/v/:x([a-z]+)").segments);
+    const [alpha] = insertPattern(root, compilePattern("/v/:x([a-z]+)").segments) as [TrieNode];
     alpha.target = createTarget();
-    const plain = insertPattern(root, compilePattern("/v/:x").segments);
+    const [plain] = insertPattern(root, compilePattern("/v/:x").segments) as [TrieNode];
     plain.target = createTarget();
     expect(matchPattern(root, "/v/42")?.target).toBe(numeric.target);
     expect(matchPattern(root, "/v/abc")?.target).toBe(alpha.target);
@@ -189,11 +203,12 @@ describe("variant priority", () => {
 
   it("the first-registered OPTIONAL variant wins at end-of-path", () => {
     const root = createNode();
-    const first = insertPattern(root, compilePattern("/a/:x?").segments);
-    first.target = createTarget();
-    const second = insertPattern(root, compilePattern("/a/:x(\\d+)?").segments);
-    second.target = createTarget();
-    expect(matchPattern(root, "/a")?.target).toBe(first.target);
-    expect(matchPattern(root, "/a/7")?.target).toBe(first.target);
+    setTargets(root, "/a/:x?");
+    setTargets(root, "/a/:x(\\d+)?");
+    const node = root.children.get("a");
+    // The end-of-path skip lands in the HEAD variant's skip subtree; the
+    // consume path lands in its consume node — both first-registered.
+    expect(matchPattern(root, "/a")?.target).toBe(node?.param?.skipNode?.target);
+    expect(matchPattern(root, "/a/7")?.target).toBe(node?.param?.node.target);
   });
 });

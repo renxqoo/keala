@@ -104,7 +104,12 @@ export const serializeCookie = (
       `Invalid cookie value for "${name}": CTL, comma, semicolon, quote and backslash are not allowed`,
     );
   }
-  let header = `${name}=${value}`;
+  // Symmetric codec: values are percent-encoded on the wire and decoded by
+  // parseCookies — a value carrying a literal "%2F" must survive the
+  // browser's byte-for-byte echo verbatim (and a SIGNED cookie's HMAC must
+  // be verifiable over the same string it was computed on). Validation runs
+  // against the RAW value; the encoded form is always cookie-octet-safe.
+  let header = `${name}=${encodeURIComponent(value)}`;
   if (options.maxAge !== undefined) {
     if (!Number.isFinite(options.maxAge)) {
       throw new TypeError("cookie maxAge must be a finite number");
@@ -119,6 +124,11 @@ export const serializeCookie = (
   if (options.expires !== undefined) {
     if (!(options.expires instanceof Date)) {
       throw new TypeError("cookie expires must be a Date");
+    }
+    // An invalid Date would ship the literal "Expires=Invalid Date" — reject
+    // the same shape response.lastModified does.
+    if (Number.isNaN(options.expires.getTime())) {
+      throw new TypeError("cookie expires must be a valid Date");
     }
     if (options.expires.getTime() - Date.now() > MAX_COOKIE_AGE_MS) {
       throw new TypeError("cookie expires cannot exceed 400 days out");

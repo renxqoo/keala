@@ -10,6 +10,7 @@
 import type { Application } from "../app.ts";
 import { createError, type HttpErrorProps } from "../../http/errors.ts";
 import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
+import type { HeaderMap } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
 import { requestApi } from "./request.ts";
 import type { ResponseApi } from "./response.ts";
@@ -60,8 +61,9 @@ const contextApi: ThisType<Context> & {
     const c = this as Context;
     // The facade writes `Set-Cookie` straight into the response header record
     // (same semantics as koa); arrays are detected by the finalizer without
-    // needing the multi-value flag.
-    const headers = (c.headersRecord ??= {});
+    // needing the multi-value flag. Null-proto like recordOf() — inherited
+    // keys must never surface on the header record.
+    const headers = (c.headersRecord ??= Object.create(null) as HeaderMap);
     const cookies = createCookies({
       get cookieHeader(): string | null {
         return c.rawRequest.headers.get("cookie");

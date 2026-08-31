@@ -84,7 +84,9 @@ describe("acceptsEncoding / acceptsCharset / acceptsLanguage", () => {
   });
 
   it("language prefix matching", () => {
-    expect(acceptsLanguage("en-GB,en;q=0.8,zh-CN;q=0.9", ["zh", "en", "fr"])).toBe("en");
+    // negotiator: "en"'s quality is 0.8 (its exact range beats the en-GB
+    // prefix), "zh" carries zh-CN's 0.9 — zh wins.
+    expect(acceptsLanguage("en-GB,en;q=0.8,zh-CN;q=0.9", ["zh", "en", "fr"])).toBe("zh");
     expect(acceptsLanguage("zh-CN;q=1, en-GB;q=0.5", ["zh", "en"])).toBe("zh");
     expect(acceptsLanguage("en;q=0.5, zh", ["en", "zh"])).toBe("zh");
   });

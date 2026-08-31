@@ -25,18 +25,17 @@ import {
   onAppError,
   parseListenArgs,
   pluginInstallerOf,
+  registerRedirect,
   routeShortcut,
   wsUpgradeHandler,
 } from "./dispatch.ts";
 import { createEmitter, type Listener } from "./emitter.ts";
 import {
   type Chain,
-  buildURL,
   createRouterState,
   EMPTY_PARAMS,
   matchRoute,
   rebuildChains,
-  redirectTargetSegments,
   registerDef,
   normalizePrefix,
   urlFor,
@@ -363,6 +362,14 @@ export const createApp = (options: AppOptions = {}): Application => {
         // ws registrations re-key under the mount (see mergeMountedWs — an
         // empty source map makes its own guard throw for router-typed subs).
         if (def.wsKey !== undefined) {
+          // The app.ws() pooling guard, enforced on the mount path too: the
+          // socket keeps this request's context alive for the connection
+          // lifetime, which pooling would recycle under the next request.
+          if (poolingEnabled) {
+            throw new TypeError(
+              "app.mount() cannot introduce ws routes into a pooling: true app — sockets retain contexts beyond the request lifetime",
+            );
+          }
           mergeMountedWs(
             wsRoutes,
             router,
@@ -374,28 +381,13 @@ export const createApp = (options: AppOptions = {}): Application => {
           );
           continue;
         }
-        registerDef(router, def.method, path, [...subGlobal, ...def.handlers], def.name, globalMw);
+        registerDef(router, def.method, path, def.handlers, def.name, globalMw, subGlobal);
       }
       return app;
     },
 
     redirect(source, destination, code = 301) {
-      const destSegments = redirectTargetSegments(destination);
-      registerDef(
-        router,
-        "GET",
-        source,
-        [
-          (c) => {
-            const target =
-              destSegments === null ? destination : buildURL(destSegments, c.params ?? {});
-            c.status = code;
-            c.redirect(target);
-          },
-        ],
-        undefined,
-        globalMw,
-      );
+      registerRedirect(router, source, destination, code, globalMw);
       return app;
     },
 

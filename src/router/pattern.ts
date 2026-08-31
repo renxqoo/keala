@@ -76,6 +76,11 @@ export const compilePattern = (path: string): PatternIR => {
           throw new TypeError(`Unbalanced custom pattern: ${JSON.stringify(path)}`);
         }
         const source = body.slice(open + 1, close);
+        // Text after the closing paren is not representable — registering the
+        // truncated pattern would silently match MORE than written.
+        if (body.slice(close + 1).length > 0) {
+          throw new TypeError(`Unexpected text after the custom pattern: ${JSON.stringify(path)}`);
+        }
         pattern = new RegExp(`^(?:${source})$`);
         body = body.slice(0, open);
       }

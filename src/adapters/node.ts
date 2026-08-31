@@ -67,11 +67,14 @@ const requestOf = (incoming: IncomingMessage, fallbackHost: string): Request => 
   // Origin-form is prefixed with an authority: the request's own Host header
   // when present (`c.host` and same-origin checks must see it), else the
   // bound address. An absolute-form target (proxy-style requests) is used
-  // verbatim — its own authority IS the identity.
+  // verbatim — its own authority IS the identity. `OPTIONS *` (server-wide
+  // options, RFC 7231 §4.3.7) addresses the whole server, not a path — map
+  // it to "/" so the router decides instead of the URL constructor throwing.
   const target = incoming.url ?? "/";
-  const url = /^https?:\/\//i.test(target)
-    ? target
-    : `http://${incoming.headers.host ?? fallbackHost}${target}`;
+  const requestTarget = target === "*" ? "/" : target;
+  const url = /^https?:\/\//i.test(requestTarget)
+    ? requestTarget
+    : `http://${incoming.headers.host ?? fallbackHost}${requestTarget}`;
   const declared = incoming.headers["content-length"];
   const chunked = incoming.headers["transfer-encoding"] !== undefined;
   if (!mayCarryBody(method) || (declared === undefined && !chunked) || declared === "0") {

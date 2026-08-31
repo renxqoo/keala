@@ -82,8 +82,13 @@ export const startBunServer = (
   if (options.nativeRoutes !== false && app.nativeSinks.size > 0) {
     serveOptions["routes"] = buildNativeRoutes(app.nativeSinks);
   }
+  // Websocket handlers install UNCONDITIONALLY: they dispatch through the
+  // live wsRoutes map, so `app.ws()` registered after listen() is picked up
+  // without a reload (HTTP routes hot-register the same way). Skipping the
+  // install when no ws route exists yet would silently dead-end late
+  // registrations under Bun (server.upgrade fails without handlers).
   const wsRoutes = app.wsRoutes;
-  if (wsRoutes.size > 0) {
+  {
     const config = (options.websocket ?? {}) as Record<string, unknown>;
     interface WsData {
       wsKey?: string;
@@ -97,13 +102,19 @@ export const startBunServer = (
     };
     // A rejecting async ws handler must never become an unhandledRejection
     // (a process-killer under Bun.serve) — rejections route to the app's
-    // error hook, mirroring the HTTP chain's floating-next containment.
+    // error hook, mirroring the HTTP chain's floating-next containment. The
+    // hook itself can throw (a failing listener, a non-Error value) — that
+    // failure must die here too, exactly like defaultServeError below.
     const dispatch = (run: () => unknown): void => {
       void Promise.resolve()
         .then(run)
-        .catch((error: unknown) =>
-          app.onerror(error instanceof Error ? error : new Error(String(error))),
-        );
+        .catch((error: unknown) => {
+          try {
+            app.onerror(error instanceof Error ? error : new Error(String(error)));
+          } catch {
+            // the error listener's failure is its own problem
+          }
+        });
     };
     serveOptions["websocket"] = {
       ...config,

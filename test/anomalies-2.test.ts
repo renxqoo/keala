@@ -122,12 +122,19 @@ describe("anomalies: router illegal inputs", () => {
     expect(() => app.get(path, (c) => void c)).toThrow();
   });
 
-  it.each(badPaths)("standalone router rejects path %p at mount time", (path) => {
-    const router = createRouter();
-    router.get(path, (c) => void c);
-    const app = createApp(quiet);
-    expect(() => app.mount("", router)).toThrow();
-  });
+  it.each(badPaths)(
+    "standalone router rejects path %p loudly (at registration or mount)",
+    (path) => {
+      const router = createRouter();
+      try {
+        router.get(path, (c) => void c); // malformed shapes throw right here
+      } catch {
+        return; // loud at registration — earlier than mount, same guarantee
+      }
+      const app = createApp(quiet);
+      expect(() => app.mount("", router)).toThrow();
+    },
+  );
 
   it.each(["", "//"])("edge path %p is treated as the root route", (path) => {
     const app = createApp(quiet);

@@ -34,6 +34,36 @@ const quiet = { env: "test", silent: true } as const;
 const req = (url: string, init: RequestInit = {}): Request => new Request(url, init);
 const text = async (res: Response): Promise<string> => res.text();
 
+/** target -> pattern-set via the structures the router itself indexes into. */
+const patternsOf = (
+  root: TrieNode,
+  patterns: readonly string[],
+  stateStatics?: Map<string, RouteTarget>,
+): Map<RouteTarget, string[]> => {
+  const map = new Map<RouteTarget, string[]>();
+  for (const p of patterns) {
+    const ir = compilePattern(p);
+    let target: RouteTarget | null;
+    if (stateStatics !== undefined) {
+      target = ir.isStatic
+        ? (stateStatics.get(p) ?? null)
+        : (insertPattern(root, ir.segments)[0] as { target: RouteTarget | null }).target;
+    } else {
+      const terminals = insertPattern(root, ir.segments);
+      const shared = (terminals[0] as { target: RouteTarget | null }).target ?? createTarget();
+      for (const terminal of terminals) {
+        if (terminal.target === null) terminal.target = shared;
+      }
+      target = shared;
+    }
+    if (target === null) throw new Error(`no target for ${p}`);
+    const list = map.get(target) ?? [];
+    list.push(p);
+    map.set(target, list);
+  }
+  return map;
+};
+
 describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, full shapes)", () => {
   let seed = 1;
   const rand = (): number => {
@@ -106,33 +136,6 @@ describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, fu
             .map((k) => [k, p[k] as string]),
         );
 
-  /** target -> pattern-set via the structures the router itself indexes into. */
-  const patternsOf = (
-    root: TrieNode,
-    patterns: readonly string[],
-    stateStatics?: Map<string, RouteTarget>,
-  ): Map<RouteTarget, string[]> => {
-    const map = new Map<RouteTarget, string[]>();
-    for (const p of patterns) {
-      const ir = compilePattern(p);
-      let target: RouteTarget | null;
-      if (stateStatics !== undefined) {
-        target = ir.isStatic
-          ? (stateStatics.get(p) ?? null)
-          : insertPattern(root, ir.segments).target;
-      } else {
-        const node = insertPattern(root, ir.segments);
-        if (node.target === null) node.target = createTarget();
-        target = node.target;
-      }
-      if (target === null) throw new Error(`no target for ${p}`);
-      const list = map.get(target) ?? [];
-      list.push(p);
-      map.set(target, list);
-    }
-    return map;
-  };
-
   it("holds over 300 randomized pattern tables x 200 paths each", { timeout: 30_000 }, () => {
     const problems: string[] = [];
     for (let t = 0; t < 300; t++) {
@@ -166,8 +169,11 @@ describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, fu
       try {
         for (const p of patterns) {
           registerDef(state, "GET", p, [() => {}]);
-          const node = insertPattern(root, compilePattern(p).segments);
-          if (node.target === null) node.target = createTarget();
+          const terminals = insertPattern(root, compilePattern(p).segments);
+          const shared = (terminals[0] as { target: RouteTarget | null }).target ?? createTarget();
+          for (const terminal of terminals) {
+            if (terminal.target === null) terminal.target = shared;
+          }
         }
       } catch {
         continue; // conflicting param names at one position throw by design

@@ -114,8 +114,9 @@ export const createError = (
     (typeof extra?.["message"] === "string" ? (extra["message"] as string) : undefined) ??
     message ??
     source?.message ??
-    statusMessage(resolvedStatus) ??
-    String(resolvedStatus);
+    // statusMessage returns "" (never nullish) for valid-but-unnamed statuses
+    // — the http-errors fallback for those is the status digits themselves.
+    (statusMessage(resolvedStatus) || String(resolvedStatus));
 
   const error = new Error(finalMessage) as HttpError;
   error.name = ERROR_NAMES[resolvedStatus] ?? "HttpError";

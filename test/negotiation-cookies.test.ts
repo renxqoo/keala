@@ -36,7 +36,10 @@ describe("negotiation matrix: Accept q-value table", () => {
       "application/json",
     ],
     ["*/*;q=0.1, text/html;q=0.2", ["application/json", "text/html"], "text/html"],
-    ["*/*;q=0.9, application/json;q=0.1", ["application/json", "text/html"], "application/json"],
+    // negotiator semantics (verified against the package): the exact range
+    // defines application/json's quality (0.1), so the wildcard's 0.9 wins
+    // for text/html.
+    ["*/*;q=0.9, application/json;q=0.1", ["application/json", "text/html"], "text/html"],
     ["text/*;q=0.8, application/json", ["text/plain", "application/json"], "application/json"],
     ["text/*;q=0.8, application/json;q=0.1", ["text/plain", "application/json"], "text/plain"],
     ["application/json, text/html;q=0.9, */*;q=0.8", ["text/plain"], "text/plain"],

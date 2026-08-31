@@ -21,7 +21,7 @@ import type { Application } from "./app.ts";
 import type { Context } from "./context/context.ts";
 import { byteLengthOf } from "../utils/url.ts";
 import { isEmptyStatus, statusMessage } from "../http/status.ts";
-import { isLatin1 } from "../utils/text.ts";
+import { isStatusText } from "../utils/text.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
 
@@ -121,17 +121,23 @@ const rebuildCommitted = async (c: Context, res: Response): Promise<Response> =>
       }
     }
   }
-  const overridden = (c.flags & 16) !== 0 && (c.flags & 1) !== 0;
-  const status = overridden ? c.statusValue : res.status;
+  const statusOverridden = (c.flags & 16) !== 0 && (c.flags & 1) !== 0;
+  const status = statusOverridden ? c.statusValue : res.status;
+  // Rule 4 as documented: a post-commit c.status OR c.message overrides the
+  // reason phrase — a message-only write (no status change) counts too.
   const statusText =
-    overridden && c.messageValue.length > 0 && isLatin1(c.messageValue)
+    (c.flags & 16) !== 0 && c.messageValue.length > 0 && isStatusText(c.messageValue)
       ? c.messageValue
       : res.statusText;
-  return new Response(isEmptyStatus(status) ? null : res.body, {
-    status,
-    statusText,
-    headers,
-  });
+  if (isEmptyStatus(status)) {
+    // RFC 9110 §8.6: a 204/304 MUST NOT carry content-describing headers —
+    // the same cleanup the state-mode path applies.
+    headers.delete("content-type");
+    headers.delete("content-length");
+    headers.delete("transfer-encoding");
+    return new Response(null, { status, statusText, headers });
+  }
+  return new Response(res.body, { status, statusText, headers });
 };
 
 /** Response headers for a rebuild; sniffs a text body when content-type is absent. */
@@ -340,7 +346,7 @@ const fromState = (c: Context, head: boolean): Response => {
 
   const multiValue =
     (c.flags & 4) !== 0 || (record !== null && Array.isArray(record["set-cookie"]));
-  const statusText = isLatin1(custom) ? custom : "";
+  const statusText = isStatusText(custom) ? custom : "";
   const reason = statusText.length > 0 ? statusText : undefined;
   const hasRecord = record !== null && countOf(record) > 0;
   const isObject = body !== null && typeof body === "object" && !(body instanceof Uint8Array);

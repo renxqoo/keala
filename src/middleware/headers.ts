@@ -17,6 +17,10 @@ export interface SecureHeadersOptions {
  * Safe response headers by default: nosniff, frame guard, referrer policy.
  * HSTS is opt-in (`hsts: 31536000`) because sending it over plain HTTP can
  * brick development environments.
+ *
+ * The writes run in a `finally`: a throwing downstream must still get the
+ * guards on its error response (koa-helmet parity), and the happy path
+ * keeps last-writer-wins over the handler.
  */
 export const secureHeaders = (options: SecureHeadersOptions = {}): RouteHandler => {
   const hstsValue =
@@ -24,14 +28,17 @@ export const secureHeaders = (options: SecureHeadersOptions = {}): RouteHandler 
       ? `max-age=${Math.trunc(options.hsts)}${options.hstsExtras ? `; ${options.hstsExtras.join("; ")}` : ""}`
       : null;
   return async (c, next) => {
-    await next();
-    c.set("X-Content-Type-Options", "nosniff");
-    c.set("X-Frame-Options", "DENY");
-    c.set("Referrer-Policy", options.referrerPolicy ?? "no-referrer");
-    if (options.permittedCrossDomainPolicies !== undefined) {
-      c.set("X-Permitted-Cross-Domain-Policies", options.permittedCrossDomainPolicies);
+    try {
+      await next();
+    } finally {
+      c.set("X-Content-Type-Options", "nosniff");
+      c.set("X-Frame-Options", "DENY");
+      c.set("Referrer-Policy", options.referrerPolicy ?? "no-referrer");
+      if (options.permittedCrossDomainPolicies !== undefined) {
+        c.set("X-Permitted-Cross-Domain-Policies", options.permittedCrossDomainPolicies);
+      }
+      if (hstsValue !== null) c.set("Strict-Transport-Security", hstsValue);
     }
-    if (hstsValue !== null) c.set("Strict-Transport-Security", hstsValue);
   };
 };
 
@@ -45,15 +52,19 @@ const RANDOM_UUID =
 
 /**
  * Request correlation: honors an inbound id, generates otherwise, exposes it
- * on `c.state.requestId` and echoes it on the response.
+ * on `c.state.requestId` and echoes it on the response — on the error path
+ * too (finally), so a failing request stays traceable.
  */
 export const requestId = (): RouteHandler => {
   return async (c, next) => {
     const inbound = c.get("x-request-id");
     const id = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,128}$/.test(inbound) ? inbound : RANDOM_UUID();
     c.state.requestId = id;
-    await next();
-    c.set("X-Request-ID", id);
+    try {
+      await next();
+    } finally {
+      c.set("X-Request-ID", id);
+    }
   };
 };
 

@@ -158,7 +158,7 @@ export const charsetFromContentType = (contentType: string): string => {
  * a decoy `charset=`). Only parameters AFTER the type itself are yielded, so
  * a `charset=` inside another parameter's quoted value can never win.
  */
-const contentTypeParameters = function* (
+export const contentTypeParameters = function* (
   contentType: string,
 ): Generator<[name: string, value: string]> {
   const parts: string[] = [];

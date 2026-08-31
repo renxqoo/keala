@@ -36,10 +36,11 @@ const splitHeader = (header: string): string[] => {
 };
 
 /**
- * Parse a preference header into q-sorted entries (best first).
- * Entries with q=0 are dropped: they are explicitly "not acceptable".
+ * Parse a preference header into entries (header order preserved).
+ * Unlike `parsePreferences`, q=0 entries are KEPT — explicit-refusal
+ * detection (`identity;q=0`, `gzip;q=0`) needs them.
  */
-export const parsePreferences = (header: string | null): Preference[] => {
+export const parsePreferenceEntries = (header: string | null): Preference[] => {
   if (header == null || header.length === 0) return [];
   const out: Preference[] = [];
   for (const part of splitHeader(header)) {
@@ -54,11 +55,19 @@ export const parsePreferences = (header: string | null): Preference[] => {
         if (!Number.isNaN(parsed)) q = Math.min(Math.max(parsed, 0), 1);
       }
     }
-    if (q > 0) out.push({ value, q, order: out.length });
+    out.push({ value, q, order: out.length });
   }
-  out.sort((a, b) => b.q - a.q || a.order - b.order);
   return out;
 };
+
+/**
+ * Parse a preference header into q-sorted entries (best first).
+ * Entries with q=0 are dropped: they are explicitly "not acceptable".
+ */
+export const parsePreferences = (header: string | null): Preference[] =>
+  parsePreferenceEntries(header)
+    .filter((pref) => pref.q > 0)
+    .sort((a, b) => b.q - a.q || a.order - b.order);
 
 /** Score a client media range against a concrete server type (0 = no match). */
 const mediaScore = (client: string, server: string): number => {
@@ -96,10 +105,11 @@ interface PickOptions {
 }
 
 /**
- * Pick the best provided value for a preference header.
- * Client preferences are pre-sorted (q desc, then header order), so the first
- * preference that matches anything wins; within one preference the most
- * specific provided value is chosen.
+ * Pick the best provided value for a preference header (negotiator
+ * semantics): each provided value's quality is defined by its MOST SPECIFIC
+ * matching range (RFC 7231 §5.3.2 — an exact range outranks a wildcard
+ * however their q compare), and the provided values then compete on that
+ * quality, tying out by header order and finally provided order.
  */
 export const pickPreference = ({
   header,
@@ -110,22 +120,32 @@ export const pickPreference = ({
   // No header at all: the server's own preference wins. A header whose
   // entries are all q=0 leaves `prefs` empty and must yield `false`.
   if (header == null || header.length === 0) return provided[0] ?? false;
-  const prefs = parsePreferences(header);
-  for (const pref of prefs) {
-    let bestIndex = -1;
-    let bestScore = 0;
-    for (let i = 0; i < provided.length; i++) {
-      const target = normalize(provided[i] ?? "");
-      if (target.length === 0) continue;
+  const prefs = parsePreferenceEntries(header).filter((pref) => pref.q > 0);
+  let bestIndex = -1;
+  let bestQ = 0;
+  let bestOrder = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < provided.length; i++) {
+    const target = normalize(provided[i] ?? "");
+    if (target.length === 0) continue;
+    // The most specific matching range (ties to the earliest entry) defines
+    // this value's quality — NOT the highest-q range that happens to match.
+    let match: Preference | undefined;
+    let matchScore = 0;
+    for (const pref of prefs) {
       const s = score(pref.value, target);
-      if (s > bestScore) {
-        bestScore = s;
-        bestIndex = i;
+      if (s > matchScore) {
+        matchScore = s;
+        match = pref;
       }
     }
-    if (bestIndex !== -1) return provided[bestIndex] ?? false;
+    if (match === undefined) continue;
+    if (match.q > bestQ || (match.q === bestQ && match.order < bestOrder)) {
+      bestIndex = i;
+      bestQ = match.q;
+      bestOrder = match.order;
+    }
   }
-  return false;
+  return bestIndex === -1 ? false : (provided[bestIndex] ?? false);
 };
 
 /** Values the client accepts, best-first (used when ctx.accepts() has no args). */
@@ -152,13 +172,16 @@ export const acceptsEncoding = (
   return false;
 };
 
+/**
+ * Identity is refused when an `identity` (or wildcard `*`) entry carries
+ * q=0 — in ANY spelling (`q=0.000`) and at ANY parameter position. Parsed
+ * numerically from the full entry list (which keeps q=0), never from
+ * string-matched parameter slots.
+ */
 const isIdentityRefused = (header: string): boolean => {
-  for (const part of header.split(",")) {
-    const segments = part.split(";");
-    const value = (segments[0] ?? "").trim().toLowerCase();
-    if (value !== "identity" && value !== "*") continue;
-    const q = (segments[1] ?? "").trim();
-    if (q === "q=0" || q === "q=0.0" || q === "q=0.00") return true;
+  for (const entry of parsePreferenceEntries(header)) {
+    if (entry.value !== "identity" && entry.value !== "*") continue;
+    if (entry.q === 0) return true;
   }
   return false;
 };

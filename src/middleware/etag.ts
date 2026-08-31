@@ -8,7 +8,7 @@
  */
 
 import type { RouteHandler } from "../router/router.ts";
-import { parsePreferences } from "../negotiation/accepts.ts";
+import { parsePreferenceEntries } from "../negotiation/accepts.ts";
 
 const wyhashOf = (bytes: Uint8Array): string | null => {
   const hash = (
@@ -128,15 +128,19 @@ const webGzip = async (input: Uint8Array): Promise<Uint8Array> => {
  */
 
 /**
- * q-aware gzip acceptance (RFC 9110 §12.5.3): `gzip;q=0` is an explicit
- * refusal, `*` accepts anything, and the decision reuses the same
- * preference parser as c.acceptsEncodings.
+ * q-aware gzip acceptance (RFC 9110 §12.5.3): an EXPLICIT `gzip;q=0` is a
+ * refusal no wildcard can override (the named entry outranks `*`), `*;q>0`
+ * accepts anything, and `gzip;q=0` alone refuses.
  */
 const acceptsGzip = (header: string): boolean => {
-  for (const pref of parsePreferences(header)) {
-    if (pref.value === "gzip" || pref.value === "*") return true;
+  let explicit: number | null = null;
+  let wildcard: number | null = null;
+  for (const pref of parsePreferenceEntries(header)) {
+    if (pref.value === "gzip" && explicit === null) explicit = pref.q;
+    else if (pref.value === "*" && wildcard === null) wildcard = pref.q;
   }
-  return false;
+  const quality = explicit ?? wildcard;
+  return quality !== null && quality > 0;
 };
 
 /** Extensions of inherently-compressed payloads — re-compressing wastes CPU. */

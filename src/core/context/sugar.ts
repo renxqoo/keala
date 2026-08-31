@@ -14,7 +14,7 @@
 
 import type { HeaderValue } from "../../types.ts";
 import { isEmptyStatus } from "../../http/status.ts";
-import { isLatin1 } from "../../utils/text.ts";
+import { isStatusText } from "../../utils/text.ts";
 import type { ContextState } from "./state.ts";
 
 export const TEXT_PLAIN = "text/plain; charset=utf-8";
@@ -23,7 +23,7 @@ export const TEXT_HTML = "text/html; charset=utf-8";
 /** Latin-1-safe statusText candidate from a staged c.message. */
 const stagedStatusText = (c: ContextState): string | undefined => {
   const message = c.messageValue;
-  return message.length > 0 && isLatin1(message) ? message : undefined;
+  return message.length > 0 && isStatusText(message) ? message : undefined;
 };
 
 /** Drop content-describing headers for a null-body status (204/205/304). */
@@ -177,7 +177,12 @@ export const sugarHtml = (
   const st = status ?? staged;
   const statusText = stagedStatusText(c);
   const statusInit =
-    st === undefined ? {} : { status: st, ...(statusText !== undefined ? { statusText } : {}) };
+    st === undefined && statusText === undefined
+      ? {}
+      : {
+          ...(st !== undefined ? { status: st } : {}),
+          ...(statusText !== undefined ? { statusText } : {}),
+        };
   // Null-body statuses never carry the html content-type (see sugarText).
   if (st !== undefined && isEmptyStatus(st)) {
     return new Response(null, {

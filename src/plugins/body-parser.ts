@@ -12,6 +12,7 @@
  */
 
 import { createError } from "../http/errors.ts";
+import { contentTypeParameters } from "../utils/mime.ts";
 import type { Plugin } from "../types.ts";
 import type { Application } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
@@ -50,17 +51,14 @@ const MAX_BOUNDARY_LENGTH = 1024;
  * Case-insensitive `boundary=` parameter of a content type, quoted or bare.
  * The VALUE is taken verbatim from the original header — RFC 2046 boundaries
  * are case-sensitive, and scanning for a lowercased delimiter would count
- * zero occurrences (the budget silently disarmed).
+ * zero occurrences (the budget silently disarmed). Parsing is quote-aware:
+ * a quoted boundary may itself contain ";" (`boundary="a;b"`), and a naive
+ * `split(";")` would shred it into a needle that matches nothing — arming
+ * the part budget off.
  */
 const boundaryOf = (contentType: string): string | null => {
-  for (const param of contentType.split(";").slice(1)) {
-    const eq = param.indexOf("=");
-    if (eq === -1) continue;
-    if (param.slice(0, eq).trim().toLowerCase() !== "boundary") continue;
-    let value = param.slice(eq + 1).trim();
-    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-      value = value.slice(1, -1);
-    }
+  for (const [name, value] of contentTypeParameters(contentType)) {
+    if (name !== "boundary") continue;
     return value.length === 0 || value.length > MAX_BOUNDARY_LENGTH ? null : value;
   }
   return null;

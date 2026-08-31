@@ -40,6 +40,10 @@ export interface RouteDef {
   path: string;
   handlers: RouteHandler[];
   name?: string;
+  /** Sub-router `use()` middleware merged by `mount()`; runs AFTER the
+   *  parent's global middleware and BEFORE param middleware (the koa
+   *  order: use > param > handler). */
+  prefixMiddleware?: readonly RouteHandler[];
   /** Set by app.ws(): the wsRoutes key this def's upgrade handler closes
    * over (mount() re-keys ws registrations under its prefix). */
   wsKey?: string;
@@ -128,11 +132,17 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
     }
     return target;
   }
-  const node = insertPattern(state.trieRoot, ir.segments);
-  if (node.target === null) node.target = createTarget();
+  // A pattern with optional params has one terminal per skip/consume
+  // combination — every terminal shares ONE target (duplicates of the same
+  // pattern merge into the existing target exactly like before).
+  const terminals = insertPattern(state.trieRoot, ir.segments);
+  const target = (terminals[0] as TrieNode).target ?? createTarget();
+  for (const terminal of terminals) {
+    if (terminal.target === null) terminal.target = target;
+  }
   state.hasDynamic = true;
   const first = ir.segments[0] as CompiledSegment;
-  if (first.kind !== "static") return node.target;
+  if (first.kind !== "static") return target;
   let bucket = state.buckets.get(first.value);
   if (bucket === undefined) {
     bucket = { fast: null, count: 0 };
@@ -146,10 +156,10 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
           // matcher must skip every leading static before captures begin.
           prefix: staticHeadOf(ir.segments),
           names: paramNamesOf(ir.segments),
-          target: node.target,
+          target,
         }
       : null;
-  return node.target;
+  return target;
 };
 
 /** Concatenate the leading static segments into a path prefix. */
@@ -183,7 +193,13 @@ const chainOf = (handlers: readonly RouteHandler[], globalMw: readonly RouteHand
 const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHandler[]): void => {
   const ir = compilePattern(def.path);
   const target = indexPattern(state, ir, def.path);
-  const handlers = [...paramChainFor(state, ir.segments), ...def.handlers];
+  // Koa order along the chain: the sub-router's use() middleware (if this
+  // def came through mount()) runs BEFORE param middleware, the handler last.
+  const handlers = [
+    ...(def.prefixMiddleware ?? []),
+    ...paramChainFor(state, ir.segments),
+    ...def.handlers,
+  ];
   const chain = chainOf(handlers, globalMw);
   // Duplicate path+method registrations chain in registration order
   // (@koa/router runs every matching layer).
@@ -219,6 +235,7 @@ export const registerDef = (
   handlers: RouteHandler[],
   name?: string,
   globalMw: readonly RouteHandler[] = [],
+  prefixMiddleware?: readonly RouteHandler[],
 ): RouteDef => {
   const upper = method.toUpperCase();
   if (!KNOWN_METHODS.has(upper) && upper !== ALL) {
@@ -238,6 +255,9 @@ export const registerDef = (
     path: normalizePath(joined.length === 0 ? "/" : joined),
     handlers,
     name,
+    ...(prefixMiddleware !== undefined && prefixMiddleware.length > 0
+      ? { prefixMiddleware }
+      : null),
   };
   if (state.sunkPaths.size > 0) {
     for (const sunk of state.sunkPaths) {
@@ -348,13 +368,13 @@ export const matchRoute = (state: RouterState, path: string): RouteMatch | null 
   if (target !== undefined) return { target, params: null };
   if (!state.hasDynamic) return null;
 
-  // Bucket by first segment. The fast matcher only applies to a RAW first
-  // segment (its prefix length is derived from the pattern's decoded
-  // segment); an escaped first segment goes straight to the trie, whose
-  // static children implement the decoded retry themselves.
+  // Bucket by first segment. The fast matcher's prefix is a DECODED pattern
+  // value — a request path carrying escapes compares in a different key
+  // space, so those go straight to the trie (whose static children do the
+  // decoded comparison canonically).
   const firstEnd = path.indexOf("/", 1);
   const first = firstEnd === -1 ? path.slice(1) : path.slice(1, firstEnd);
-  if (first.length > 0) {
+  if (first.length > 0 && path.indexOf("%") === -1) {
     const bucket = state.buckets.get(first);
     if (bucket !== undefined) {
       const fast = fastMatch(bucket, path);
@@ -408,6 +428,23 @@ export const buildURL = (
 export const redirectTargetSegments = (destination: string): readonly CompiledSegment[] | null => {
   if (!destination.startsWith("/") || destination.startsWith("//")) return null;
   return destination.includes(":") ? compilePattern(destination).segments : null;
+};
+
+/**
+ * A redirect destination may only reference params the SOURCE route captures
+ * — a missing required param would explode as a per-request 500, violating
+ * the eager-validation contract. Checked at registration.
+ */
+export const assertRedirectCaptures = (source: string, dest: readonly CompiledSegment[]): void => {
+  const available = new Set(paramNamesOf(compilePattern(source).segments));
+  for (const segment of dest) {
+    if (segment.kind === "static" || segment.optional) continue;
+    if (!available.has(segment.value)) {
+      throw new TypeError(
+        `redirect destination references ":${segment.value}", which ${JSON.stringify(source)} never captures`,
+      );
+    }
+  }
 };
 
 export const urlFor = (

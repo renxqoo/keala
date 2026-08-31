@@ -5,7 +5,13 @@
 
 import type { Application, WebSocketHandlers } from "./app.ts";
 import type { Chain, RouteDef, RouteHandler, RouterState } from "../router/router.ts";
-import { normalizePrefix, registerDef } from "../router/router.ts";
+import {
+  assertRedirectCaptures,
+  buildURL,
+  normalizePrefix,
+  redirectTargetSegments,
+  registerDef,
+} from "../router/router.ts";
 import { NOOP_TAIL } from "./compose.ts";
 import type { Context } from "./context/context.ts";
 import { finalize } from "./respond.ts";
@@ -42,6 +48,36 @@ export const routeShortcut = (
     throw new TypeError("Route registration requires at least one handler");
   }
   return app;
+};
+
+/**
+ * Register a redirect route (GET): a destination PATH carrying `:params` is
+ * rebuilt from the matched route's captured params; anything the source does
+ * not capture is a registration error, never a per-request 500.
+ */
+export const registerRedirect = (
+  router: RouterState,
+  source: string,
+  destination: string,
+  code: number,
+  globalMw: readonly RouteHandler[],
+): void => {
+  const destSegments = redirectTargetSegments(destination);
+  if (destSegments !== null) assertRedirectCaptures(source, destSegments);
+  registerDef(
+    router,
+    "GET",
+    source,
+    [
+      (c) => {
+        const target = destSegments === null ? destination : buildURL(destSegments, c.params ?? {});
+        c.status = code;
+        c.redirect(target);
+      },
+    ],
+    undefined,
+    globalMw,
+  );
 };
 
 /**
@@ -98,9 +134,10 @@ export const mergeMountedWs = (
     router,
     def.method,
     path,
-    [...subGlobal, wsUpgradeHandler(newKey)],
+    [wsUpgradeHandler(newKey)],
     def.name,
     globalMw,
+    subGlobal,
   ).wsKey = newKey;
 };
 
@@ -218,13 +255,16 @@ const buildErrorResponse = (
 
   // A stale committed response must not shadow the error.
   c._res = undefined;
-  // Koa's onerror contract: a failed response starts from a clean header set
-  // (set-cookie survives — deliberate, tested divergence from koa).
+  // Koa parity on the error path: headers the chain already staged ride
+  // along (koa's res keeps them; middleware security headers must still
+  // cover error pages) — only content-DESCRIBING headers drop, because they
+  // describe the body that failed to ship. The body/message below replace
+  // the failed response state entirely.
   const record = c.headersRecord;
   if (record !== null) {
-    for (const key of Object.keys(record)) {
-      if (key !== "set-cookie") delete record[key];
-    }
+    delete record["content-type"];
+    delete record["content-length"];
+    delete record["transfer-encoding"];
   }
   c.bodyValue = null;
   c.messageValue = "";

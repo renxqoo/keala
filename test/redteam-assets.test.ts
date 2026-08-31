@@ -24,7 +24,13 @@ const normParams = (p: Record<string, string> | null): string => {
   );
 };
 import { compilePattern } from "../src/router/pattern.ts";
-import { createNode, createTarget, insertPattern, matchPattern } from "../src/router/trie.ts";
+import {
+  createNode,
+  createTarget,
+  insertPattern,
+  matchPattern,
+  type RouteTarget,
+} from "../src/router/trie.ts";
 
 describe("redteam — GA-1 matchRoute equals the pure trie (trailing-param shapes)", () => {
   let seed = 1;
@@ -109,11 +115,16 @@ describe("redteam — GA-1 matchRoute equals the pure trie (trailing-param shape
     const hosts = new Map<object, Set<string>>();
     try {
       for (const p of patterns) {
-        const node = insertPattern(root, compilePattern(p).segments);
-        if (node.target === null) node.target = createTarget();
-        const set = hosts.get(node.target) ?? new Set<string>();
+        // insertPattern returns every terminal (optionals yield several);
+        // they all share one target.
+        const terminals = insertPattern(root, compilePattern(p).segments);
+        const shared = (terminals[0] as { target: RouteTarget | null }).target ?? createTarget();
+        for (const terminal of terminals) {
+          if (terminal.target === null) terminal.target = shared;
+        }
+        const set = hosts.get(shared) ?? new Set<string>();
         set.add(p);
-        hosts.set(node.target, set);
+        hosts.set(shared, set);
       }
     } catch {
       return []; // conflicting names at one position — registration throws by design

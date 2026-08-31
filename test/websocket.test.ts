@@ -127,6 +127,12 @@ describe("adapter websocket dispatcher", () => {
         reload: () => undefined,
       };
     });
-    expect(made[0]?.["websocket"]).toBeUndefined();
+    // The dispatchers read the LIVE wsRoutes map — they install
+    // unconditionally so `app.ws()` after listen() is picked up without a
+    // reload (a missing config would dead-end late routes under Bun).
+    const websocket = made[0]?.["websocket"] as Record<string, unknown>;
+    expect(websocket).toBeDefined();
+    expect(websocket["open"]).toBeTypeOf("function");
+    expect(websocket["message"]).toBeTypeOf("function");
   });
 });

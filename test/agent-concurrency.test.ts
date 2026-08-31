@@ -309,10 +309,10 @@ describe("concurrent isolation", () => {
 // 3. Error-path lifecycle
 // ---------------------------------------------------------------------------
 describe("error path lifecycle", () => {
-  it("语义锁定: a failed response drops its headers and body, keeps set-cookie (documented deviation)", async () => {
-    // Koa's ctx.onerror unsets ALL headers; this project deliberately keeps
-    // set-cookie so a failing request still clears cookies (see
-    // src/core/app.ts buildErrorResponse).
+  it("语义锁定: a failed response keeps staged headers and set-cookie, drops the failed body (koa parity)", async () => {
+    // Verified against koa 3.2.1: the error response carries headers the
+    // chain already staged (middleware security headers must reach error
+    // pages); the failed BODY is discarded and the 5xx message stays hidden.
     const errors: unknown[] = [];
     const app = createApp(quiet);
     app.onError((e) => errors.push(e));
@@ -325,7 +325,7 @@ describe("error path lifecycle", () => {
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(500);
-    expect(res.headers.get("x-custom")).toBe(null);
+    expect(res.headers.get("x-custom")).toBe("leak");
     expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
     expect(await res.text()).toBe("Internal Server Error");
     expect(res.headers.getSetCookie()).toEqual(["sid=dead; Path=/"]);

@@ -40,10 +40,16 @@ one flat context (see docs/DESIGN.md). Semantics that CHANGED on purpose:
 
 Retained koa semantics (locked by tests): onion `await next()`, `c.throw`/
 `c.assert`, signed cookies with key rotation, lazy query/cookies/ip, error
-contract (expose gate, header reset keeping set-cookie, 5xx message hiding),
-status/body state machine (204 coercion, JSON `null` literal, HEAD
-Content-Length backfill), url rewrite cache-invalidation chain, proxy trust
-gates, content negotiation, attachment GHSA fix, redirect encodeurl+escape.
+contract (expose gate, 5xx message hiding; staged headers ride along on the
+error response — verified against koa 3.2.1, only content-describing headers
+drop), symmetric cookie codec (values percent-encoded on set, decoded on
+parse — the `cookies` package contract; the HMAC of a signed cookie is
+verified over the same string it was computed on), status/body state machine
+(204 coercion, JSON `null` literal, HEAD Content-Length backfill), url
+rewrite cache-invalidation chain, proxy trust gates, content negotiation
+(negotiator semantics: a provided type's quality is its most-specific
+matching range's q), attachment GHSA fix, redirect encodeurl+escape
+(backslash encoded — WHATWG treats it as a separator).
 
 Still-open divergence: none in routing — `[T2]` is FIXED (trie positions keep
 same-name pattern variants; the skip in `test/agent-redteam.test.ts` is

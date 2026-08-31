@@ -151,8 +151,11 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     if (options.followSymlinks !== true) {
       // ANY symlink component under root — a linked directory just as much
       // as a linked file — is denied, even when it points back inside root.
-      // (root itself may legitimately be a symlink.)
-      const parts = absolute.slice(root.length + 1).split(sep === "\\" ? /[\\/]/ : "/");
+      // (root itself may legitimately be a symlink.) The walk covers the
+      // FINAL served path (the directory-index resolution included): walking
+      // only `absolute` would leave a symlinked <dir>/index.html unexamined
+      // exactly when the directory path was requested.
+      const parts = filePath.slice(root.length + 1).split(sep === "\\" ? /[\\/]/ : "/");
       let walked = root;
       for (const part of parts) {
         walked = `${walked}${sep}${part}`;

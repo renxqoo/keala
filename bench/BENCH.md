@@ -12,16 +12,17 @@ Generated: 2026-08-31T05:24:49.284Z
 
 ## Text response
 
-| Framework | Runtime | req/s | noise |
-| --- | --- | ---: | ---: |
-| raw Bun.serve | bun 1.4 | 225,920 | ±5% |
-| bun-koa | bun 1.4 | 226,144 | ±7% |
-| hono 4 | bun 1.4 | 223,280 | ±4% |
-| koa 3 | node 22 | 59,336 | ±2% |
-| fastify 5 | node 22 | 71,592 | ±2% |
-| koa 3 | bun 1.4 | 115,816 | ±11% |
-| fastify 5 | bun 1.4 | 132,092 | ±2% |
-| go net/http | go 1.27 | 178,736 | ±3% |
+| Framework     | Runtime |   req/s | noise |
+| ------------- | ------- | ------: | ----: |
+| raw Bun.serve | bun 1.4 | 225,920 |   ±5% |
+| bun-koa       | bun 1.4 | 226,144 |   ±7% |
+| hono 4        | bun 1.4 | 223,280 |   ±4% |
+| koa 3         | node 22 |  59,336 |   ±2% |
+| fastify 5     | node 22 |  71,592 |   ±2% |
+| koa 3         | bun 1.4 | 115,816 |  ±11% |
+| fastify 5     | bun 1.4 | 132,092 |   ±2% |
+| go net/http   | go 1.27 | 178,736 |   ±3% |
+
 - bun-koa vs koa 3: **3.81x** (±7% / ±2%)
 - bun-koa vs fastify 5: **3.16x** (±7% / ±2%)
 - bun-koa vs hono 4: **1.01x** (±7% / ±4%)
@@ -30,16 +31,17 @@ Generated: 2026-08-31T05:24:49.284Z
 
 ## JSON response
 
-| Framework | Runtime | req/s | noise |
-| --- | --- | ---: | ---: |
-| raw Bun.serve | bun 1.4 | 234,480 | ±9% |
-| bun-koa | bun 1.4 | 227,792 | ±8% |
-| hono 4 | bun 1.4 | 231,072 | ±8% |
-| koa 3 | node 22 | 57,708 | ±2% |
-| fastify 5 | node 22 | 71,528 | ±3% |
-| koa 3 | bun 1.4 | 119,184 | ±8% |
-| fastify 5 | bun 1.4 | 133,332 | ±7% |
-| go net/http | go 1.27 | 182,336 | ±3% |
+| Framework     | Runtime |   req/s | noise |
+| ------------- | ------- | ------: | ----: |
+| raw Bun.serve | bun 1.4 | 234,480 |   ±9% |
+| bun-koa       | bun 1.4 | 227,792 |   ±8% |
+| hono 4        | bun 1.4 | 231,072 |   ±8% |
+| koa 3         | node 22 |  57,708 |   ±2% |
+| fastify 5     | node 22 |  71,528 |   ±3% |
+| koa 3         | bun 1.4 | 119,184 |   ±8% |
+| fastify 5     | bun 1.4 | 133,332 |   ±7% |
+| go net/http   | go 1.27 | 182,336 |   ±3% |
+
 - bun-koa vs koa 3: **3.95x** (±8% / ±2%)
 - bun-koa vs fastify 5: **3.18x** (±8% / ±3%)
 - bun-koa vs hono 4: **0.99x** (±8% / ±8%)
@@ -48,16 +50,17 @@ Generated: 2026-08-31T05:24:49.284Z
 
 ## Param route
 
-| Framework | Runtime | req/s | noise |
-| --- | --- | ---: | ---: |
-| raw Bun.serve | bun 1.4 | 229,568 | ±5% |
-| bun-koa | bun 1.4 | 225,472 | ±6% |
-| hono 4 | bun 1.4 | 224,816 | ±6% |
-| koa 3 | node 22 | 57,912 | ±1% |
-| fastify 5 | node 22 | 70,944 | ±1% |
-| koa 3 | bun 1.4 | 114,576 | ±4% |
-| fastify 5 | bun 1.4 | 133,752 | ±5% |
-| go net/http | go 1.27 | 181,136 | ±3% |
+| Framework     | Runtime |   req/s | noise |
+| ------------- | ------- | ------: | ----: |
+| raw Bun.serve | bun 1.4 | 229,568 |   ±5% |
+| bun-koa       | bun 1.4 | 225,472 |   ±6% |
+| hono 4        | bun 1.4 | 224,816 |   ±6% |
+| koa 3         | node 22 |  57,912 |   ±1% |
+| fastify 5     | node 22 |  70,944 |   ±1% |
+| koa 3         | bun 1.4 | 114,576 |   ±4% |
+| fastify 5     | bun 1.4 | 133,752 |   ±5% |
+| go net/http   | go 1.27 | 181,136 |   ±3% |
+
 - bun-koa vs koa 3: **3.89x** (±6% / ±1%)
 - bun-koa vs fastify 5: **3.18x** (±6% / ±1%)
 - bun-koa vs hono 4: **1.00x** (±6% / ±6%)
@@ -66,16 +69,17 @@ Generated: 2026-08-31T05:24:49.284Z
 
 ## 3 middlewares
 
-| Framework | Runtime | req/s | noise |
-| --- | --- | ---: | ---: |
-| raw Bun.serve | bun 1.4 | 232,512 | ±1% |
-| bun-koa | bun 1.4 | 198,944 | ±3% |
-| hono 4 | bun 1.4 | 186,352 | ±3% |
-| koa 3 | node 22 | 56,312 | ±0% |
-| fastify 5 | node 22 | 73,112 | ±14% |
-| koa 3 | bun 1.4 | 114,088 | ±2% |
-| fastify 5 | bun 1.4 | 140,560 | ±3% |
-| go net/http | go 1.27 | 178,512 | ±1% |
+| Framework     | Runtime |   req/s | noise |
+| ------------- | ------- | ------: | ----: |
+| raw Bun.serve | bun 1.4 | 232,512 |   ±1% |
+| bun-koa       | bun 1.4 | 198,944 |   ±3% |
+| hono 4        | bun 1.4 | 186,352 |   ±3% |
+| koa 3         | node 22 |  56,312 |   ±0% |
+| fastify 5     | node 22 |  73,112 |  ±14% |
+| koa 3         | bun 1.4 | 114,088 |   ±2% |
+| fastify 5     | bun 1.4 | 140,560 |   ±3% |
+| go net/http   | go 1.27 | 178,512 |   ±1% |
+
 - bun-koa vs koa 3: **3.53x** (±3% / ±0%)
 - bun-koa vs fastify 5: **2.72x** (±3% / ±14%)
 - bun-koa vs hono 4: **1.07x** (±3% / ±3%)
@@ -84,14 +88,15 @@ Generated: 2026-08-31T05:24:49.284Z
 
 ## 1000-route scale (late)
 
-| Framework | Runtime | req/s | noise |
-| --- | --- | ---: | ---: |
-| raw Bun.serve (scale) | bun 1.4 | 179,168 | ±2% |
-| bun-koa (scale) | bun 1.4 | 247,232 | ±3% |
-| hono 4 (scale) | bun 1.4 | 249,024 | ±3% |
-| koa 3 (scale) | node 22 | 15,622 | ±2% |
-| fastify 5 (scale) | node 22 | 83,096 | ±1% |
-| go net/http (scale) | go 1.27 | 188,128 | ±2% |
+| Framework             | Runtime |   req/s | noise |
+| --------------------- | ------- | ------: | ----: |
+| raw Bun.serve (scale) | bun 1.4 | 179,168 |   ±2% |
+| bun-koa (scale)       | bun 1.4 | 247,232 |   ±3% |
+| hono 4 (scale)        | bun 1.4 | 249,024 |   ±3% |
+| koa 3 (scale)         | node 22 |  15,622 |   ±2% |
+| fastify 5 (scale)     | node 22 |  83,096 |   ±1% |
+| go net/http (scale)   | go 1.27 | 188,128 |   ±2% |
+
 - bun-koa vs koa 3: **15.83x** (±3% / ±2%)
 - bun-koa vs fastify 5: **2.98x** (±3% / ±1%)
 - bun-koa vs hono 4: **0.99x** (±3% / ±3%)
@@ -100,65 +105,65 @@ Generated: 2026-08-31T05:24:49.284Z
 
 ## Latency under load (median of interleaved rounds)
 
-| Framework | scenario | p50 (ms) | p99 (ms) |
-| --- | --- | ---: | ---: |
-| raw Bun.serve | Text response | 0.0 | 2.0 |
-| raw Bun.serve | JSON response | 0.0 | 2.0 |
-| raw Bun.serve | Param route | 0.0 | 2.0 |
-| raw Bun.serve | 3 middlewares | 0.0 | 1.0 |
-| bun-koa | Text response | 0.0 | 2.0 |
-| bun-koa | JSON response | 0.0 | 2.0 |
-| bun-koa | Param route | 0.0 | 2.0 |
-| bun-koa | 3 middlewares | 0.0 | 2.0 |
-| hono 4 | Text response | 0.0 | 2.0 |
-| hono 4 | JSON response | 0.0 | 2.0 |
-| hono 4 | Param route | 0.0 | 2.0 |
-| hono 4 | 3 middlewares | 0.0 | 2.0 |
-| koa 3 | Text response | 3.0 | 6.0 |
-| koa 3 | JSON response | 3.0 | 4.0 |
-| koa 3 | Param route | 3.0 | 4.0 |
-| koa 3 | 3 middlewares | 3.0 | 4.0 |
-| fastify 5 | Text response | 2.0 | 5.0 |
-| fastify 5 | JSON response | 2.0 | 5.0 |
-| fastify 5 | Param route | 2.0 | 4.0 |
-| fastify 5 | 3 middlewares | 2.0 | 4.0 |
-| koa 3 | Text response | 1.0 | 3.0 |
-| koa 3 | JSON response | 1.0 | 4.0 |
-| koa 3 | Param route | 1.0 | 3.0 |
-| koa 3 | 3 middlewares | 1.0 | 3.0 |
-| fastify 5 | Text response | 1.0 | 3.0 |
-| fastify 5 | JSON response | 1.0 | 3.0 |
-| fastify 5 | Param route | 1.0 | 3.0 |
-| fastify 5 | 3 middlewares | 1.0 | 2.0 |
-| go net/http | Text response | 1.0 | 3.0 |
-| go net/http | JSON response | 1.0 | 3.0 |
-| go net/http | Param route | 1.0 | 3.0 |
-| go net/http | 3 middlewares | 1.0 | 3.0 |
-| raw Bun.serve (scale) | 1000-route scale (late) | 1.0 | 2.0 |
-| bun-koa (scale) | 1000-route scale (late) | 0.0 | 1.0 |
-| hono 4 (scale) | 1000-route scale (late) | 0.0 | 1.0 |
-| koa 3 (scale) | 1000-route scale (late) | 12.0 | 20.0 |
-| fastify 5 (scale) | 1000-route scale (late) | 2.0 | 4.0 |
-| go net/http (scale) | 1000-route scale (late) | 1.0 | 2.0 |
+| Framework             | scenario                | p50 (ms) | p99 (ms) |
+| --------------------- | ----------------------- | -------: | -------: |
+| raw Bun.serve         | Text response           |      0.0 |      2.0 |
+| raw Bun.serve         | JSON response           |      0.0 |      2.0 |
+| raw Bun.serve         | Param route             |      0.0 |      2.0 |
+| raw Bun.serve         | 3 middlewares           |      0.0 |      1.0 |
+| bun-koa               | Text response           |      0.0 |      2.0 |
+| bun-koa               | JSON response           |      0.0 |      2.0 |
+| bun-koa               | Param route             |      0.0 |      2.0 |
+| bun-koa               | 3 middlewares           |      0.0 |      2.0 |
+| hono 4                | Text response           |      0.0 |      2.0 |
+| hono 4                | JSON response           |      0.0 |      2.0 |
+| hono 4                | Param route             |      0.0 |      2.0 |
+| hono 4                | 3 middlewares           |      0.0 |      2.0 |
+| koa 3                 | Text response           |      3.0 |      6.0 |
+| koa 3                 | JSON response           |      3.0 |      4.0 |
+| koa 3                 | Param route             |      3.0 |      4.0 |
+| koa 3                 | 3 middlewares           |      3.0 |      4.0 |
+| fastify 5             | Text response           |      2.0 |      5.0 |
+| fastify 5             | JSON response           |      2.0 |      5.0 |
+| fastify 5             | Param route             |      2.0 |      4.0 |
+| fastify 5             | 3 middlewares           |      2.0 |      4.0 |
+| koa 3                 | Text response           |      1.0 |      3.0 |
+| koa 3                 | JSON response           |      1.0 |      4.0 |
+| koa 3                 | Param route             |      1.0 |      3.0 |
+| koa 3                 | 3 middlewares           |      1.0 |      3.0 |
+| fastify 5             | Text response           |      1.0 |      3.0 |
+| fastify 5             | JSON response           |      1.0 |      3.0 |
+| fastify 5             | Param route             |      1.0 |      3.0 |
+| fastify 5             | 3 middlewares           |      1.0 |      2.0 |
+| go net/http           | Text response           |      1.0 |      3.0 |
+| go net/http           | JSON response           |      1.0 |      3.0 |
+| go net/http           | Param route             |      1.0 |      3.0 |
+| go net/http           | 3 middlewares           |      1.0 |      3.0 |
+| raw Bun.serve (scale) | 1000-route scale (late) |      1.0 |      2.0 |
+| bun-koa (scale)       | 1000-route scale (late) |      0.0 |      1.0 |
+| hono 4 (scale)        | 1000-route scale (late) |      0.0 |      1.0 |
+| koa 3 (scale)         | 1000-route scale (late) |     12.0 |     20.0 |
+| fastify 5 (scale)     | 1000-route scale (late) |      2.0 |      4.0 |
+| go net/http (scale)   | 1000-route scale (late) |      1.0 |      2.0 |
 
 ## Memory footprint (sampled via /debug/memory)
 
-| Framework | idle RSS | steady RSS | peak RSS | idle heap | steady heap |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| raw Bun.serve | 14.1MB | 43.4MB | 45.1MB | 0.1MB | 0.2MB |
-| bun-koa | 25.2MB | 51.3MB | 59.1MB | 0.6MB | 0.8MB |
-| hono 4 | 26.4MB | 55.4MB | 62.4MB | 0.5MB | 0.6MB |
-| koa 3 | 69.0MB | 110.6MB | 110.8MB | 9.7MB | 22.6MB |
-| fastify 5 | 64.3MB | 104.3MB | 104.5MB | 11.3MB | 19.6MB |
-| koa 3 | 41.1MB | 159.0MB | 161.6MB | 4.6MB | 4.6MB |
-| fastify 5 | 43.4MB | 166.1MB | 166.4MB | 5.5MB | 4.8MB |
-| go net/http | 11.7MB | 28.6MB | 29.4MB | 0.3MB | 0.7MB |
-| raw Bun.serve (scale) | 19.2MB | 46.1MB | 46.2MB | 0.2MB | 0.2MB |
-| bun-koa (scale) | 31.9MB | 51.5MB | 51.5MB | 1.4MB | 1.4MB |
-| hono 4 (scale) | 34.1MB | 49.7MB | 49.8MB | 0.7MB | 0.9MB |
-| koa 3 (scale) | 74.8MB | 108.6MB | 109.1MB | 12.5MB | 19.8MB |
-| fastify 5 (scale) | 97.9MB | 73.5MB | 174.1MB | 27.8MB | 16.3MB |
-| go net/http (scale) | 12.6MB | 27.9MB | 27.9MB | 1.2MB | 3.5MB |
+| Framework             | idle RSS | steady RSS | peak RSS | idle heap | steady heap |
+| --------------------- | -------: | ---------: | -------: | --------: | ----------: |
+| raw Bun.serve         |   14.1MB |     43.4MB |   45.1MB |     0.1MB |       0.2MB |
+| bun-koa               |   25.2MB |     51.3MB |   59.1MB |     0.6MB |       0.8MB |
+| hono 4                |   26.4MB |     55.4MB |   62.4MB |     0.5MB |       0.6MB |
+| koa 3                 |   69.0MB |    110.6MB |  110.8MB |     9.7MB |      22.6MB |
+| fastify 5             |   64.3MB |    104.3MB |  104.5MB |    11.3MB |      19.6MB |
+| koa 3                 |   41.1MB |    159.0MB |  161.6MB |     4.6MB |       4.6MB |
+| fastify 5             |   43.4MB |    166.1MB |  166.4MB |     5.5MB |       4.8MB |
+| go net/http           |   11.7MB |     28.6MB |   29.4MB |     0.3MB |       0.7MB |
+| raw Bun.serve (scale) |   19.2MB |     46.1MB |   46.2MB |     0.2MB |       0.2MB |
+| bun-koa (scale)       |   31.9MB |     51.5MB |   51.5MB |     1.4MB |       1.4MB |
+| hono 4 (scale)        |   34.1MB |     49.7MB |   49.8MB |     0.7MB |       0.9MB |
+| koa 3 (scale)         |   74.8MB |    108.6MB |  109.1MB |    12.5MB |      19.8MB |
+| fastify 5 (scale)     |   97.9MB |     73.5MB |  174.1MB |    27.8MB |      16.3MB |
+| go net/http (scale)   |   12.6MB |     27.9MB |   27.9MB |     1.2MB |       3.5MB |
 
 ---
 
@@ -183,21 +188,21 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 
 **bun-koa vs hono 4: statistical parity — on all three machines.**
 
-| M4 10-core (report above) |        bun-koa |         hono 4 | ratio | verdict      |
-| ------------------------- | -------------: | -------------: | ----: | ------------ |
-| text                      | 226,144 ±7%    | 223,280 ±4%    | 1.01x | inside noise |
-| JSON                      | 227,792 ±8%    | 231,072 ±8%    | 0.99x | inside noise |
-| param                     | 225,472 ±6%    | 224,816 ±6%    | 1.00x | tie          |
-| 3 middlewares             | 198,944 ±3%    | 186,352 ±3%    | 1.07x | leans ours   |
-| 1000-route scale          | 247,232 ±3%    | 249,024 ±3%    | 0.99x | tie          |
+| M4 10-core (report above) |     bun-koa |      hono 4 | ratio | verdict      |
+| ------------------------- | ----------: | ----------: | ----: | ------------ |
+| text                      | 226,144 ±7% | 223,280 ±4% | 1.01x | inside noise |
+| JSON                      | 227,792 ±8% | 231,072 ±8% | 0.99x | inside noise |
+| param                     | 225,472 ±6% | 224,816 ±6% | 1.00x | tie          |
+| 3 middlewares             | 198,944 ±3% | 186,352 ±3% | 1.07x | leans ours   |
+| 1000-route scale          | 247,232 ±3% | 249,024 ±3% | 0.99x | tie          |
 
-| 8-core Apple Silicon |        bun-koa |        hono 4 |     ratio | verdict       |
-| -------------------- | -------------: | -------------: | --------: | ------------- |
-| text                 |  228,432 ±13% |  194,448 ±23% |     1.17x | inside noise  |
-| JSON                 |  231,280 ±13% |  211,968 ±16% |     1.09x | inside noise  |
-| param                |  243,536 ±15% |  242,000 ±21% |     1.01x | tie           |
+| 8-core Apple Silicon  |       bun-koa |        hono 4 |     ratio | verdict       |
+| --------------------- | ------------: | ------------: | --------: | ------------- |
+| text                  |  228,432 ±13% |  194,448 ±23% |     1.17x | inside noise  |
+| JSON                  |  231,280 ±13% |  211,968 ±16% |     1.09x | inside noise  |
+| param                 |  243,536 ±15% |  242,000 ±21% |     1.01x | tie           |
 | 3 middlewares         |  206,224 ±15% |  195,056 ±10% |     1.06x | inside noise  |
-| 1000-route scale     |   229,136 ±6% |   239,856 ±6% |     0.96x | inside noise  |
+| 1000-route scale      |   229,136 ±6% |   239,856 ±6% |     0.96x | inside noise  |
 | **in-process ns/req** | **379 / 476** | **379 / 476** | **1.00x** | **exact tie** |
 
 | Intel 4-core (colocated) |     bun-koa |      hono 4 | ratio | verdict      |
@@ -239,11 +244,11 @@ property disclosure) initially ran in `initContext` — i.e. on EVERY fresh
 context, paying an `Object.keys()` allocation + loop per request on the
 no-pooling hot path.
 
-| in-process ns/req (best of 3) |         bun-koa |         hono 4 | ratio to hono    |
-| ----------------------------- | --------------: | -------------: | ---------------- |
-| pre-change baseline           |  384 / 490      |  386 / 488     | 0.995x / 1.004x  |
-| hardening, first cut          |  421 / 528      |  378 / 496     | **1.11x / 1.06x** ← regression |
-| hardening, sweep moved to the pool-recycle path only | 352 / 443 | 342 / 430 | 1.006x / 1.007x |
+| in-process ns/req (best of 3)                        |   bun-koa |    hono 4 | ratio to hono                  |
+| ---------------------------------------------------- | --------: | --------: | ------------------------------ |
+| pre-change baseline                                  | 384 / 490 | 386 / 488 | 0.995x / 1.004x                |
+| hardening, first cut                                 | 421 / 528 | 378 / 496 | **1.11x / 1.06x** ← regression |
+| hardening, sweep moved to the pool-recycle path only | 352 / 443 | 342 / 430 | 1.006x / 1.007x                |
 
 The sweep now runs only in `resetContext` (a fresh `Object.create`d context
 cannot carry foreign keys), the regression vanished, and the full suite
@@ -257,12 +262,12 @@ interleaved rounds per run; post numbers are best-of-2 full runs, each
 internally a median of 4 rounds):
 
 | scenario (HTTP req/s) | pre-change | post-hardening | vs hono pre | vs hono post |
-| -------------------- | ---------: | -------------: | ----------: | -----------: |
-| text                 |    236,320 |        230,800 |      1.01x  |       1.00–1.01x |
-| JSON                 |    234,368 |        227,792 |      1.03x  |       0.99–1.01x |
-| param                |    226,016 |        225,472 |      1.01x  |       0.98–1.00x |
-| 3 middlewares        |    193,680 |        198,944 |      1.04x  |       0.98–1.07x |
-| 1000-route scale     |    230,736 |        247,232 |      1.02x  |       0.99–1.01x |
+| --------------------- | ---------: | -------------: | ----------: | -----------: |
+| text                  |    236,320 |        230,800 |       1.01x |   1.00–1.01x |
+| JSON                  |    234,368 |        227,792 |       1.03x |   0.99–1.01x |
+| param                 |    226,016 |        225,472 |       1.01x |   0.98–1.00x |
+| 3 middlewares         |    193,680 |        198,944 |       1.04x |   0.98–1.07x |
+| 1000-route scale      |    230,736 |        247,232 |       1.02x |   0.99–1.01x |
 
 Every ratio sits inside its run-to-run noise band — the hardening round
 costs nothing measurable on the wire. Memory idles at parity too (bun-koa
@@ -287,7 +292,7 @@ it is the fastest participant, ahead of **raw Bun.serve** itself:
 | ------------- | ----------: | ----------: | ----: | -------------------- |
 | text          | 56,764 ±13% |  57,720 ±2% | 0.98x | inside noise         |
 | JSON          | 48,648 ±10% |  56,228 ±3% | 0.87x | Go ahead, near-noise |
-| param         | 47,604 ±18% |  55,268 ±36% | 0.86x | inside noise         |
+| param         | 47,604 ±18% | 55,268 ±36% | 0.86x | inside noise         |
 | 3 middlewares |  39,396 ±1% |  54,972 ±4% | 0.72x | **real gap**         |
 | 1000-route    |  55,608 ±2% |  62,976 ±2% | 0.88x | **real gap**         |
 

@@ -8,7 +8,7 @@
  * route of the group; `param()` middleware runs for routes capturing `name`.
  */
 
-import { buildURL, redirectTargetSegments } from "./router.ts";
+import { assertRedirectCaptures, buildURL, redirectTargetSegments } from "./router.ts";
 import { compilePattern } from "./pattern.ts";
 import type { RouteDef, RouteHandler } from "./router.ts";
 /** Standalone route group: registers routes now, mounts later. */
@@ -63,6 +63,15 @@ export const createRouter = (options: { prefix?: string } = {}): Router => {
       if (typeof handler !== "function") {
         throw new TypeError("Route handlers must be functions");
       }
+    }
+    // compilePattern runs at mount() for group defs — enforce its leading-
+    // slash rule eagerly (on BOTH the path and a configured prefix) instead
+    // of letting `${prefix}${path}` manufacture paths like "/v1users".
+    if (path.length > 0 && path.charCodeAt(0) !== 47 /* "/" */) {
+      throw new TypeError(`Route path must start with "/": ${JSON.stringify(path)}`);
+    }
+    if (prefix.length > 0 && prefix.charCodeAt(0) !== 47 /* "/" */) {
+      throw new TypeError(`Router prefix must start with "/": ${JSON.stringify(options.prefix)}`);
     }
     const full = `${prefix}${path}` || "/";
     const def: RouteDef = {
@@ -133,6 +142,7 @@ export const createRouter = (options: { prefix?: string } = {}): Router => {
       // route's captured values (koa-router behavior); absolute URLs and
       // scheme-relative targets are verbatim Locations.
       const destSegments = redirectTargetSegments(destination);
+      if (destSegments !== null) assertRedirectCaptures(source, destSegments);
       add("GET", source, [
         (c) => {
           const target =

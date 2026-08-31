@@ -80,6 +80,9 @@ export const encodeUrlValue = (url: string): string => {
     }
     const point = url.codePointAt(i) as number;
     const ch = String.fromCodePoint(point);
+    // Backslash joins the unsafe set: WHATWG URL parsing treats "\" as "/"
+    // in special-scheme URLs, so a bare Location of "/\evil.com" resolves to
+    // the authority "//evil.com" — a cross-origin open redirect.
     const unsafe =
       point > 0x7e ||
       point < 0x21 ||
@@ -87,7 +90,8 @@ export const encodeUrlValue = (url: string): string => {
       ch === "'" ||
       ch === "<" ||
       ch === ">" ||
-      ch === "`";
+      ch === "`" ||
+      ch === "\\";
     if (unsafe) {
       for (const byte of urlEncoder.encode(ch)) {
         out += `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;

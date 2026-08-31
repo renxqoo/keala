@@ -89,7 +89,23 @@ export const registerSink = (
   if (!isResponse && dirValue === null) {
     throw new TypeError("app.sink() requires a Response or { dir } value");
   }
-  const entry: NativeSinkEntry = isResponse ? { response: value } : { dir: dirValue as string };
+  if (isResponse) {
+    const response = value as Response;
+    // The native table replays the SAME instance on every hit — a body that
+    // was already consumed is provably dead (every request would 500). An
+    // UNCONSUMED body is fine: the mirror snapshots it through a clone and
+    // rebuilds per hit, and `bodyUsed` is the only synchronously provable
+    // non-replay state (every fetch body — string or stream — surfaces as a
+    // ReadableStream, so its type distinguishes nothing).
+    if (response.bodyUsed) {
+      throw new TypeError(
+        "app.sink() requires an unconsumed Response — an already-read body cannot be replayed",
+      );
+    }
+  }
+  const entry: NativeSinkEntry = isResponse
+    ? { response: value as Response }
+    : { dir: dirValue as string };
   const isDir = !isResponse;
 
   if (isDir) {

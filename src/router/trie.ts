@@ -11,7 +11,13 @@
  * patterns (`/users/:id(\\d+)/a` next to `/users/:id/b`). The head slot keeps
  * the first-registered variant (hot path: one branch), `paramMore` keeps the
  * rest in registration order; a variant matches by (name, pattern source),
- * and identical variants share one node with sticky optionality.
+ * and identical variants share one node.
+ *
+ * Optionality lives on the EDGE, not the node: a `:x?` pattern gets a
+ * dedicated `skipNode` subtree that only patterns DECLARING the position
+ * optional ever populate. The skip transition can therefore never land in a
+ * subtree registered by a sibling route whose `:x` is required — sharing a
+ * variant node stays safe.
  */
 
 import type { CompiledSegment } from "./pattern.ts";
@@ -29,8 +35,11 @@ export interface RouteTarget {
 export interface ParamChild {
   name: string;
   pattern: RegExp | null;
-  optional: boolean;
   node: TrieNode;
+  /** Subtree reachable by SKIPPING an optional param — populated only by
+   * patterns that declare this position optional. Null when the position
+   * was never declared optional. */
+  skipNode: TrieNode | null;
 }
 
 export interface TrieNode {
@@ -81,8 +90,11 @@ const pushVariant = (
   decoded: string,
   params: ParamLink | null,
 ): void => {
-  if (variant.optional) {
-    stack.push({ node: variant.node, index, params });
+  // The skip edge is only offered when THIS position was declared optional
+  // by some pattern (skipNode exists) — and it leads exclusively into the
+  // subtree those optional patterns registered (see insertPattern).
+  if (variant.skipNode !== null) {
+    stack.push({ node: variant.skipNode, index, params });
   }
   if (segment.length > 0 && (variant.pattern === null || variant.pattern.test(decoded))) {
     stack.push({
@@ -111,19 +123,30 @@ export const matchPattern = (root: TrieNode, path: string): TrieMatch | null => 
 
     if (index === segments.length) {
       if (node.target !== null) return { target: node.target, params: recordOf(params) };
-      // Trailing optional params (`:x?`) may be skipped at the end of a path.
-      // Push order = pop priority: later variants first, the head (first
-      // registered) last so it pops first.
+      // A trailing wildcard with an EMPTY capture answers the bare
+      // prefix+"/" (buildURL emits exactly that for {wildcard: ""}). Gated
+      // on the raw trailing slash: "/w" itself is a different resource.
+      const wild = node.wildcard;
+      if (wild !== null && wild.node.target !== null && path.length > 1 && path.endsWith("/")) {
+        stack.push({
+          node: wild.node,
+          index,
+          params: { name: wild.name, value: "", next: params },
+        });
+      }
+      // Trailing optional params (`:x?`) may be skipped at the end of a
+      // path. Push order = pop priority: later variants first, the head
+      // (first registered) last so it pops first.
       const head = node.param;
       const more = node.paramMore;
       if (more !== null) {
         for (let i = more.length - 1; i >= 0; i--) {
           const variant = more[i] as ParamChild;
-          if (variant.optional) stack.push({ node: variant.node, index, params });
+          if (variant.skipNode !== null) stack.push({ node: variant.skipNode, index, params });
         }
       }
-      if (head !== null && head.optional) {
-        stack.push({ node: head.node, index, params });
+      if (head !== null && head.skipNode !== null) {
+        stack.push({ node: head.skipNode, index, params });
       }
       continue;
     }
@@ -158,10 +181,14 @@ export const matchPattern = (root: TrieNode, path: string): TrieMatch | null => 
     }
 
     // Static children are keyed by the DECODED pattern segment (compile time
-    // decodes); a request segment carrying escapes needs a decoded retry.
-    // The plain lookup stays first and allocation-free for the common case.
-    let child = node.children.get(segment);
-    if (child === undefined && segment.indexOf("%") !== -1) {
+    // decodes); the comparison therefore runs in the canonical key space —
+    // a segment carrying escapes is decoded first, exactly like the
+    // staticMap's canonical lookup, so a raw "a%2Fb" can never satisfy a
+    // key whose decoded value is "a%2Fb" (that key means "a/b" escaped).
+    let child: TrieNode | undefined;
+    if (segment.indexOf("%") === -1) {
+      child = node.children.get(segment);
+    } else {
       child = node.children.get(decodeSegment(segment));
     }
     if (child !== undefined) {
@@ -175,7 +202,10 @@ const recordOf = (link: ParamLink | null): Record<string, string> => {
   const params: Record<string, string> = Object.create(null);
   let current = link;
   while (current !== null) {
-    params[current.name] = current.value;
+    // The cons-list is newest-first; first assignment wins, so the LATEST
+    // capture of a repeated name is the one that survives (express and
+    // @koa/router semantics, and what the fast matcher does too).
+    if (!(current.name in params)) params[current.name] = current.value;
     current = current.next;
   }
   return params;
@@ -209,7 +239,9 @@ const variantFor = (node: TrieNode, pattern: RegExp | null): ParamChild | undefi
 };
 
 /**
- * Insert a compiled pattern, returning the terminal node.
+ * Insert a compiled pattern, returning EVERY terminal node it created. A
+ * pattern with optional params has one terminal per skip/consume
+ * combination — they all share the caller's single RouteTarget.
  *
  * A DIFFERENT parameter name at a position already holding one still throws
  * (inconsistent naming is a bug to surface at setup); a different custom
@@ -217,62 +249,63 @@ const variantFor = (node: TrieNode, pattern: RegExp | null): ParamChild | undefi
  * own subtree reachable — an earlier `:id(\\d+)` must never swallow a later
  * plain `:id`.
  */
-export const insertPattern = (root: TrieNode, segments: readonly CompiledSegment[]): TrieNode => {
-  let node = root;
-  for (const segment of segments) {
+export const insertPattern = (root: TrieNode, segments: readonly CompiledSegment[]): TrieNode[] => {
+  const insert = (node: TrieNode, i: number): TrieNode[] => {
+    if (i === segments.length) return [node];
+    const segment = segments[i] as CompiledSegment;
     if (segment.kind === "wildcard") {
       if (node.wildcard === null) {
         node.wildcard = {
           name: "wildcard",
           pattern: null,
-          optional: false,
           node: createNode(),
+          skipNode: null,
         };
       }
-      node = node.wildcard.node;
-      continue;
+      return insert(node.wildcard.node, i + 1);
     }
     if (segment.kind === "param") {
       if (node.param === null) {
         node.param = {
           name: segment.value,
           pattern: segment.pattern,
-          optional: segment.optional,
           node: createNode(),
+          skipNode: null,
         };
-        node = node.param.node;
-        continue;
+      } else {
+        const head = node.param as ParamChild;
+        if (head.name !== segment.value) {
+          throw new TypeError(
+            `Conflicting parameter names at the same position: ":${head.name}" vs ":${segment.value}"`,
+          );
+        }
+        const existing = variantFor(node, segment.pattern);
+        if (existing === undefined) {
+          const created: ParamChild = {
+            name: segment.value,
+            pattern: segment.pattern,
+            node: createNode(),
+            skipNode: null,
+          };
+          (node.paramMore ??= []).push(created);
+        }
       }
-      const head = node.param as ParamChild;
-      if (head.name !== segment.value) {
-        throw new TypeError(
-          `Conflicting parameter names at the same position: ":${head.name}" vs ":${segment.value}"`,
-        );
-      }
-      const existing = variantFor(node, segment.pattern);
-      if (existing === undefined) {
-        const created: ParamChild = {
-          name: segment.value,
-          pattern: segment.pattern,
-          optional: segment.optional,
-          node: createNode(),
-        };
-        (node.paramMore ??= []).push(created);
-        node = created.node;
-        continue;
-      }
-      // Registration order must not decide matchability: once optional,
-      // always optional at this position.
-      if (segment.optional) existing.optional = true;
-      node = existing.node;
-      continue;
+      const variant = variantFor(node, segment.pattern);
+      if (variant === undefined) throw new TypeError("unreachable param variant");
+      const consumed = insert(variant.node, i + 1);
+      if (!segment.optional) return consumed;
+      // The remainder is reachable WITHOUT consuming this param — but only
+      // through the dedicated skip subtree, so required-param siblings can
+      // never be served with the param missing.
+      const skip = (variant.skipNode ??= createNode());
+      return [...consumed, ...insert(skip, i + 1)];
     }
     let child = node.children.get(segment.value);
     if (child === undefined) {
       child = createNode();
       node.children.set(segment.value, child);
     }
-    node = child;
-  }
-  return node;
+    return insert(child, i + 1);
+  };
+  return insert(root, 0);
 };

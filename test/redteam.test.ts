@@ -86,8 +86,10 @@ describe("redteam — RT-1 fast matcher ignores static tail after params", () =>
     const state = createRouterState();
     registerDef(state, "GET", "/users/:id/posts", [() => {}]);
     const root = createNode();
-    const node = insertPattern(root, compilePattern("/users/:id/posts").segments);
-    if (node.target === null) node.target = createTarget();
+    const terminals = insertPattern(root, compilePattern("/users/:id/posts").segments);
+    for (const terminal of terminals) {
+      if (terminal.target === null) terminal.target = createTarget();
+    }
     expect(matchRoute(state, "/users/42")).toBeNull(); // the trie says null
     expect(matchPattern(root, "/users/42")).toBeNull();
   });

@@ -30,6 +30,22 @@ export const isLatin1 = (value: string): boolean => {
   return true;
 };
 
+/**
+ * Eligibility of a custom message as a fetch `statusText`: latin-1, and no
+ * control bytes beyond HTAB (undici rejects every other C0 control and DEL
+ * at Response construction — an ineligible message falls back to the
+ * standard reason phrase instead of costing the whole response).
+ */
+export const isStatusText = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code > 255) return false;
+    if (code < 0x20 && code !== 0x09 /* HTAB */) return false;
+    if (code === 0x7f /* DEL */) return false;
+  }
+  return true;
+};
+
 /** Names that must never become header fields (prototype hazards). */
 const FORBIDDEN_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 
