@@ -62,35 +62,53 @@ export const parseHostHeader = (host: string): { hostname: string; port: string 
 
 /**
  * Koa's `encodeurl`, UTF-8 correct: percent-encode characters unsafe in a
- * Location header (non-ASCII, controls, space, `"`, `'`, `<`, `>`, `` ` ``)
- * as their UTF-8 BYTE sequence (code-point iteration — encoding UTF-16
- * code units would emit latin-1 `%E9` and malformed surrogate escapes)
- * while leaving existing percent-escapes untouched.
+ * Location header (non-ASCII, controls, space, `"`, `<`, `>`, `` ` ``,
+ * `{`, `}` — the encodeurl/WHATWG path percent-encode set; `'` stays, it is
+ * in encodeurl's reserved-safe set) as their UTF-8 BYTE sequence (code-point
+ * iteration — encoding UTF-16 code units would emit latin-1 `%E9` and
+ * malformed surrogate escapes) while leaving valid percent-escapes
+ * untouched. A `%` NOT followed by two hex digits is not a valid escape and
+ * is re-encoded as `%25` (encodeurl's rule) so the Location can never ship a
+ * malformed escape verbatim.
  */
 
 const urlEncoder = new TextEncoder();
 
+const isHex = (code: number): boolean =>
+  (code >= 0x30 && code <= 0x39) ||
+  (code >= 0x41 && code <= 0x46) ||
+  (code >= 0x61 && code <= 0x66);
+
 export const encodeUrlValue = (url: string): string => {
   let out = "";
   for (let i = 0; i < url.length;) {
-    if (url.charCodeAt(i) === 37 && /[0-9a-fA-F]{2}/.test(url.slice(i + 1, i + 3))) {
-      out += url.slice(i, i + 3);
-      i += 3;
+    if (url.charCodeAt(i) === 37 /* "%" */) {
+      const h1 = url.charCodeAt(i + 1);
+      const h2 = url.charCodeAt(i + 2);
+      if (isHex(h1) && isHex(h2)) {
+        out += url.slice(i, i + 3);
+        i += 3;
+        continue;
+      }
+      out += "%25";
+      i += 1;
       continue;
     }
     const point = url.codePointAt(i) as number;
     const ch = String.fromCodePoint(point);
     // Backslash joins the unsafe set: WHATWG URL parsing treats "\" as "/"
     // in special-scheme URLs, so a bare Location of "/\evil.com" resolves to
-    // the authority "//evil.com" — a cross-origin open redirect.
+    // the authority "//evil.com" — a cross-origin open redirect. (encodeurl
+    // keeps it raw; this divergence is locked by test.)
     const unsafe =
       point > 0x7e ||
       point < 0x21 ||
       ch === '"' ||
-      ch === "'" ||
       ch === "<" ||
       ch === ">" ||
       ch === "`" ||
+      ch === "{" ||
+      ch === "}" ||
       ch === "\\";
     if (unsafe) {
       for (const byte of urlEncoder.encode(ch)) {

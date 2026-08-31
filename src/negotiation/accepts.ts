@@ -130,10 +130,12 @@ interface PickOptions {
  * Pick the best provided value for a preference header (negotiator
  * semantics): each provided value's quality is defined by its MOST SPECIFIC
  * matching range (RFC 7231 §5.3.2 — an exact range outranks a wildcard
- * however their q compare), and the provided values then compete on that
- * quality, tying out on match SPECIFICITY (negotiator's compareSpecs — an
- * exactly-matched value beats a wildcard-matched rival at equal q), then
- * header order, finally provided order.
+ * however their q compare), and among EQUALLY specific matches the one with
+ * the HIGHEST q defines it (negotiator's specify: duplicate ranges collapse
+ * to their best q, regardless of order). A winning range with q=0 is an
+ * EXPLICIT refusal — the value is unavailable even though a wildcard would
+ * accept it. The provided values then compete on that quality, tying out on
+ * match specificity, then header order, finally provided order.
  */
 export const pickPreference = ({
   header,
@@ -142,9 +144,12 @@ export const pickPreference = ({
   score,
 }: PickOptions): string | false => {
   // No header at all: the server's own preference wins. A header whose
-  // entries are all q=0 leaves `prefs` empty and must yield `false`.
+  // entries are all q=0 leaves no candidate and must yield `false`.
   if (header == null || header.length === 0) return provided[0] ?? false;
-  const prefs = parsePreferenceEntries(header).filter((pref) => pref.q > 0);
+  // The specificity scan runs over the UNFILTERED entries — dropping q=0
+  // up front would let an exact `name;q=0` refusal be overridden by a
+  // wildcard (negotiator keeps them for exactly this reason).
+  const prefs = parsePreferenceEntries(header);
   let bestIndex = -1;
   let bestQ = 0;
   let bestScore = 0;
@@ -152,18 +157,19 @@ export const pickPreference = ({
   for (let i = 0; i < provided.length; i++) {
     const target = normalize(provided[i] ?? "");
     if (target.length === 0) continue;
-    // The most specific matching range (ties to the earliest entry) defines
-    // this value's quality — NOT the highest-q range that happens to match.
+    // The most specific matching range defines this value's quality — NOT
+    // the highest-q range that happens to match. Among equally specific
+    // matches, the highest q wins (earliest entry on ties).
     let match: Preference | undefined;
     let matchScore = 0;
     for (const pref of prefs) {
       const s = score(pref, target);
-      if (s > matchScore) {
+      if (s > matchScore || (s === matchScore && s > 0 && pref.q > (match?.q ?? -1))) {
         matchScore = s;
         match = pref;
       }
     }
-    if (match === undefined) continue;
+    if (match === undefined || match.q <= 0) continue;
     if (
       match.q > bestQ ||
       (match.q === bestQ && matchScore > bestScore) ||
@@ -188,15 +194,20 @@ export const acceptsType = (header: string | null, provided: readonly string[]):
 
 /**
  * Encoding negotiation: `ctx.acceptsEncodings(['gzip', 'br'])`.
- * Per RFC 7231, `identity` stays acceptable unless explicitly refused.
+ * Per RFC 7231 §5.3.4, `identity` stays acceptable unless explicitly refused.
+ * An absent/empty header means the client understands NO content codings —
+ * only identity (negotiator's answer), not "the server's first provided".
  */
 export const acceptsEncoding = (
   header: string | null,
   provided: readonly string[],
 ): string | false => {
+  if (header == null || header.length === 0) {
+    return provided.includes("identity") ? "identity" : false;
+  }
   const picked = pickPreference({ header, provided, normalize: identity, score: tokenScore });
   if (picked !== false) return picked;
-  if (header !== null && header.length > 0 && provided.includes("identity")) {
+  if (provided.includes("identity")) {
     return isIdentityRefused(header) ? false : "identity";
   }
   return false;

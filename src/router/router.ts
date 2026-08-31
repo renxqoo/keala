@@ -117,8 +117,15 @@ export const normalizePrefix = (prefix: string): string => {
  * Index one compiled pattern. The trie insert validates conflicts eagerly;
  * bucket bookkeeping mirrors it. A bucket keeps its fast matcher only while
  * it holds exactly one simple-shape dynamic pattern.
+ *
+ * Returns the pattern's terminal TARGETS (one per terminal NODE, deduped):
+ * patterns that share a terminal (an optional `:x?` consumes the same
+ * variant node a required `:x` terminated) append layers to the SHARED
+ * target — both run for the shared shape — while the optional's SKIP
+ * terminal keeps its own target, so a required pattern's layer can never
+ * run for a path that skips the param.
  */
-const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): RouteTarget => {
+const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): RouteTarget[] => {
   if (ir.isStatic) {
     // Key by the CANONICAL path — decoded per segment exactly like the
     // trie's static children, with "%" and "/" re-escaped inside decoded
@@ -130,19 +137,17 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
       target = createTarget();
       state.staticMap.set(key, target);
     }
-    return target;
+    return [target];
   }
-  // A pattern with optional params has one terminal per skip/consume
-  // combination — every terminal shares ONE target (duplicates of the same
-  // pattern merge into the existing target exactly like before).
   const terminals = insertPattern(state.trieRoot, ir.segments);
-  const target = (terminals[0] as TrieNode).target ?? createTarget();
+  const targets: RouteTarget[] = [];
   for (const terminal of terminals) {
-    if (terminal.target === null) terminal.target = target;
+    const target = (terminal.target ??= createTarget());
+    if (!targets.includes(target)) targets.push(target);
   }
   state.hasDynamic = true;
   const first = ir.segments[0] as CompiledSegment;
-  if (first.kind !== "static") return target;
+  if (first.kind !== "static") return targets;
   let bucket = state.buckets.get(first.value);
   if (bucket === undefined) {
     bucket = { fast: null, count: 0 };
@@ -156,10 +161,10 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
           // matcher must skip every leading static before captures begin.
           prefix: staticHeadOf(ir.segments),
           names: paramNamesOf(ir.segments),
-          target,
+          target: targets[0] as RouteTarget,
         }
       : null;
-  return target;
+  return targets;
 };
 
 /** Concatenate the leading static segments into a path prefix. */
@@ -192,7 +197,7 @@ const chainOf = (handlers: readonly RouteHandler[], globalMw: readonly RouteHand
 /** Index + compose the chain for ONE definition (incremental registration). */
 const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHandler[]): void => {
   const ir = compilePattern(def.path);
-  const target = indexPattern(state, ir, def.path);
+  const targets = indexPattern(state, ir, def.path);
   // Koa order along the chain: the sub-router's use() middleware (if this
   // def came through mount()) runs BEFORE param middleware, the handler last.
   const handlers = [
@@ -200,19 +205,20 @@ const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHand
     ...paramChainFor(state, ir.segments),
     ...def.handlers,
   ];
-  // Duplicate path+method registrations append LAYERS (@koa/router runs
-  // every matching layer) and the chain is recomposed over the full layer
-  // list — the global middleware is embedded exactly once no matter how
-  // many layers the path accumulated. (Composing the previous CHAIN under
-  // the new one re-ran the global once per duplicate.)
-  const previous = target.layers.get(def.method) as RouteHandler[] | undefined;
-  const layers = previous === undefined ? handlers : [...previous, ...handlers];
-  target.layers.set(def.method, layers);
-  target.methods.set(def.method, chainOf(layers, globalMw));
-  target.allowed.add(def.method);
-  if (def.method === ALL) target.allowed.add("*");
-  if (def.method === "GET") target.allowed.add("HEAD");
-  if (def.name !== undefined) target.name = def.name;
+  // Every terminal target of the pattern receives the layers. Duplicates of
+  // the same path append (@koa/router runs every matching layer) and the
+  // chain is recomposed over the full layer list — the global middleware is
+  // embedded exactly once no matter how many layers accumulated.
+  for (const target of targets) {
+    const previous = target.layers.get(def.method) as RouteHandler[] | undefined;
+    const layers = previous === undefined ? handlers : [...previous, ...handlers];
+    target.layers.set(def.method, layers);
+    target.methods.set(def.method, chainOf(layers, globalMw));
+    target.allowed.add(def.method);
+    if (def.method === ALL) target.allowed.add("*");
+    if (def.method === "GET") target.allowed.add("HEAD");
+    if (def.name !== undefined) target.name = def.name;
+  }
 };
 
 const resetIndex = (state: RouterState): void => {

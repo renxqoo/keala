@@ -76,7 +76,10 @@ describe("acceptsEncoding / acceptsCharset / acceptsLanguage", () => {
       "gzip",
     );
     expect(acceptsEncoding("br;q=0, gzip", ["gzip", "br"])).toBe("gzip");
-    expect(acceptsEncoding(null, ["gzip", "br"])).toBe("gzip");
+    // Absent header → identity only (RFC 7231 §5.3.4 / negotiator, verified
+    // live): never the server's first provided coding.
+    expect(acceptsEncoding(null, ["gzip", "br"])).toBe(false);
+    expect(acceptsEncoding(null, ["gzip", "identity"])).toBe("identity");
   });
 
   it("charset negotiation", () => {

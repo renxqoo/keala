@@ -9,7 +9,7 @@
 
 import type { HeaderMap, HeaderValue, ResponseBody } from "../../types.ts";
 import { isEmptyStatus, isRedirectStatus, statusMessage } from "../../http/status.ts";
-import { expandContentType, mimeFromExtension } from "../../utils/mime.ts";
+import { expandContentType } from "../../utils/mime.ts";
 import {
   contentDisposition,
   escapeHtml,
@@ -173,8 +173,13 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
         return;
       }
       if (value === null) this.flags |= 2;
-      if (!isEmptyStatus(this.statusValue)) this.statusValue = 204;
-      // The implicit 204 is an explicit status as far as koa is concerned.
+      if (!isEmptyStatus(this.statusValue)) {
+        // The implicit 204 is an explicit status as far as koa is concerned —
+        // and a POST-commit reset must rewrite the committed status on the
+        // rule-4 rebuild (flag 32), not silently strand a bodied 200.
+        if (this._res !== undefined) this.flags |= 16 | 32;
+        this.statusValue = 204;
+      }
       this.flags |= 1;
       this.remove("Content-Type");
       this.remove("Content-Length");
@@ -301,9 +306,14 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     }
     const base = basenameOf(filename);
     this.set("Content-Disposition", contentDisposition(base, options?.fallback, disposition));
-    // GHSA-c5vw-j4hf-j526: never override an existing Content-Type.
+    // GHSA-c5vw-j4hf-j526: never override an existing Content-Type. The
+    // inference goes through expandContentType — the same expansion c.type
+    // uses — so extensions resolve with their charset ("html" → text/html;
+    // charset=utf-8) and ".bin" maps to application/octet-stream instead of
+    // letting the runtime's text/plain leak into a binary download.
     if (base.lastIndexOf(".") !== -1 && !this.has("Content-Type")) {
-      const mime = mimeFromExtension(base);
+      const ext = base.slice(base.lastIndexOf(".") + 1);
+      const mime = expandContentType(ext);
       if (mime !== null) recordOf(this)["content-type"] = mime;
     }
   },
@@ -342,8 +352,10 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     // Through the status setter: a post-commit redirect must rewrite the
     // committed Response's status too (flag 32) — the direct statusValue
     // writes used here were invisible to the rule-4 rebuild, shipping
-    // Location on a 200 with the old body.
-    if (!isRedirectStatus(this.statusValue)) {
+    // Location on a 200 with the old body. The gate reads the COMMIT-AWARE
+    // status (`c.status`), so an already-committed 301/308 is preserved
+    // instead of being demoted to 302 (308 carries POST-retry semantics).
+    if (!isRedirectStatus(this.status)) {
       this.messageValue = "";
       this.status = 302;
     }

@@ -169,10 +169,13 @@ describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, fu
       try {
         for (const p of patterns) {
           registerDef(state, "GET", p, [() => {}]);
+          // Mirror indexPattern's CURRENT model: one target per TERMINAL NODE
+          // (patterns sharing a terminal append to it; an optional's skip
+          // terminal keeps its own target — R6-9). The equivalence invariant
+          // under test (matchRoute ≡ pure trie) is unchanged.
           const terminals = insertPattern(root, compilePattern(p).segments);
-          const shared = (terminals[0] as { target: RouteTarget | null }).target ?? createTarget();
           for (const terminal of terminals) {
-            if (terminal.target === null) terminal.target = shared;
+            terminal.target ??= createTarget();
           }
         }
       } catch {

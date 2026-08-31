@@ -40,7 +40,11 @@ const dropContentHeaders = (
 
 /**
  * Merge the context's state-mode headers with per-call headers for the sugar
- * helpers. Undefined when neither exists (the bare fast path).
+ * helpers. Undefined when neither exists (the bare fast path). The merge runs
+ * in the NORMALIZED (lowercased) keyspace: the staged record is lowercase by
+ * construction, and a per-call key in its original case ("Content-Type")
+ * would otherwise survive next to its staged lowercase twin — fetch's record
+ * init appends both into one comma-joined (invalid) singleton header.
  */
 const mergedHeadersOf = (
   c: ContextState,
@@ -49,8 +53,11 @@ const mergedHeadersOf = (
   const record = c.headersRecord;
   if (record === null && headers === undefined) return undefined;
   if (headers === undefined) return { ...record };
-  if (record === null) return { ...headers };
-  return { ...record, ...headers };
+  const merged: Record<string, HeaderValue> = record === null ? {} : { ...record };
+  for (const key of Object.keys(headers)) {
+    merged[key.toLowerCase()] = headers[key] as HeaderValue;
+  }
+  return merged;
 };
 
 /**
@@ -177,8 +184,15 @@ export const sugarHtml = (
   headers?: Record<string, HeaderValue>,
 ): Response => {
   const merged = consumeStaged(c, headers);
+  // text/html is the DEFAULT, not an override — the caller's explicit
+  // content-type wins (hono's setDefaultContentType order). The merged record
+  // is already normalized to lowercase keys.
   const withType =
-    merged === undefined ? { "content-type": TEXT_HTML } : { ...merged, "content-type": TEXT_HTML };
+    merged === undefined
+      ? { "content-type": TEXT_HTML }
+      : merged["content-type"] === undefined
+        ? { ...merged, "content-type": TEXT_HTML }
+        : merged;
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
   const st = status ?? staged;
   const statusText = stagedStatusText(c);

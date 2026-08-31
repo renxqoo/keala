@@ -117,15 +117,21 @@ const TYPE_MAP: Readonly<Record<string, string>> = Object.assign(Object.create(n
   bin: "application/octet-stream",
 }) as Readonly<Record<string, string>>;
 
-/** null = unexpandable: koa drops such Content-Type values entirely. */
+/**
+ * null = unexpandable: koa drops such Content-Type values entirely. A leading
+ * "." is stripped first (koa/mime-types accept extension forms), so ".html"
+ * resolves through the charset-carrying TYPE_MAP exactly like "html" — the
+ * extension fallback below returns bare types without charset.
+ */
 export const expandContentType = (value: string): string | null => {
-  const direct = TYPE_MAP[value];
+  const token = value.startsWith(".") ? value.slice(1) : value;
+  const direct = TYPE_MAP[token];
   if (direct !== undefined) return direct;
-  if (!value.includes("/")) {
-    const fromExt = mimeFromExtension(`x.${value}`);
+  if (!token.includes("/")) {
+    const fromExt = mimeFromExtension(`x.${token}`);
     if (fromExt !== null) return fromExt;
   }
-  return value.includes("/") ? value : null;
+  return token.includes("/") ? token : null;
 };
 
 /** Best MIME type for a file extension (used by `ctx.attachment`). */

@@ -11,14 +11,28 @@
 
 import type { Application } from "../app.ts";
 import type { Context } from "./context.ts";
-import { baseContextProto, resetContext } from "./context.ts";
+import { resetContext } from "./context.ts";
 
 const RETIRED = "context retired: do not retain contexts past the request lifetime";
 
-const dead = (): PropertyDescriptorMap => {
-  // WRITE-ONLY guard: reads chain to the live prototype (post-request
-  // telemetry keeps working on stale-but-visible data); every mutation path
-  // throws, so retained contexts can never corrupt the next request.
+/**
+ * Build the retired surface for one app's contexts. WRITE-ONLY guard: reads
+ * chain to the app's LIVE prototype (post-request telemetry keeps working,
+ * including `app.decorate()` members — the guard must chain to the app's own
+ * derived proto, not the shared base); every mutation path throws, so
+ * retained contexts can never corrupt the next request.
+ */
+/** First getter for `key` on the prototype CHAIN (the live accessors live on
+ *  the shared base; decorate() may override them higher up). */
+const getterOnChain = (proto: object, key: string): (() => unknown) | undefined => {
+  for (let at: object | null = proto; at !== null; at = Object.getPrototypeOf(at)) {
+    const get = Object.getOwnPropertyDescriptor(at, key)?.get;
+    if (get !== undefined) return get;
+  }
+  return undefined;
+};
+
+export const deadProtoFor = (liveProto: object): object => {
   const descriptors: PropertyDescriptorMap = {};
   for (const key of [
     "status",
@@ -37,10 +51,10 @@ const dead = (): PropertyDescriptorMap => {
     "cookies",
   ]) {
     // Setter-only accessors would shadow reads with undefined — forward the
-    // base getter explicitly so post-request reads still work.
-    const baseGet = Object.getOwnPropertyDescriptor(baseContextProto, key)?.get;
+    // live getter explicitly so post-request reads still work.
+    const liveGet = getterOnChain(liveProto, key);
     descriptors[key] = {
-      ...(baseGet !== undefined ? { get: baseGet } : {}),
+      ...(liveGet !== undefined ? { get: liveGet } : {}),
       set(): void {
         throw new Error(RETIRED);
       },
@@ -55,14 +69,8 @@ const dead = (): PropertyDescriptorMap => {
       configurable: true,
     };
   }
-  return descriptors;
+  return Object.defineProperties(Object.create(liveProto), descriptors);
 };
-
-/** The retired surface: reads and writes through the response/request mutators throw. */
-export const deadContextProto: object = Object.defineProperties(
-  Object.create(baseContextProto),
-  dead(),
-);
 
 const POOL_MAX = 128;
 
@@ -77,6 +85,7 @@ export interface ContextPool {
 
 export const createPool = (app: Application, liveProto: object): ContextPool => {
   const pool: Context[] = [];
+  const deadProto: object = deadProtoFor(liveProto);
   return {
     acquire(): Context | undefined {
       const c = pool.pop();
@@ -86,7 +95,7 @@ export const createPool = (app: Application, liveProto: object): ContextPool => 
     },
     release(c: Context): void {
       if (pool.length >= POOL_MAX) return;
-      Object.setPrototypeOf(c, deadContextProto);
+      Object.setPrototypeOf(c, deadProto);
       pool.push(c);
     },
     get size(): number {

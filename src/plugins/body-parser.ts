@@ -64,24 +64,23 @@ const boundaryOf = (contentType: string): string | null => {
   return null;
 };
 
-/** Non-overlapping occurrences of an ASCII needle in raw bytes. */
+/**
+ * Non-overlapping occurrences of an ASCII needle in raw bytes. Built on
+ * Buffer#indexOf — the runtime's native substring search (memmem-class,
+ * linear) — because a hand-rolled byte loop is O(n·m): a crafted boundary
+ * ("-"×1021+"C" against an all-dash body) mismatched only at the needle's
+ * last byte, paying a full 1024-byte compare per position (~1.6s of
+ * synchronous CPU per 1MB, ~16s at the 10MB default limit).
+ */
 const countOccurrences = (bytes: Uint8Array, needle: string): number => {
-  const first = needle.charCodeAt(0);
-  const length = needle.length;
+  const buffer = Buffer.isBuffer(bytes)
+    ? bytes
+    : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let count = 0;
-  for (let i = 0; i + length <= bytes.length; i++) {
-    if (bytes[i] !== first) continue;
-    let matched = true;
-    for (let j = 1; j < length; j++) {
-      if (bytes[i + j] !== needle.charCodeAt(j)) {
-        matched = false;
-        break;
-      }
-    }
-    if (matched) {
-      count++;
-      i += length - 1;
-    }
+  let at = buffer.indexOf(needle);
+  while (at !== -1) {
+    count++;
+    at = buffer.indexOf(needle, at + needle.length);
   }
   return count;
 };

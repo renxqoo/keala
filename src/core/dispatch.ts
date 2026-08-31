@@ -229,16 +229,21 @@ const errorResponse = (
   try {
     const out = buildErrorResponse(app, c, err);
     if (out instanceof Promise) {
-      return out.catch(() => staticServerError());
+      return out.catch(() => staticServerError(c.method));
     }
     return out;
   } catch {
-    return staticServerError();
+    return staticServerError(c.method);
   }
 };
 
-const staticServerError = (): Response =>
-  new Response("Internal Server Error", {
+/**
+ * The absolute last resort. HEAD-aware: a bodied HEAD response desyncs every
+ * keep-alive connection (RFC 9110 §9.3.2 — the client would read the body
+ * bytes as the next response).
+ */
+const staticServerError = (method: string | undefined): Response =>
+  new Response(method === "HEAD" ? null : "Internal Server Error", {
     status: 500,
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
@@ -283,7 +288,20 @@ const buildErrorResponse = (
   const message = exposed ? error.message : statusMessage(status) || "Internal Server Error";
   c.set("Content-Type", "text/plain; charset=utf-8");
   c.body = message;
-  return finalizeGuarded(app, c);
+  // TERMINAL conversion — the error path must never re-enter the full error
+  // pipeline: a finalize failure here (say, a staged header no Response can
+  // carry) answers the static 500 directly. Routing this through
+  // finalizeGuarded's catch → errorResponse → buildErrorResponse recursed
+  // mutually until stack overflow, firing app.onerror ~1.3k times for ONE
+  // request and, on promise-shaped finalize failures, escaping as an
+  // unhandled RangeError.
+  try {
+    const out = finalize(app, c);
+    if (out instanceof Promise) return out.catch(() => staticServerError(c.method));
+    return out;
+  } catch {
+    return staticServerError(c.method);
+  }
 };
 
 interface ParsedListen {

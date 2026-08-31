@@ -69,15 +69,26 @@ const methodNotAllowed = (c: Context): Response | null => {
   const allowHeader = ALLOW_ORDER.filter((m) => allowed.has(m)).join(", ");
   const method = c.method.toUpperCase();
   const headers: HeaderMap = { allow: allowHeader };
+  // koa parity: the synthesized 405/501 answers carry the status-message body
+  // (koa's respond() fills a null body with ctx.message on error statuses) —
+  // HEAD stays bodiless (RFC 9110 §9.3.2).
   if (!KNOWN_METHODS.has(method)) {
-    return new Response(null, { status: 501, headers });
+    return new Response(method === "HEAD" ? null : statusMessage(501) || "Not Implemented", {
+      status: 501,
+      headers:
+        method === "HEAD" ? headers : { ...headers, "content-type": "text/plain; charset=utf-8" },
+    });
   }
   if (method === "OPTIONS") {
     // koa-router: OPTIONS answers 200 with an empty body and Allow.
     return new Response(null, { status: 200, headers });
   }
   if (!allowed.has(method)) {
-    return new Response(null, { status: 405, headers });
+    return new Response(method === "HEAD" ? null : statusMessage(405) || "Method Not Allowed", {
+      status: 405,
+      headers:
+        method === "HEAD" ? headers : { ...headers, "content-type": "text/plain; charset=utf-8" },
+    });
   }
   return null;
 };
@@ -411,6 +422,20 @@ const fromState = (c: Context, head: boolean): Response => {
 export const finalize = (app: Application, c: Context): Response | Promise<Response> => {
   const committed = c._res;
   if (committed !== undefined) {
+    // RFC 9110 §8.6: a 204/304 MUST NOT carry a body. A handler returning a
+    // bodied Response with an empty status is sanitized exactly like the
+    // state-mode path (undici refuses the construction; Bun allows it).
+    if (isEmptyStatus(committed.status) && committed.body !== null) {
+      const headers = new Headers(committed.headers);
+      headers.delete("content-type");
+      headers.delete("content-length");
+      headers.delete("transfer-encoding");
+      return new Response(null, {
+        status: committed.status,
+        statusText: committed.statusText,
+        headers,
+      });
+    }
     const record = c.headersRecord;
     // Rule 4: a committed Response with post-commit mutations (staged
     // headers, removals, a status/message override) is REBUILT; the common

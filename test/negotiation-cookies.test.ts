@@ -90,7 +90,10 @@ describe("negotiation matrix: encoding and charset tables", () => {
     ["gzip;q=0, br", ["gzip", "br"], "br"],
     ["gzip;q=0, *;q=0", ["gzip", "br"], false],
     ["*", ["gzip"], "gzip"],
-    ["", ["gzip"], "gzip"],
+    // An absent/empty Accept-Encoding means the client understands NO
+    // content codings — identity only (RFC 7231 §5.3.4; negotiator's answer,
+    // verified live). Not "the server's first provided".
+    ["", ["gzip"], false],
   ])("encodings %j → %j", async (header, provided, expected) => {
     const ctx = await probe({ "Accept-Encoding": header });
     expect(ctx.acceptsEncodings(...provided)).toBe(expected);

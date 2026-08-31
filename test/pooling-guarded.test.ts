@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { deadContextProto } from "../src/core/context/pool.ts";
+import { deadProtoFor } from "../src/core/context/pool.ts";
+import { baseContextProto } from "../src/core/context/context.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
@@ -104,8 +105,8 @@ describe("guarded pooling", () => {
     expect(ok.status).toBe(200);
   });
 
-  it("deadContextProto exposes the retired surface", () => {
-    const retired = Object.create(deadContextProto) as Context;
+  it("deadProtoFor(baseContextProto) exposes the retired surface", () => {
+    const retired = Object.create(deadProtoFor(baseContextProto)) as Context;
     expect(() => {
       (retired as unknown as { remove: (k: string) => void }).remove("x");
     }).toThrow(/retired/);

@@ -167,13 +167,20 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
 
     if (!mayStore) return;
     // State-mode responses (the framework's koa-style API) commit only in the
-    // finalizer, AFTER the onion — materialize the equivalent Response here
-    // (without committing it) so eligibility and capture see the same object
-    // the finalizer will build. The discard is safe: nothing consumed the
-    // body (textualBody reads a clone), and the finalizer re-derives an
-    // identical Response from the untouched state.
+    // finalizer, AFTER the onion. Decide capturability from the STATE first:
+    // materializing (below) runs the same finalizer machinery the app uses,
+    // which for a stream body wraps it in the onStreamError observer — that
+    // locks the developer's stream with a getReader() the REAL finalizer then
+    // trips over (a hard 500). Non-textual state bodies were never capturable
+    // anyway; decline before touching anything.
+    const stateMode = c._res === undefined;
+    if (stateMode && !isTextualStateBody(c.bodyValue)) return;
+    // Materialize the equivalent Response (without committing it) so
+    // eligibility and capture see the same object the finalizer will build.
+    // The discard is safe: nothing consumed the body (textualBody reads a
+    // clone), and the finalizer re-derives an identical Response from the
+    // untouched state.
     const res = c._res ?? (await finalize(c.app, c));
-    if (c._res === undefined && !isTextualStateBody(c.bodyValue)) return;
     if (!eligible(c, res)) return;
     const body = await textualBody(res);
     if (body === null || body.length === 0) return;
@@ -185,7 +192,10 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     }
     for (const cookie of res.headers.getSetCookie()) headers.push(["set-cookie", cookie]);
 
-    store.set(key, { expires: now + ttl, body, headers });
+    // The TTL window starts when the REPRESENTATION was produced (after the
+    // handler settled), not when the request began — a handler slower than
+    // the ttl would otherwise mint entries that are born expired.
+    store.set(key, { expires: Date.now() + ttl, body, headers });
     // LRU eviction keeps the freshest `max` entries.
     while (store.size > max) {
       const oldest = store.keys().next().value as string | undefined;

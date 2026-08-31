@@ -41,7 +41,9 @@ describe("ported parity security semantics", () => {
     });
     const res = await app.handle(new Request("http://localhost:3000/a"));
     expect(res.headers.get("content-disposition")).toContain("filename*=UTF-8''");
-    expect(res.headers.get("content-type")).toBe("text/csv");
+    // koa parity: the inference goes through the same expansion c.type
+    // uses — text/* extensions carry their charset.
+    expect(res.headers.get("content-type")).toContain("text/csv");
   });
 
   it("GHSA-c5vw-j4hf-j526: attachment never overrides an existing Content-Type", async () => {
@@ -78,7 +80,9 @@ describe("ported parity security semantics", () => {
     const res = await app.handle(new Request("http://localhost:3000/r"));
     expect(res.status).toBe(201);
     expect(res.headers.get("x-from-inner")).toBe("1");
-    expect(res.headers.get("content-type")).toBe("text/csv");
+    // koa parity: the inference goes through the same expansion c.type
+    // uses — text/* extensions carry their charset.
+    expect(res.headers.get("content-type")).toContain("text/csv");
     expect(await res.text()).toBe("inner");
   });
 

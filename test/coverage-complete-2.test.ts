@@ -38,7 +38,7 @@ describe("coverage: response sugar combinations", () => {
     expect(await res.text()).toBe("body");
   });
 
-  it("json carries status and headers; html always wins content-type", async () => {
+  it("json carries status and headers; an explicit per-call content-type wins over html's default", async () => {
     const app = createApp(quiet);
     app.get("/j", (c) => c.json({ ok: true }, 202, { "x-j": "1" }));
     app.get("/h", (c) => c.html("<b>x</b>", 200, { "content-type": "text/plain" }));
@@ -47,8 +47,10 @@ describe("coverage: response sugar combinations", () => {
     expect(j.headers.get("x-j")).toBe("1");
     expect((j.headers.get("content-type") ?? "").split(";")[0]).toBe("application/json");
     expect(await j.text()).toBe('{"ok":true}');
+    // hono parity (setDefaultContentType): text/html is the DEFAULT, the
+    // caller's explicit content-type wins.
     const h = await app.handle(req("/h"));
-    expect(h.headers.get("content-type")).toContain("text/html");
+    expect(h.headers.get("content-type")).toBe("text/plain");
   });
 
   it("state-mode object bodies carry status through Response.json", async () => {

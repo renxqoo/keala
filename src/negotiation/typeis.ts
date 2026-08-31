@@ -37,14 +37,18 @@ export const typeIs = (
       if ((incoming.split("/")[1] ?? "").endsWith(shorthand)) return incoming;
       continue;
     }
+    // `*` / `*/*` match every representation — the answer is the incoming
+    // type (type-is semantics). Checked BEFORE the `*/subtype` branch, which
+    // would otherwise swallow `*/*` as a literal "*" subtype.
+    const early = expandShorthand(shorthand);
+    if (early === "any" || early === "*" || early === "*/*") return incoming;
     if (shorthand.startsWith("*/")) {
       // `*/png` matches any type whose subtype is png.
       const subtype = shorthand.slice(2);
       if (incoming.split("/")[1] === subtype) return shorthand;
       continue;
     }
-    const type = expandShorthand(shorthand);
-    if (type === "any" || type === "*") return incoming;
+    const type = early;
     if (type.endsWith("/*")) {
       const prefix = type.slice(0, -1); // keep trailing /
       if (incoming.startsWith(prefix)) return shorthand;
