@@ -61,7 +61,7 @@ export const startBunServer = (
   const serve = serveImpl ?? defaultServeImplementation();
   if (serve === undefined) {
     throw new Error(
-      'listen() requires Bun.serve (Bun >= 1.4). Under Node use startNodeServer from "@honu/core/node", or call app.handle() yourself.',
+      'listen() requires Bun.serve (Bun >= 1.4). Under Node use startNodeServer from "eleu/node", or call app.handle() yourself.',
     );
   }
 

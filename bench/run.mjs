@@ -13,7 +13,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import autocannon from "autocannon";
 
 // Server labels derive the runtime versions from the actual binaries, so
-// the report never claims a runtime it did not use. The honu node servers
+// the report never claims a runtime it did not use. The eleu node servers
 // load .ts natively (type stripping is default-on since node 23.6).
 const NODE_LABEL = `node ${process.versions.node.split(".")[0]}`;
 const BUN_LABEL = `bun ${execSync("bun --version", { encoding: "utf8" }).trim()}`;
@@ -46,9 +46,9 @@ const GO_LABEL = GO_AVAILABLE
 
 const SERVERS = [
   { name: "raw Bun.serve (bun 1.4)", cmd: ["bun", "bench/server-raw.ts"], port: 4104 },
-  { name: "honu (bun 1.4)", cmd: ["bun", "bench/server-honu.ts"], port: 4103 },
+  { name: "eleu (bun 1.4)", cmd: ["bun", "bench/server-eleu.ts"], port: 4103 },
   { name: "hono 4 (bun 1.4)", cmd: ["bun", "bench/server-hono.ts"], port: 4102 },
-  { name: `honu (${NODE_LABEL})`, cmd: ["node", "bench/server-honu-node.ts"], port: 4109 },
+  { name: `eleu (${NODE_LABEL})`, cmd: ["node", "bench/server-eleu-node.ts"], port: 4109 },
   { name: `koa 3 (${NODE_LABEL})`, cmd: ["node", "bench/server-koa.mjs"], port: 4101 },
   { name: `fastify 5 (${NODE_LABEL})`, cmd: ["node", "bench/server-fastify.mjs"], port: 4105 },
   { name: "koa 3 (bun 1.4)", cmd: ["bun", "bench/server-koa.mjs"], port: 4106 },
@@ -75,15 +75,15 @@ const SCALE_SERVERS = [
     scale: true,
   },
   {
-    name: "honu (bun 1.4)",
-    cmd: ["bun", "bench/server-honu-scale.ts"],
+    name: "eleu (bun 1.4)",
+    cmd: ["bun", "bench/server-eleu-scale.ts"],
     port: 4113,
     scale: true,
   },
   { name: "hono 4 (bun 1.4)", cmd: ["bun", "bench/server-hono-scale.ts"], port: 4112, scale: true },
   {
-    name: `honu (${NODE_LABEL})`,
-    cmd: ["node", "bench/server-honu-node-scale.ts"],
+    name: `eleu (${NODE_LABEL})`,
+    cmd: ["node", "bench/server-eleu-node-scale.ts"],
     port: 4119,
     scale: true,
   },
@@ -278,7 +278,7 @@ const main = async () => {
     }
 
     const lines = [];
-    lines.push("# honu performance report", "");
+    lines.push("# eleu performance report", "");
     lines.push(`Generated: ${new Date().toISOString()}`, "");
     lines.push("- Load tool: autocannon (4 client workers — one process saturates at ~177k req/s)");
     lines.push(
@@ -291,7 +291,7 @@ const main = async () => {
       "- Ratio lines carry each side's run-to-run noise (±spread); a ratio inside the noise band is a TIE, not a win",
     );
     lines.push(
-      `- Runtimes: ${BUN_LABEL} (raw / honu / hono) vs ${NODE_LABEL} (honu / koa / fastify)${GO_AVAILABLE ? ` vs ${GO_LABEL}` : ""}`,
+      `- Runtimes: ${BUN_LABEL} (raw / eleu / hono) vs ${NODE_LABEL} (eleu / koa / fastify)${GO_AVAILABLE ? ` vs ${GO_LABEL}` : ""}`,
     );
     lines.push("- Loopback HTTP/1.1 keep-alive; identical response shapes on every framework");
     lines.push(
@@ -318,13 +318,13 @@ const main = async () => {
           `| ${instance.name.split(" (")[0]}${instance.scale ? " (scale)" : ""} | ${instance.name.match(/\((.*)\)/)?.[1] ?? ""} | ${Math.round(median(entry.rps)).toLocaleString("en-US")} | ${spreadOf(entry.rps)} |`,
         );
       }
-      const ours = entries.find((e) => e.instance.name.startsWith("honu"));
+      const ours = entries.find((e) => e.instance.name.startsWith("eleu"));
       for (const other of ["koa 3", "fastify 5", "hono 4", "raw Bun", "go net/http"]) {
         const ref = entries.find((e) => e.instance.name.startsWith(other) && e !== ours);
         if (ours && ref && ref !== ours) {
           const ratio = median(ours.entry.rps) / median(ref.entry.rps);
           lines.push(
-            `- honu vs ${other}: **${ratio.toFixed(2)}x** (${spreadOf(ours.entry.rps)} / ${spreadOf(ref.entry.rps)})`,
+            `- eleu vs ${other}: **${ratio.toFixed(2)}x** (${spreadOf(ours.entry.rps)} / ${spreadOf(ref.entry.rps)})`,
           );
         }
       }

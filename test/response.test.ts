@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 
-const makeApp = () => new Honu({ env: "test" });
+const makeApp = () => new Eleu({ env: "test" });
 
 describe("response facade (flat context)", () => {
   it("starts as 404 with no body", async () => {

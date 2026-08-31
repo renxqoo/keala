@@ -50,14 +50,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu, type Application } from "../src/core/app.ts";
+import { Eleu, type Application } from "../src/core/app.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, request: Request) => app.handle(request);
 
 describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   it("PIPE-1: c.redirect must percent-encode backslash (open redirect via /\\evil.com)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/r", (c) => {
       // The classic reflected-redirect pattern: ?next=%2F%5Cevil.com
       c.redirect(String(c.query.next));
@@ -71,7 +71,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   });
 
   it("PIPE-2: post-commit 204 must drop content-type/content-length (RFC 9110 MUST NOT)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.status = 204; // canonical empty-status downgrade after the commit
@@ -89,7 +89,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   });
 
   it("PIPE-2b: post-commit 304 downgrade strips content headers like the state path", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.status = 304; // fresh-check pattern
@@ -108,7 +108,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   });
 
   it("PIPE-3: post-commit vary() must merge with the committed Vary, not replace it", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.vary("Accept");
@@ -122,7 +122,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   });
 
   it("PIPE-4: a NUL in c.message must not turn the response into a 500", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use((c) => {
       c.status = 200;
       c.message = "ok\u0000marker"; // passes the CR/LF-only setter check
@@ -134,7 +134,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   });
 
   it("PIPE-5: c.html() keeps a staged c.message as statusText like c.text()/c.json()", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use((c) => {
       c.message = "Custom";
       return c.html("<b>hi</b>");
@@ -144,7 +144,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   });
 
   it("PIPE-6: a post-commit c.message overrides the reason phrase (rule-4 contract)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.message = "Custom Phrase";
@@ -157,7 +157,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
   });
 
   it("PIPE-7: touching c.cookies must not put Object.prototype under the header record", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     let observed = true;
     app.use((c) => {
       expect(c.has("constructor")).toBe(false); // control: null-proto record

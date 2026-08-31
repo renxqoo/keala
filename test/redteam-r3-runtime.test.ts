@@ -61,7 +61,7 @@ import { join } from "node:path";
 import { connect } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Honu, type Application } from "../src/core/app.ts";
+import { Eleu, type Application } from "../src/core/app.ts";
 import { startBunServer, type ServeImplementation } from "../src/adapters/bun.ts";
 import { listen, type NodeServerHandle } from "../src/adapters/node.ts";
 import { createError } from "../src/http/errors.ts";
@@ -96,7 +96,7 @@ afterAll(async () => {
 
 describe("RT3-01: serveStatic directory-index path skips the symlink walk", () => {
   it("a symlinked index.html reached through its DIRECTORY path must be denied like the direct file path", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.sink("/assets/*", { dir: root });
 
     // Control: the direct file path is (correctly) refused today.
@@ -120,8 +120,8 @@ describe("RT3-01: serveStatic directory-index path skips the symlink walk", () =
 
 describe("RT3-02: mount() must refuse ws registrations under a pooling parent", () => {
   it("mounting a ws-bearing sub-app into pooling:true must fail loudly (same guard as app.ws)", () => {
-    const parent = new Honu({ ...quiet, pooling: true });
-    const sub = new Honu(quiet);
+    const parent = new Eleu({ ...quiet, pooling: true });
+    const sub = new Eleu(quiet);
     sub.ws("/ws", { open: () => undefined });
     expect(() => parent.mount("/sub", sub)).toThrow(/pooling/);
   });
@@ -130,11 +130,11 @@ describe("RT3-02: mount() must refuse ws registrations under a pooling parent", 
     // Contract chosen for the fix: the mount is REFUSED (see the previous
     // it), so no ws route exists — the upgrade can never run, no context is
     // ever retained by a socket, and the next request answers normally.
-    const parent = new Honu({ ...quiet, pooling: true });
+    const parent = new Eleu({ ...quiet, pooling: true });
     parent.get("/second", (c) => {
       c.body = "second";
     });
-    const sub = new Honu(quiet);
+    const sub = new Eleu(quiet);
     sub.ws("/ws", { open: () => undefined });
     expect(() => parent.mount("/sub", sub)).toThrow(/pooling/);
 
@@ -171,7 +171,7 @@ describe("RT3-03: ws dispatch containment must survive a throwing error listener
       onUnhandled,
     );
     try {
-      const app = new Honu(quiet);
+      const app = new Eleu(quiet);
       app.onError(() => {
         throw new Error("listener-exploded");
       });
@@ -214,7 +214,7 @@ describe("RT3-03: ws dispatch containment must survive a throwing error listener
 
 describe("RT3-04: registering a ws route after listen() must be loud or wired", () => {
   it("late app.ws() must either throw or reach the running server's websocket handlers", () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const reloads: Record<string, unknown>[] = [];
     let captured: Record<string, unknown> = {};
     const impl: ServeImplementation = () => ({
@@ -254,7 +254,7 @@ describe("RT3-05: the Node adapter must not 500 a legal OPTIONS * request", () =
   });
 
   it("OPTIONS * answers a non-5xx status (RFC 7231 §4.3.7 request-target)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/x", (c) => {
       c.body = "ok";
     });
@@ -292,7 +292,7 @@ describe("RT3-06: createError must not produce an empty message for unnamed stat
   });
 
   it("an error response for an unnamed status carries a non-empty body", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/t", () => {
       throw createError(420);
     });
@@ -312,7 +312,7 @@ describe("RT3-07: sink must refuse bodies the native table cannot replay", () =>
     // the body's TYPE proves nothing. The provable contract: unconsumed
     // bodies sink (the mirror snapshots through a clone and rebuilds per
     // hit — no per-request 500, no divergence between hits).
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const oneShot = new Response(
       new ReadableStream<Uint8Array>({
         start(controller) {
@@ -332,7 +332,7 @@ describe("RT3-07: sink must refuse bodies the native table cannot replay", () =>
   });
 
   it("an already-consumed Response is refused at registration (not a per-request 500)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const consumed = new Response("x");
     await consumed.text();
     expect(() => app.sink("/dead", consumed)).toThrow();

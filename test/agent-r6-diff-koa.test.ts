@@ -1,11 +1,11 @@
 /**
- * r6 differential audit — honu vs the REAL koa 3.2.1 stack.
+ * r6 differential audit — eleu vs the REAL koa 3.2.1 stack.
  *
  * koa 3.2.1 (+ @koa/router 15.7) is driven through `app.callback()` with
- * minimal hand-written node:http mocks; honu through `app.handle(Request)`.
+ * minimal hand-written node:http mocks; eleu through `app.handle(Request)`.
  * Observable responses (status / headers / body) are compared field by field,
  * and shared semantics are unit-diffed against the real packages koa links.
- * RED `it`s assert honu equals the live-computed koa reference (the comment
+ * RED `it`s assert eleu equals the live-computed koa reference (the comment
  * states the koa value); the last describe locks INTENTIONAL divergences.
  */
 
@@ -16,7 +16,7 @@ import { Router } from "@koa/router";
 import contentDispositionPkg from "content-disposition";
 import acceptsPkg from "accepts";
 
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
 import { contentDisposition } from "../src/utils/text.ts";
 import { acceptsType, acceptsEncoding } from "../src/negotiation/accepts.ts";
@@ -123,10 +123,10 @@ const driveKoa = async (
 };
 
 const driveBun = async (
-  setup: (app: InstanceType<typeof Honu>) => void,
+  setup: (app: InstanceType<typeof Eleu>) => void,
   reqInit: ReqInit,
 ): Promise<Snapshot> => {
-  const app = new Honu({ env: "test" } as const);
+  const app = new Eleu({ env: "test" } as const);
   setup(app);
   const res = await app.handle(
     new Request(`http://localhost:3000${reqInit.url ?? "/"}`, {
@@ -145,13 +145,13 @@ const koaEncodings = (header: string, provided: string[]) =>
 const koaTypes = (header: string, provided: string[]) =>
   acceptsPkg({ headers: { accept: header } } as never).type(...provided) ?? null;
 
-// --- CONFIRMED BUGS (red): honu deviates from koa without justification. ---
+// --- CONFIRMED BUGS (red): eleu deviates from koa without justification. ---
 
 describe("r6 diff — type-is: `*/*` never matches", () => {
   it("`ctx.is(['*/*'])` returns false instead of the incoming type", () => {
     // koa (type-is): typeis(req, ['*/*']) with Content-Type: application/json
     //   => 'application/json' — the canonical match-anything pattern.
-    // honu: lowers '*/*' into the `endsWith('/*')` branch with prefix '*/'
+    // eleu: lowers '*/*' into the `endsWith('/*')` branch with prefix '*/'
     //   (no normalized type starts with it) => false.
     const req = { headers: { "content-type": "application/json", "content-length": "10" } };
     expect(typeIs("application/json", ["*/*"])).toBe(typeisPkg(req as never, ["*/*"])); // koa: 'application/json'
@@ -200,7 +200,7 @@ describe("r6 diff — redirect Location (encodeurl)", () => {
   it("an invalid percent escape is left raw instead of being %25-escaped", async () => {
     // koa (encodeurl): '/trailing%' => '/trailing%25' — a '%' not followed by
     // two hex digits is NOT a valid escape and gets encoded.
-    // honu: keeps the bare '%', shipping a malformed Location value.
+    // eleu: keeps the bare '%', shipping a malformed Location value.
     const { koa, bun } = await loc("/trailing%");
     expect(bun).toBe(koa); // koa: '/trailing%25'
   });
@@ -225,7 +225,7 @@ describe("r6 diff — content-disposition", () => {
     // koa (content-disposition): TEXT_REGEXP allows \x80-\xff in the quoted
     //   form, so 'naïve file.txt' => 'attachment; filename="naïve file.txt"'
     //   with NO filename* (the latin-1 fallback equals the name).
-    // honu: isAscii is /^[\x20-\x7e]*$/ (ASCII only) => masks 'ï' to '?'
+    // eleu: isAscii is /^[\x20-\x7e]*$/ (ASCII only) => masks 'ï' to '?'
     //   and appends filename*=UTF-8''na%C3%AFve%20file.txt.
     expect(contentDisposition("naïve file.txt")).toBe(contentDispositionPkg("naïve file.txt"));
   });
@@ -244,7 +244,7 @@ describe("r6 diff — content-disposition", () => {
     // koa (content-disposition): HEX_ESCAPE_REGEXP forces BOTH parameters so
     //   legacy clients cannot URL-decode the quoted name:
     //   '50%20off.txt' => 'attachment; filename="50%20off.txt"; filename*=UTF-8''50%2520off.txt'
-    // honu: early-returns the plain filename only.
+    // eleu: early-returns the plain filename only.
     expect(contentDisposition("50%20off.txt")).toBe(contentDispositionPkg("50%20off.txt"));
   });
 
@@ -252,7 +252,7 @@ describe("r6 diff — content-disposition", () => {
     // koa (content-disposition): an explicit fallback string ALWAYS becomes
     //   the legacy name and forces filename* (fallbackName !== name):
     //   ('file.txt', 'fallback.txt') => 'attachment; filename="fallback.txt"; filename*=UTF-8''file.txt'
-    // honu: only applies the fallback when the filename is non-ASCII.
+    // eleu: only applies the fallback when the filename is non-ASCII.
     expect(contentDisposition("file.txt", "fallback.txt")).toBe(
       contentDispositionPkg("file.txt", { fallback: "fallback.txt" }),
     );
@@ -261,7 +261,7 @@ describe("r6 diff — content-disposition", () => {
 describe("r6 diff — attachment Content-Type inference", () => {
   it("'.bin' fails to infer application/octet-stream", async () => {
     // koa: ctx.attachment('data.bin') => Content-Type 'application/octet-stream'
-    //   (mime-types lookup of '.bin'). honu: EXT_TO_MIME has no 'bin' entry
+    //   (mime-types lookup of '.bin'). eleu: EXT_TO_MIME has no 'bin' entry
     //   (TYPE_MAP does!) so no Content-Type is set and the runtime default
     //   'text/plain' leaks into a binary download.
     const koa = await driveKoa(
@@ -287,7 +287,7 @@ describe("r6 diff — response type expansion charset", () => {
   it("c.type = '.html' drops the charset that koa's expansion adds", async () => {
     // koa: response.type = '.html' goes through mime-types contentType =>
     //   'text/html; charset=utf-8' (identical to type = 'html').
-    // honu: the extension path returns the bare EXT_TO_MIME value
+    // eleu: the extension path returns the bare EXT_TO_MIME value
     //   ('text/html') — inconsistent with its own shorthand path.
     const koa = await driveKoa(
       (app) =>
@@ -354,7 +354,7 @@ describe("r6 diff — accepts negotiation", () => {
     // koa (negotiator): a provided type's quality is defined by its MOST
     //   SPECIFIC matching range — 'text/html;q=0' refuses html outright, so
     //   .type('html') is false even though '*/*' would accept it.
-    // honu: pickPreference filters q=0 ranges BEFORE the specificity match.
+    // eleu: pickPreference filters q=0 ranges BEFORE the specificity match.
     expect(acceptsType("text/html;q=0, */*", ["html"]) ?? null).toBe(
       koaTypes("text/html;q=0, */*", ["html"]),
     ); // koa: false, bun: 'html'
@@ -370,7 +370,7 @@ describe("r6 diff — accepts negotiation", () => {
   it("duplicate same-specificity ranges keep the FIRST q instead of the highest", () => {
     // koa (negotiator): among equally-specific ranges for one value the
     // HIGHER q defines the quality ('gzip;q=0.001, gzip;q=0.3' => 0.3), so
-    // gzip ties identity at 0.3 and wins on header order. honu's
+    // gzip ties identity at 0.3 and wins on header order. eleu's
     // `s > matchScore` keeps the first exact range (q=0.001).
     const header = "gzip;q=0.001, gzip;q=0.3, identity;q=0.3";
     expect(acceptsEncoding(header, ["gzip", "identity"]) ?? null).toBe(

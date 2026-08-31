@@ -1,10 +1,10 @@
-// honu scale server (Node.js runtime): 1000 static routes only — dedicated
+// eleu scale server (Node.js runtime): 1000 static routes only — dedicated
 // process so the base scenarios stay unpolluted. Mirrors the Bun variant.
-// Run: node --experimental-strip-types bench/server-honu-node-scale.ts [port]
-import { Honu } from "../src/index.ts";
+// Run: node --experimental-strip-types bench/server-eleu-node-scale.ts [port]
+import { Eleu } from "../src/index.ts";
 import { listen } from "../src/adapters/node.ts";
 
-const app = new Honu();
+const app = new Eleu();
 for (let i = 0; i < 1000; i++) {
   app.get(`/route-${i}`, (c) => c.text(`route-${i}`));
 }

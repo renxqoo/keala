@@ -1,10 +1,7 @@
-// honu bench server (Node.js runtime via the node adapter) — mirrors
-// bench/server-honu.ts route for route, so the two runtimes are comparable.
-// Run: node --experimental-strip-types bench/server-honu-node.ts [port]
-import { Honu } from "../src/index.ts";
-import { listen } from "../src/adapters/node.ts";
+// eleu bench server (Bun runtime) — mirrors the other bench servers.
+import { Eleu } from "../src/index.ts";
 
-const app = new Honu();
+const app = new Eleu();
 
 app.get("/text", (c) => c.text("hello world"));
 
@@ -38,5 +35,5 @@ app.get("/debug/memory", (c) =>
   }),
 );
 
-const port = Number(process.argv[2] ?? 4109);
-listen(app, port, "127.0.0.1");
+const port = Number(process.argv[2] ?? 4103);
+app.listen(port, "127.0.0.1");

@@ -61,7 +61,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import {
   acceptsCharset,
   acceptsEncoding,
@@ -111,7 +111,7 @@ describe("R3-1 serveStatic: a symlinked subdirectory index escapes root", () => 
   });
 
   it("denies <dir>/index.html symlinks with followSymlinks off (default)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(serveStatic({ root }));
     const res = await app.handle(new Request("http://localhost:3000/uploads/"));
     expect(res.status).toBe(403); // same denial as the top-level link.js case
@@ -121,7 +121,7 @@ describe("R3-1 serveStatic: a symlinked subdirectory index escapes root", () => 
 
 describe("R3-2 bodyParser: multipart part budget disarmed by `;` in a quoted boundary", () => {
   const appOf = () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(createBodyParser()); // formPartLimit defaults to 1000
     // The exposed 413 from the budget check renders through the standard
     // error path; a surviving budget materializes every part instead.

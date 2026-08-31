@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { quiet } from "./agent-r6-prop-rig.mts";
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 
 describe("agent-r6 RED: confirmed violations", () => {
   it("R6-1 [INV-8, seed head-dirty-committed#17] non-latin-1 header value must not flood app.onerror", async () => {
@@ -21,7 +21,7 @@ describe("agent-r6 RED: confirmed violations", () => {
     // level firing app.onerror once. In production (env != test, no listener)
     // every level also console.error's the full stack — a log-flood amplifier
     // reachable with a single request. Correct contract: onerror fires once.
-    const app = new Honu({ ...quiet });
+    const app = new Eleu({ ...quiet });
     let onerror = 0;
     app.onError(() => {
       onerror++;
@@ -43,7 +43,7 @@ describe("agent-r6 RED: confirmed violations", () => {
     // 500. RFC 9110 §9.3.2: a server MAY send headers for HEAD as if GET,
     // but MUST NOT send a body — a bodied HEAD desyncs any keep-alive
     // connection (the client reads the body bytes as the next response).
-    const app = new Honu({ ...quiet });
+    const app = new Eleu({ ...quiet });
     app.get("/r", (c) => {
       c.set("x-unicode", "café中");
       c.body = "ok";
@@ -60,7 +60,7 @@ describe("agent-r6 RED: confirmed violations", () => {
     // writes) after next(). rebuildCommitted's headers.set() throws, the
     // error path re-stages the poison header, and the recursion above runs —
     // onerror floods and the HEAD answer is bodied.
-    const app = new Honu({ ...quiet });
+    const app = new Eleu({ ...quiet });
     let onerror = 0;
     app.onError(() => {
       onerror++;
@@ -96,7 +96,7 @@ describe("agent-r6 RED: confirmed violations", () => {
       "unhandledRejection",
       onUnhandledRejection,
     );
-    const app = new Honu({ ...quiet });
+    const app = new Eleu({ ...quiet });
     let onerror = 0;
     app.onError(() => {
       onerror++;

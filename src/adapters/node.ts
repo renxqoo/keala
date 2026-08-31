@@ -9,10 +9,10 @@
  * refused before routing.
  *
  * ```ts
- * import { Honu } from "@honu/core";
- * import { listen } from "@honu/core/node";
+ * import { Eleu } from "eleu";
+ * import { listen } from "eleu/node";
  *
- * const app = new Honu();
+ * const app = new Eleu();
  * app.get("/", (c) => { c.body = "hello"; });
  * listen(app, 3000);
  * ```

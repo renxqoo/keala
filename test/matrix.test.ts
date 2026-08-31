@@ -14,12 +14,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu, type Context } from "../src/index.ts";
+import { Eleu, type Context } from "../src/index.ts";
 
 const quiet = { env: "test" } as const;
 
 const respondWith = async (setup: (c: Context) => void, init?: RequestInit): Promise<Response> => {
-  const app = new Honu(quiet);
+  const app = new Eleu(quiet);
   app.get("/", (c) => {
     setup(c);
   });
@@ -28,7 +28,7 @@ const respondWith = async (setup: (c: Context) => void, init?: RequestInit): Pro
 
 const captureCtx = async (setup: (c: Context) => void): Promise<Context> => {
   let captured: Context | undefined;
-  const app = new Honu(quiet);
+  const app = new Eleu(quiet);
   app.use(async (c) => {
     captured = c;
     setup(c);
@@ -151,7 +151,7 @@ describe("matrix: HEAD across body kinds", () => {
   it.each(heads)("HEAD %s keeps Content-Length %d", async (_label, body, length) => {
     // Dual-mode commit path: Content-Length is backfilled from the would-be
     // body exactly like koa.
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/", (c) => {
       if (typeof body === "object" && body !== null && !(body instanceof Uint8Array)) {
         return c.json(body);
@@ -350,7 +350,7 @@ describe("matrix: toJSON snapshots", () => {
   });
 
   it("toJSON captures method/url/header from the request side", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     let json: Record<string, unknown> | undefined;
     app.use((c) => {
       json = c.toJSON();

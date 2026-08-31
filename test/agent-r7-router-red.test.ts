@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 import { acceptsType } from "../src/negotiation/accepts.ts";
 import { parseQuery } from "../src/utils/query.ts";
 import { validateHeaderValue } from "../src/utils/text.ts";
@@ -19,7 +19,7 @@ const request = (path: string, init?: RequestInit): Request =>
 
 describe("R7-ROUTER-1 [HIGH] named URL round-trip for an encoded slash", () => {
   it("keeps %2F inside its original static segment", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("encoded", "/files/a%2Fb", (c) => c.text("encoded-segment"));
     app.get("/files/a/b", (c) => c.text("different-resource"));
 
@@ -38,7 +38,7 @@ describe("R7-ROUTER-1 [HIGH] named URL round-trip for an encoded slash", () => {
 
 describe("R7-ROUTER-2 [HIGH] failed registration is atomic", () => {
   it("does not publish the failed name or poison a later router rebuild", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("healthy", "/healthy", (c) => c.text("healthy"));
 
     // Repro: malformed custom regex compilation throws as promised.
@@ -111,7 +111,7 @@ describe("R7-QUERY-1 [MEDIUM] malformed escapes still decode valid query bytes",
 
 describe("R7-URL-1 [LOW] assigning query preserves URL fragments", () => {
   it("places the serialized query before the existing fragment", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     let observed = "";
     app.use((c) => {
       c.url = "/resource?old=1#section";

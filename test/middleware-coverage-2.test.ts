@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import { compress } from "../src/middleware/etag.ts";
 import { cors } from "../src/middleware/cors.ts";
 import type { Context } from "../src/core/context/context.ts";
@@ -24,7 +24,7 @@ const gzRequest = (path: string): Request =>
 
 describe("coverage: compress with injected gzip", () => {
   it("compresses eligible string bodies and replaces the body bytes", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(compress({ gzip }));
     app.get("/x", (c) => {
       c.body = "0".repeat(400);
@@ -37,7 +37,7 @@ describe("coverage: compress with injected gzip", () => {
   });
 
   it("object bodies compress; pre-encoded and committed responses skip", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(compress({ gzip }));
     app.get("/obj", (c) => {
       c.body = { pad: "1".repeat(500) };
@@ -54,7 +54,7 @@ describe("coverage: compress with injected gzip", () => {
 
   it("skips when the packed output would not shrink", async () => {
     const growing = (): Promise<Uint8Array> => Promise.resolve(new Uint8Array(1024).fill(1));
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(compress({ gzip: growing }));
     app.get("/x", (c) => {
       c.body = "0".repeat(400);
@@ -64,7 +64,7 @@ describe("coverage: compress with injected gzip", () => {
   });
 
   it("Uint8Array bodies are eligible; accept-encoding lists parse", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(compress({ gzip }));
     app.get("/x", (c) => {
       c.body = new Uint8Array(400).fill(7);
@@ -81,7 +81,7 @@ describe("coverage: compress with injected gzip", () => {
 
 describe("coverage: cors preflight extras", () => {
   it("preflight reflects whitelisted origin with credentials and exposes headers", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(
       cors({
         origin: ["https://app.site"],
@@ -109,7 +109,7 @@ describe("coverage: cors preflight extras", () => {
   });
 
   it("simple-mode default reject answers 403 on preflight", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(cors({ origin: ["https://a"] }));
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -125,7 +125,7 @@ describe("coverage: cors preflight extras", () => {
 describe("coverage: adapter drain + router mount through dispatch", () => {
   it("drain events reach the registered handlers", async () => {
     const drained: string[] = [];
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.ws("/w", {
       drain: (_ws, c) => {
         drained.push(c.path);
@@ -149,7 +149,7 @@ describe("coverage: adapter drain + router mount through dispatch", () => {
   });
 
   it("mount composes sub-router param middleware into the parent", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const api = new Router({ prefix: "/v1" });
     api.param("id", async (c, next) => {
       c.set("X-Param-Mw", c.params?.["id"] ?? "");
@@ -163,7 +163,7 @@ describe("coverage: adapter drain + router mount through dispatch", () => {
   });
 
   it("router middleware is exposed through mount (global middleware prepended)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const sub = new Router();
     sub.use(async (_c: Context, next) => {
       await next();

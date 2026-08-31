@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import { etag, compress } from "../src/middleware/etag.ts";
 import { cors, csrf } from "../src/middleware/cors.ts";
 import { secureHeaders, requestId } from "../src/middleware/headers.ts";
@@ -23,7 +23,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("coverage: etag body kinds and negotiation", () => {
   it("tags Uint8Array and object bodies; streams and null pass through", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(etag());
     app.get("/u8", (c) => {
       c.body = new Uint8Array([1, 2, 3]);
@@ -49,7 +49,7 @@ describe("coverage: etag body kinds and negotiation", () => {
   });
 
   it("pre-existing etags win; 201 bodies participate; weak-tag matching strips W/", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(etag());
     app.get("/pre", (c) => {
       c.etag = '"custom"';
@@ -71,7 +71,7 @@ describe("coverage: etag body kinds and negotiation", () => {
   });
 
   it("if-none-match lists and the * wildcard match", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(etag());
     app.get("/x", (c) => {
       c.body = "stable";
@@ -86,7 +86,7 @@ describe("coverage: etag body kinds and negotiation", () => {
 
 describe("coverage: compress decision tree", () => {
   it("large gzip-eligible bodies compress on Bun; small and stream bodies skip", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(compress());
     app.get("/big", (c) => {
       c.body = "compressible-content-".repeat(40);
@@ -112,7 +112,7 @@ describe("coverage: compress decision tree", () => {
 
 describe("coverage: cors and csrf edges", () => {
   it("preflight from a rejected origin invokes the custom reject handler", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(
       cors({
         origin: ["https://only.site"],
@@ -131,7 +131,7 @@ describe("coverage: cors and csrf edges", () => {
   });
 
   it("non-preflight rejected origins hit the reject handler too", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(cors({ origin: ["https://a"], reject: () => new Response("no", { status: 403 }) }));
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -141,7 +141,7 @@ describe("coverage: cors and csrf edges", () => {
   });
 
   it("csrf: unparseable Referer/Origin sources reject", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(csrf());
     app.post("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -153,7 +153,7 @@ describe("coverage: cors and csrf edges", () => {
 
 describe("coverage: streams edges", () => {
   it("write-after-close and close-twice never throw", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/x", (c) =>
       streamText(c, async (w) => {
         w.close();
@@ -166,7 +166,7 @@ describe("coverage: streams edges", () => {
   });
 
   it("abort during SSE clears the heartbeat and runs cleanup", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     let cleaned = false;
     app.get("/s", (c) =>
       streamSSE(
@@ -187,7 +187,7 @@ describe("coverage: streams edges", () => {
   });
 
   it("producer failure inside streamSSE still clears the heartbeat timer", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/e", (c) =>
       streamSSE(
         c,
@@ -202,7 +202,7 @@ describe("coverage: streams edges", () => {
   });
 
   it("abort cleanup handlers that themselves throw stay contained", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/t", (c) =>
       stream(c, async (w) => {
         w.onAbort(() => {
@@ -218,7 +218,7 @@ describe("coverage: streams edges", () => {
 
 describe("coverage: body-parser reader errors", () => {
   it("a locked/missing body reads as empty", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(createBodyParser());
     app.get("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -233,7 +233,7 @@ describe("coverage: serveStatic remaining branches", () => {
   it("root option validation and missing files on the index path", async () => {
     expect(() => serveStatic({ root: "" })).toThrow(TypeError);
     const dir = await mkdtemp(join(tmpdir(), "bk-cov-"));
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(serveStatic({ root: dir }));
     // directory without index.html -> 404
     expect((await app.handle(req("/"))).status).toBe(404);
@@ -243,7 +243,7 @@ describe("coverage: serveStatic remaining branches", () => {
 
 describe("coverage: headers edges", () => {
   it("secureHeaders extras without hsts are inert; requestId state carries", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(secureHeaders({ permittedCrossDomainPolicies: "none" }));
     app.use(requestId());
     app.get("/x", (c) => c.text("ok"));

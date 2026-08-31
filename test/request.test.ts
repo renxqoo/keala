@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const probe = async (
@@ -8,7 +8,7 @@ const probe = async (
   proxy = false,
 ): Promise<Context> => {
   let captured: Context | undefined;
-  const probing = new Honu({ keys: ["k"], proxy, proxyIpHeader: "x-forwarded-for" });
+  const probing = new Eleu({ keys: ["k"], proxy, proxyIpHeader: "x-forwarded-for" });
   probing.use(async (c) => {
     captured = c;
     c.body = "probed";
@@ -89,7 +89,7 @@ describe("request facade (flat context)", () => {
   });
 
   it("derives host from the URL when the Host header is absent", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     let captured: Context | undefined;
     app.use(async (c) => {
       captured = c;
@@ -137,7 +137,7 @@ describe("request facade (flat context)", () => {
     );
     expect(ctx.ips).toEqual(["1.1.1.1", "2.2.2.2"]);
 
-    const limited = new Honu({ proxy: true, proxyIpHeader: "x-real-ip", maxIpsCount: 1 });
+    const limited = new Eleu({ proxy: true, proxyIpHeader: "x-real-ip", maxIpsCount: 1 });
     let captured: Context | undefined;
     limited.use(async (c) => {
       captured = c;
@@ -166,7 +166,7 @@ describe("request facade (flat context)", () => {
   });
 
   it("falls back to the remote address from the runtime channel", async () => {
-    const remoteApp = new Honu();
+    const remoteApp = new Eleu();
     let captured: Context | undefined;
     remoteApp.use(async (c) => {
       captured = c;
@@ -241,7 +241,7 @@ describe("request facade (flat context)", () => {
   });
 
   it("reports freshness against response validators", async () => {
-    const etagApp = new Honu();
+    const etagApp = new Eleu();
     let etagCtx: Context | undefined;
     etagApp.use(async (c) => {
       etagCtx = c;
@@ -255,7 +255,7 @@ describe("request facade (flat context)", () => {
     expect(etagCtx?.fresh).toBe(true);
     expect(etagCtx?.stale).toBe(false);
 
-    const staleApp = new Honu();
+    const staleApp = new Eleu();
     let staleCtx: Context | undefined;
     staleApp.use(async (c) => {
       staleCtx = c;
@@ -273,7 +273,7 @@ describe("request facade (flat context)", () => {
     const post = await probe({ url: "http://localhost:3000/", method: "POST" });
     expect(post.fresh).toBe(false);
 
-    const errApp = new Honu();
+    const errApp = new Eleu();
     let errCtx: Context | undefined;
     errApp.use(async (c) => {
       errCtx = c;
@@ -287,7 +287,7 @@ describe("request facade (flat context)", () => {
   });
 
   it("exposes cookies bound to the app keys", async () => {
-    const cookieApp = new Honu({ keys: ["secret-1"] });
+    const cookieApp = new Eleu({ keys: ["secret-1"] });
     let cookieCtx: Context | undefined;
     cookieApp.use(async (c) => {
       cookieCtx = c;
@@ -298,7 +298,7 @@ describe("request facade (flat context)", () => {
     // A freshly-set cookie is not visible to reads (the jar holds request cookies).
     expect(cookieCtx?.cookies.get("sid")).toBeUndefined();
     const setCookie = baked.headers.getSetCookie()[0] ?? "";
-    const roundTrip = new Honu({ keys: ["secret-1"] });
+    const roundTrip = new Eleu({ keys: ["secret-1"] });
     let readCtx: Context | undefined;
     roundTrip.use(async (c) => {
       readCtx = c;
@@ -311,7 +311,7 @@ describe("request facade (flat context)", () => {
   });
 
   it("supports throw and assert helpers", async () => {
-    const throwing = new Honu();
+    const throwing = new Eleu();
     throwing.use(async (c) => {
       c.assert(c.query["token"] !== undefined, 401, "token required");
       c.throw(418, "teapot");
@@ -324,7 +324,7 @@ describe("request facade (flat context)", () => {
   });
 
   it("exposes app settings", () => {
-    const app = new Honu({ keys: ["test-key"], proxyIpHeader: "x-forwarded-for" });
+    const app = new Eleu({ keys: ["test-key"], proxyIpHeader: "x-forwarded-for" });
     expect(app.env).toBe(process.env["NODE_ENV"] ?? "development");
     expect(app.settings.subdomainOffset).toBe(2);
     expect(app.settings.proxyIpHeader).toBe("x-forwarded-for");

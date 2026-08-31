@@ -7,7 +7,7 @@
  *
  * Credential verification always delegates to the caller's `verify` —
  * never compare plaintext strings with `===`; pair with the password
- * helpers (`honu/helpers/password`) for PBKDF2/argon2 round-trips.
+ * helpers (`eleu/helpers/password`) for PBKDF2/argon2 round-trips.
  */
 
 import type { RouteHandler } from "../router/router.ts";

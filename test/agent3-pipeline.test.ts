@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
@@ -26,7 +26,7 @@ describe("agent3 — finalize: synthesized responses drop staged headers", () =>
   // Expected (koa contract, cf. app.test.ts "global middleware runs for
   // UNMATCHED paths"): middleware headers reach the client on every response.
   it("CONFIRMED-BUG: 405 synthesis drops headers staged by global middleware", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       c.set("X-Tag", "1");
       await next();
@@ -39,7 +39,7 @@ describe("agent3 — finalize: synthesized responses drop staged headers", () =>
   });
 
   it("CONFIRMED-BUG: notFound returning a Response drops staged headers", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       c.set("X-Tag", "1");
       await next();
@@ -58,7 +58,7 @@ describe("agent3 — post-commit response rewrites are dropped", () => {
   // `await next()` never reaches the wire (the getter was made commit-aware,
   // the setter is silently lost).
   it("CONFIRMED-BUG: c.status write after next() never reaches the response", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.status = 201;
@@ -70,7 +70,7 @@ describe("agent3 — post-commit response rewrites are dropped", () => {
   });
 
   it("CONFIRMED-BUG: c.status write after next() is dropped on the merge path too", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.status = 203;
@@ -87,7 +87,7 @@ describe("agent3 — post-commit response rewrites are dropped", () => {
   // mergeIntoCommitted() then applies staged strings via `headers.set()`,
   // replacing the committed Response's own value instead of appending to it.
   it("CONFIRMED-BUG: c.append after next() replaces the committed header", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.append("X-Many", "b");
@@ -98,7 +98,7 @@ describe("agent3 — post-commit response rewrites are dropped", () => {
   });
 
   it("CONFIRMED-BUG: c.append Set-Cookie after next() drops the committed cookie", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.append("Set-Cookie", "outer=1; Path=/");
@@ -113,7 +113,7 @@ describe("agent3 — post-commit response rewrites are dropped", () => {
   // committed fast path whenever `countOf(record) > 0` is false — a removal
   // leaves no record entries, so the committed header is sent unchanged.
   it("CONFIRMED-BUG: c.remove after next() is a silent no-op on a committed Response", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.remove("X-Secret");
@@ -133,7 +133,7 @@ describe("agent3 — sugar helpers vs staged state", () => {
   // (`c.status = 204; c.body = "done"`) is cleaned to an empty 204 by
   // fromState's empty-status contract.
   it("CONFIRMED-BUG: c.text with an explicit 204 status answers an opaque 500", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/a", (c) => c.text("done", 204));
     const res = await app.handle(req("/a"));
     expect(res.status).toBe(204);
@@ -141,7 +141,7 @@ describe("agent3 — sugar helpers vs staged state", () => {
   });
 
   it("CONFIRMED-BUG: staged 204 status + c.text answers an opaque 500", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/b", (c) => {
       c.status = 204;
       return c.text("done");
@@ -156,7 +156,7 @@ describe("agent3 — sugar helpers vs staged state", () => {
   // c.message is silently discarded — fromState() would have honored it
   // (cf. test/response.test.ts "status message" via the state path).
   it("CONFIRMED-BUG: sugar helpers drop a staged c.message (statusText lost)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/x", (c) => {
       c.message = "all good";
       return c.text("ok");
@@ -168,7 +168,7 @@ describe("agent3 — sugar helpers vs staged state", () => {
 
 describe("agent3 — investigated and cleared", () => {
   it("clear: error headers with array values all reach the response", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/e", (c) => {
       c.throw(400, "nope", { headers: { "retry-after": ["1", "2"] } });
     });
@@ -178,7 +178,7 @@ describe("agent3 — investigated and cleared", () => {
   });
 
   it("clear: HEAD on an expose 4xx error backfills content-length", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/e", (c) => {
       c.throw(418, "teapot");
     });
@@ -189,7 +189,7 @@ describe("agent3 — investigated and cleared", () => {
   });
 
   it("clear: circular body answers a clean 500, not a rejection", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/c", (c) => {
       const o: Record<string, unknown> = {};
       o["self"] = o;
@@ -201,7 +201,7 @@ describe("agent3 — investigated and cleared", () => {
   });
 
   it("clear: a throwing onerror listener still answers the static 500", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.onError(() => {
       throw new Error("listener boom");
     });
@@ -216,7 +216,7 @@ describe("agent3 — investigated and cleared", () => {
   it("clear: HEAD on a committed Response strips the body without reading it", async () => {
     // R7: no body reads in the finalizer — CL stays what the Response itself
     // exposes (sugar helpers attach it at construction for HEAD instead).
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/x", () => new Response("committed-body"));
     const res = await app.handle(req("/x", { method: "HEAD" }));
     expect(res.status).toBe(200);

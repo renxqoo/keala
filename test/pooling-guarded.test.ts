@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import { deadProtoFor } from "../src/core/context/pool.ts";
 import { baseContextProto } from "../src/core/context/context.ts";
 import type { Context } from "../src/core/context/context.ts";
@@ -13,7 +13,7 @@ const quiet = { env: "test" } as const;
 
 describe("guarded pooling", () => {
   it("recycles contexts across requests with identical behavior", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.get("/x/:id", (c) => c.text(`id:${c.params?.["id"]}`));
     for (let i = 0; i < 5; i++) {
       const res = await app.handle(new Request(`http://localhost:3000/x/${i}`));
@@ -22,7 +22,7 @@ describe("guarded pooling", () => {
   });
 
   it("async chains retire only after settling (state intact during flight)", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.get("/slow", async (c, next) => {
       await new Promise((resolve) => setTimeout(resolve, 5));
       await next();
@@ -36,7 +36,7 @@ describe("guarded pooling", () => {
 
   it("a retained retired context throws on every write surface", async () => {
     const held: Context[] = [];
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.use((c, next) => {
       held.push(c);
       return next();
@@ -62,7 +62,7 @@ describe("guarded pooling", () => {
 
   it("a retired context is live again after reset (pool reuse)", async () => {
     const held: Context[] = [];
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.use((c, next) => {
       held.push(c);
       return next();
@@ -81,7 +81,7 @@ describe("guarded pooling", () => {
 
   it("pooling stays off by default (no recycling, no guards)", async () => {
     const held: Context[] = [];
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use((c, next) => {
       held.push(c);
       return next();
@@ -93,7 +93,7 @@ describe("guarded pooling", () => {
   });
 
   it("errors recycle through the pool without leaking into the next request", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.get("/boom", () => {
       throw new Error("kaboom");
     });

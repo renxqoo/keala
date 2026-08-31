@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import { createEmitter } from "../src/core/emitter.ts";
 import { streamText, streamSSE, stream } from "../src/helpers/streams.ts";
 
@@ -22,7 +22,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 describe("guarded pooling: recycle completeness", () => {
   it("a recycled context carries no ad-hoc properties from the previous request (cross-request disclosure)", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.use((c, next) => {
       // koa-idiomatic per-request decoration (decorate() is for shared slots;
       // per-request data like an authenticated user is assigned ad hoc).
@@ -49,7 +49,7 @@ describe("guarded pooling: recycle completeness", () => {
 
 describe("guarded pooling: release vs streaming body consumption", () => {
   it("a streaming handler still reads its own request's data after the pool recycles the context", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     let open: () => void = () => gate.then(() => undefined);
     const gate = new Promise<void>((resolve) => {
       open = resolve;
@@ -75,7 +75,7 @@ describe("guarded pooling: release vs streaming body consumption", () => {
 
   it("a late stream error (onStreamError) is attributed to the request that owns the stream", async () => {
     const seen: string[] = [];
-    const app = new Honu({
+    const app = new Eleu({
       env: "test",
       pooling: true,
       onStreamError: (_error, c) => {
@@ -112,7 +112,7 @@ describe("guarded pooling: release vs streaming body consumption", () => {
 
 describe("guarded pooling: retireWithBody edge paths", () => {
   it("a cancelled body retires the context (client disconnect)", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.get("/s", (c) => {
       c.body = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -140,7 +140,7 @@ describe("guarded pooling: retireWithBody edge paths", () => {
   });
 
   it("a body reader error retires the context exactly once", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     let detonate: () => void = () => undefined;
     const boom = new Promise<void>((resolve) => {
       detonate = () => resolve();
@@ -169,7 +169,7 @@ describe("guarded pooling: retireWithBody edge paths", () => {
 describe("native sink: JS mirror parity", () => {
   it("the JS mirror preserves the sunk Response's status text", async () => {
     const sunk = new Response("ok", { status: 280, statusText: "Custom Reason" });
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.sink("/health", sunk);
     const res = await app.handle(req("/health"));
     expect(res.status).toBe(280);
@@ -198,7 +198,7 @@ describe("emitter: off()/once() contract", () => {
 
 describe("stream helpers: security header consistency", () => {
   it("streamText and streamSSE keep the nosniff header stream() sets", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/bin", (c) => stream(c, () => undefined));
     app.get("/txt", (c) => streamText(c, () => undefined));
     app.get("/sse", (c) => streamSSE(c, () => undefined, { heartbeat: 0 }));

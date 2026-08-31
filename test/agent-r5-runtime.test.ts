@@ -72,7 +72,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu, type Application } from "../src/core/app.ts";
+import { Eleu, type Application } from "../src/core/app.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, req: Request) => app.handle(req);
@@ -97,7 +97,7 @@ const streamOf = (chunks: string[], errorAt?: number): ReadableStream<Uint8Array
 
 describe("agent r5 — confirmed bugs", () => {
   it("R5-1a: stale pre-commit status must not leak into a post-commit remove() rebuild", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       c.status = 404; // staged BEFORE the commit (koa 404-interceptor pattern)
       await next();
@@ -110,7 +110,7 @@ describe("agent r5 — confirmed bugs", () => {
   });
 
   it("R5-1b: post-commit message-only override must not resurrect a stale staged status", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       c.status = 418; // pre-commit
       await next();
@@ -123,7 +123,7 @@ describe("agent r5 — confirmed bugs", () => {
   });
 
   it("R5-1c: pre-commit c.body=null must not turn a committed 200 into a bodyless 204", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       c.body = null; // reset idiom: flag 1 + implicit statusValue 204 (pre-commit)
       await next();
@@ -136,7 +136,7 @@ describe("agent r5 — confirmed bugs", () => {
   });
 
   it("R5-2a: pooling + handler-locked body must not throw out of handle() (sync chain)", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.get("/", () => {
       const res = new Response(streamOf(["hi"]));
       res.body?.getReader(); // user error: lock the body, never release
@@ -155,7 +155,7 @@ describe("agent r5 — confirmed bugs", () => {
   });
 
   it("R5-2b: pooling + handler-locked body must not reject handle() (async chain)", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.get("/", async () => {
       const res = new Response(streamOf(["hi"]));
       res.body?.getReader();
@@ -174,7 +174,7 @@ describe("agent r5 — confirmed bugs", () => {
   });
 
   it("R5-3: post-commit c.redirect() must actually redirect", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       await next();
       c.redirect("/login");
@@ -186,7 +186,7 @@ describe("agent r5 — confirmed bugs", () => {
   });
 
   it("R5-4a: late c.cookies.set() after a sugar return must not vanish (post-commit form)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c, next) => {
       void c.cookies.get("incoming"); // materialize the memoized facade early
       await next();
@@ -201,7 +201,7 @@ describe("agent r5 — confirmed bugs", () => {
   });
 
   it("R5-4b: late c.cookies.set() after a sugar return must not vanish (same-request form)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/c", (c) => {
       c.cookies.set("a", "1");
       const built = c.text("ok"); // consumes the staging record
@@ -214,7 +214,7 @@ describe("agent r5 — confirmed bugs", () => {
 
   it("R5-5: symbol-keyed handler properties must be swept on pool recycle", async () => {
     const KEY = Symbol("r5");
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     app.get("/s", (c) => {
       const holder = c as unknown as Record<symbol, unknown>;
       const before = holder[KEY];
@@ -232,7 +232,7 @@ describe("agent r5 — confirmed bugs", () => {
     // (TypeError "Controller is already closed" reaches the app hook);
     // passes under node/undici — see the header note for R5-6.
     const errors: string[] = [];
-    const app = new Honu({
+    const app = new Eleu({
       ...quiet,
       pooling: true,
       onStreamError: (err) => errors.push(String(err)),

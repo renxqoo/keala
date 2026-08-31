@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { Honu, Router, createError } from "../src/index.ts";
+import { Eleu, Router, createError } from "../src/index.ts";
 import { acceptsEncoding } from "../src/negotiation/accepts.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
 import {
@@ -25,7 +25,7 @@ describe("branch coverage: round 3", () => {
   });
 
   it("set() accepts multi-value headers", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     app.use(async (c) => {
       c.set("X-Multi", ["a", "b"]);
       c.body = "ok";
@@ -42,7 +42,7 @@ describe("branch coverage: round 3", () => {
   });
 
   it("prefers x-forwarded-host when proxying", async () => {
-    const app = new Honu({ proxy: true });
+    const app = new Eleu({ proxy: true });
     let host = "";
     app.use(async (c) => {
       host = c.host;
@@ -72,7 +72,7 @@ describe("branch coverage: round 3", () => {
       },
     };
     try {
-      new Honu().listen({
+      new Eleu().listen({
         port: 3999,
         reusePort: true,
         idleTimeout: 5,

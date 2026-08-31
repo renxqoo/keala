@@ -13,7 +13,7 @@ import encodeurl from "encodeurl";
 import escapeHtmlPkg from "escape-html";
 import { Router as RouterOf } from "@koa/router";
 
-import { Honu, Router } from "../src/index.ts";
+import { Eleu, Router } from "../src/index.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
 import {
   acceptsType as acceptsTypeOf,
@@ -35,10 +35,10 @@ const mulberry32 = (seed: number) => () => {
 };
 
 const driveBun = async (
-  setup: (app: InstanceType<typeof Honu>) => void,
+  setup: (app: InstanceType<typeof Eleu>) => void,
   reqInit: { url?: string; method?: string; headers?: Record<string, string> },
 ): Promise<{ status: number; headers: Record<string, unknown>; body: string }> => {
-  const app = new Honu({ env: "test" } as const);
+  const app = new Eleu({ env: "test" } as const);
   setup(app);
   const res = await app.handle(
     new Request(`http://localhost:3000${reqInit.url ?? "/"}`, {
@@ -234,7 +234,7 @@ describe("documents intentional divergence", () => {
   });
 
   it("ctx.is() ignores body presence (locked by test/request.test.ts)", async () => {
-    // type-is returns null for bodyless requests; honu matches on the
+    // type-is returns null for bodyless requests; eleu matches on the
     // Content-Type alone — locked by test/request.test.ts:70.
     const bun = await driveBun(
       (app) => {
@@ -259,7 +259,7 @@ describe("documents intentional divergence", () => {
   });
 
   it("the no-arg language list is lowercased (locked by test/coverage-gaps-4.test.ts)", async () => {
-    // negotiator preserves 'fr-CA'; honu's shared preference parser
+    // negotiator preserves 'fr-CA'; eleu's shared preference parser
     // lowercases values — locked by coverage-gaps-4.test.ts:118.
     const bun = await driveBun(
       (app) => {
@@ -273,7 +273,7 @@ describe("documents intentional divergence", () => {
   });
 
   it("attachment rejects path separators in a string fallback (locked by test/response.test.ts)", () => {
-    // content-disposition basenames a '/'-containing fallback; honu throws
+    // content-disposition basenames a '/'-containing fallback; eleu throws
     // — locked by response.test.ts 'attachment rejects path separators in fallback'.
     expect(() => contentDispositionOf("报表.bin", "a/b")).toThrow(TypeError);
   });
@@ -281,7 +281,7 @@ describe("documents intentional divergence", () => {
   it("cookie parsing decodes percent-escapes where cookies@0.9.1 does not (documented symmetric codec)", () => {
     // koa 3.2.1 links cookies ~0.9.1 whose get() regex returns the RAW value
     // ('%2F'), requires 'name=' with no inner whitespace, ignores bare
-    // tokens, and resolves duplicate names FIRST-wins. honu's symmetric
+    // tokens, and resolves duplicate names FIRST-wins. eleu's symmetric
     // codec (percent-encode on set / decode on parse) is documented in
     // PARITY.md and locked by test/cookies.test.ts:23; its last-wins
     // duplicate resolution follows RFC 6265 §5.3 / browser behavior (the
@@ -302,7 +302,7 @@ describe("documents intentional divergence", () => {
 
   it("routing matches case-SENSITIVELY (locked by test/router.test.ts; hono-aligned)", async () => {
     // @koa/router 15.7 defaults to case-insensitive (path-to-regexp
-    // sensitive:false); honu deliberately matches hono here — locked by
+    // sensitive:false); eleu deliberately matches hono here — locked by
     // router.test.ts "encoding: ... case-sensitive" ("/case" 404, "/Case"
     // 200). A case-insensitive default would also blind serveStatic against
     // case-sensitive filesystems.
@@ -311,7 +311,7 @@ describe("documents intentional divergence", () => {
   });
 
   it("the Allow header uses the fixed ALLOW_ORDER (locked by test/router.test.ts)", async () => {
-    // koa-router emits registration order ('POST, HEAD, GET'); honu's
+    // koa-router emits registration order ('POST, HEAD, GET'); eleu's
     // canonical order is deterministic regardless of registration order and
     // is locked by router.test.ts ("HEAD, GET" for a GET route).
     const bun = await driveBun(
@@ -332,9 +332,9 @@ describe("documents intentional divergence", () => {
     expect(() => router.url("missing", { id: "1" })).toThrow();
   });
 
-  it("@koa/router 15.7 rejects legacy ':param?' / ':param(\\d+)' syntax that honu supports", () => {
+  it("@koa/router 15.7 rejects legacy ':param?' / ':param(\\d+)' syntax that eleu supports", () => {
     // path-to-regexp v8 (inside @koa/router 15.7) throws on registration;
-    // honu deliberately keeps the koa-router <=13 syntax as a superset.
+    // eleu deliberately keeps the koa-router <=13 syntax as a superset.
     expect(() => new RouterOf().get("/files/:name?", () => {})).toThrow();
     expect(() => new RouterOf().get("/n/:num(\\d+)", () => {})).toThrow();
   });

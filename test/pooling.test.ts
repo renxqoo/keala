@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 import {
   baseContextProto,
   createContext,
@@ -28,7 +28,7 @@ import {
 const quiet = { env: "test" } as const;
 
 /** A context that lived through a full, messy request lifecycle. */
-const usedContext = (app = new Honu({ keys: ["k"] })): Context => {
+const usedContext = (app = new Eleu({ keys: ["k"] })): Context => {
   const c = createContext(app, baseContextProto, new Request("http://localhost:3000/a?x=1"), {
     remote: "1.1.1.1",
   });
@@ -51,7 +51,7 @@ const usedContext = (app = new Honu({ keys: ["k"] })): Context => {
 
 describe("resetContext recycling semantics", () => {
   it("field conservation: a recycled context carries exactly the fresh context's state fields", () => {
-    const app = new Honu({ keys: ["k"] });
+    const app = new Eleu({ keys: ["k"] });
     const raw = new Request("http://localhost:3000/b?y=2");
     const runtime = { remote: "2.2.2.2" };
     const fresh = createContext(app, baseContextProto, raw, runtime);
@@ -112,7 +112,7 @@ describe("resetContext recycling semantics", () => {
 
 describe("request isolation (fresh context per request)", () => {
   it("serial requests never observe stale state", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/a/:id", (c) => {
       c.state["id"] = c.params?.["id"];
       c.set("X-Run", String(c.state["id"]));
@@ -147,7 +147,7 @@ describe("request isolation (fresh context per request)", () => {
   });
 
   it("concurrent interleaved requests keep isolated contexts", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/slow/:tag", async (c) => {
       const mine = c.params?.["tag"] as string;
       await new Promise((resolve) => setTimeout(resolve, mine === "a" ? 15 : 2));
@@ -163,7 +163,7 @@ describe("request isolation (fresh context per request)", () => {
   });
 
   it("error responses recycle cleanly", async () => {
-    const app = new Honu({ ...quiet });
+    const app = new Eleu({ ...quiet });
     app.onError(() => {});
     app.get("/ok", (c) => {
       c.body = `fresh:${c.state["step"] ?? "0"}`;
@@ -177,7 +177,7 @@ describe("request isolation (fresh context per request)", () => {
   });
 
   it("cookies and headers do not leak between requests", async () => {
-    const app = new Honu({ ...quiet, keys: ["k"] });
+    const app = new Eleu({ ...quiet, keys: ["k"] });
     app.use(async (c) => {
       if (c.path === "/set") {
         c.cookies.set("sid", "one", { signed: true });
@@ -198,7 +198,7 @@ describe("request isolation (fresh context per request)", () => {
   });
 
   it("stream bodies still deliver across requests", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (c) => {
       c.body = new ReadableStream({
         start(controller) {

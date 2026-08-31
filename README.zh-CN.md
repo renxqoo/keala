@@ -1,4 +1,4 @@
-# Honu
+# Eleu
 
 [English](./README.md) | 简体中文
 
@@ -6,17 +6,17 @@
 [Bun 1.4+](https://bun.sh)，零依赖。**
 
 ```bash
-bun add @honu/core
+bun add eleu
 ```
 
 ## 快速开始
 
 ```ts
-import { Honu } from "@honu/core";
+import { Eleu } from "eleu";
 
-const app = new Honu();
+const app = new Eleu();
 
-app.get("/", (c) => c.text("hello honu")); // hono 风格 return
+app.get("/", (c) => c.text("hello eleu")); // hono 风格 return
 app.get("/users/:id(\\d+)", (c) => c.json({ id: c.params.id }));
 app.get("/page", (c) => {
   // koa 风格 state
@@ -30,7 +30,7 @@ app.listen(3000);
 路由分组通过表合并挂载（未命中的路径穿透到父级，404 不会被吞掉）：
 
 ```ts
-import { Router } from "@honu/core";
+import { Router } from "eleu";
 
 const api = new Router({ prefix: "/v1" });
 api.param("oid", async (c, next) => {
@@ -44,13 +44,13 @@ app.mount("/api", api);
 同样跑在 Node 上 —— 同一个应用，多一行导入：
 
 ```ts
-import { listen } from "@honu/core/node";
+import { listen } from "eleu/node";
 listen(app, 3000);
 ```
 
-## 为什么选 honu
+## 为什么选 eleu
 
-- **Hono 级速度。** ABAB 交错的 HTTP 基准显示 honu 与 Hono 统计持平
+- **Hono 级速度。** ABAB 交错的 HTTP 基准显示 eleu 与 Hono 统计持平
   （所有比值落在运行噪声内），**比 Koa 3 快 3.0–3.5 倍**（1000 条路由
   时 15 倍），且在参与对比的 JS 框架中峰值内存最低 —— 同时保留惰性
   内容协商、签名 Cookie、405/Allow 合成与完整洋葱模型。中间件链在
@@ -77,7 +77,7 @@ listen(app, 3000);
 
 基准装置中还包含 Go `net/http` 参照：在对比机器上，Go 在吞吐上领先
 所有 JS 运行时（包括裸 `Bun.serve`）约 10–15%，内存优势更为悬殊 ——
-差距来自运行时的 HTTP 栈，而非框架开销（相对于 hono，honu 在其上
+差距来自运行时的 HTTP 栈，而非框架开销（相对于 hono，eleu 在其上
 没有增加任何东西）。见 `bench/BENCH.md`。
 
 ## 中间件、插件与 helper
@@ -89,10 +89,10 @@ listen(app, 3000);
 
 | 入口                   | 提供什么                                                                    | 加载量             |
 | ---------------------- | --------------------------------------------------------------------------- | ------------------ |
-| `@honu/core`                 | Honu / Router / compose / Context / errors / cookies / bodyParser / helpers | 应用面             |
-| `@honu/core/middleware`      | 一次导入拿到全部中间件工厂                                                  | 整个 middleware 层 |
-| `@honu/core/middleware/cors` | 单个工厂                                                                    | 仅该文件           |
-| `@honu/core/node`   | Node 监听器（bun/node 互斥）                                                | 仅该文件           |
+| `eleu`                 | Eleu / Router / compose / Context / errors / cookies / bodyParser / helpers | 应用面             |
+| `eleu/middleware`      | 一次导入拿到全部中间件工厂                                                  | 整个 middleware 层 |
+| `eleu/middleware/cors` | 单个工厂                                                                    | 仅该文件           |
+| `eleu/node`   | Node 监听器（bun/node 互斥）                                                | 仅该文件           |
 
 - **middleware** —— 逐请求的管道函数：`app.use(cors())`
 - **plugins** —— 安装期的安装器（`install(app)`），为 context 装饰成员：`app.use(createBodyParser())`
@@ -116,8 +116,8 @@ import {
   timeout,
   serveStatic,
   validator,
-} from "@honu/core/middleware"; // 聚合入口 —— 也可按文件导入：honu/middleware/cors
-import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "@honu/core";
+} from "eleu/middleware"; // 聚合入口 —— 也可按文件导入：eleu/middleware/cors
+import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "eleu";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN：安装 c.req.json()/text()/formData()…
 // formData() 采用双重预算：formLimit 字节 AND formPartLimit 个部件
@@ -204,14 +204,14 @@ Range），在 Node 下则缓冲后输出。`streamSSE` 在心跳之外，还通
 
 ## 从 koa 迁移
 
-| Koa                                                     | honu                                                |
+| Koa                                                     | eleu                                                |
 | ------------------------------------------------------- | --------------------------------------------------- |
 | `ctx.request.get("x")`                                  | `c.get("x")`                                        |
 | `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                     |
 | `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n`（相同）               |
 | `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`             |
 | `app.use(router.routes()).use(router.allowedMethods())` | 直接 `app.get(...)`，或 `app.mount(prefix, router)` |
-| `new Koa({ proxy: true })`                              | `new Honu({ proxy: true })`                         |
+| `new Koa({ proxy: true })`                              | `new Eleu({ proxy: true })`                         |
 | `ctx.state.user`                                        | `c.state.user`（相同）                              |
 | `ctx.cookies.get/set`                                   | `c.cookies.get/set`（相同，签名 + keys）            |
 
@@ -221,7 +221,7 @@ Range），在 Node 下则缓冲后输出。`streamSSE` 在心跳之外，还通
 
 ## 为什么快
 
-| Koa (Node)                               | honu (Bun)                                                       |
+| Koa (Node)                               | eleu (Bun)                                                       |
 | ---------------------------------------- | ---------------------------------------------------------------- |
 | **每次请求**重新编译分发闭包             | 链在**注册时**一次性编译                                         |
 | 每个中间件跳转都包一层 `Promise.resolve` | 全同步链**零 Promise** 返回                                      |
@@ -238,14 +238,14 @@ Range），在 Node 下则缓冲后输出。`streamSSE` 在心跳之外，还通
 
 | 成员                                                                           | 说明                                                                                                                                          |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Honu(options?)`                                                           | 应用类（koa 风格的 `new`）。选项：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`subdomainOffset`、`env`、`silent`                         |
+| `new Eleu(options?)`                                                           | 应用类（koa 风格的 `new`）。选项：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`subdomainOffset`、`env`、`silent`                         |
 | `app.use(...mw)`                                                               | 全局中间件，编译进每条路由链（延迟 `use` 会重新组合）                                                                                         |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | 路由注册；命名形式 `app.get(name, path, ...handlers)`                                                                                         |
 | `app.on(method, path, ...handlers)`                                            | 任意方法、任意大小写                                                                                                                          |
 | `app.mount(prefix, routerOrApp)`                                               | 表合并挂载（404 穿透到父级）；子应用的全局中间件会被前置                                                                                      |
 | `app.param(name, mw)`                                                          | 作用于所有捕获该参数的路由的中间件                                                                                                            |
 | `app.handle(request, runtime?)`                                                | fetch 风格处理器；`runtime = { server?, remote?, env? }` 为 `c.ip` 和 websocket 升级提供数据                                                  |
-| `app.listen(port?, host?, cb?)`                                                | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `@honu/core/node` 的 `listen()` |
+| `app.listen(port?, host?, cb?)`                                                | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `eleu/node` 的 `listen()` |
 | `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | 把静态路由沉入 Bun 原生路由表；在运行中的服务器上热重载该表                                                                                   |
 | `app.onError(fn)` / `app.notFound(fn)`                                         | 错误订阅与自定义 404；`silent`/`env: "test"` 会抑制默认日志                                                                                   |
 | `app.decorate(key, value)`                                                     | 扩展每个 context（安装期进行；重复/核心 key 抛错 —— 绝不静默遮蔽）                                                                            |
@@ -292,10 +292,10 @@ priority overwrite signed`。签名采用 HMAC-SHA256 并支持密钥轮换
 在 Bun 上导入框架永远不会加载 node:http 桥接：
 
 ```ts
-import { Honu } from "@honu/core";
-import { listen } from "@honu/core/node";
+import { Eleu } from "eleu";
+import { listen } from "eleu/node";
 
-const app = new Honu();
+const app = new Eleu();
 app.get("/", (c) => {
   c.body = "hello";
 });
@@ -306,7 +306,7 @@ listen(app, 3000, "127.0.0.1", () => console.log("up"));
 `set-cookie`，对畸形 HTTP 回答 400，并暴露 `port/hostname/stop/fetch/
 ready()`，与 Bun 句柄的形状保持一致。WebSocket 仅限 Bun：`app.ws()`
 路由回答 501，裸 Upgrade 请求在协议层直接拒绝。Node 原生模块
-（crypto/fs）全部惰性加载 —— 空闲的 `import "honu"` 不加载任何桥接
+（crypto/fs）全部惰性加载 —— 空闲的 `import "eleu"` 不加载任何桥接
 （Bun 上少约 2.8MB RSS）；crypto 桥在第一次签名 Cookie / CSRF 回退 /
 密码校验时才加载。
 
@@ -368,5 +368,5 @@ src/
   utils/        url/query/text/mime 工具、node-lazy（惰性内建桥接）
 ```
 
-MIT 许可证。主运行时 Bun ≥ 1.4（也可通过 `@honu/core/node` 在
+MIT 许可证。主运行时 Bun ≥ 1.4（也可通过 `eleu/node` 在
 Node 下运行）。

@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu, type Application } from "../src/index.ts";
+import { Eleu, type Application } from "../src/index.ts";
 import { cache } from "../src/middleware/cache.ts";
 import { createBodyParser } from "../src/plugins/body-parser.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
@@ -41,7 +41,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
     new URL(location ?? "", "http://good.com:3000/r").host;
 
   it("every relative-looking foreign target stays a same-origin path", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/r", (c) => {
       c.redirect(String(c.query.next));
     });
@@ -68,7 +68,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   });
 
   it("locks: an explicit scheme:// target is the developer's absolute redirect (koa parity)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/r", (c) => {
       c.redirect(String(c.query.next));
     });
@@ -80,7 +80,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   });
 
   it("locks: same-origin //host targets pass through untouched", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/r", (c) => {
       c.redirect(String(c.query.next));
     });
@@ -99,31 +99,31 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
 
 describe("R6-F trie: root wildcard priority matrix [locks]", () => {
   it("static / beats /* on /", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/*", (c) => c.text("wild"));
     app.get("/", (c) => c.text("root"));
     expect(await (await drive(app, new Request("http://x/"))).text()).toBe("root");
   });
 
   it("/:x does NOT answer / while /* does (empty capture)", async () => {
-    const a = new Honu(quiet);
+    const a = new Eleu(quiet);
     a.get("/:x", (c) => c.text(`p:${c.params?.["x"]}`));
     expect((await drive(a, new Request("http://x/"))).status).toBe(404);
-    const b = new Honu(quiet);
+    const b = new Eleu(quiet);
     b.get("/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
     const res = await drive(b, new Request("http://x/"));
     expect(await res.text()).toBe("w:");
   });
 
   it("optional /:x? outranks /* on /", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/*", (c) => c.text("wild"));
     app.get("/:x?", (c) => c.text(`opt:${c.params?.["x"] ?? "-"}`));
     expect(await (await drive(app, new Request("http://x/"))).text()).toBe("opt:-");
   });
 
   it("/* answers // (normalized to /) and /deep/paths", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
     expect((await drive(app, new Request("http://x//"))).status).toBe(200);
     expect(await (await drive(app, new Request("http://x/a/b/c"))).text()).toBe("w:a/b/c");
@@ -137,7 +137,7 @@ describe("R6-F trie: root wildcard priority matrix [locks]", () => {
 describe("R6-K concurrency and mutable shared state [locks]", () => {
   it("cache: two concurrent misses compute twice, store once, replay correctly", async () => {
     let computed = 0;
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/c", cache({ ttl: 60_000 }), async (c) => {
       computed += 1;
       await new Promise((r) => setTimeout(r, 5));
@@ -156,7 +156,7 @@ describe("R6-K concurrency and mutable shared state [locks]", () => {
   });
 
   it("cache: HEAD shares the GET entry with a correct content-length", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/h", cache(), (c) => c.text("hello"));
     await drive(app, new Request("http://x/h"));
     const head = await drive(app, new Request("http://x/h", { method: "HEAD" }));
@@ -166,7 +166,7 @@ describe("R6-K concurrency and mutable shared state [locks]", () => {
   });
 
   it("cache: X-Forwarded-Host path smuggling cannot forge another key (r5-2 lock)", async () => {
-    const app = new Honu({ ...quiet, proxy: true });
+    const app = new Eleu({ ...quiet, proxy: true });
     app.use(cache({ ttl: 60_000 }));
     app.get("/y", (c) => c.text("ATTACKER"));
     app.get("/x/y", (c) => c.text("VICTIM"));
@@ -195,7 +195,7 @@ describe("R6-K concurrency and mutable shared state [locks]", () => {
   });
 
   it("sink: concurrent first hits all capture the body correctly", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.sink("/s", new Response("sunk", { headers: { "x-s": "1" } }));
     const [a, b, c] = await Promise.all([
       drive(app, new Request("http://x/s")),
@@ -212,7 +212,7 @@ describe("R6-K concurrency and mutable shared state [locks]", () => {
     const root = mkdtempSync(join(tmpdir(), "r6lock-"));
     try {
       writeFileSync(join(root, "f.txt"), "ok");
-      const app = new Honu(quiet);
+      const app = new Eleu(quiet);
       app.get("/*", serveStatic({ root }));
       const [a, b] = await Promise.all([
         drive(app, new Request("http://x/f.txt")),
@@ -225,7 +225,7 @@ describe("R6-K concurrency and mutable shared state [locks]", () => {
   });
 
   it("decorate() during an in-flight request becomes visible to that request (documented)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     let saw: unknown = "unset";
     app.use(async (c, next) => {
       await next();
@@ -272,7 +272,7 @@ describe("R6-J regex audit: 100KB hostile inputs stay linear [locks]", () => {
   });
 
   it("cache-control directive regexes through the real eligibility path", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const hostile = `${"no-cache,".repeat(20_000)}private`;
     app.get("/cc", cache(), (c) => {
       c.set("Cache-Control", hostile);
@@ -284,7 +284,7 @@ describe("R6-J regex audit: 100KB hostile inputs stay linear [locks]", () => {
   });
 
   it("redirect neutralization on a 100KB hostile target", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/r", (c) => {
       c.redirect(String(c.query.next));
     });
@@ -320,7 +320,7 @@ describe("R6-J regex audit: 100KB hostile inputs stay linear [locks]", () => {
 
 describe("R6-H pooling: retired contexts [locks]", () => {
   it("locks: a consumer cancelling mid-pull still recycles the context safely", async () => {
-    const app = new Honu({ ...quiet, pooling: true });
+    const app = new Eleu({ ...quiet, pooling: true });
     let pulls = 0;
     app.get("/s", (c) => {
       c.body = new ReadableStream({
@@ -358,7 +358,7 @@ describe("R6-I multipart part-budget scan [locks]", () => {
     );
 
   it("locks: a benign 1MB body with a normal boundary scans fast", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(createBodyParser());
     app.post("/f", (c) => c.text("parsed"));
     const t0 = performance.now();

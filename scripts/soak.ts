@@ -9,13 +9,13 @@
  * under budget. Run: bun scripts/soak.ts
  */
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 
 const ROUNDS = 24;
 const PER_ROUND = 20_000;
 const DRIFT_BUDGET_BYTES = 1_500; // allowed retained growth per request
 
-const app = new Honu({ keys: ["soak"], env: "test" });
+const app = new Eleu({ keys: ["soak"], env: "test" });
 app.use(async (c, next) => {
   c.set("X-Soak", "1");
   await next();
@@ -112,7 +112,7 @@ const driveConcurrent = async (label: string): Promise<void> => {
   if (!pass) process.exitCode = 1;
 };
 
-console.log(`honu soak — ${ROUNDS} rounds x ${PER_ROUND.toLocaleString()} (Bun ${Bun.version})`);
+console.log(`eleu soak — ${ROUNDS} rounds x ${PER_ROUND.toLocaleString()} (Bun ${Bun.version})`);
 
 for (let round = 0; round < ROUNDS; round++) {
   await driveInProcess(`round ${round} A in-process`);

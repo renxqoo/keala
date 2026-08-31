@@ -19,7 +19,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { Honu, Router, isRedirectStatus, type Context } from "../src/index.ts";
+import { Eleu, Router, isRedirectStatus, type Context } from "../src/index.ts";
 import { createEmitter } from "../src/core/emitter.ts";
 
 const quiet = { env: "test" } as const;
@@ -27,10 +27,10 @@ const quiet = { env: "test" } as const;
 /** Drive a request through an app and capture the context for inspection. */
 const probe = async (
   init: { url: string; method?: string; headers?: Record<string, string> },
-  setup?: (app: InstanceType<typeof Honu>) => void,
+  setup?: (app: InstanceType<typeof Eleu>) => void,
 ): Promise<Context> => {
   let captured: Context | undefined;
-  const app = new Honu(quiet);
+  const app = new Eleu(quiet);
   app.use(async (c) => {
     captured = c;
     c.body = "done";
@@ -87,7 +87,7 @@ describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
     headers: Record<string, string>,
   ): Promise<boolean> => {
     let fresh: boolean | undefined;
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/", (c) => {
       c.status = 200;
       responseSetup(c);
@@ -177,7 +177,7 @@ describe("agent audit: Referrer alias and back()", () => {
   });
 
   it("back() redirects to a same-origin Referer from a real request", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/target", (c) => c.back("/alt"));
     const res = await app.handle(
       new Request("http://example.com:3000/target", {
@@ -189,7 +189,7 @@ describe("agent audit: Referrer alias and back()", () => {
   });
 
   it('redirect("back") resolves through the Referer header', async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/", (c) => c.redirect("back"));
     const res = await app.handle(
       new Request("http://example.com/", { headers: { Referer: "/previous" } }),
@@ -209,7 +209,7 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
   });
 
   it("redirect() replaces a previously-set 304 instead of keeping it", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/", (c) => {
       c.status = 304;
       c.redirect("/next");
@@ -220,7 +220,7 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
   });
 
   it("redirect() keeps 305 (a real redirect status)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/", (c) => {
       c.status = 305;
       c.redirect("/proxy");
@@ -232,7 +232,7 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
 
   it("redirect() resets a custom status message when coercing to 302", async () => {
     let message = "";
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/", (c) => {
       c.status = 404;
       c.message = "Custom Phrase";
@@ -247,7 +247,7 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
 
 describe("agent audit: emitter once/off edges", () => {
   it("off() with an unknown listener is a no-op and keeps other listeners", () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const keep = vi.fn();
     app.onError(keep);
     app.off("error", vi.fn());
@@ -276,7 +276,7 @@ describe("agent audit: emitter once/off edges", () => {
   });
 
   it("re-subscribing after the last off() works on a fresh list", () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const first = vi.fn();
     app.onError(first);
     app.off("error", first);
@@ -292,7 +292,7 @@ describe("agent audit: emitter once/off edges", () => {
 describe("agent audit: router mount and trie encoding", () => {
   it("router.use() middleware keeps the query string visible downstream", async () => {
     const router = new Router();
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const seen: string[] = [];
     // Upstream of the mounted router: after next() resolves the url is intact.
     app.use(async (c, next) => {
@@ -320,7 +320,7 @@ describe("agent audit: router mount and trie encoding", () => {
   });
 
   it("percent-encoded static segments inside dynamic routes match", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/caf%C3%A9/:id", (c) => {
       c.body = { id: c.params?.["id"] };
     });
@@ -330,7 +330,7 @@ describe("agent audit: router mount and trie encoding", () => {
   });
 
   it("unicode route patterns match percent-encoded requests", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/café/:id", (c) => {
       c.body = `ok:${c.params?.["id"]}`;
     });
@@ -340,7 +340,7 @@ describe("agent audit: router mount and trie encoding", () => {
   });
 
   it("keeps %2F inside a single param segment (no path splitting)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/files/:name", (c) => {
       c.body = `file:${c.params?.["name"]}`;
     });
@@ -384,12 +384,12 @@ describe("agent audit: is() array form (type-is compatibility)", () => {
 
 describe("agent audit: app.onerror contract", () => {
   it("tolerates a null error outside the test env", () => {
-    const app = new Honu({ env: "development" });
+    const app = new Eleu({ env: "development" });
     expect(() => app.onerror(null as unknown as Error)).not.toThrow();
   });
 
   it("still forwards real errors to listeners", () => {
-    const app = new Honu({ env: "development" });
+    const app = new Eleu({ env: "development" });
     const spy = vi.fn();
     app.onError(spy);
     app.onerror(new Error("real"));
@@ -399,7 +399,7 @@ describe("agent audit: app.onerror contract", () => {
 
 describe("agent audit: compose next() guard under nesting", () => {
   it("rejects a second next() from a route handler nested in app middleware", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     let message = "";
     app.use(async (_c, next) => {
       try {
@@ -417,7 +417,7 @@ describe("agent audit: compose next() guard under nesting", () => {
   });
 
   it("still resolves when the same handler serves many sequential requests", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.use(async (_c, next) => next());
     app.get("/seq", async (c, next) => {
       await next();

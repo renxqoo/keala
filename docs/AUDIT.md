@@ -1,4 +1,4 @@
-# honu — 审计裁决记录（2026-08-30）
+# eleu — 审计裁决记录（2026-08-30）
 
 四路子代理并行审计（性能/安全/功能/迁移，全部只读）+ 两项关键结论主 agent 亲手复验。本文件是 DESIGN.md 修订的依据留痕。
 
@@ -52,4 +52,4 @@
 - **cache 三面**：主键加请求 authority；`no-cache`/`max-age=0` 响应不入缓存；请求侧 `no-store` 不播种、`no-cache` 绕过命中。
 - **ws 与 pooling/sink 契约**：mount 携 ws 进 pooling 父应用拒绝（与 app.ws 同门）；websocket handlers 无条件装配（活表分发，晚注册 ws 生效——优于拒载）；sink 拒绝已消费 body（bodyUsed 为唯一可同步证明的不可重放态；fetch 下一切 body 均表现为流，类型不可判别）。
 - **杂项**：redirect Location 编码反斜杠（WHATWG 视作分隔符的开放重定向）；multipart boundary 引号感知解析（复用 contentTypeParameters，堵 part 预算解除武装）；serveStatic 符号链接步进覆盖最终 filePath（目录 index 分支曾绕过）；错误响应保留 secureHeaders/requestId（finally 写入）；message 控制字符改为 statusText 资格制（不炸响应）；group 路径/前缀注册期校验；redirect 目标缺参注册期抛错；mount 后 param 中间件序修正（use > param，@koa/router 实测）；重复参数名 last-wins 统一两层；Node 适配器 OPTIONS * 映射 "/"；createError 未命名状态回退 String(status)；maxAge/expires 校验收紧。
-- **性能门禁**：进程内 A/B（以 hono 为对照消除机器漂移）honu/hono 比值 HEAD 1.014-1.022 → 修复后 1.000-1.004，无回归；1422 Node 门 + 1403 Bun 门全绿；四门（fmt/lint/tsc/vitest）全绿。
+- **性能门禁**：进程内 A/B（以 hono 为对照消除机器漂移）eleu/hono 比值 HEAD 1.014-1.022 → 修复后 1.000-1.004，无回归；1422 Node 门 + 1403 Bun 门全绿；四门（fmt/lint/tsc/vitest）全绿。

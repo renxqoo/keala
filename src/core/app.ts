@@ -1,5 +1,5 @@
 /**
- * The application — `new Honu()`.
+ * The application — `new Eleu()`.
  *
  * Request pipeline (docs/DESIGN.md §2): routing happens at the TOP of the
  * pipeline (not as an onion layer), the matched route's precompiled chain
@@ -74,7 +74,7 @@ const NO_WS_HANDLERS: ReadonlyMap<string, WebSocketHandlers> = new Map();
 
 export { isRouter };
 
-export class Honu implements Application {
+export class Eleu implements Application {
   readonly env: string;
   readonly proxy: boolean;
   readonly silent: boolean;

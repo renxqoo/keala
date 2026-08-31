@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import { cache } from "../src/middleware/cache.ts";
 
 const quiet = { env: "test" } as const;
@@ -14,7 +14,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 describe("responseCache", () => {
   it("misses compute, hits replay identical bodies with x-cache markers", async () => {
     let computed = 0;
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/heavy", cache(), (c) => {
       computed += 1;
       return c.json({ n: computed });
@@ -29,7 +29,7 @@ describe("responseCache", () => {
   });
 
   it("each hit is a FRESH Response instance (repeatable bodies)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/x", cache(), (c) => c.text("replayable"));
     for (let i = 0; i < 3; i++) {
       const res = await app.handle(req("/x"));
@@ -38,7 +38,7 @@ describe("responseCache", () => {
   });
 
   it("HEAD hits serve stripped bodies with Content-Length", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/x", cache(), (c) => c.text("12345"));
     await app.handle(req("/x")); // warm
     const head = await app.handle(new Request("http://localhost:3000/x", { method: "HEAD" }));
@@ -50,7 +50,7 @@ describe("responseCache", () => {
 
   it("keys are per-path; includeQuery opts the query in", async () => {
     const seen: string[] = [];
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/q", cache(), (c) => {
       seen.push(c.querystring);
       return c.text(`qs:${c.querystring}`);
@@ -62,7 +62,7 @@ describe("responseCache", () => {
     await app.handle(req("/q?a=2"));
     expect(seen).toEqual(["a=1", "a=1", "a=2"]);
 
-    const keyed = new Honu(quiet);
+    const keyed = new Eleu(quiet);
     const hits: string[] = [];
     keyed.get("/k", cache({ includeQuery: true }), (c) => {
       hits.push(c.querystring);
@@ -76,7 +76,7 @@ describe("responseCache", () => {
 
   it("TTL expiry recomputes", async () => {
     let computed = 0;
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/t", cache({ ttl: 15 }), (c) => {
       computed += 1;
       return c.text(`v${computed}`);
@@ -87,7 +87,7 @@ describe("responseCache", () => {
   });
 
   it("LRU evicts the oldest beyond max", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/l/:id", cache({ max: 2 }), (c) => c.text(`id:${c.params?.["id"]}`));
     await app.handle(req("/l/1"));
     await app.handle(req("/l/2"));
@@ -99,7 +99,7 @@ describe("responseCache", () => {
   });
 
   it("ineligible responses never cache", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/post-only", cache(), (c) => c.text("mutated"));
     app.get("/private", cache(), (c) => {
       c.set("Cache-Control", "private");
@@ -125,7 +125,7 @@ describe("responseCache", () => {
 
   it("authorization-bearing requests bypass storage and replay", async () => {
     let computed = 0;
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/auth", cache(), (c) => {
       computed += 1;
       return c.text(`v${computed}`);
@@ -146,7 +146,7 @@ describe("responseCache", () => {
   });
 
   it("binary (non-textual) bodies are not captured", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/bin", cache(), (c) => {
       c.body = new Uint8Array([1, 2, 3]);
     });

@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import { Router } from "../src/router/group.ts";
 import { createEmitter } from "../src/core/emitter.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
@@ -24,7 +24,7 @@ describe("coverage: every method shortcut registers a working route", () => {
   it.each(["get", "post", "put", "patch", "delete", "head", "options"] as const)(
     "app.%s routes its method",
     async (verb) => {
-      const app = new Honu(quiet);
+      const app = new Eleu(quiet);
       app[verb]("/x", (c) => c.text("hit"));
       const res = await app.handle(req("/x", { method: verb.toUpperCase() }));
       expect(res.status).toBe(200);
@@ -32,14 +32,14 @@ describe("coverage: every method shortcut registers a working route", () => {
   );
 
   it("the named two-argument form registers under the name", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("thing", "/things/:id", (c) => c.text(c.params?.["id"] ?? ""));
     expect(app.url("thing", { id: "9" })).toBe("/things/9");
     expect(await (await app.handle(req("/things/9"))).text()).toBe("9");
   });
 
   it("routeShortcut rejects malformed registrations", () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     expect(() => app.get(42 as unknown as string, () => undefined)).toThrow(/path string/);
     expect(() => app.get("/x", null as unknown as () => void)).toThrow(/at least one handler/);
   });
@@ -47,7 +47,7 @@ describe("coverage: every method shortcut registers a working route", () => {
 
 describe("coverage: mount parameter middleware merge", () => {
   it("a later mount does not clobber an existing param middleware", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.param("id", async (c, next) => {
       c.set("X-App", "1");
       await next();
@@ -79,7 +79,7 @@ describe("coverage: listen argument parsing", () => {
       made.push(options);
       return serveImpl(options);
     };
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     // inject a fake Bun.serve so listen() runs its full parsing path
     (globalThis as { Bun?: unknown }).Bun = { serve: impl };
     try {
@@ -169,7 +169,7 @@ describe("coverage: typeis wildcard shorthands", () => {
 describe("coverage: startBunServer error listener", () => {
   it("wires onListen through a microtask", async () => {
     const heard = vi.fn();
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     startBunServer(app, { port: 0 }, heard, () => ({
       port: 0,
       hostname: "x",

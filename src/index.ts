@@ -1,19 +1,19 @@
 /**
- * honu — hono-fast, onion-ergonomic, Bun-native.
+ * eleu — hono-fast, onion-ergonomic, Bun-native.
  *
- * The ROOT entry is the app surface: core (the Honu class, router,
+ * The ROOT entry is the app surface: core (the Eleu class, router,
  * context, errors, cookie signing) plus the plugin and the in-handler
- * helpers. Middleware lives at `@honu/core/middleware` (aggregate) or
- * `@honu/core/middleware/<name>` (per file); the Node adapter at
- * `@honu/core/node` — those two are the only split-out tiers (the
+ * helpers. Middleware lives at `eleu/middleware` (aggregate) or
+ * `eleu/middleware/<name>` (per file); the Node adapter at
+ * `eleu/node` — those two are the only split-out tiers (the
  * middleware tier is the heavy one; adapters are a mutually exclusive
  * runtime choice).
  *
  * ```ts
- * import { Honu } from "@honu/core";
- * import { cors } from "@honu/core/middleware";
+ * import { Eleu } from "eleu";
+ * import { cors } from "eleu/middleware";
  *
- * const app = new Honu({ keys: ["secret"] })
+ * const app = new Eleu({ keys: ["secret"] })
  *
  * app.use(cors())                                   // global onion middleware
  * app.get("/users/:id", (c) => c.json({ id: c.params.id }))   // return style
@@ -23,7 +23,7 @@
  * ```
  */
 
-export { Honu, type Application } from "./core/app.ts";
+export { Eleu, type Application } from "./core/app.ts";
 export { Router } from "./router/group.ts";
 export type { ErrorListener, NotFoundHandler, WebSocketHandlers } from "./core/application.ts";
 export {

@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { Honu, isHttpError } from "../src/index.ts";
+import { Eleu, isHttpError } from "../src/index.ts";
 import { normalizeError } from "../src/http/errors.ts";
 import { getPath, getSearch, parseHostHeader } from "../src/utils/url.ts";
 import { escapeHtml } from "../src/utils/text.ts";
 
 describe("coverage gaps", () => {
   it("caches the cookies facade per context", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     let first: unknown;
     let second: unknown;
     app.use(async (c) => {
@@ -20,7 +20,7 @@ describe("coverage gaps", () => {
   });
 
   it("delegates response setters through the flat context", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     app.use(async (c) => {
       c.type = "text/csv";
       c.length = 5;
@@ -33,7 +33,7 @@ describe("coverage gaps", () => {
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("content-type")).toBe("text/csv");
-    const probe = new Honu();
+    const probe = new Eleu();
     let seenLength: number | undefined = 0;
     probe.use(async (c) => {
       c.body = "a,b,c";
@@ -47,7 +47,7 @@ describe("coverage gaps", () => {
   });
 
   it("skips empty strings inside multi-value header flattening", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     app.use(async (c) => {
       c.append("Set-Cookie", ["a=1; Path=/", ""]);
       c.body = "ok";
@@ -57,7 +57,7 @@ describe("coverage gaps", () => {
   });
 
   it("stores single-element append values as plain strings", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     app.use(async (c) => {
       c.append("X-List", ["only"]);
       c.append("X-List", "second");
@@ -68,7 +68,7 @@ describe("coverage gaps", () => {
   });
 
   it("falls back to the numeric status for unknown codes without a body", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     app.use(async (c) => {
       c.status = 599;
     });
@@ -80,7 +80,7 @@ describe("coverage gaps", () => {
   it("assert throws with full options and passes silently when satisfied", async () => {
     // The core folds the standalone httpAssert helper into `c.assert`
     // (createError(status, message, props) under the hood).
-    const app = new Honu({ env: "test" });
+    const app = new Eleu({ env: "test" });
     let captured: unknown;
     app.use((c) => {
       c.assert(true, 500);
@@ -121,7 +121,7 @@ describe("coverage gaps", () => {
   });
 
   it("keeps etag quoting for weak validators", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     app.use(async (c) => {
       c.etag = 'W/"weak"';
       c.body = "ok";
@@ -131,7 +131,7 @@ describe("coverage gaps", () => {
   });
 
   it("supports context assert with extra properties", async () => {
-    const app = new Honu({ env: "test" });
+    const app = new Eleu({ env: "test" });
     app.use(async (c) => {
       c.assert(false, 400, "bad input", { headers: { "x-reason": "coverage" } });
     });
@@ -141,7 +141,7 @@ describe("coverage gaps", () => {
   });
 
   it("emits errors without a context attached", () => {
-    const app = new Honu({ env: "development", silent: true });
+    const app = new Eleu({ env: "development", silent: true });
     const spy = vi.fn();
     app.onError(spy);
     app.onerror(new Error("bare"));

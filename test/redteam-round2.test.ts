@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 import { sign } from "../src/context/cookies.ts";
 import { compilePattern } from "../src/router/pattern.ts";
 import { createRouterState, matchRoute, registerDef } from "../src/router/router.ts";
@@ -210,7 +210,7 @@ describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, fu
 
 describe("redteam round2 — GA-2 concurrency isolation", () => {
   it("500 mixed concurrent requests answer without crosstalk", { timeout: 60_000 }, async () => {
-    const app = new Honu({ ...quiet, keys: ["k"] });
+    const app = new Eleu({ ...quiet, keys: ["k"] });
     app.use(async (c, next) => {
       c.state.step = "1";
       await next();
@@ -297,7 +297,7 @@ describe("redteam round2 — GA-3 leak fence", () => {
     "100k mixed requests retain under 32B/request",
     { timeout: 120_000 },
     async () => {
-      const app = new Honu({ ...quiet, keys: ["k"] });
+      const app = new Eleu({ ...quiet, keys: ["k"] });
       app.get("/text", (c) => c.text("hello"));
       app.get("/users/:id", (c) => c.json({ id: c.params?.["id"] }));
       app.get("/err", () => {
@@ -327,7 +327,7 @@ describe("redteam round2 — GA-3 leak fence", () => {
 
 describe("redteam round2 — GA-4 security quick-scan", () => {
   it("CRLF in header values is rejected and answers 500 without injecting", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/x", (c) => {
       c.set("x-inj", "a\r\nSet-Cookie: pwned=1");
       return c.text("ok");
@@ -339,7 +339,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
   });
 
   it("cookie signatures: valid accepted, forged value and forged digest rejected", async () => {
-    const app = new Honu({ ...quiet, keys: ["k1"] });
+    const app = new Eleu({ ...quiet, keys: ["k1"] });
     app.get("/read", (c) => c.text(`v=${c.cookies.get("sess", { signed: true }) ?? "REJECT"}`));
     const good = sign("v1", "k1");
     const read = async (cookie: string): Promise<string> =>
@@ -351,7 +351,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
   });
 
   it("signed read without keys fails closed; query cannot pollute prototypes", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/read", (c) => {
       let out = "raw";
       try {
@@ -380,7 +380,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
   });
 
   it("unknown methods throw at registration; Allow never carries injected text", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     expect(() => app.on("GET\r\nX: 1", "/x", () => {})).toThrow();
     app.post("/x", (c) => c.text("p"));
     const res = await handleFlat(app, req("http://localhost/x", { method: "PUT" }));
@@ -389,7 +389,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
   });
 
   it("Location header cannot carry CRLF (redirect target is URL-normalized + encoded)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/r", (c) => c.redirect("http://evil.test/a\r\nSet-Cookie: pwned=1"));
     const res = await handleFlat(app, req("http://localhost/r"));
     expect(res.headers.get("location") ?? "").not.toMatch(/[\r\n]/);
@@ -397,7 +397,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
   });
 
   it("encoded traversal in a captured param stays a decoded string (no path semantics)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/files/:name", (c) => c.text(`f=${c.params?.["name"]}`));
     const res = await handleFlat(app, req("http://localhost/files/..%2F..%2Fetc"));
     expect([res.status, await text(res)]).toEqual([200, "f=../../etc"]);

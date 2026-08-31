@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { createEmitter } from "../src/core/emitter.ts";
 import {
@@ -17,7 +17,7 @@ const probe = async (
   headers: Record<string, string>,
   proxy = false,
 ): Promise<Context> => {
-  const app = new Honu({ proxy });
+  const app = new Eleu({ proxy });
   let captured: Context | undefined;
   app.use(async (c) => {
     captured = c;
@@ -50,7 +50,7 @@ describe("branch coverage: protocol and proxy", () => {
 
 describe("branch coverage: freshness", () => {
   it("matches weak etags", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     let ctx: Context | undefined;
     app.use(async (c) => {
       ctx = c;
@@ -63,7 +63,7 @@ describe("branch coverage: freshness", () => {
   });
 
   it("is stale when if-modified-since predates lastModified", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     let ctx: Context | undefined;
     app.use(async (c) => {
       ctx = c;
@@ -80,7 +80,7 @@ describe("branch coverage: freshness", () => {
   });
 
   it("is stale on an unparsable if-modified-since", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     let ctx: Context | undefined;
     app.use(async (c) => {
       ctx = c;
@@ -95,7 +95,7 @@ describe("branch coverage: freshness", () => {
   });
 
   it("is stale when no validators exist at all", async () => {
-    const app = new Honu();
+    const app = new Eleu();
     let ctx: Context | undefined;
     app.use(async (c) => {
       ctx = c;

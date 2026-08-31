@@ -10,12 +10,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const isBun = typeof Bun !== "undefined";
 
-const app = new Honu({ env: "test" });
+const app = new Eleu({ env: "test" });
 app.get("/text", (c) => c.text("hello world"));
 app.get("/json", (c) => c.json({ hello: "world" }));
 app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
@@ -84,7 +84,7 @@ describe("perf evidence: budgets (ratio fences)", () => {
 
 describe("perf evidence: structural fences", () => {
   it("a fully synchronous chain settles without a promise", async () => {
-    const syncApp = new Honu({ env: "test" });
+    const syncApp = new Eleu({ env: "test" });
     syncApp.use((c, next) => {
       void c.set("X-Sync", "1");
       return next();
@@ -99,7 +99,7 @@ describe("perf evidence: structural fences", () => {
   });
 
   it("every context carries the exact same hidden-class key order", () => {
-    const app2 = new Honu({ env: "test" });
+    const app2 = new Eleu({ env: "test" });
     app2.get("/k", () => undefined);
     const shapes = new Set<string>();
     const seen: Context[] = [];

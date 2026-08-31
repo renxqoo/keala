@@ -1,7 +1,7 @@
 /**
  * Guarded context pooling.
  *
- * Opt-in via `new Honu({ pooling: true })`. A settled context is retired by
+ * Opt-in via `new Eleu({ pooling: true })`. A settled context is retired by
  * SWAPPING its prototype to `deadContextProto` — every mutating accessor then
  * throws with a clear message, so fire-and-forget code holding a retired
  * context cannot silently corrupt the next request. The live prototype is

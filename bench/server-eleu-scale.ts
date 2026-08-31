@@ -1,8 +1,8 @@
-// honu scale server: 1000 static routes only (dedicated process so the
+// eleu scale server: 1000 static routes only (dedicated process so the
 // base scenarios stay unpolluted).
-import { Honu } from "../src/index.ts";
+import { Eleu } from "../src/index.ts";
 
-const app = new Honu();
+const app = new Eleu();
 for (let i = 0; i < 1000; i++) {
   app.get(`/route-${i}`, (c) => c.text(`route-${i}`));
 }

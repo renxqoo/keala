@@ -52,7 +52,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Honu } from "../src/core/app.ts";
+import { Eleu } from "../src/core/app.ts";
 import { Router } from "../src/router/group.ts";
 import { compilePattern } from "../src/router/pattern.ts";
 
@@ -62,14 +62,14 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 describe("R3-1 sticky optionality contaminates required-param routes (trie)", () => {
   it("a required-param route must 404 a path with the param absent once a sibling declares the position optional", async () => {
     // Control: the required-param route alone refuses "/a/c".
-    const alone = new Honu(quiet);
+    const alone = new Eleu(quiet);
     alone.get("/a/:x/c", (c) => c.text(`x=${c.params?.["x"]}`));
     expect((await alone.handle(req("/a/c"))).status).toBe(404);
 
     // Registering an unrelated optional variant at the same position makes
     // the SAME request answer 200 with `x` MISSING — the skip transition of
     // ":x?" reaches the "/c" tail registered by the required-param pattern.
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/a/:x/c", (c) => c.text(`x=${c.params?.["x"] ?? "MISSING"}`));
     app.get("/a/:x?/b", (c) => c.text("b"));
     const res = await app.handle(req("/a/c"));
@@ -77,7 +77,7 @@ describe("R3-1 sticky optionality contaminates required-param routes (trie)", ()
   });
 
   it("a plain single-param route must not become servable at the bare prefix (no param captured)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("/u/:id", (c) => c.text(`id=${c.params?.["id"] ?? "MISSING"}`));
     app.get("/u/:id?/posts", (c) => c.text("posts"));
     const res = await app.handle(req("/u"));
@@ -85,7 +85,7 @@ describe("R3-1 sticky optionality contaminates required-param routes (trie)", ()
   });
 
   it("the contamination must not flip 404 into 405+Allow for other methods", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.post("/a/:x/c", (c) => c.text("c"));
     app.get("/a/:x?/b", (c) => c.text("b"));
     const res = await app.handle(req("/a/c", { method: "DELETE" }));
@@ -110,13 +110,13 @@ describe("R3-3 staticMap and trie disagree on decoded static segments containing
   it("a dynamic route must not match a request whose decoded static segment differs (static twin 404s)", async () => {
     // Static control: the pattern segment decodes to "a%2Fb"; the request
     // segment "a%2Fb" decodes to "a/b" — different values, no match.
-    const stat = new Honu(quiet);
+    const stat = new Eleu(quiet);
     stat.get("/a%252Fb", (c) => c.text("static"));
     expect((await stat.handle(req("/a%2Fb"))).status).toBe(404);
 
     // Same pair through a dynamic route: the trie's raw-first static-child
     // lookup accepts the RAW "a%2Fb" against the decoded key "a%2Fb".
-    const dyn = new Honu(quiet);
+    const dyn = new Eleu(quiet);
     dyn.get("/a%252Fb/:id", (c) => c.text(`dyn:${c.params?.["id"]}`));
     expect((await dyn.handle(req("/a%2Fb/5"))).status).toBe(404);
   });
@@ -124,14 +124,14 @@ describe("R3-3 staticMap and trie disagree on decoded static segments containing
 
 describe("R3-4 duplicate param names: fast matcher and trie capture different values", () => {
   it("adding an unrelated route to the bucket must not flip the captured param value (last one wins)", async () => {
-    const fast = new Honu(quiet);
+    const fast = new Eleu(quiet);
     fast.get("/dup/:x/:x", (c) => c.text(`x=${c.params?.["x"]}`));
     const fastRes = await fast.handle(req("/dup/1/2"));
     expect(await fastRes.text()).toBe("x=2");
 
     // A second dynamic pattern under "/dup" disables the fast matcher —
     // the trie's cons-list keeps the FIRST capture instead.
-    const trieApp = new Honu(quiet);
+    const trieApp = new Eleu(quiet);
     trieApp.get("/dup/:x/:x", (c) => c.text(`x=${c.params?.["x"]}`));
     trieApp.get("/dup/x/:y", (c) => c.text(`y=${c.params?.["y"]}`));
     const trieRes = await trieApp.handle(req("/dup/1/2"));
@@ -142,7 +142,7 @@ describe("R3-4 duplicate param names: fast matcher and trie capture different va
 describe("R3-5 mounted param middleware runs outside the router's use() middleware", () => {
   it("a group's use() middleware is prepended to every route — it must run before its param() middleware (koa parity)", async () => {
     const order: string[] = [];
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     const api = new Router();
     api.use(async (_c, next) => {
       order.push("use");
@@ -170,14 +170,14 @@ describe("R3-6 custom-pattern parser silently discards text after the closing pa
 
 describe("R3-7 redirect destination params the source never captures explode per-request", () => {
   it("registration must throw when a destination :param is not captured by the source route", () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     expect(() => app.redirect("/a", "/x/:missing", 302)).toThrow();
   });
 });
 
 describe("R3-8 url() builds '/w/' for an empty wildcard value but the router 404s it", () => {
   it("a trailing wildcard must match the bare prefix+'/' with an empty capture (url round-trip)", async () => {
-    const app = new Honu(quiet);
+    const app = new Eleu(quiet);
     app.get("w", "/w/*", (c) => c.text(`[${c.params?.["wildcard"] ?? ""}]`));
     const built = app.url("w", { wildcard: "" });
     expect(built).toBe("/w/");
