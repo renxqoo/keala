@@ -9,15 +9,15 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
-import { createRouter } from "../src/router/group.ts";
+import { Honu } from "../src/core/app.ts";
+import { Router } from "../src/router/group.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
 describe("agent3: redirect() destinations", () => {
   it("app.redirect() accepts an absolute-URL destination (a scheme colon is not a :param)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     // "https://example.com/new".includes(":") is true (the scheme colon), so
     // redirect() feeds the whole URL to compilePattern(), which rejects it as
     // a route path. Absolute destinations are plain verbatim Locations —
@@ -29,8 +29,8 @@ describe("agent3: redirect() destinations", () => {
   });
 
   it("router.redirect() accepts an absolute-URL destination with a port", async () => {
-    const app = createApp(quiet);
-    const api = createRouter({ prefix: "/v1" });
+    const app = new Honu(quiet);
+    const api = new Router({ prefix: "/v1" });
     api.redirect("/old", "https://example.com:8080/new", 302);
     app.mount("/api", api);
     const res = await app.handle(req("/api/v1/old"));
@@ -44,7 +44,7 @@ describe("agent3: static Map vs trie equivalence", () => {
     // "/admin%2Fpanel" is ONE physical segment. The trie keeps %2F inside a
     // segment (locked by trie.test.ts and router.test.ts), so the dynamic
     // sibling correctly refuses it…
-    const dyn = createApp(quiet);
+    const dyn = new Honu(quiet);
     dyn.get("/admin/:page", (c) => c.text(`dyn:${c.params?.["page"]}`));
     expect((await dyn.handle(req("/admin%2Fpanel"))).status).toBe(404);
 
@@ -52,7 +52,7 @@ describe("agent3: static Map vs trie equivalence", () => {
     // staticMap lookup, so "/admin%2Fpanel" collapses onto the key of the
     // TWO-segment static route and is served. Same request, same shape,
     // different answer depending on whether the route is static.
-    const stat = createApp(quiet);
+    const stat = new Honu(quiet);
     stat.get("/admin/panel", (c) => c.text("static"));
     expect((await stat.handle(req("/admin%2Fpanel"))).status).toBe(404);
   });
@@ -60,7 +60,7 @@ describe("agent3: static Map vs trie equivalence", () => {
 
 describe("agent3: named-route URL building", () => {
   it("url() percent-encodes wildcard values so the built URL round-trips", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("wild", "/w/*", (c) => c.text(c.params?.["wildcard"] ?? ""));
     // A wildcard value is user data: characters that cannot appear in a URL
     // path (space, "?", "#") must be escaped, or the built string stops
@@ -74,7 +74,7 @@ describe("agent3: named-route URL building", () => {
 
 describe("agent3: native-sink overlap detection", () => {
   it("a later JS route aliasing a sunk path through percent-escapes throws (decoded keys)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/esc%20ped", new Response("native"));
     // The sunk mirror registers under the DECODED staticMap key "/esc ped",
     // while sunkPaths stores the raw "/esc%20ped". pathsConflict() compares
@@ -87,9 +87,9 @@ describe("agent3: native-sink overlap detection", () => {
 
 describe("agent3: mount() merges websocket registrations", () => {
   it("mount() carries the sub-app's ws routes under the prefix (the upgrade stays servable)", async () => {
-    const sub = createApp(quiet);
+    const sub = new Honu(quiet);
     sub.ws("/chat", { open() {} });
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.mount("/ws", sub);
     // mount() copies the sub-app's ALL-route (the upgrade handler), so
     // "GET /ws/chat" dispatches wsUpgradeHandler("/chat") — but the wsRoutes
@@ -103,9 +103,9 @@ describe("agent3: mount() merges websocket registrations", () => {
 
 describe("agent3: mount() and param middleware ordering", () => {
   it("a param middleware merged by mount() reaches the parent's existing routes too", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/old/:oid", (c) => c.text("parent"));
-    const api = createRouter();
+    const api = new Router();
     api.param("oid", async (c, next) => {
       c.set("X-Org", c.params?.["oid"] ?? "");
       await next();
@@ -130,7 +130,7 @@ describe("agent3: mount() and param middleware ordering", () => {
 
 describe("agent3: regression probes for adjacent behavior (green today)", () => {
   it("optional params backtrack mid-path", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/users/:id?/posts", (c) => c.text(`id=${c.params?.["id"] ?? "-"}`));
     expect(await (await app.handle(req("/users/9/posts"))).text()).toBe("id=9");
     expect(await (await app.handle(req("/users/posts"))).text()).toBe("id=-");
@@ -138,8 +138,8 @@ describe("agent3: regression probes for adjacent behavior (green today)", () => 
   });
 
   it("static beats param across a mount boundary", async () => {
-    const app = createApp(quiet);
-    const api = createRouter();
+    const app = new Honu(quiet);
+    const api = new Router();
     api.get("/:id", (c) => c.text(`param:${c.params?.["id"]}`));
     app.mount("/api", api);
     app.get("/api/list", (c) => c.text("static"));
@@ -149,7 +149,7 @@ describe("agent3: regression probes for adjacent behavior (green today)", () => 
   });
 
   it("fast matcher and trie agree on %2F inside a captured param", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/users/:id", (c) => c.text(c.params?.["id"] ?? ""));
     app.get("/users/:id/posts/:tid", (c) => c.text(`${c.params?.["id"]}/${c.params?.["tid"]}`));
     expect(await (await app.handle(req("/users/a%2Fb"))).text()).toBe("a/b");
@@ -157,7 +157,7 @@ describe("agent3: regression probes for adjacent behavior (green today)", () => 
   });
 
   it("escaped literals in static routes match their encoded form", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/a%3Fb", (c) => c.text("q"));
     app.get("/caf%C3%A9", (c) => c.text("coffee"));
     expect(await (await app.handle(req("/a%3Fb"))).text()).toBe("q");

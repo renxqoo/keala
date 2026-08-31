@@ -9,13 +9,13 @@
  * under budget. Run: bun scripts/soak.ts
  */
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 
 const ROUNDS = 24;
 const PER_ROUND = 20_000;
 const DRIFT_BUDGET_BYTES = 1_500; // allowed retained growth per request
 
-const app = createApp({ keys: ["soak"], env: "test" });
+const app = new Honu({ keys: ["soak"], env: "test" });
 app.use(async (c, next) => {
   c.set("X-Soak", "1");
   await next();

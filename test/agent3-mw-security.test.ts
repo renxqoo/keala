@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { validator, type StandardSchema } from "../src/middleware/validator.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
 import { cache } from "../src/middleware/cache.ts";
@@ -81,7 +81,7 @@ afterAll(async () => {
 
 describe("MW-1 [RED]: a second validator() must not 500 — getter install must be idempotent", () => {
   it("two different schemas on two routes both validate (second route returns 400, not 500)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post("/a", validator(passthrough()), (c) => c.json({ ok: true }));
     app.post("/b", validator(rejectObjects()), (c) => c.json({ ok: true }));
 
@@ -118,7 +118,7 @@ describe("MW-2 [RED]: a Promise-returning validate() must be awaited", () => {
       },
     } as unknown as StandardSchema;
 
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post("/x", validator(asyncSchema), (c) =>
       c.json({ got: (c as unknown as { valid?: unknown }).valid ?? null }),
     );
@@ -137,7 +137,7 @@ describe("MW-2 [RED]: a Promise-returning validate() must be awaited", () => {
 
 describe("MW-3 [RED]: a non-matching If-None-Match must serve the full representation", () => {
   it("stale If-None-Match answers 200 WITH the file body (not an empty 200)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root }));
 
     const res = await app.handle(
@@ -149,7 +149,7 @@ describe("MW-3 [RED]: a non-matching If-None-Match must serve the full represent
   });
 
   it("a wildcard-or-multi If-None-Match that does not match also serves the body", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root }));
 
     const res = await app.handle(
@@ -166,7 +166,7 @@ describe("MW-3 [RED]: a non-matching If-None-Match must serve the full represent
 
 describe("MW-4 [RED]: prefix must only strip at a path-segment boundary", () => {
   it("a path that merely STARTS WITH the prefix is not under the mount", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root, prefix: "/assets" }));
 
     // Control: the mounted URL space works.
@@ -185,7 +185,7 @@ describe("MW-4 [RED]: prefix must only strip at a path-segment boundary", () => 
   it("a sibling route name is not shadowed by the static mount", async () => {
     // The mount must not hijack URL space that belongs to other routes:
     // "/assets-internal" only differs from the prefix by a suffix.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root, prefix: "/assets" }));
     app.get("/assets-internal", (c) => c.text("route handler"));
 
@@ -200,7 +200,7 @@ describe("MW-4 [RED]: prefix must only strip at a path-segment boundary", () => 
 
 describe("MW-5 [RED]: requests bearing a Cookie header must not seed/replay cache entries", () => {
   it("alice's cached response is not replayed to bob (request Cookie is identity)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     // A handler that personalizes on the request's Cookie header without
     // touching the c.cookies facade and without setting any cookie —
     // every other eligibility rule is satisfied.
@@ -217,7 +217,7 @@ describe("MW-5 [RED]: requests bearing a Cookie header must not seed/replay cach
   });
 
   it("an anonymous request is still cacheable after cookie-bearing ones were skipped", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let computed = 0;
     app.get("/pub", cache({ ttl: 60_000 }), (c) => {
       computed += 1;

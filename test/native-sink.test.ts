@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { createApp, startBunServer, type ServeImplementation } from "../src/index.ts";
+import { Honu, startBunServer, type ServeImplementation } from "../src/index.ts";
 import { buildNativeRoutes } from "../src/core/sink.ts";
 
 const quiet = { env: "test" } as const;
@@ -30,71 +30,71 @@ afterAll(async () => {
 
 describe("sink: guard matrix (every refusal is loud)", () => {
   it("rejects non-absolute and empty paths", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.sink("health", new Response("ok"))).toThrow(/absolute path/);
     expect(() => app.sink("", new Response("ok"))).toThrow(/absolute path/);
   });
 
   it("rejects values that are neither Response nor { dir }", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     // @ts-expect-error -- runtime contract check for JS callers
     expect(() => app.sink("/health", "ok")).toThrow(/Response or \{ dir \}/);
   });
 
   it("rejects duplicate sinks of the same path", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     expect(() => app.sink("/health", new Response("again"))).toThrow(/already registered/);
   });
 
   it("rejects static sinks on param/wildcard paths", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.sink("/users/:id", new Response("ok"))).toThrow(/plain paths/);
     expect(() => app.sink("/assets/*", new Response("ok"))).toThrow(/plain paths/);
   });
 
   it("rejects dir sinks without a /* suffix and empty dir values", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.sink("/assets", { dir: root })).toThrow(/\/\*/);
     expect(() => app.sink("/assets/*", { dir: "" })).toThrow(/directory path/);
   });
 
   it("rejects sinking when global middleware exists (it would be bypassed)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use((_c, next) => next());
     expect(() => app.sink("/health", new Response("ok"))).toThrow(/without global middleware/);
   });
 
   it("rejects app.use(fn) after a sink exists (ordering invariants are bidirectional)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     expect(() => app.use((_c, next) => next())).toThrow(/bypasses global middleware/);
   });
 
   it("rejects app.param() after a sink exists", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     expect(() => app.param("id", (_c, next) => next())).toThrow(/bypasses param middleware/);
   });
 
   it("rejects sinking when param middleware exists", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.param("id", (_c, next) => next());
     expect(() => app.sink("/users/1", new Response("ok"))).toThrow(/without param middleware/);
   });
 
   it("rejects a sink overlapping an existing JS route (both directions)", () => {
-    const direct = createApp(quiet);
+    const direct = new Honu(quiet);
     direct.get("/health", (c) => c.text("js"));
     expect(() => direct.sink("/health", new Response("native"))).toThrow(/overlaps/);
 
-    const subtree = createApp(quiet);
+    const subtree = new Honu(quiet);
     subtree.get("/assets/logo.png", (c) => c.text("js"));
     expect(() => subtree.sink("/assets/*", { dir: root })).toThrow(/overlaps/);
   });
 
   it("rejects JS routes registered AFTER a sink (native table would shadow them)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     expect(() => app.get("/health", (c) => c.text("js"))).toThrow(/natively-sunk/);
     // A deeper path is a different route — no shadowing, no refusal.
@@ -103,20 +103,20 @@ describe("sink: guard matrix (every refusal is loud)", () => {
   });
 
   it("rejects mount() introducing param middleware alongside sinks", () => {
-    const sub = createApp(quiet);
+    const sub = new Honu(quiet);
     sub.param("id", (_c, next) => next());
     sub.get("/x/:id", (c) => c.text("x"));
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     expect(() => app.mount("/m", sub)).toThrow(/param middleware alongside sunk/);
 
-    const clean = createApp(quiet);
+    const clean = new Honu(quiet);
     clean.get("/y", (c) => c.text("y"));
     expect(() => app.mount("/n", clean)).not.toThrow();
   });
 
   it("a 205 null-body sunk response survives the rebuild", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/reset", new Response(null, { status: 205 }));
     const res = await app.handle(req("/reset"));
     expect(res.status).toBe(205);
@@ -124,7 +124,7 @@ describe("sink: guard matrix (every refusal is loud)", () => {
   });
 
   it("sibling subtrees and unrelated paths never conflict", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     app.get("/users/:id", (c) => c.text("u"));
     app.sink("/assets/*", { dir: root });
@@ -135,7 +135,7 @@ describe("sink: guard matrix (every refusal is loud)", () => {
 
 describe("sink: JS mirror (runtime-portable serving)", () => {
   it("serves the sunk response body, status and headers repeatedly", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok", { status: 200, headers: { "x-sunk": "yes" } }));
     for (let i = 0; i < 3; i++) {
       const res = await app.handle(req("/health"));
@@ -146,7 +146,7 @@ describe("sink: JS mirror (runtime-portable serving)", () => {
   });
 
   it("HEAD reuses the GET mirror (empty body, same status)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     const res = await app.handle(new Request("http://localhost:3000/health", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -154,7 +154,7 @@ describe("sink: JS mirror (runtime-portable serving)", () => {
   });
 
   it("non-GET methods answer 405 with the allowed set", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     const res = await app.handle(new Request("http://localhost:3000/health", { method: "POST" }));
     expect(res.status).toBe(405);
@@ -162,7 +162,7 @@ describe("sink: JS mirror (runtime-portable serving)", () => {
   });
 
   it("a null-body (204) sunk response survives the rebuild", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/noop", new Response(null, { status: 204 }));
     const res = await app.handle(req("/noop"));
     expect(res.status).toBe(204);
@@ -173,7 +173,7 @@ describe("sink: JS mirror (runtime-portable serving)", () => {
     const headers = new Headers();
     headers.append("set-cookie", "a=1");
     headers.append("set-cookie", "b=2");
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/sweet", new Response("ok", { headers }));
     const res = await app.handle(req("/sweet"));
     expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]);
@@ -181,7 +181,7 @@ describe("sink: JS mirror (runtime-portable serving)", () => {
 
   it("the sunk Response instance stays unconsumed for the native table", async () => {
     const response = new Response("precious");
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", response);
     await app.handle(req("/health"));
     // The native table reuses THIS instance; a consumed body would 500 there.
@@ -189,7 +189,7 @@ describe("sink: JS mirror (runtime-portable serving)", () => {
   });
 
   it("dir sinks mirror to serveStatic semantics (index, 404, traversal denial)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/assets/*", { dir: root });
     expect((await app.handle(req("/assets/app.js"))).status).toBe(200);
     expect((await app.handle(req("/assets/"))).status).toBe(200); // index.html
@@ -214,7 +214,7 @@ describe("sink: native routes table (adapter)", () => {
   };
 
   it("builds the table with Response entries and {dir} entries", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const health = new Response("ok");
     app.sink("/health", health);
     app.sink("/assets/*", { dir: root });
@@ -226,7 +226,7 @@ describe("sink: native routes table (adapter)", () => {
   });
 
   it("startBunServer embeds the routes table and honors nativeRoutes: false", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
 
     const withTable: { options: Record<string, unknown> } = { options: {} };
@@ -239,7 +239,7 @@ describe("sink: native routes table (adapter)", () => {
   });
 
   it("an app without sinks gets no routes key", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x", (c) => c.text("x"));
     const captured: { options: Record<string, unknown> } = { options: {} };
     startBunServer(app, { port: 0 }, undefined, fakeServe(captured));
@@ -247,7 +247,7 @@ describe("sink: native routes table (adapter)", () => {
   });
 
   it("reloadNativeRoutes throws before listen()", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/health", new Response("ok"));
     expect(() => app.reloadNativeRoutes()).toThrow(/app\.listen/);
   });
@@ -268,7 +268,7 @@ describe("sink: native routes table (adapter)", () => {
       };
       (globalThis as { Bun?: unknown }).Bun = { serve: impl };
       try {
-        const app = createApp(quiet);
+        const app = new Honu(quiet);
         const server = app.listen(0);
         expect(reloads.length).toBe(0);
         app.sink("/health", new Response("ok"));
@@ -280,7 +280,7 @@ describe("sink: native routes table (adapter)", () => {
 
         // The opt-out is sticky: sinks after listen({nativeRoutes: false})
         // must NOT silently install a native table later.
-        const optOut = createApp(quiet);
+        const optOut = new Honu(quiet);
         const optServer = optOut.listen({ port: 0, nativeRoutes: false });
         optOut.sink("/ping", new Response("pong"));
         expect(reloads.length).toBe(2); // no new reload

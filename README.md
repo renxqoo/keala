@@ -22,9 +22,9 @@ bun add honu
 ```
 
 ```ts
-import { createApp } from "honu";
+import { Honu } from "honu";
 
-const app = createApp({ keys: ["signing-secret"] });
+const app = new Honu({ keys: ["signing-secret"] });
 
 // Global onion middleware — compiled into every route chain once
 app.use(async (c, next) => {
@@ -48,9 +48,9 @@ app.listen(3000);
 Route groups mount by table merge (404s fall through to the parent):
 
 ```ts
-import { createRouter } from "honu";
+import { Router } from "honu";
 
-const api = createRouter({ prefix: "/v1" });
+const api = new Router({ prefix: "/v1" });
 api.param("oid", async (c, next) => {
   /* org guard */ await next();
 });
@@ -68,7 +68,7 @@ subpaths while the root stays the one-import app surface:
 
 | Entry                     | What it gives you                                                                      | Loads               |
 | ------------------------- | -------------------------------------------------------------------------------------- | ------------------- |
-| `honu`                 | createApp / createRouter / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
+| `honu`                 | Honu / Router / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
 | `honu/middleware`      | every middleware factory in one import                                                 | the middleware tier |
 | `honu/middleware/cors` | one factory                                                                            | that file only      |
 | `honu/adapters/node`   | the Node listener (bun/node are exclusive)                                             | that file only      |
@@ -191,7 +191,7 @@ writes are staged; the last committer wins; untouched requests hit
 | `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n` (same)                    |
 | `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`                 |
 | `app.use(router.routes()).use(router.allowedMethods())` | `app.get(...)` directly, or `app.mount(prefix, router)` |
-| `new Koa({ proxy: true })`                              | `createApp({ proxy: true })`                            |
+| `new Koa({ proxy: true })`                              | `new Honu({ proxy: true })`                            |
 | `ctx.state.user`                                        | `c.state.user` (same)                                   |
 | `ctx.cookies.get/set`                                   | `c.cookies.get/set` (same, signed + keys)               |
 
@@ -219,7 +219,7 @@ their object shape on `c.body` reads.
 
 | Member                                                                         | Description                                                                                                                                                                |
 | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createApp(options?)`                                                          | Factory (no classes anywhere). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                                |
+| `new Honu(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                                |
 | `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                                 |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                                          |
 | `app.on(method, path, ...handlers)`                                            | Any method, any case                                                                                                                                                       |
@@ -258,7 +258,7 @@ overwrite signed`. Signing is HMAC-SHA256 with key rotation (Keygrip format:
 
 ### Router
 
-`createRouter({ prefix })` groups routes for `app.mount`. Patterns: `:name`,
+`new Router({ prefix })` groups routes for `app.mount`. Patterns: `:name`,
 `:name(\\d+)` (custom regex), `:name?` (optional), `*` (wildcard tail).
 Matching priority static > param > wildcard; HEAD falls back to GET handlers
 (Express-style); 405 + `Allow`, OPTIONS 200, and 501 for unknown verbs are
@@ -274,10 +274,10 @@ its own subpath so importing the framework never loads the node:http bridge
 on Bun:
 
 ```ts
-import { createApp } from "honu";
+import { Honu } from "honu";
 import { listen } from "honu/adapters/node";
 
-const app = createApp();
+const app = new Honu();
 app.get("/", (c) => {
   c.body = "hello";
 });

@@ -13,14 +13,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { sign, unsign } from "../src/context/cookies.ts";
 
 const quiet = { env: "test" } as const;
 
 const attack = async (setup: (c: Context) => void, init?: RequestInit): Promise<Response> => {
-  const app = createApp(quiet);
+  const app = new Honu(quiet);
   app.onError(() => {});
   app.use((c) => {
     setup(c);
@@ -107,7 +107,7 @@ describe("security: prototype pollution vector matrix", () => {
     ["__defineGetter__", "x"],
   ])("query key %p never pollutes Object.prototype", async (key, value) => {
     let queryKeys = 0;
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use((c) => {
       queryKeys = Object.keys(c.query).length;
       c.body = "ok";
@@ -129,7 +129,7 @@ describe("security: prototype pollution vector matrix", () => {
   });
 
   it("pollution through cookie names, state and params is inert", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/:__proto__", () => {});
     app.use((c) => {
       c.state["__proto__"] = { polluted: true } as never;
@@ -183,7 +183,7 @@ describe("security: cookie forgery matrix", () => {
   });
 
   it("end-to-end: forged cookies read as absent", async () => {
-    const app = createApp({ ...quiet, keys: ["prod-key"] });
+    const app = new Honu({ ...quiet, keys: ["prod-key"] });
     app.use((c) => {
       c.body = c.cookies.get("sid") ?? "anonymous";
     });
@@ -254,7 +254,7 @@ describe("security: path traversal and routing abuse", () => {
     ["a/../../../b"],
     ["/static/../../etc/passwd"],
   ])("wildcard capture of %p stays inside the route", async (raw) => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/static/*", (c) => {
       c.body = `cap:${c.params?.wildcard}`;
     });
@@ -266,7 +266,7 @@ describe("security: path traversal and routing abuse", () => {
   });
 
   it("decoded params never escape their segment for :name captures", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/users/:name/files/:rest", (c) => {
       c.body = `${c.params?.name}/${c.params?.rest}`;
     });
@@ -277,7 +277,7 @@ describe("security: path traversal and routing abuse", () => {
   });
 
   it("many routes do not degrade matching into wrong hits", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     for (let i = 0; i < 200; i++) {
       app.get(`/r${i}/:id(\\d+)`, (c) => {
         c.body = `r${i}`;
@@ -292,7 +292,7 @@ describe("security: path traversal and routing abuse", () => {
 
 describe("security: resource-abuse bounds", () => {
   it("a 64KB query string parses under 300ms", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let values = 0;
     app.use((c) => {
       // Touch the query so the parse actually happens inside the timed window.
@@ -311,7 +311,7 @@ describe("security: resource-abuse bounds", () => {
   });
 
   it("a pathological Accept header with 2k entries parses bounded", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use((c) => {
       c.body = String(c.accepts("html"));
     });
@@ -323,7 +323,7 @@ describe("security: resource-abuse bounds", () => {
   });
 
   it("deeply nested wildcard-free tries stay bounded on misses", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/:a/:b/:c/:d/:e/:f/:g/:h/:i/:j/end", () => {});
     const start = Date.now();
     await app.handle(new Request("http://localhost:3000/1/2/3/4/5/6/7/8/9/10/miss"));
@@ -349,7 +349,7 @@ describe("security: information disclosure matrix", () => {
       },
     ],
   ])("%s hides the message on 5xx", async (_label, boom) => {
-    const app = createApp({ env: "production" });
+    const app = new Honu({ env: "production" });
     app.onError(() => {});
     app.use(async () => {
       await boom();
@@ -363,7 +363,7 @@ describe("security: information disclosure matrix", () => {
 
   it("stack traces never reach the response body in any env", async () => {
     for (const env of ["development", "production", "test"]) {
-      const app = createApp({ env });
+      const app = new Honu({ env });
       app.onError(() => {});
       app.use(async () => {
         throw new Error("boom");
@@ -374,7 +374,7 @@ describe("security: information disclosure matrix", () => {
   });
 
   it("exposed 4xx messages cannot smuggle headers via multi-line payloads", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       c.throw(400, "line1\r\nX-Evil: 1");
     });
@@ -383,7 +383,7 @@ describe("security: information disclosure matrix", () => {
   });
 
   it("error.headers values are validated even for trusted-looking errors", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async () => {
       const err = new Error("x") as Error & { status: number; headers: unknown };
       err.status = 418;

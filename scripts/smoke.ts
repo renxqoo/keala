@@ -7,8 +7,8 @@
 
 import { dirname } from "node:path";
 
-import { createApp } from "../src/core/app.ts";
-import { createRouter } from "../src/router/group.ts";
+import { Honu } from "../src/core/app.ts";
+import { Router } from "../src/router/group.ts";
 
 const root = dirname(new URL(import.meta.url).pathname);
 
@@ -22,8 +22,8 @@ const check = (name: string, condition: boolean, detail = ""): void => {
   console.error(`  ✗ ${name} ${detail}`);
 };
 
-const app = createApp({ keys: ["smoke-secret"], env: "production" });
-const api = createRouter({ prefix: "/api" });
+const app = new Honu({ keys: ["smoke-secret"], env: "production" });
+const api = new Router({ prefix: "/api" });
 
 api.param("id", async (c, next) => {
   if (!/^\d+$/.test(c.params?.["id"] ?? "")) {
@@ -133,7 +133,7 @@ const get = async (path: string, init?: RequestInit): Promise<Response> =>
 
 // --- Bun-native branches (real runtime, not the stubbed bridge tests) -----
 if (typeof Bun !== "undefined") {
-  const nativeApp = createApp({ env: "production" });
+  const nativeApp = new Honu({ env: "production" });
   const { hashPassword, verifyPassword } = await import("../src/helpers/password.ts");
   const { csrfToken } = await import("../src/middleware/csrf-token.ts");
   const hash = await hashPassword("smoke-pw");

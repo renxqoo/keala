@@ -1,7 +1,7 @@
 // One-shot verification of the in-process baseline: raw vs honu vs hono.
 // Not part of the repo's benchmark suite; exists to re-verify claims for the
 // refactor plan. Run: bun bench/verify-baseline.ts
-import { createApp } from "../src/index.ts";
+import { Honu } from "../src/index.ts";
 import { Hono } from "hono";
 
 // Per-suite measured requests: BATCHES rounds x SUB interleaved sub-batches.
@@ -10,7 +10,7 @@ const BATCHES = 40;
 
 const rawHandler = (_req: Request): Response => new Response("hello world");
 
-const app = createApp();
+const app = new Honu();
 app.get("/text", (c) => {
   c.body = "hello world";
 });

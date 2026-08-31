@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
@@ -14,7 +14,7 @@ const quiet = { env: "test" } as const;
 
 describe("ported parity security semantics", () => {
   it("redirect(back) prefers same-origin Referrer, then alt, then /", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/back", (c) => {
       c.redirect("back", "/alt");
     });
@@ -34,7 +34,7 @@ describe("ported parity security semantics", () => {
   });
 
   it("attachment with unicode filenames emits RFC 5987 encoding + mime", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/a", (c) => {
       c.attachment("年度报告.csv");
       c.body = "x";
@@ -47,7 +47,7 @@ describe("ported parity security semantics", () => {
   });
 
   it("GHSA-c5vw-j4hf-j526: attachment never overrides an existing Content-Type", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/a", (c) => {
       c.type = "application/json";
       c.attachment("malicious.html");
@@ -59,7 +59,7 @@ describe("ported parity security semantics", () => {
   });
 
   it("etag setter quotes bare values", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/e", (c) => {
       c.etag = "v42";
       c.body = "x";
@@ -69,7 +69,7 @@ describe("ported parity security semantics", () => {
   });
 
   it("web Response as body merges headers through validated set()", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/r", (c) => {
       // Inner status wins (koa semantics); headers merge via set().
       c.body = new Response("inner", {
@@ -91,7 +91,7 @@ describe("ported parity security semantics", () => {
     // stay on the error response (security middleware must cover error
     // pages); only content-DESCRIBING headers drop, and the 5xx message is
     // never leaked.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/boom", (c) => {
       c.set("X-Before", "1");
       c.set("Content-Length", "999");
@@ -107,7 +107,7 @@ describe("ported parity security semantics", () => {
   });
 
   it("exposed 4xx errors surface their message", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/teapot", (c) => {
       c.throw(418, "short and stout");
     });
@@ -117,7 +117,7 @@ describe("ported parity security semantics", () => {
   });
 
   it("custom status message survives to statusText", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/m", (c) => {
       c.status = 418;
       c.message = "short and stout";
@@ -129,7 +129,7 @@ describe("ported parity security semantics", () => {
   });
 
   it("unhandled requests answer 404 Not Found", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const res = await app.handle(new Request("http://localhost:3000/nowhere"));
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
@@ -143,7 +143,7 @@ describe("ported parity security semantics", () => {
 
 describe("koa corpus locks", () => {
   it("back() REJECTS a cross-origin Referrer (open-redirect defense)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/back", (c) => c.redirect("back", "/alt"));
     const res = await app.handle(
       req("/back", { headers: { referer: "https://evil.example/login" } }),
@@ -161,7 +161,7 @@ describe("koa corpus locks", () => {
   });
 
   it("redirect normalizes absolute targets through URL (backslash-at stays a path)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/r", (c) => c.redirect("http://google.com\\@apple.com"));
     const res = await app.handle(req("/r"));
     // The \@ must never become a userinfo separator (koa redirect.test:17):
@@ -171,7 +171,7 @@ describe("koa corpus locks", () => {
   });
 
   it("attachment: type option, ?-mask fallback, basename, and invalid types", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/inline", (c) => {
       c.attachment("doc.pdf", { type: "inline" });
       c.body = "x";
@@ -202,7 +202,7 @@ describe("koa corpus locks", () => {
   });
 
   it("errors carrying statusCode (not status) are honored; invalid statuses coerce to 500", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/teapot", () => {
       const err = new Error("short and stout") as Error & { statusCode: number };
       err.statusCode = 418;
@@ -218,7 +218,7 @@ describe("koa corpus locks", () => {
   });
 
   it("hostname resolves bracketed IPv6 through URL semantics", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/h", (c) => {
       c.body = c.hostname;
     });
@@ -232,7 +232,7 @@ describe("koa corpus locks", () => {
   });
 
   it("c.URL exposes the live WHATWG URL view", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/u", (c) => {
       c.body = c.URL instanceof URL ? c.URL.pathname : "not a URL";
     });

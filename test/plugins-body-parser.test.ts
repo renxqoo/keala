@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
 import {
   validator,
@@ -25,7 +25,7 @@ const jsonBody = (value: unknown, headers: Record<string, string> = {}): Request
 
 describe("bodyParser: readers", () => {
   it("json/text/arrayBuffer/blob read the memoized body", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     let order: string[] = [];
     app.post("/x", async (c0) => {
@@ -47,7 +47,7 @@ describe("bodyParser: readers", () => {
   });
 
   it("multiple middleware+handler reads share one body consumption", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c0, next) => {
       const c = c0 as ContextWithBody;
@@ -63,7 +63,7 @@ describe("bodyParser: readers", () => {
   });
 
   it("empty bodies: json -> null, text -> empty string", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -74,7 +74,7 @@ describe("bodyParser: readers", () => {
   });
 
   it("urlencoded and multipart formData parse", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -95,7 +95,7 @@ describe("bodyParser: readers", () => {
 
 describe("bodyParser: limits and malformed input", () => {
   it("declared Content-Length over the limit fails fast with 413", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 8 }));
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -107,7 +107,7 @@ describe("bodyParser: limits and malformed input", () => {
   });
 
   it("streamed bodies over the limit abort at the boundary (no Content-Length)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 16 }));
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -132,7 +132,7 @@ describe("bodyParser: limits and malformed input", () => {
   });
 
   it("malformed JSON answers an exposed 400", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -160,7 +160,7 @@ describe("validator", () => {
   });
 
   it("valid bodies populate c.valid; handlers run after", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const ran: string[] = [];
     const mw: RouteHandler = async (_c, next) => {
       ran.push("next");
@@ -176,7 +176,7 @@ describe("validator", () => {
   });
 
   it("invalid bodies answer an exposed 400 listing issues", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let reached = false;
     app.post("/x", validator(schemaOk(false)), () => {
       reached = true;
@@ -189,7 +189,7 @@ describe("validator", () => {
   });
 
   it("empty bodies validate null; malformed JSON answers 400", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const echoNull: StandardSchema = {
       "~standard": {
         version: 1,
@@ -210,7 +210,7 @@ describe("validator", () => {
 
 describe("bodyParser: form part budget", () => {
   it("multipart bodies over the part limit answer 413", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 3 }));
     app.post("/x", (c) => {
       return (c as ContextWithBody).req
@@ -229,7 +229,7 @@ describe("bodyParser: form part budget", () => {
   });
 
   it("multipart bodies within the part limit parse normally", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 10 }));
     app.post("/x", (c) => {
       return (c as ContextWithBody).req
@@ -249,7 +249,7 @@ describe("bodyParser: form part budget", () => {
   });
 
   it("urlencoded pair counts are budgeted too", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 3 }));
     app.post("/x", (c) => {
       return (c as ContextWithBody).req.formData().then((fd) => c.text(String(fd.get("c"))));
@@ -265,7 +265,7 @@ describe("bodyParser: form part budget", () => {
   });
 
   it("the default budget (1000) rejects an amplification body well under the byte limit", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/x", (c) => {
       return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
@@ -287,7 +287,7 @@ describe("bodyParser: form part budget", () => {
 
 describe("bodyParser: coverage top-up", () => {
   it("a quoted boundary is honored", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 5 }));
     app.post("/x", (c) => {
       return (c as ContextWithBody).req.formData().then((fd) => c.text(String(fd.get("f"))));
@@ -301,7 +301,7 @@ describe("bodyParser: coverage top-up", () => {
   });
 
   it("a mixed-CASE boundary is still scanned (value taken verbatim from the header)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 50 }));
     app.post("/x", (c) => {
       return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
@@ -319,7 +319,7 @@ describe("bodyParser: coverage top-up", () => {
   });
 
   it("an 80-char boundary (past RFC 2046, accepted by parsers) is still budgeted", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 50 }));
     app.post("/x", (c) => {
       return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
@@ -335,7 +335,7 @@ describe("bodyParser: coverage top-up", () => {
   });
 
   it("a declared content-length over the limit fails fast with 413", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 16 }));
     app.post("/x", (c) => {
       return (c as ContextWithBody).req.json().then(() => c.text("parsed"));
@@ -353,7 +353,7 @@ describe("bodyParser: coverage top-up", () => {
 
 describe("bodyParser: boundary edge cases", () => {
   it("an empty boundary parameter is treated as absent", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/x", (c) => {
       return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));

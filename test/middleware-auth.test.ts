@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { basicAuth, bearerAuth } from "../src/middleware/auth.ts";
 import {
   bunPasswordHasher,
@@ -22,7 +22,7 @@ const basic = (user: string, pass: string): Record<string, string> => ({
 });
 
 const guarded = (verify: (u: string, p: string) => boolean | Promise<boolean>) => {
-  const app = createApp(quiet);
+  const app = new Honu(quiet);
   app.use(basicAuth({ verify, realm: 'Admin "Area"' }));
   app.get("/secret", (c) => c.text("granted"));
   return app;
@@ -77,7 +77,7 @@ describe("basicAuth", () => {
   });
 
   it("supports passwords containing colons and unicode credentials", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(basicAuth({ verify: (u, p) => p === "pa:ss:word" || (u === "用户" && p === "密码") }));
     app.get("/secret", (c) => c.text("ok"));
     expect((await app.handle(req("/secret", { headers: basic("u", "pa:ss:word") }))).status).toBe(
@@ -97,7 +97,7 @@ describe("basicAuth", () => {
   });
 
   it("supports async verifiers and their rejections", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(
       basicAuth({
         verify: async (u, p) => {
@@ -119,7 +119,7 @@ describe("basicAuth", () => {
 
 describe("bearerAuth", () => {
   const bearerApp = (verify: (t: string) => boolean | Promise<boolean>) => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(bearerAuth({ verify, realm: "API" }));
     app.get("/me", (c) => c.text("ok"));
     return app;

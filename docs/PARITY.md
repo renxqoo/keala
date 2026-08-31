@@ -161,7 +161,7 @@ koa@3.2.1 (`__tests__`), @koa/router@13.0.0 (`test/`), hono@4.13.5 (`src/*.test.
 | application/response.test.js       |     7 | OK      | test/parity-security.test.ts (archived residue) (app.response layer)                                                                                                              |
 | application/toJSON.test.js         |     1 | OK      | test/app.test.ts                                                                                                                                                                  |
 | application/use.test.js            |     4 | OK      | test/app.test.ts (chaining, validation, recompile)                                                                                                                                |
-| index.js                           |     1 | OK      | module export shape (createRouter)                                                                                                                                                |
+| index.js                           |     1 | OK      | module export shape (Router)                                                                                                                                                |
 | lib/layer.js                       |    20 | OK      | test/trie.test.ts (compile: params, regex, optional, wildcard, errors)                                                                                                            |
 | lib/router.js                      |   106 | OK      | test/router.test.ts (methods, params, param-mw, prefix, use/mount, redirect, allowedMethods 405/501, url(), nesting, HEAD fallback)                                               |
 

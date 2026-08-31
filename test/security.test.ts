@@ -15,15 +15,15 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { createError } from "../src/http/errors.ts";
 
 const quiet = { env: "test" } as const;
-const drive = (app: ReturnType<typeof createApp>, request: Request) => app.handle(request);
+const drive = (app: InstanceType<typeof Honu>, request: Request) => app.handle(request);
 
 describe("header injection (response splitting)", () => {
   it("rejects CRLF in header values via set/append", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       expect(() => c.set("X-Safe", "v\r\nSet-Cookie: pwned=1")).toThrow(TypeError);
       expect(() => c.append("X-Safe", "v\nX-Evil: 1")).toThrow(TypeError);
@@ -37,7 +37,7 @@ describe("header injection (response splitting)", () => {
   });
 
   it("keeps CR/LF out of redirect Location values (percent-encodes)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       c.redirect("/ok\r\nSet-Cookie: evil=1");
     });
@@ -49,7 +49,7 @@ describe("header injection (response splitting)", () => {
   });
 
   it("rejects CRLF in status messages", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       expect(() => {
         c.message = "fine\r\nX-Evil: 1";
@@ -60,7 +60,7 @@ describe("header injection (response splitting)", () => {
   });
 
   it("rejects CRLF and NUL in cookie serialization", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       expect(() => c.cookies.set("sid", "v\r\nSet-Cookie: evil=1")).toThrow(TypeError);
       expect(() => c.cookies.set("sid", "v\u0000")).toThrow(TypeError);
@@ -71,7 +71,7 @@ describe("header injection (response splitting)", () => {
   });
 
   it("rejects CRLF in ETag values", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       expect(() => {
         c.etag = 'x"\r\nX-Evil: 1';
@@ -82,7 +82,7 @@ describe("header injection (response splitting)", () => {
   });
 
   it("drops invalid headers arriving via error.headers instead of crashing", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async () => {
       throw createError(503, "down", {
         headers: { "Retry-After": "5", "X-Bad": "v\r\nSet-Cookie: evil=1" },
@@ -98,7 +98,7 @@ describe("header injection (response splitting)", () => {
 
 describe("prototype pollution", () => {
   it("neutralizes __proto__ / constructor / prototype query keys", async () => {
-    const app = createApp();
+    const app = new Honu();
     let captured: Record<string, unknown> | undefined;
     app.use(async (c) => {
       captured = c.query as Record<string, unknown>;
@@ -116,7 +116,7 @@ describe("prototype pollution", () => {
   });
 
   it("rejects __proto__-style header names", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       expect(() => c.set("__proto__", "x")).toThrow(TypeError);
       expect(() => c.set("constructor", "x")).toThrow(TypeError);
@@ -128,7 +128,7 @@ describe("prototype pollution", () => {
   });
 
   it("ignores __proto__ cookie names instead of mutating the session map", async () => {
-    const app = createApp({ keys: ["k"] });
+    const app = new Honu({ keys: ["k"] });
     app.use(async (c) => {
       expect(c.cookies.get("__proto__")).toBeUndefined();
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
@@ -143,7 +143,7 @@ describe("prototype pollution", () => {
   });
 
   it("keeps state and params maps unpollutable", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.get("/files/*", (c) => {
       c.state["__proto__"] = "x";
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
@@ -155,7 +155,7 @@ describe("prototype pollution", () => {
 
 describe("malformed input must never crash the process", () => {
   it("survives broken percent-encoding in paths and queries", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.get("/files/:name", (c) => {
       c.body = String(c.params?.name);
     });
@@ -165,7 +165,7 @@ describe("malformed input must never crash the process", () => {
   });
 
   it("survives enormous paths and query strings", async () => {
-    const app = createApp();
+    const app = new Honu();
     let queryKeys = 0;
     app.use(async (c) => {
       queryKeys = Object.keys(c.query).length;
@@ -179,7 +179,7 @@ describe("malformed input must never crash the process", () => {
   });
 
   it("survives malformed cookie headers", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       expect(c.cookies.get("session")).toBe("ok");
       c.body = "ok";
@@ -193,7 +193,7 @@ describe("malformed input must never crash the process", () => {
   });
 
   it("survives hostile accept headers", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       expect(c.accepts("html")).toBeDefined();
       c.body = "ok";
@@ -211,7 +211,7 @@ describe("malformed input must never crash the process", () => {
   });
 
   it("answers with a clean 500 when middleware throws non-errors", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async () => {
       throw { malicious: "object" };
     });
@@ -223,7 +223,7 @@ describe("malformed input must never crash the process", () => {
 
 describe("information disclosure", () => {
   it("never leaks stack traces or internals on 5xx", async () => {
-    const app = createApp({ env: "production" });
+    const app = new Honu({ env: "production" });
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     app.use(async () => {
       throw new Error("SECRET_DATABASE_PASSWORD leak");
@@ -237,7 +237,7 @@ describe("information disclosure", () => {
   });
 
   it("keeps 4xx exposed messages but sanitizes nothing else", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       c.throw(400, "invalid input");
     });
@@ -246,7 +246,7 @@ describe("information disclosure", () => {
   });
 
   it("escapes HTML in redirect bodies (XSS in fallback page)", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       c.redirect("/next?<script>alert(document.domain)</script>");
     });
@@ -260,7 +260,7 @@ describe("information disclosure", () => {
   });
 
   it("escapes quotes in redirect href attributes", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       c.redirect('/a?x="onmouseover=alert(1)');
     });
@@ -275,7 +275,7 @@ describe("information disclosure", () => {
 
 describe("cookie integrity", () => {
   it("rejects forged signatures", async () => {
-    const app = createApp({ keys: ["production-key"] });
+    const app = new Honu({ keys: ["production-key"] });
     app.use(async (c) => {
       c.body = c.cookies.get("sid") ?? "anonymous";
     });
@@ -287,7 +287,7 @@ describe("cookie integrity", () => {
   });
 
   it("does not accept cookies signed with a retired key as new signatures", async () => {
-    const app = createApp({ keys: ["new-key", "old-key"] });
+    const app = new Honu({ keys: ["new-key", "old-key"] });
     app.use(async (c) => {
       if (c.path === "/set") {
         c.cookies.set("sid", "fresh", { signed: true });
@@ -310,7 +310,7 @@ describe("cookie integrity", () => {
 
 describe("routing abuse resistance", () => {
   it("does not match path traversal out of the wildcard scope via decode", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.get("/assets/*", (c) => {
       c.body = `wildcard:${c.params?.wildcard}`;
     });
@@ -320,7 +320,7 @@ describe("routing abuse resistance", () => {
   });
 
   it("treats conflicting routes deterministically (no crash on adversarial patterns)", () => {
-    const app = createApp();
+    const app = new Honu();
     expect(() => {
       app.get("/a/:x(\\d+)", () => {});
       app.get("/a/:x([a-z]+)", () => {});
@@ -342,7 +342,7 @@ describe("routing abuse resistance", () => {
 
 describe("CONFIRMED-BUG: null-body finalization", () => {
   it('CONFIRMED-BUG(now fixed): a 204 response must have an empty body, not the text "null" (TODO-BUG: respond.ts bodyInitOf)', async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use((c) => {
       c.status = 204;
     });
@@ -352,7 +352,7 @@ describe("CONFIRMED-BUG: null-body finalization", () => {
   });
 
   it('CONFIRMED-BUG(now fixed): explicit null body then explicit status serves "" not "null" (TODO-BUG: respond.ts bodyInitOf)', async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use((c) => {
       c.body = null;
       c.body = undefined as never; // koa allows an undefined body assignment

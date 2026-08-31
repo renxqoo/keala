@@ -47,7 +47,7 @@
  * "/a//b" throws; url() with an empty-string param value emits an
  * unmatchable "/a//b" (express behaves the same); a redirect destination
  * carrying "*" without ":" is used verbatim; parent app.param wins over a
- * mounted router's param for the same name; createRouter does not validate
+ * mounted router's param for the same name; Router does not validate
  * method names until mount; ALL routes answer truly-unknown methods with
  * the handler instead of 501; "OPTIONS *" server-wide behavior is
  * runtime-dependent; "/w//" yields an absent wildcard param while "/w/"
@@ -56,8 +56,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
-import { createRouter } from "../src/router/group.ts";
+import { Honu } from "../src/core/app.ts";
+import { Router } from "../src/router/group.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
@@ -68,7 +68,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use middleware", () => {
   it("global middleware runs exactly once for a doubly-registered route", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let globals = 0;
     app.use((_c, next) => {
       globals++;
@@ -85,7 +85,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
   });
 
   it("execution order is global > layer1 > layer2 with a single global pass", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const order: string[] = [];
     app.use(async (_c, next) => {
       order.push("global");
@@ -105,7 +105,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
   });
 
   it("still doubles after a rebuild (app.use registered after the duplicates)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let globals = 0;
     app.get("/dup", async (_c, next) => {
       await next();
@@ -122,13 +122,13 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
   });
 
   it("a route registered via mount() and again directly doubles the global too", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let globals = 0;
     app.use((_c, next) => {
       globals++;
       return next();
     });
-    const sub = createRouter();
+    const sub = new Router();
     sub.get("/x", async (_c, next) => {
       await next();
     });
@@ -145,7 +145,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
 
 describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
   it("app.get('/*') answers GET / (express/hono semantics; '/*' is the catch-all)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
     const res = await app.handle(req("/"));
     expect(res.status).toBe(200);
@@ -153,7 +153,7 @@ describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
   });
 
   it("url() output for an empty root wildcard round-trips", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("w", "/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
     const url = app.url("w", { wildcard: "" }); // buildURL emits "/"
     expect(url).toBe("/");
@@ -162,7 +162,7 @@ describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
   });
 
   it("a static '/' route still wins over the root wildcard (priority unchanged)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/*", (c) => c.text("wild"));
     app.get("/", (c) => c.text("root"));
     const res = await app.handle(req("/"));
@@ -176,23 +176,23 @@ describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
 
 describe("R5-3 CONFIRMED-BUG: redirect destination requires a param the source only captures optionally", () => {
   it("registration must throw (eager validation — the param can be absent at runtime)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     // "/o" (no :x captured) would otherwise 500 inside buildURL per request.
     expect(() => app.redirect("/o/:x?", "/n/:x", 302)).toThrow();
   });
 
   it("mid-pattern optional source params are covered by the same contract", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.redirect("/a/:x?/b", "/c/:x", 302)).toThrow();
   });
 
   it("locks correct: an optional destination param needs no such guarantee", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.redirect("/o/:x?", "/n/:x?", 302)).not.toThrow();
   });
 
   it("locks correct: a required source param satisfies a required destination param", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.redirect("/o/:x", "/n/:x", 302)).not.toThrow();
   });
 });
@@ -203,7 +203,7 @@ describe("R5-3 CONFIRMED-BUG: redirect destination requires a param the source o
 
 describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middleware", () => {
   const innerRouter = () => {
-    const inner = createRouter();
+    const inner = new Router();
     inner.use(async (c, next) => {
       c.set("X-Inner", "1");
       await next();
@@ -213,7 +213,7 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   };
 
   it("the inner middleware runs through the middle app (control)", async () => {
-    const mid = createApp(quiet);
+    const mid = new Honu(quiet);
     mid.mount("/r", innerRouter());
     const res = await mid.handle(req("/r/leaf"));
     expect(res.status).toBe(200);
@@ -221,8 +221,8 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   });
 
   it("the inner middleware must survive remounting the middle app", async () => {
-    const app = createApp(quiet);
-    const mid = createApp(quiet);
+    const app = new Honu(quiet);
+    const mid = new Honu(quiet);
     mid.mount("/r", innerRouter());
     app.mount("/b", mid);
     const res = await app.handle(req("/b/r/leaf"));
@@ -231,16 +231,16 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   });
 
   it("three levels deep: the innermost use() middleware must still run", async () => {
-    const app = createApp(quiet);
-    const leaf = createRouter();
+    const app = new Honu(quiet);
+    const leaf = new Router();
     leaf.use(async (c, next) => {
       c.set("X-Leaf", "1");
       await next();
     });
     leaf.get("/x", (c) => c.text("x"));
-    const mid1 = createApp(quiet);
+    const mid1 = new Honu(quiet);
     mid1.mount("/m1", leaf);
-    const mid2 = createApp(quiet);
+    const mid2 = new Honu(quiet);
     mid2.mount("/m2", mid1);
     app.mount("/top", mid2);
     const res = await app.handle(req("/top/m2/m1/x"));
@@ -249,14 +249,14 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   });
 
   it("locks correct: the middle app's own global middleware and inner param middleware survive remount", async () => {
-    const app = createApp(quiet);
-    const inner = createRouter();
+    const app = new Honu(quiet);
+    const inner = new Router();
     inner.param("id", async (c, next) => {
       c.set("X-Param", c.params?.["id"] ?? "");
       await next();
     });
     inner.get("/i/:id", (c) => c.text("i"));
-    const mid = createApp(quiet);
+    const mid = new Honu(quiet);
     mid.use(async (c, next) => {
       c.set("X-Mid", "1");
       await next();

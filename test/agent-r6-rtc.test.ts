@@ -24,7 +24,7 @@
  *         finalizeGuarded converts into a plain 500. Seeds: `c.body =
  *         someStream` (or `c.body = new Response(stream)`, whose body setter
  *         unwraps to `value.body`) on a route wrapped in cache() with
- *         `createApp({ onStreamError })`. Without onStreamError the same
+ *         `new Honu({ onStreamError })`. Without onStreamError the same
  *         route streams fine (locked below), so the regression is exactly
  *         the r5 materialization interacting with the stream observer.
  *         Fix direction: bail out (before materializing) whenever
@@ -146,7 +146,7 @@
  */
 import { describe, expect, it } from "vitest";
 import Negotiator from "negotiator";
-import { createApp, type Application } from "../src/index.ts";
+import { Honu, type Application } from "../src/index.ts";
 import { cache } from "../src/middleware/cache.ts";
 import {
   acceptsCharset,
@@ -174,7 +174,7 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
 
   it("stream body + onStreamError + cache() must stream, not 500 (R6-1)", async () => {
     const seen: string[] = [];
-    const app = createApp({ ...quiet, onStreamError: (e) => seen.push(e.message) });
+    const app = new Honu({ ...quiet, onStreamError: (e) => seen.push(e.message) });
     app.get("/s", cache(), (c) => {
       c.body = streamOf(["hello"]);
     });
@@ -188,7 +188,7 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
   });
 
   it("c.body = new Response(stream) hits the same lock (R6-1b)", async () => {
-    const app = createApp({ ...quiet, onStreamError: () => undefined });
+    const app = new Honu({ ...quiet, onStreamError: () => undefined });
     app.get("/s", cache(), (c) => {
       c.body = new Response(streamOf(["world"]));
     });
@@ -198,7 +198,7 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
   });
 
   it("locks: the same route streams fine without the onStreamError hook", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/s", cache(), (c) => {
       c.body = streamOf(["hello"]);
     });
@@ -209,7 +209,7 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
 
   it("locks: state-mode TEXTUAL bodies are stored and replayed (the r5 goal)", async () => {
     let n = 0;
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/t", cache({ ttl: 60_000 }), (c) => {
       n += 1;
       c.body = `v${n}`;
@@ -223,7 +223,7 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
 });
 describe("R6-B cache(): ttl window [RED]", () => {
   it("an entry must live ttl from RESPONSE time, not request start (R6-8)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let n = 0;
     app.get("/slow", cache({ ttl: 120 }), async (c) => {
       n += 1;
@@ -240,7 +240,7 @@ describe("R6-B cache(): ttl window [RED]", () => {
 });
 describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", () => {
   it("post-commit c.body = null upgrades to 204 (koa parity) (R6-2)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get(
       "/x",
       async (c, next) => {
@@ -257,7 +257,7 @@ describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", (
   });
 
   it("post-commit redirect keeps a committed 301/308 (R6-3)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get(
       "/x",
       async (c, next) => {
@@ -274,7 +274,7 @@ describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", (
   });
 
   it("locks: post-commit c.status override wins over the commit (flag 32)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get(
       "/x",
       async (c, next) => {
@@ -288,7 +288,7 @@ describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", (
   });
 
   it("locks: post-commit c.message override wins (flag 64), pre-commit staging superseded", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get(
       "/x",
       async (c, next) => {
@@ -303,7 +303,7 @@ describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", (
     const res = await drive(app, new Request("http://good.com/x"));
     expect(res.statusText).toBe("After Commit");
 
-    const app2 = createApp(quiet);
+    const app2 = new Honu(quiet);
     app2.get("/x", async (c) => {
       c.message = "Staged";
       return new Response("ok");
@@ -313,7 +313,7 @@ describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", (
   });
 
   it("locks: post-commit body write replaces the committed body (flag 128)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get(
       "/x",
       async (c, next) => {
@@ -327,7 +327,7 @@ describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", (
   });
 
   it("locks: post-commit 204 drops content-describing headers", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get(
       "/x",
       async (c, next) => {
@@ -365,7 +365,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   ];
 
   it("every relative-looking foreign target stays a same-origin path", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     HOSTILE.forEach((target, i) => {
       app.get(`/r${i}`, (c) => c.redirect(target));
     });
@@ -382,7 +382,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   });
 
   it("locks: an explicit scheme:// target is the developer's absolute redirect (koa parity)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/abs", (c) => c.redirect("https:////example.org/x/./y"));
     const res = await drive(app, new Request("http://good.com/abs"));
     // Matches ^https?:\/\// → normalized through new URL — deliberate, same
@@ -392,7 +392,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   });
 
   it("locks: same-origin //host targets pass through untouched", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/same", (c) => c.redirect("//good.com:8080/back"));
     const res = await drive(app, new Request("http://good.com:8080/same"));
     expect(res.headers.get("location")).toBe("//good.com:8080/back");
@@ -428,7 +428,7 @@ describe("R6-E negotiation: explicit refusals vs wildcards [RED + locks]", () =>
 
   it("absent Accept-Encoding means identity-only (R6-5)", async () => {
     // App-level (the real-world path): a request with NO Accept-Encoding…
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let answered: unknown = "unset";
     app.get("/e", (c) => {
       answered = c.acceptsEncodings(["gzip", "identity", "deflate"]);

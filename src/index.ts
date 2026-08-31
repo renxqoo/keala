@@ -1,7 +1,7 @@
 /**
  * honu — hono-fast, onion-ergonomic, Bun-native.
  *
- * The ROOT entry is the app surface: core (app factory, router, composition,
+ * The ROOT entry is the app surface: core (the Honu class, router,
  * context, errors, cookie signing) plus the plugin and the in-handler
  * helpers. Middleware lives at `honu/middleware` (aggregate) or
  * `honu/middleware/<name>` (per file); the Node adapter at
@@ -10,10 +10,10 @@
  * runtime choice).
  *
  * ```ts
- * import { createApp } from "honu";
+ * import { Honu } from "honu";
  * import { cors } from "honu/middleware";
  *
- * const app = createApp({ keys: ["secret"] })
+ * const app = new Honu({ keys: ["secret"] })
  *
  * app.use(cors())                                   // global onion middleware
  * app.get("/users/:id", (c) => c.json({ id: c.params.id }))   // return style
@@ -23,9 +23,9 @@
  * ```
  */
 
-export { createApp, type Application } from "./core/app.ts";
-export { createRouter, type Router } from "./router/group.ts";
-export type { ErrorListener, NotFoundHandler } from "./core/app.ts";
+export { Honu, type Application } from "./core/app.ts";
+export { Router } from "./router/group.ts";
+export type { ErrorListener, NotFoundHandler, WebSocketHandlers } from "./core/application.ts";
 export {
   compose,
   direct,

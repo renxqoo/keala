@@ -9,7 +9,7 @@ import { gzipSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { streamText } from "../src/helpers/streams.ts";
 import { cache } from "../src/middleware/cache.ts";
@@ -20,7 +20,7 @@ describe("R7-CROSS-1 responseCache preserves representation bytes", () => {
   it("replays an encoded textual Response byte-for-byte", async () => {
     const packed = new Uint8Array(gzipSync("hello"));
     let computed = 0;
-    const app = createApp({ env: "test" });
+    const app = new Honu({ env: "test" });
     app.get("/encoded", cache(), () => {
       computed++;
       return new Response(packed, {

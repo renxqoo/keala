@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 
 const quiet = { env: "test", silent: true } as const;
 
@@ -32,7 +32,7 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
      */
     const observed: string[] = [];
     const timerFired = deferred();
-    const app = createApp({ ...quiet, pooling: true });
+    const app = new Honu({ ...quiet, pooling: true });
     app.get("/first", (c) => {
       setTimeout(() => {
         try {
@@ -81,7 +81,7 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
     const victimStarted = deferred();
     const releaseVictim = deferred();
 
-    const app = createApp({ ...quiet, pooling: true });
+    const app = new Honu({ ...quiet, pooling: true });
     app.use((c, next) => {
       if (c.path === "/early") {
         void next();
@@ -179,7 +179,7 @@ describe("R7 core: response headers do not wait for an open stream body", () => 
      * EOF or 8192 bytes before constructing the response.
      */
     const open = openBody();
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.set("X-Late", "1");
@@ -205,7 +205,7 @@ describe("R7 core: response headers do not wait for an open stream body", () => 
      * below that budget forever.
      */
     const open = openBody();
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/stream", () => new Response(open.body));
 
     const pending = Promise.resolve(

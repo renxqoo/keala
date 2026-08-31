@@ -1,5 +1,5 @@
 /**
- * Standalone route groups — `createRouter({ prefix })`.
+ * Standalone route groups — `new Router({ prefix })`.
  *
  * A group registers routes up front and merges into an app at `mount()` time
  * (route-table merge semantics: an unmatched sub-route falls through to the
@@ -11,51 +11,25 @@
 import { assertRedirectCaptures, buildURL, redirectTargetSegments } from "./router.ts";
 import { compilePattern } from "./pattern.ts";
 import type { RouteDef, RouteHandler } from "./router.ts";
+import type { Application } from "../core/application.ts";
+
 /** Standalone route group: registers routes now, mounts later. */
-export interface Router {
-  get(path: string, ...handlers: RouteHandler[]): Router;
-  get(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  post(path: string, ...handlers: RouteHandler[]): Router;
-  post(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  put(path: string, ...handlers: RouteHandler[]): Router;
-  put(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  patch(path: string, ...handlers: RouteHandler[]): Router;
-  patch(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  delete(path: string, ...handlers: RouteHandler[]): Router;
-  delete(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  head(path: string, ...handlers: RouteHandler[]): Router;
-  head(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  options(path: string, ...handlers: RouteHandler[]): Router;
-  options(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  all(path: string, ...handlers: RouteHandler[]): Router;
-  all(name: string, path: string, ...handlers: RouteHandler[]): Router;
-  on(method: string, path: string, ...handlers: RouteHandler[]): Router;
-  /** Middleware prepended to every route of this router. */
-  use(...middleware: RouteHandler[]): Router;
-  /** Per-parameter middleware, run for routes that capture `name`. */
-  param(name: string, middleware: RouteHandler): Router;
-  redirect(source: string, destination: string, code?: number): Router;
-  url(name: string, params?: Record<string, string>): string;
-  route(name: string): string | undefined;
-  readonly defs: readonly RouteDef[];
-  /** Param middleware registered on this router (consumed at mount time). */
-  readonly paramMiddlewares: ReadonlyMap<string, RouteHandler>;
-  /** Router-level middleware (applied at mount time, whenever registered). */
-  readonly middleware: readonly RouteHandler[];
-}
+export class Router {
+  #defs: RouteDef[] = [];
+  #middleware: RouteHandler[] = [];
+  #params = new Map<string, RouteHandler>();
+  #named = new Map<string, RouteDef>();
+  #prefix: string;
 
-import type { Application } from "../core/app.ts";
+  constructor(options: { prefix?: string } = {}) {
+    const raw = options.prefix ?? "";
+    if (raw.length > 0 && raw.charCodeAt(0) !== 47 /* "/" */) {
+      throw new TypeError(`Router prefix must start with "/": ${JSON.stringify(raw)}`);
+    }
+    this.#prefix = raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
+  }
 
-/** Create a standalone router: `const api = createRouter({ prefix: "/v1" })`. */
-export const createRouter = (options: { prefix?: string } = {}): Router => {
-  const defs: RouteDef[] = [];
-  const middleware: RouteHandler[] = [];
-  const params = new Map<string, RouteHandler>();
-  const named = new Map<string, RouteDef>();
-  let prefix = options.prefix ?? "";
-  if (prefix.length > 1 && prefix.endsWith("/")) prefix = prefix.slice(0, -1);
-
-  const add = (method: string, path: string, handlers: RouteHandler[], name?: string): void => {
+  #add(method: string, path: string, handlers: RouteHandler[], name?: string): void {
     if (handlers.length === 0) {
       throw new TypeError("Route registration requires at least one handler");
     }
@@ -65,15 +39,12 @@ export const createRouter = (options: { prefix?: string } = {}): Router => {
       }
     }
     // compilePattern runs at mount() for group defs — enforce its leading-
-    // slash rule eagerly (on BOTH the path and a configured prefix) instead
-    // of letting `${prefix}${path}` manufacture paths like "/v1users".
+    // slash rule eagerly instead of letting `${prefix}${path}` manufacture
+    // paths like "/v1users".
     if (path.length > 0 && path.charCodeAt(0) !== 47 /* "/" */) {
       throw new TypeError(`Route path must start with "/": ${JSON.stringify(path)}`);
     }
-    if (prefix.length > 0 && prefix.charCodeAt(0) !== 47 /* "/" */) {
-      throw new TypeError(`Router prefix must start with "/": ${JSON.stringify(options.prefix)}`);
-    }
-    const full = `${prefix}${path}` || "/";
+    const full = `${this.#prefix}${path}` || "/";
     const def: RouteDef = {
       method: method.toUpperCase(),
       path: full.length > 1 && full.endsWith("/") ? full.slice(0, -1) : full,
@@ -82,92 +53,148 @@ export const createRouter = (options: { prefix?: string } = {}): Router => {
       handlers,
       name,
     };
-    defs.push(def);
-    if (name !== undefined) named.set(name, def);
-  };
+    this.#defs.push(def);
+    if (name !== undefined) this.#named.set(name, def);
+  }
 
-  const shortcut =
-    (method: string) =>
-    (pathOrName: string, pathOrHandler: string | RouteHandler, ...rest: RouteHandler[]): Router => {
-      if (typeof pathOrHandler === "string") {
-        add(method, pathOrHandler, rest, pathOrName);
-      } else {
-        add(method, pathOrName, [pathOrHandler, ...rest]);
+  #shortcut(
+    method: string,
+    pathOrName: string,
+    pathOrHandler: string | RouteHandler | undefined,
+    rest: RouteHandler[],
+  ): Router {
+    if (typeof pathOrHandler === "string") {
+      // (name, path, ...handlers) form.
+      this.#add(method, pathOrHandler, rest, pathOrName);
+    } else {
+      // (path, handler, ...more) — a missing handler lets #add's "at least
+      // one handler" guard throw, the same runtime validation the app-level
+      // shortcuts surface.
+      const handlers = pathOrHandler === undefined ? rest : [pathOrHandler, ...rest];
+      this.#add(method, pathOrName, handlers);
+    }
+    return this;
+  }
+
+  get(path: string, ...handlers: RouteHandler[]): Router;
+  get(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  get(pathOrName: string, pathOrHandler?: string | RouteHandler, ...rest: RouteHandler[]): Router {
+    return this.#shortcut("GET", pathOrName, pathOrHandler, rest);
+  }
+  post(path: string, ...handlers: RouteHandler[]): Router;
+  post(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  post(pathOrName: string, pathOrHandler?: string | RouteHandler, ...rest: RouteHandler[]): Router {
+    return this.#shortcut("POST", pathOrName, pathOrHandler, rest);
+  }
+  put(path: string, ...handlers: RouteHandler[]): Router;
+  put(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  put(pathOrName: string, pathOrHandler?: string | RouteHandler, ...rest: RouteHandler[]): Router {
+    return this.#shortcut("PUT", pathOrName, pathOrHandler, rest);
+  }
+  patch(path: string, ...handlers: RouteHandler[]): Router;
+  patch(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  patch(
+    pathOrName: string,
+    pathOrHandler?: string | RouteHandler,
+    ...rest: RouteHandler[]
+  ): Router {
+    return this.#shortcut("PATCH", pathOrName, pathOrHandler, rest);
+  }
+  delete(path: string, ...handlers: RouteHandler[]): Router;
+  delete(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  delete(
+    pathOrName: string,
+    pathOrHandler?: string | RouteHandler,
+    ...rest: RouteHandler[]
+  ): Router {
+    return this.#shortcut("DELETE", pathOrName, pathOrHandler, rest);
+  }
+  head(path: string, ...handlers: RouteHandler[]): Router;
+  head(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  head(pathOrName: string, pathOrHandler?: string | RouteHandler, ...rest: RouteHandler[]): Router {
+    return this.#shortcut("HEAD", pathOrName, pathOrHandler, rest);
+  }
+  options(path: string, ...handlers: RouteHandler[]): Router;
+  options(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  options(
+    pathOrName: string,
+    pathOrHandler?: string | RouteHandler,
+    ...rest: RouteHandler[]
+  ): Router {
+    return this.#shortcut("OPTIONS", pathOrName, pathOrHandler, rest);
+  }
+  all(path: string, ...handlers: RouteHandler[]): Router;
+  all(name: string, path: string, ...handlers: RouteHandler[]): Router;
+  all(pathOrName: string, pathOrHandler?: string | RouteHandler, ...rest: RouteHandler[]): Router {
+    return this.#shortcut("ALL", pathOrName, pathOrHandler, rest);
+  }
+
+  on(method: string, path: string, ...handlers: RouteHandler[]): Router {
+    this.#add(method, path, handlers);
+    return this;
+  }
+
+  use(...mw: RouteHandler[]): Router {
+    for (const handler of mw) {
+      if (typeof handler !== "function") {
+        throw new TypeError("router.use() requires middleware functions");
       }
-      return router;
-    };
+      this.#middleware.push(handler);
+    }
+    return this;
+  }
 
-  const urlOf = (name: string, values: Record<string, string>): string => {
-    const def = named.get(name);
+  param(name: string, middleware: RouteHandler): Router {
+    if (typeof name !== "string" || name.length === 0) {
+      throw new TypeError("router.param() requires a parameter name");
+    }
+    if (typeof middleware !== "function") {
+      throw new TypeError("router.param() requires a middleware function");
+    }
+    this.#params.set(name, middleware);
+    return this;
+  }
+
+  redirect(source: string, destination: string, code = 301): Router {
+    // A destination PATH carrying `:params` is rebuilt from the matched
+    // route's captured values (koa-router behavior); absolute URLs and
+    // scheme-relative targets are verbatim Locations.
+    const destSegments = redirectTargetSegments(destination);
+    if (destSegments !== null) assertRedirectCaptures(source, destSegments);
+    this.#add("GET", source, [
+      (c) => {
+        const target = destSegments === null ? destination : buildURL(destSegments, c.params ?? {});
+        c.status = code;
+        c.redirect(target);
+      },
+    ]);
+    return this;
+  }
+
+  url(name: string, values: Record<string, string> = Object.create(null)): string {
+    const def = this.#named.get(name);
     if (def === undefined) {
       throw new Error(`No route registered under name: ${JSON.stringify(name)}`);
     }
     return buildURL(compilePattern(def.path).segments, values);
-  };
+  }
 
-  const router: Router = {
-    get: shortcut("GET"),
-    post: shortcut("POST"),
-    put: shortcut("PUT"),
-    patch: shortcut("PATCH"),
-    delete: shortcut("DELETE"),
-    head: shortcut("HEAD"),
-    options: shortcut("OPTIONS"),
-    all: shortcut("ALL"),
-    on: (method, path, ...handlers) => {
-      add(method, path, handlers);
-      return router;
-    },
-    use(...mw) {
-      for (const handler of mw) {
-        if (typeof handler !== "function") {
-          throw new TypeError("router.use() requires middleware functions");
-        }
-        middleware.push(handler);
-      }
-      return router;
-    },
-    param(name, handler) {
-      if (typeof name !== "string" || name.length === 0) {
-        throw new TypeError("router.param() requires a parameter name");
-      }
-      if (typeof handler !== "function") {
-        throw new TypeError("router.param() requires a middleware function");
-      }
-      params.set(name, handler);
-      return router;
-    },
-    redirect(source, destination, code = 301) {
-      // A destination PATH carrying `:params` is rebuilt from the matched
-      // route's captured values (koa-router behavior); absolute URLs and
-      // scheme-relative targets are verbatim Locations.
-      const destSegments = redirectTargetSegments(destination);
-      if (destSegments !== null) assertRedirectCaptures(source, destSegments);
-      add("GET", source, [
-        (c) => {
-          const target =
-            destSegments === null ? destination : buildURL(destSegments, c.params ?? {});
-          c.status = code;
-          c.redirect(target);
-        },
-      ]);
-      return router;
-    },
-    url: (name, values = Object.create(null)) => urlOf(name, values),
-    route: (name) => named.get(name)?.path,
-    get defs(): readonly RouteDef[] {
-      return defs;
-    },
-    get paramMiddlewares(): ReadonlyMap<string, RouteHandler> {
-      return params;
-    },
-    get middleware(): readonly RouteHandler[] {
-      return middleware;
-    },
-  };
+  route(name: string): string | undefined {
+    return this.#named.get(name)?.path;
+  }
 
-  return router;
-};
+  get defs(): readonly RouteDef[] {
+    return this.#defs;
+  }
+  /** Param middleware registered on this router (consumed at mount time). */
+  get paramMiddlewares(): ReadonlyMap<string, RouteHandler> {
+    return this.#params;
+  }
+  /** Router-level middleware (applied at mount time, whenever registered). */
+  get middleware(): readonly RouteHandler[] {
+    return this.#middleware;
+  }
+}
 
 export const isRouter = (sub: Router | Application): sub is Router =>
   Array.isArray((sub as Router).defs) && !("router" in sub);

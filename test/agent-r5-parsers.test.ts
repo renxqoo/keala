@@ -6,14 +6,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { acceptsCharset, acceptsEncoding, acceptsType } from "../src/negotiation/accepts.ts";
 import { createBodyParser } from "../src/plugins/body-parser.ts";
 import { validator } from "../src/middleware/validator.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
-const drive = (app: ReturnType<typeof createApp>, req: Request) => app.handle(req);
+const drive = (app: InstanceType<typeof Honu>, req: Request) => app.handle(req);
 
 /** Run one request through global middleware and hand the context back. */
 const probe = async (
@@ -22,7 +22,7 @@ const probe = async (
   opts: Record<string, unknown> = {},
   url = "http://x/",
 ): Promise<unknown> => {
-  const app = createApp({ ...quiet, ...opts });
+  const app = new Honu({ ...quiet, ...opts });
   let captured: Context | undefined;
   app.use(async (c) => {
     captured = c;
@@ -114,7 +114,7 @@ describe("R2 (bug): a param'd Accept range must not match the bare server type",
 
 describe("R3 (bug): validator renders malformed issues instead of crashing", () => {
   it("a null entry in `issues` yields an exposed 400, not a 500", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     const schema = {
       "~standard": {

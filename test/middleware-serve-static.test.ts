@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import {
   isWithinRoot,
   resolveRelativeSegments,
@@ -44,7 +44,7 @@ const OUTSIDE_NAME = "bk-outside-secret";
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
 const appWith = () => {
-  const app = createApp(quiet);
+  const app = new Honu(quiet);
   app.use(serveStatic({ root }));
   return app;
 };
@@ -65,7 +65,7 @@ describe("serveStatic: serving", () => {
   });
 
   it("nested paths and index:false behave", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root, index: false }));
     expect((await app.handle(req("/"))).status).toBe(404);
     expect((await app.handle(req("/sub/deep.css"))).status).toBe(200);
@@ -118,7 +118,7 @@ describe("serveStatic: security matrix", () => {
     // must refuse to decode that into guarded/secret.txt and serve it.
     await mkdir(join(root, "guarded"));
     await writeFile(join(root, "guarded", "secret.txt"), "TOP SECRET");
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root }));
     for (const path of [
       "/guarded%2Fsecret.txt",
@@ -137,7 +137,7 @@ describe("serveStatic: security matrix", () => {
   });
 
   it("only GET/HEAD are served; other methods fall through", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root }));
     for (const method of ["POST", "DELETE", "PUT"]) {
       const res = await app.handle(new Request(`http://localhost:3000/app.js`, { method }));
@@ -154,7 +154,7 @@ describe("serveStatic: security matrix", () => {
 
   it("symlinks are denied by default and served when opted in", async () => {
     expect((await appWith().handle(req("/link.js"))).status).toBe(403);
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root, followSymlinks: true }));
     const res = await app.handle(req("/link.js"));
     expect(res.status).toBe(200);
@@ -162,7 +162,7 @@ describe("serveStatic: security matrix", () => {
   });
 
   it("prefix stripping serves mounted assets", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root, prefix: "/assets" }));
     const res = await app.handle(req("/assets/report.txt"));
     expect(await res.text()).toBe("year-end report");
@@ -214,21 +214,21 @@ describe("serveStatic: platform separators", () => {
 
 describe("serveStatic: coverage top-up", () => {
   it("a directory whose index is missing answers 404", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root }));
     const res = await app.handle(req("/sub"));
     expect(res.status).toBe(404);
   });
 
   it("a configured index escaping the root is refused", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root, index: `../../${OUTSIDE_NAME}/secret.txt` }));
     const res = await app.handle(req("/sub"));
     expect(res.status).toBe(403);
   });
 
   it("malformed percent escapes pass through verbatim and miss", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(serveStatic({ root }));
     const res = await app.handle(req("/%FF%FE%zz"));
     expect(res.status).toBe(404);

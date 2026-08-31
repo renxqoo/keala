@@ -5,17 +5,17 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { createBodyParser } from "../src/plugins/body-parser.ts";
 import { validator, type ContextWithValid } from "../src/middleware/validator.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
-const drive = (app: ReturnType<typeof createApp>, req: Request) => app.handle(req);
+const drive = (app: InstanceType<typeof Honu>, req: Request) => app.handle(req);
 
 describe("bodyParser locks correct behavior", () => {
   it("a second reader with a SMALLER limit 413s even on cached bytes", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 5, formLimit: 1000 }));
     app.post("/", async (c) => {
       const f = await (c as unknown as { req: { formData(): Promise<FormData> } }).req.formData();
@@ -40,7 +40,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("multiple readers share the memoized bytes", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { text(): Promise<string>; json(): Promise<unknown> } })
@@ -61,7 +61,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("arrayBuffer/blob share the json limit (one byte budget for data readers)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 4 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { arrayBuffer(): Promise<Uint8Array> } }).req;
@@ -77,7 +77,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("a declared content-length below the real streamed size is caught while reading", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 10 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { text(): Promise<string> } }).req;
@@ -103,7 +103,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("a declared content-length above the real size reads to completion", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 100 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { text(): Promise<string> } }).req;
@@ -128,7 +128,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("an oversized DECLARED length fails fast before any read", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 8 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { text(): Promise<string> } }).req;
@@ -147,7 +147,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("json() of an empty body is null, not a parse error", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { json(): Promise<unknown> } }).req;
@@ -159,7 +159,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("urlencoded part budget: separators+1 against the limit", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 5 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { formData(): Promise<FormData> } }).req;
@@ -187,7 +187,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("multipart budget: quoted boundary containing ';' is honored (parts = occurrences-1)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 2 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { formData(): Promise<FormData> } }).req;
@@ -214,7 +214,7 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("multipart with zero delimiter hits skips the budget (runtime answers 400)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ formPartLimit: 1 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { formData(): Promise<FormData> } }).req;
@@ -237,13 +237,13 @@ describe("bodyParser locks correct behavior", () => {
   });
 
   it("installing the plugin twice fails loudly (decorate collision guard)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     expect(() => app.use(createBodyParser())).toThrow(TypeError);
   });
 
   it("textLimit is independent of jsonLimit", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ textLimit: 3, jsonLimit: 1000 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { text(): Promise<string> } }).req;
@@ -276,7 +276,7 @@ describe("validator locks correct behavior", () => {
 
   it("an empty body validates null (bytes.length === 0 → parsed = null)", async () => {
     let seen: unknown = "unset";
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post(
       "/",
       validator(
@@ -292,7 +292,7 @@ describe("validator locks correct behavior", () => {
   });
 
   it("aligns its read limit with the app's bodyJsonLimit", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 8 }));
     app.post("/", validator(schemaOf(() => ({ value: 1 }))), (c) => c.text("ok"));
     const ok = await drive(
@@ -316,7 +316,7 @@ describe("validator locks correct behavior", () => {
   });
 
   it("defaults to 1MB when no bodyParser is installed", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post("/", validator(schemaOf(() => ({ value: 1 }))), (c) => c.text("ok"));
     const res = await drive(
       app,
@@ -330,7 +330,7 @@ describe("validator locks correct behavior", () => {
   });
 
   it("malformed JSON short-circuits with an exposed 400", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/", validator(schemaOf(() => ({ value: 1 }))), (c) => c.text("ok"));
     const res = await drive(
@@ -345,7 +345,7 @@ describe("validator locks correct behavior", () => {
   });
 
   it("a rejected validate() promise surfaces as 5xx, never as a pass", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/", validator(schemaOf(() => Promise.reject(new Error("schema exploded")))), (c) =>
       c.text("unreachable"),
@@ -362,7 +362,7 @@ describe("validator locks correct behavior", () => {
   });
 
   it("issues render as a 400 listing messages and paths", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post(
       "/",
@@ -386,8 +386,8 @@ describe("validator locks correct behavior", () => {
   });
 
   it("c.valid installs once per app and stays app-isolated", async () => {
-    const app1 = createApp(quiet);
-    const app2 = createApp(quiet);
+    const app1 = new Honu(quiet);
+    const app2 = new Honu(quiet);
     // c.valid is a decorated getter (installed by validator at request time).
     const validOf = (c: Context) => String((c as ContextWithValid).valid);
     app1.post("/", validator(schemaOf(() => ({ value: "one" }))), (c) => c.text(validOf(c)));

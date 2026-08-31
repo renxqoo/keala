@@ -1,9 +1,10 @@
 /**
  * Shared type definitions.
  *
- * The framework is functional-first: no classes, only factory functions and
- * plain (often prototype-less) objects. Runtime-facing types live here or
- * next to their owning module.
+ * The framework keeps a functional core (compose/dispatch/respond/router are
+ * plain functions over plain, often prototype-less objects) with exactly two
+ * exported classes as its facade — `Honu` (the app) and `Router` (standalone
+ * route groups). Runtime-facing types live here or next to their owner.
  */
 
 /** Callable invoked by a middleware to run the downstream part of the onion. */

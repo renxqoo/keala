@@ -14,7 +14,7 @@
  * R3-2  MEDIUM src/router/group.ts:58-78 (add) + src/core/app.ts:361-377
  *        (mount)  Group paths/prefixes are never validated for a leading "/":
  *        `${base}${def.path}` concatenates into a plausible path, so a mounted
- *        `createRouter({prefix:"/v1"}).get("users")` silently serves
+ *        `new Router({prefix:"/v1"}).get("users")` silently serves
  *        "/api/v1users" while app.get("users") throws.
  * R3-3  MEDIUM src/router/trie.ts:163-169 vs src/router/router.ts:294-298
  *        staticMap compares CANONICAL keys (decoded, re-escaped) but the trie
@@ -52,8 +52,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
-import { createRouter } from "../src/router/group.ts";
+import { Honu } from "../src/core/app.ts";
+import { Router } from "../src/router/group.ts";
 import { compilePattern } from "../src/router/pattern.ts";
 
 const quiet = { env: "test" } as const;
@@ -62,14 +62,14 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 describe("R3-1 sticky optionality contaminates required-param routes (trie)", () => {
   it("a required-param route must 404 a path with the param absent once a sibling declares the position optional", async () => {
     // Control: the required-param route alone refuses "/a/c".
-    const alone = createApp(quiet);
+    const alone = new Honu(quiet);
     alone.get("/a/:x/c", (c) => c.text(`x=${c.params?.["x"]}`));
     expect((await alone.handle(req("/a/c"))).status).toBe(404);
 
     // Registering an unrelated optional variant at the same position makes
     // the SAME request answer 200 with `x` MISSING — the skip transition of
     // ":x?" reaches the "/c" tail registered by the required-param pattern.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/a/:x/c", (c) => c.text(`x=${c.params?.["x"] ?? "MISSING"}`));
     app.get("/a/:x?/b", (c) => c.text("b"));
     const res = await app.handle(req("/a/c"));
@@ -77,7 +77,7 @@ describe("R3-1 sticky optionality contaminates required-param routes (trie)", ()
   });
 
   it("a plain single-param route must not become servable at the bare prefix (no param captured)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/u/:id", (c) => c.text(`id=${c.params?.["id"] ?? "MISSING"}`));
     app.get("/u/:id?/posts", (c) => c.text("posts"));
     const res = await app.handle(req("/u"));
@@ -85,7 +85,7 @@ describe("R3-1 sticky optionality contaminates required-param routes (trie)", ()
   });
 
   it("the contamination must not flip 404 into 405+Allow for other methods", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post("/a/:x/c", (c) => c.text("c"));
     app.get("/a/:x?/b", (c) => c.text("b"));
     const res = await app.handle(req("/a/c", { method: "DELETE" }));
@@ -95,13 +95,14 @@ describe("R3-1 sticky optionality contaminates required-param routes (trie)", ()
 
 describe("R3-2 mounted group paths without a leading slash concatenate silently", () => {
   it("router.get('users') must throw like app.get('users') does (path must start with '/')", () => {
-    const router = createRouter({ prefix: "/v1" });
+    const router = new Router({ prefix: "/v1" });
     expect(() => router.get("users", (c) => c.text("u"))).toThrow(/must start with/);
   });
 
-  it("a router prefix without a leading slash must throw at registration too", () => {
-    const router = createRouter({ prefix: "v1" });
-    expect(() => router.get("/users", (c) => c.text("u"))).toThrow(/must start with/);
+  it("a router prefix without a leading slash throws at CONSTRUCTION (fail fast)", () => {
+    // The Router class validates the prefix in the constructor — the bad
+    // config surfaces where it was written, not at the first registration.
+    expect(() => new Router({ prefix: "v1" })).toThrow(/must start with/);
   });
 });
 
@@ -109,13 +110,13 @@ describe("R3-3 staticMap and trie disagree on decoded static segments containing
   it("a dynamic route must not match a request whose decoded static segment differs (static twin 404s)", async () => {
     // Static control: the pattern segment decodes to "a%2Fb"; the request
     // segment "a%2Fb" decodes to "a/b" — different values, no match.
-    const stat = createApp(quiet);
+    const stat = new Honu(quiet);
     stat.get("/a%252Fb", (c) => c.text("static"));
     expect((await stat.handle(req("/a%2Fb"))).status).toBe(404);
 
     // Same pair through a dynamic route: the trie's raw-first static-child
     // lookup accepts the RAW "a%2Fb" against the decoded key "a%2Fb".
-    const dyn = createApp(quiet);
+    const dyn = new Honu(quiet);
     dyn.get("/a%252Fb/:id", (c) => c.text(`dyn:${c.params?.["id"]}`));
     expect((await dyn.handle(req("/a%2Fb/5"))).status).toBe(404);
   });
@@ -123,14 +124,14 @@ describe("R3-3 staticMap and trie disagree on decoded static segments containing
 
 describe("R3-4 duplicate param names: fast matcher and trie capture different values", () => {
   it("adding an unrelated route to the bucket must not flip the captured param value (last one wins)", async () => {
-    const fast = createApp(quiet);
+    const fast = new Honu(quiet);
     fast.get("/dup/:x/:x", (c) => c.text(`x=${c.params?.["x"]}`));
     const fastRes = await fast.handle(req("/dup/1/2"));
     expect(await fastRes.text()).toBe("x=2");
 
     // A second dynamic pattern under "/dup" disables the fast matcher —
     // the trie's cons-list keeps the FIRST capture instead.
-    const trieApp = createApp(quiet);
+    const trieApp = new Honu(quiet);
     trieApp.get("/dup/:x/:x", (c) => c.text(`x=${c.params?.["x"]}`));
     trieApp.get("/dup/x/:y", (c) => c.text(`y=${c.params?.["y"]}`));
     const trieRes = await trieApp.handle(req("/dup/1/2"));
@@ -141,8 +142,8 @@ describe("R3-4 duplicate param names: fast matcher and trie capture different va
 describe("R3-5 mounted param middleware runs outside the router's use() middleware", () => {
   it("a group's use() middleware is prepended to every route — it must run before its param() middleware (koa parity)", async () => {
     const order: string[] = [];
-    const app = createApp(quiet);
-    const api = createRouter();
+    const app = new Honu(quiet);
+    const api = new Router();
     api.use(async (_c, next) => {
       order.push("use");
       await next();
@@ -169,14 +170,14 @@ describe("R3-6 custom-pattern parser silently discards text after the closing pa
 
 describe("R3-7 redirect destination params the source never captures explode per-request", () => {
   it("registration must throw when a destination :param is not captured by the source route", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.redirect("/a", "/x/:missing", 302)).toThrow();
   });
 });
 
 describe("R3-8 url() builds '/w/' for an empty wildcard value but the router 404s it", () => {
   it("a trailing wildcard must match the bare prefix+'/' with an empty capture (url round-trip)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("w", "/w/*", (c) => c.text(`[${c.params?.["wildcard"] ?? ""}]`));
     const built = app.url("w", { wildcard: "" });
     expect(built).toBe("/w/");

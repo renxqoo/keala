@@ -21,7 +21,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp, createRouter, createError } from "../src/index.ts";
+import { Honu, Router, createError } from "../src/index.ts";
 
 const quiet = { env: "test" } as const;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,7 +35,7 @@ describe("same-request interleaving: query cache", () => {
     // the next read re-parse. Our single-slot cache must be invalidated by
     // the url setter (src/core/context/request.ts set url).
     const observed: unknown[] = [];
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       observed.push({ ...c.query });
       await next();
@@ -51,7 +51,7 @@ describe("same-request interleaving: query cache", () => {
 
   it("语义锁定: a path rewrite keeps the query string values", async () => {
     const observed: unknown[] = [];
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       observed.push(c.path, c.querystring, { ...c.query });
@@ -79,7 +79,7 @@ describe("same-request interleaving: query cache", () => {
   // `this.url = ...`, whose setter resets the query cache) — it should update
   // urlValue without touching queryValue because the querystring is intact.
   it("CONFIRMED-BUG: a path rewrite keeps the cached query object and its mutations", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const observed: unknown[] = [];
     app.use(async (c, next) => {
       const cached = c.query;
@@ -97,7 +97,7 @@ describe("same-request interleaving: query cache", () => {
 
   it("语义锁定: re-reading query after a downstream ctx.search rewrite reflects the new value", async () => {
     const observed: unknown[] = [];
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       observed.push({ ...c.query });
       await next();
@@ -115,7 +115,7 @@ describe("same-request interleaving: query cache", () => {
   // Koa's same-value guard, so the cached query object survives an identical
   // assignment (src/core/context/request.ts set querystring).
   it("语义锁定: assigning an identical querystring preserves the cached query object", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const observed: unknown[] = [];
     app.use(async (c, next) => {
       const cached = c.query;
@@ -136,7 +136,7 @@ describe("same-request interleaving: query cache", () => {
   // and the next read re-parses the stringified form. koa's verbatim-stash
   // deviation is gone, so this now locks plain Koa semantics.
   it("语义锁定(koa parity): query= rewrites the query string and re-parses on read", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const observed: unknown[] = [];
     app.use(async (c) => {
       // The numeric `page` exercises stringifyQuery's number coercion.
@@ -155,8 +155,8 @@ describe("same-request interleaving: query cache", () => {
 // ---------------------------------------------------------------------------
 describe("concurrent isolation", () => {
   const buildApp = () => {
-    const app = createApp({ ...quiet, keys: ["k"] });
-    const router = createRouter();
+    const app = new Honu({ ...quiet, keys: ["k"] });
+    const router = new Router();
     router.get("/user/:id", async (c) => {
       await delay(Number(c.params?.["id"]) % 3);
       c.set("X-Path", "param");
@@ -227,7 +227,7 @@ describe("concurrent isolation", () => {
   });
 
   it("语义锁定: ctx.state stays request-private across await points under concurrency", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     const violations: string[] = [];
     app.use(async (c) => {
       const mine = c.query["token"] as string;
@@ -250,7 +250,7 @@ describe("concurrent isolation", () => {
   });
 
   it("语义锁定: concurrent 405s each produce the right Allow header", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (_c, next) => {
       await next();
     });
@@ -281,7 +281,7 @@ describe("concurrent isolation", () => {
   // gone. The recycling contract itself is locked in test/pooling.test.ts
   // (resetContext field conservation); this locks the observable sequence.
   it("语义锁定: a 405 answer never bleeds into the next request's 404", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (_c, next) => {
       await next();
     });
@@ -314,7 +314,7 @@ describe("error path lifecycle", () => {
     // chain already staged (middleware security headers must reach error
     // pages); the failed BODY is discarded and the 5xx message stays hidden.
     const errors: unknown[] = [];
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError((e) => errors.push(e));
     app.use(async (c) => {
       c.set("X-Custom", "leak");
@@ -333,7 +333,7 @@ describe("error path lifecycle", () => {
   });
 
   it("语义锁定: upstream middleware may recover after a downstream error", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {});
     app.use(async (c, next) => {
       try {
@@ -353,7 +353,7 @@ describe("error path lifecycle", () => {
 
   it("语义锁定: when a request throws twice, the surviving error wins exactly once", async () => {
     const messages: string[] = [];
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError((e: Error) => messages.push(e.message));
     app.use(async (_c, next) => {
       try {
@@ -372,7 +372,7 @@ describe("error path lifecycle", () => {
   });
 
   it("语义锁定: an error listener that throws never escapes app.handle", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {
       throw new Error("listener exploded");
     });
@@ -388,7 +388,7 @@ describe("error path lifecycle", () => {
     // The route handler runs (method matched) and throws: the rejection skips
     // the 405/Allow fixup and the error path owns the response, exactly like
     // @koa/router under koa-compose.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {});
     app.get("/get-only", () => {
       throw createError(410, "gone");
@@ -402,7 +402,7 @@ describe("error path lifecycle", () => {
   // `messageValue`, so a custom status phrase set before the failure cannot
   // leak onto the error response's status line.
   it("语义锁定: the error response does not inherit the failed response's custom statusText", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {});
     app.use(async (c) => {
       c.status = 500;

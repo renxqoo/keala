@@ -21,7 +21,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 
 **honu vs hono 4: statistical parity — on all three machines.**
 
-| M4 10-core (report above) |     honu |      hono 4 | ratio | verdict      |
+| M4 10-core (report above) |        honu |      hono 4 | ratio | verdict      |
 | ------------------------- | ----------: | ----------: | ----: | ------------ |
 | text                      | 226,144 ±7% | 223,280 ±4% | 1.01x | inside noise |
 | JSON                      | 227,792 ±8% | 231,072 ±8% | 0.99x | inside noise |
@@ -29,7 +29,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 | 3 middlewares             | 198,944 ±3% | 186,352 ±3% | 1.07x | leans ours   |
 | 1000-route scale          | 247,232 ±3% | 249,024 ±3% | 0.99x | tie          |
 
-| 8-core Apple Silicon  |       honu |        hono 4 |     ratio | verdict       |
+| 8-core Apple Silicon  |          honu |        hono 4 |     ratio | verdict       |
 | --------------------- | ------------: | ------------: | --------: | ------------- |
 | text                  |  228,432 ±13% |  194,448 ±23% |     1.17x | inside noise  |
 | JSON                  |  231,280 ±13% |  211,968 ±16% |     1.09x | inside noise  |
@@ -38,7 +38,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 | 1000-route scale      |   229,136 ±6% |   239,856 ±6% |     0.96x | inside noise  |
 | **in-process ns/req** | **379 / 476** | **379 / 476** | **1.00x** | **exact tie** |
 
-| Intel 4-core (colocated) |     honu |      hono 4 | ratio | verdict      |
+| Intel 4-core (colocated) |        honu |      hono 4 | ratio | verdict      |
 | ------------------------ | ----------: | ----------: | ----: | ------------ |
 | text                     | 56,764 ±13% | 52,884 ±21% | 1.07x | inside noise |
 | JSON                     | 48,648 ±10% | 46,000 ±11% | 1.06x | inside noise |
@@ -77,7 +77,7 @@ property disclosure) initially ran in `initContext` — i.e. on EVERY fresh
 context, paying an `Object.keys()` allocation + loop per request on the
 no-pooling hot path.
 
-| in-process ns/req (best of 3)                        |   honu |    hono 4 | ratio to hono                  |
+| in-process ns/req (best of 3)                        |      honu |    hono 4 | ratio to hono                  |
 | ---------------------------------------------------- | --------: | --------: | ------------------------------ |
 | pre-change baseline                                  | 384 / 490 | 386 / 488 | 0.995x / 1.004x                |
 | hardening, first cut                                 | 421 / 528 | 378 / 496 | **1.11x / 1.06x** ← regression |
@@ -121,7 +121,7 @@ A stdlib `net/http` server with byte-identical responses joins the harness
 (`bench/server-go`, auto-built when a Go toolchain exists). On the Intel box
 it is the fastest participant, ahead of **raw Bun.serve** itself:
 
-| Intel 4-core  |     honu |          Go | ratio | verdict              |
+| Intel 4-core  |        honu |          Go | ratio | verdict              |
 | ------------- | ----------: | ----------: | ----: | -------------------- |
 | text          | 56,764 ±13% |  57,720 ±2% | 0.98x | inside noise         |
 | JSON          | 48,648 ±10% |  56,228 ±3% | 0.87x | Go ahead, near-noise |
@@ -144,7 +144,7 @@ scheduler queuing, not per-request cost. On the M4 the ordering inverts
 
 The batch-interleaved in-process baseline on the same Intel machine:
 
-| scenario          |           honu |            hono 4 | ratio |
+| scenario          |              honu |            hono 4 | ratio |
 | ----------------- | ----------------: | ----------------: | ----: |
 | text, in-process  | 2,118 ns (472k/s) | 2,089 ns (479k/s) | 0.99x |
 | param, in-process | 2,757 ns (363k/s) | 2,703 ns (370k/s) | 0.98x |

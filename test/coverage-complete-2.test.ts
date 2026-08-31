@@ -6,8 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
-import { createRouter } from "../src/router/group.ts";
+import { Honu } from "../src/core/app.ts";
+import { Router } from "../src/router/group.ts";
 import { contentDisposition } from "../src/utils/text.ts";
 
 const quiet = { env: "test" } as const;
@@ -15,7 +15,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("coverage: response sugar combinations", () => {
   it("text with explicit status keeps it and adds a default content-type with headers", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/a", (c) => c.text("nope", 404));
     app.get("/b", (c) => c.text("hdr", 201, { "x-b": "1" }));
     const a = await app.handle(req("/a"));
@@ -28,7 +28,7 @@ describe("coverage: response sugar combinations", () => {
   });
 
   it("state headers written before the sugar merge into it", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/m", (c) => {
       c.set("X-Merged", "1");
       return c.text("body");
@@ -39,7 +39,7 @@ describe("coverage: response sugar combinations", () => {
   });
 
   it("json carries status and headers; an explicit per-call content-type wins over html's default", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/j", (c) => c.json({ ok: true }, 202, { "x-j": "1" }));
     app.get("/h", (c) => c.html("<b>x</b>", 200, { "content-type": "text/plain" }));
     const j = await app.handle(req("/j"));
@@ -54,7 +54,7 @@ describe("coverage: response sugar combinations", () => {
   });
 
   it("state-mode object bodies carry status through Response.json", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/s", (c) => {
       c.status = 201;
       c.set("x-s", "1");
@@ -69,7 +69,7 @@ describe("coverage: response sugar combinations", () => {
 
 describe("coverage: router group paths", () => {
   it("redirect with :params rebuilds from matched captures", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/users/:id", (c) => c.text("u"));
     app.redirect("/u/:id", "/users/:id", 301);
     const res = await app.handle(req("/u/77"));
@@ -78,14 +78,14 @@ describe("coverage: router group paths", () => {
   });
 
   it("use()/param() argument validation throws", () => {
-    const router = createRouter();
+    const router = new Router();
     expect(() => router.use("nope" as unknown as () => void)).toThrow(TypeError);
     expect(() => router.param("", () => undefined)).toThrow(TypeError);
     expect(() => router.param("x", "nope" as unknown as () => void)).toThrow(TypeError);
   });
 
   it("router.url throws for unknown names and missing params", () => {
-    const router = createRouter();
+    const router = new Router();
     router.get("thing", "/t/:id", () => undefined);
     expect(() => router.url("ghost", {})).toThrow(/No route registered/);
     expect(() => router.url("thing", {})).toThrow(/Missing required parameter/);
@@ -95,15 +95,15 @@ describe("coverage: router group paths", () => {
   });
 
   it("prefixed groups carry their prefix into mounted paths", async () => {
-    const app = createApp(quiet);
-    const api = createRouter({ prefix: "/v2" });
+    const app = new Honu(quiet);
+    const api = new Router({ prefix: "/v2" });
     api.get("/items", (c) => c.text("items"));
     app.mount("/api", api);
     expect(await (await app.handle(req("/api/v2/items"))).text()).toBe("items");
   });
 
   it("on() accepts any casing and rejects unknown methods", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.on("Delete", "/d", (c) => c.text("deleted"));
     expect((await app.handle(req("/d", { method: "DELETE" }))).status).toBe(200);
     expect(() => app.on("WAT", "/w", () => undefined)).toThrow(TypeError);
@@ -126,7 +126,7 @@ describe("coverage: content-disposition fallbacks", () => {
 
 describe("coverage: app.param validation", () => {
   it("rejects bad names and handlers", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.param("", () => undefined)).toThrow(TypeError);
     expect(() => app.param("x", "nope" as unknown as () => void)).toThrow(TypeError);
   });

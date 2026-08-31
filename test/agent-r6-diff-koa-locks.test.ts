@@ -13,7 +13,7 @@ import encodeurl from "encodeurl";
 import escapeHtmlPkg from "escape-html";
 import { Router as RouterOf } from "@koa/router";
 
-import { createApp, createRouter } from "../src/index.ts";
+import { Honu, Router } from "../src/index.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
 import {
   acceptsType as acceptsTypeOf,
@@ -35,10 +35,10 @@ const mulberry32 = (seed: number) => () => {
 };
 
 const driveBun = async (
-  setup: (app: ReturnType<typeof createApp>) => void,
+  setup: (app: InstanceType<typeof Honu>) => void,
   reqInit: { url?: string; method?: string; headers?: Record<string, string> },
 ): Promise<{ status: number; headers: Record<string, unknown>; body: string }> => {
-  const app = createApp({ env: "test" } as const);
+  const app = new Honu({ env: "test" } as const);
   setup(app);
   const res = await app.handle(
     new Request(`http://localhost:3000${reqInit.url ?? "/"}`, {
@@ -327,7 +327,7 @@ describe("documents intentional divergence", () => {
   it("router.url throws for unknown names where @koa/router returns an Error object", () => {
     // @koa/router 15.7's url() RETURNS new Error(...) instead of throwing —
     // a koa-router quirk not worth replicating.
-    const router = createRouter();
+    const router = new Router();
     router.get("user", "/users/:id", () => {});
     expect(() => router.url("missing", { id: "1" })).toThrow();
   });

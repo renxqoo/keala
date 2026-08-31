@@ -2,7 +2,7 @@
  * The middleware aggregate — every per-request pipeline factory in one import.
  *
  * ```ts
- * import { createApp } from "honu";
+ * import { Honu } from "honu";
  * import { cors, bodyLimit, serveStatic } from "honu/middleware";
  * ```
  *

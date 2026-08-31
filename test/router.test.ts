@@ -6,14 +6,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
-import { createRouter } from "../src/router/group.ts";
+import { Honu } from "../src/core/app.ts";
+import { Router } from "../src/router/group.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
-const appWith = (setup: (app: ReturnType<typeof createApp>) => void) => {
-  const app = createApp(quiet);
+const appWith = (setup: (app: InstanceType<typeof Honu>) => void) => {
+  const app = new Honu(quiet);
   setup(app);
   return (path: string, init?: RequestInit) => app.handle(req(path, init));
 };
@@ -195,7 +195,7 @@ describe("router: registration behaviors", () => {
   });
 
   it("named routes build URLs (encoding, optionals, wildcards)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("user", "/users/:id(\\d+)", () => undefined);
     app.get("file", "/files/:name?", () => undefined);
     app.get("wild", "/w/*", () => undefined);
@@ -208,7 +208,7 @@ describe("router: registration behaviors", () => {
   });
 
   it("app.redirect emits a GET redirect route (param substitution included)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/users/:id", (c) => c.text("u"));
     app.redirect("/u/:id", "/users/:id", 302);
     const res = await app.handle(req("/u/9"));
@@ -219,8 +219,8 @@ describe("router: registration behaviors", () => {
 
 describe("router: groups and mounts", () => {
   it("prefix groups, nesting and fallthrough", async () => {
-    const app = createApp(quiet);
-    const users = createRouter();
+    const app = new Honu(quiet);
+    const users = new Router();
     users.get("/:id", (c) => c.text(`user ${c.params?.["id"]}`));
     users.get("/", (c) => c.text("index"));
     app.mount("/v1/users", users);
@@ -233,8 +233,8 @@ describe("router: groups and mounts", () => {
   });
 
   it("router.use middleware applies to the group's routes only", async () => {
-    const app = createApp(quiet);
-    const api = createRouter();
+    const app = new Honu(quiet);
+    const api = new Router();
     api.use(async (c, next) => {
       c.set("X-Api", "1");
       await next();
@@ -247,8 +247,8 @@ describe("router: groups and mounts", () => {
   });
 
   it("router.param middleware applies to capturing routes in the group", async () => {
-    const app = createApp(quiet);
-    const api = createRouter();
+    const app = new Honu(quiet);
+    const api = new Router();
     api.param("oid", async (c, next) => {
       c.set("X-Org", c.params?.["oid"] ?? "");
       await next();
@@ -262,7 +262,7 @@ describe("router: groups and mounts", () => {
   });
 
   it("an array of routes shares handlers", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     for (const path of ["/a", "/b"]) app.get(path, (c) => c.text(`hit:${c.path}`));
     expect(await (await app.handle(req("/a"))).text()).toBe("hit:/a");
     expect(await (await app.handle(req("/b"))).text()).toBe("hit:/b");

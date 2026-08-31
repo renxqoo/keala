@@ -5,11 +5,11 @@ import { describe, expect, it } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { createApp } from "../src/index.ts";
+import { Honu } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const probe = async (url: string, headers: Record<string, string>): Promise<Context> => {
-  const app = createApp();
+  const app = new Honu();
   let captured: Context | undefined;
   app.use(async (c) => {
     captured = c;
@@ -22,7 +22,7 @@ const probe = async (url: string, headers: Record<string, string>): Promise<Cont
 
 describe("branch coverage: final round", () => {
   it("catches synchronous middleware throws without a promise", async () => {
-    const app = createApp({ env: "test" });
+    const app = new Honu({ env: "test" });
     app.use(() => {
       throw new Error("sync boom");
     });
@@ -46,7 +46,7 @@ describe("branch coverage: final round", () => {
       },
     };
     try {
-      createApp().listen("3007", "localhost");
+      new Honu().listen("3007", "localhost");
       expect(captured["port"]).toBe(3007);
       expect(captured["hostname"]).toBe("localhost");
     } finally {
@@ -64,7 +64,7 @@ describe("branch coverage: final round", () => {
   // Expected (koa): HEAD of a 4-byte binary body answers with
   // Content-Length "4".
   it("CONFIRMED-BUG: keeps Content-Length for HEAD with binary bodies", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       c.body = new Uint8Array([1, 2, 3, 4]);
     });
@@ -74,7 +74,7 @@ describe("branch coverage: final round", () => {
   });
 
   it("combines custom status text with multi-value headers", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       c.status = 201;
       c.message = "with cookies";
@@ -88,7 +88,7 @@ describe("branch coverage: final round", () => {
   });
 
   it("exposes computed length for binary and empty bodies", async () => {
-    const app = createApp();
+    const app = new Honu();
     let binaryLength: number | undefined = -1;
     let streamLength: number | undefined = -1;
     app.use(async (c, next) => {
@@ -122,7 +122,7 @@ describe("branch coverage: final round", () => {
   });
 
   it("falls back to last-modified when etag lacks if-none-match", async () => {
-    const app = createApp();
+    const app = new Honu();
     let freshWithEtag: boolean | undefined;
     app.use(async (c) => {
       c.status = 200;
@@ -140,7 +140,7 @@ describe("branch coverage: final round", () => {
   });
 
   it("matches any etag against If-None-Match: *", async () => {
-    const app = createApp();
+    const app = new Honu();
     let freshStar: boolean | undefined;
     app.use(async (c) => {
       c.status = 200;
@@ -153,7 +153,7 @@ describe("branch coverage: final round", () => {
   });
 
   it("is stale when only if-none-match is absent and lastModified is unset", async () => {
-    const app = createApp();
+    const app = new Honu();
     let freshNoValidators: boolean | undefined;
     app.use(async (c) => {
       c.status = 200;

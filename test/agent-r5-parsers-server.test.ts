@@ -5,7 +5,7 @@
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { connect } from "node:net";
 import { startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
 import { hashPassword, verifyPassword } from "../src/helpers/password.ts";
@@ -17,9 +17,9 @@ describe("node adapter locks correct behavior", () => {
     for (const server of servers) server.stop(true);
   });
   const serve = async (
-    register: (app: ReturnType<typeof createApp>) => void,
+    register: (app: InstanceType<typeof Honu>) => void,
   ): Promise<{ port: number }> => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     register(app);
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     servers.push(server);

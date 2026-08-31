@@ -1,6 +1,6 @@
 {
   "name": "honu",
-  "version": "1.0.0",
+  "version": "0.5.0",
   "description": "High-performance onion-model web framework for Bun 1.4+. Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking (Bun.serve routes table), Bun.password/Bun.CSRF components. At parity or faster than Hono on Bun.",
   "license": "MIT",
   "files": [

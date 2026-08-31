@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 
 const quiet = { env: "test" } as const;
 const req = (url: string, init?: RequestInit): Request => new Request(url, init);
@@ -130,7 +130,7 @@ describe("redteam — GA-1 matchRoute equals the pure trie (trailing-param shape
       return []; // conflicting names at one position — registration throws by design
     }
 
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     try {
       for (const p of patterns) app.get(p, (c) => c.text(`${p}|${normParams(c.params)}`));
     } catch {
@@ -184,21 +184,21 @@ describe("redteam — GA-1 matchRoute equals the pure trie (trailing-param shape
 
 describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
   it("CONFIRMED-BUG(now fixed) (RT-9a): GET /%61dmin must hit the static /admin route", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/admin", (c) => c.text("static-admin"));
     const res = await app.handle(req("http://localhost/%61dmin"));
     expect([res.status, await text(res)]).toEqual([200, "static-admin"]);
   });
 
   it("CONFIRMED-BUG(now fixed) (RT-9b): static must beat the wildcard for /%61dmin", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/admin", (c) => c.text("static-admin"));
     app.get("/*", (c) => c.text(`wild:${c.params?.["wildcard"]}`));
     expect(await text(await app.handle(req("http://localhost/%61dmin")))).toBe("static-admin");
   });
 
   it("CONFIRMED-BUG(now fixed) (RT-9c): an encoded non-first static segment must match", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/admin/items", (c) => c.text("items"));
     expect((await app.handle(req("http://localhost/admin/%69tems"))).status).toBe(200);
   });
@@ -207,7 +207,7 @@ describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
     // The pure-trie cross-check lives in the GA-1 fuzz asset; here the same
     // guarantee is asserted through the app: a table with ONLY static routes
     // (no trie fallback exists) must still decode-match escaped requests.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/admin", (c) => c.text("static-admin"));
     app.get("/admin/panel", (c) => c.text("panel"));
     expect((await app.handle(req("http://localhost/%61dmin"))).status).toBe(200);
@@ -216,7 +216,7 @@ describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
   });
 
   it("green witness: a dynamic route answers its encoded static prefix", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/admin/:id", (c) => c.text(`dyn:${c.params?.["id"]}`));
     expect(await text(await app.handle(req("http://localhost/%61dmin/1")))).toBe("dyn:1");
   });

@@ -43,9 +43,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp, type Application } from "../src/core/app.ts";
+import { Honu, type Application } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
-import { createRouter } from "../src/router/group.ts";
+import { Router } from "../src/router/group.ts";
 import { compilePattern } from "../src/router/pattern.ts";
 import { createNode, createTarget, insertPattern, matchPattern } from "../src/router/trie.ts";
 
@@ -67,13 +67,13 @@ const handle = async (
   url: string,
   init?: RequestInit,
 ): Promise<Response> => {
-  const app = createApp({ env: "test" });
+  const app = new Honu({ env: "test" });
   setup(app);
   return app.handle(new Request(`http://localhost:3000${url}`, init));
 };
 
 const runPlain = async (mw: (c: Context) => void, init?: RequestInit): Promise<Response> => {
-  const app = createApp({ env: "test" });
+  const app = new Honu({ env: "test" });
   app.use(mw);
   return app.handle(new Request("http://localhost:3000/", init));
 };
@@ -155,7 +155,7 @@ describe("red team: trie matching", () => {
 describe("red team: router", () => {
   it("[R1] applies param middleware registered after the route (order-independent)", async () => {
     const res = await handle((app) => {
-      const router = createRouter();
+      const router = new Router();
       router.get("/users/:id", (c) => {
         c.body = "route";
       });
@@ -188,7 +188,7 @@ describe("red team: router", () => {
     // preserved with a prefixed group mounted into the app.
     let guardRan = false;
     const res = await handle((app) => {
-      const router = createRouter({ prefix: "/api" });
+      const router = new Router({ prefix: "/api" });
       router.use(async (_c, next) => {
         guardRan = true;
         await next();
@@ -206,7 +206,7 @@ describe("red team: router", () => {
   it("[R4] allowedMethods sees mounted router matches (405/Allow, OPTIONS/Allow)", async () => {
     const del = await handle(
       (app) => {
-        const child = createRouter();
+        const child = new Router();
         child.get("/items/:sku", (c) => {
           c.body = { sku: c.params?.["sku"] };
         });
@@ -220,7 +220,7 @@ describe("red team: router", () => {
 
     const options = await handle(
       (app) => {
-        const child = createRouter();
+        const child = new Router();
         child.get("/items/:sku", (c) => {
           c.body = { sku: c.params?.["sku"] };
         });
@@ -236,7 +236,7 @@ describe("red team: router", () => {
 
 describe("red team: request lazy cache", () => {
   it("[Q1] querystring setter round-trips when the url carries a fragment", async () => {
-    const app = createApp({ env: "test" });
+    const app = new Honu({ env: "test" });
     app.use((c) => {
       c.url = "/a#f";
       c.querystring = "x=1";
@@ -325,8 +325,8 @@ describe("red team: respond state machine", () => {
 
 describe("CONFIRMED-BUG: router core (found during this migration)", () => {
   it("CONFIRMED-BUG(now fixed): app.mount('/', router) must mount at root, not throw (TODO-BUG: core/app.ts mount base keeps '/' and produces '//path')", async () => {
-    const app = createApp({ env: "test" });
-    const router = createRouter();
+    const app = new Honu({ env: "test" });
+    const router = new Router();
     router.get("/users/:id", (c) => {
       c.body = "u";
     });
@@ -338,8 +338,8 @@ describe("CONFIRMED-BUG: router core (found during this migration)", () => {
 
   it("CONFIRMED-BUG(now fixed): router.use() registered after a route must still apply (TODO-BUG: router/group.ts add() snapshots middleware per def)", async () => {
     let guardRan = false;
-    const app = createApp({ env: "test" });
-    const router = createRouter();
+    const app = new Honu({ env: "test" });
+    const router = new Router();
     router.get("/admin/panel", (c) => {
       c.body = "panel";
     });

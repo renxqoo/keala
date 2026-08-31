@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/index.ts";
+import { Honu } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { serializeCookie } from "../src/context/cookies.ts";
 import { acceptsType } from "../src/negotiation/accepts.ts";
@@ -13,7 +13,7 @@ import { acceptsType } from "../src/negotiation/accepts.ts";
 const quiet = { env: "test" } as const;
 
 const probe = async (headers: Record<string, string>): Promise<Context> => {
-  const app = createApp(quiet);
+  const app = new Honu(quiet);
   let ctx: Context | undefined;
   app.use(async (c) => {
     ctx = c;
@@ -189,7 +189,7 @@ describe("cookies matrix: serialization option table", () => {
 
 describe("cookies matrix: facade behaviors", () => {
   it("multiple distinct cookies accumulate in order", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c) => {
       c.cookies.set("a", "1");
       c.cookies.set("b", "2");
@@ -200,7 +200,7 @@ describe("cookies matrix: facade behaviors", () => {
   });
 
   it("signed cookies round-trip through the facade with options intact", async () => {
-    const app = createApp({ ...quiet, keys: ["k1"] });
+    const app = new Honu({ ...quiet, keys: ["k1"] });
     app.use(async (c) => {
       if (c.path === "/set") {
         c.cookies.set("sid", "user-9", { signed: true, httpOnly: true, path: "/" });
@@ -209,7 +209,7 @@ describe("cookies matrix: facade behaviors", () => {
       c.body = c.cookies.get("sid") ?? "none";
     });
     await app.handle(new Request("http://localhost:3000/set"));
-    const setter = createApp({ ...quiet, keys: ["k1"] });
+    const setter = new Honu({ ...quiet, keys: ["k1"] });
     setter.use(async (c) => {
       c.cookies.set("sid", "user-9", { signed: true });
     });
@@ -263,7 +263,7 @@ describe("url/query matrix: dense getters", () => {
     ["http://h/a%20b", { path: "/a%20b" }],
   ];
   it.each(rows)("%s → %j", async (url, expected) => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let seen: Record<string, unknown> = {};
     app.use(async (c) => {
       seen = {

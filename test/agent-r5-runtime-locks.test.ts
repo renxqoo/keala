@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp, type Application } from "../src/core/app.ts";
+import { Honu, type Application } from "../src/core/app.ts";
 import { createEmitter } from "../src/core/emitter.ts";
 import { parseListenArgs } from "../src/core/dispatch.ts";
 
@@ -41,7 +41,7 @@ describe("agent r5 — locks correct behavior", () => {
       onUR,
     );
     try {
-      const app = createApp(quiet);
+      const app = new Honu(quiet);
       app.use(() => new Response("early")); // returns without awaiting next()
       app.use(async () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
@@ -60,7 +60,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("compose: double next() answers 500 and never escapes handle()", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use((_c, next) => {
       next();
       next(); // guarded
@@ -72,7 +72,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("compose: a custom thenable handler return answers 500 (loud, never hangs)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     // eslint-disable-next-line unicorn/no-thenable
     app.get("/", () => ({ then() {} }) as unknown as Response);
     const res = await drive(app, new Request("http://localhost:3000/"));
@@ -80,7 +80,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("dispatch: a throwing onError listener falls back to the static 500, handle resolves", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {
       throw new Error("listener boom");
     });
@@ -93,7 +93,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("dispatch: a __proto__ key in error.headers is dropped per-header, the rest survive", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       const headers = JSON.parse('{"__proto__":"evil","x-reason":"ok"}') as Record<string, string>;
       c.throw(409, { headers });
@@ -104,7 +104,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("dispatch: error.status = 1 (invalid) answers 500 — never reaches the status setter", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", () => {
       const err = new Error("weird status") as Error & { status: number };
       err.status = 1;
@@ -115,7 +115,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("dispatch: a thrown string normalizes to 500", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", () => {
       throw "plain string";
     });
@@ -124,7 +124,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("sink: concurrent first hits, replay, failing source retries, 204 sink", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.sink("/static", new Response("sunk-body", { headers: { "x-sunk": "1" } }));
     const [a, b] = await Promise.all([
       drive(app, new Request("http://localhost:3000/static")),
@@ -136,14 +136,14 @@ describe("agent r5 — locks correct behavior", () => {
     expect(await c.text()).toBe("sunk-body");
     expect(c.headers.get("x-sunk")).toBe("1");
 
-    const app2 = createApp(quiet);
+    const app2 = new Honu(quiet);
     app2.sink("/bad", new Response(streamOf(["x"], 1)));
     const r1 = await drive(app2, new Request("http://localhost:3000/bad"));
     expect(r1.status).toBe(500);
     const r2 = await drive(app2, new Request("http://localhost:3000/bad"));
     expect(r2.status).toBe(500);
 
-    const app3 = createApp(quiet);
+    const app3 = new Honu(quiet);
     app3.sink("/empty", new Response(null, { status: 204, headers: { "x-e": "1" } }));
     const r3 = await drive(app3, new Request("http://localhost:3000/empty"));
     expect(r3.status).toBe(204);
@@ -154,7 +154,7 @@ describe("agent r5 — locks correct behavior", () => {
   it("pooling: onStreamError fires on the LIVE context before retire, stream errors onward", async () => {
     let sawUrl = "";
     let sawStatus = 0;
-    const app = createApp({
+    const app = new Honu({
       ...quiet,
       pooling: true,
       onStreamError: (err, c) => {
@@ -178,7 +178,7 @@ describe("agent r5 — locks correct behavior", () => {
 
   it("streaming: onStreamError without pooling observes the producer error with the live context", async () => {
     const order: string[] = [];
-    const app = createApp({
+    const app = new Honu({
       ...quiet,
       onStreamError: (err, c) => order.push(`${(err as Error).message}:${c.url}`),
     });
@@ -192,7 +192,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("pooling: handler-assigned string keys over a decorate() value are swept on recycle", async () => {
-    const app = createApp({ ...quiet, pooling: true });
+    const app = new Honu({ ...quiet, pooling: true });
     app.decorate("tenant", "base");
     app.get("/", (c) => {
       const ctx = c as unknown as { tenant: string };
@@ -209,7 +209,7 @@ describe("agent r5 — locks correct behavior", () => {
   it("finalizer: HEAD + dirty committed stream merges headers WITHOUT reading the body", async () => {
     // R7-CORE-4: the finalizer never reads a committed body — an open producer
     // must never block handle(). CL/CT stay what the Response itself exposes.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.set("X-Late", "1");
@@ -224,7 +224,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("finalizer: c.status=204 then a body write stays 204/empty (koa contract)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.status = 204;
       c.body = "x";
@@ -236,7 +236,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("finalizer: HEAD + unmatched method answers 405 with Allow and staged global headers", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       c.set("X-Global", "1");
       await next();
@@ -253,7 +253,7 @@ describe("agent r5 — locks correct behavior", () => {
     // R7-CORE-3: sniffing required reading the body; the finalizer never
     // reads committed bodies now. A bare bytes Response carries no CT on the
     // dirty path either — exactly like the untouched commit path.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.set("X-Late", "1");
@@ -266,7 +266,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("finalizer: state-mode LOCKED stream body answers 500, handle never rejects", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.status = 200;
       const stream = streamOf(["hi"]);
@@ -278,7 +278,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("finalizer: DISTURBED committed body + dirty rebuild answers 500, handle never rejects", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.set("X-Late", "1");
@@ -293,7 +293,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("sugar: plain c.set after a sugar return still merges (control for R5-4)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.set("X-Late", "1");
@@ -308,7 +308,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("sugar: HEAD on a sugar response backfills Content-Length and drops the body", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/h", (c) => c.text("hello"));
     const res = await drive(app, new Request("http://localhost:3000/h", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -317,7 +317,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("sugar: 304 keeps validators/cookies and drops content headers", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/e", (c) => {
       c.cookies.set("sess", "1");
       return c.text("nvm", 304);
@@ -329,7 +329,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("pooling: a 500 followed by a healthy request recycles cleanly", async () => {
-    const app = createApp({ ...quiet, pooling: true });
+    const app = new Honu({ ...quiet, pooling: true });
     app.get("/a", () => {
       throw new Error("boom");
     });
@@ -342,7 +342,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("rule 4: post-commit status override written POST-commit applies (control for R5-1)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.status = 418;
@@ -354,7 +354,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("rule 4: post-commit 304 keeps validators, drops content headers", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.status = 304;
@@ -371,7 +371,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("rule 4: staged writes replace, removals drop, untouched committed headers survive", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       await next();
       c.set("X-Replace", "second");
@@ -391,7 +391,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("pooling: concurrent recycled contexts keep their stream bodies separate", async () => {
-    const app = createApp({ ...quiet, pooling: true });
+    const app = new Honu({ ...quiet, pooling: true });
     const enc = new TextEncoder();
     app.get("/s/:id", (c) => {
       const id = c.params?.["id"] ?? "?";
@@ -415,7 +415,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("pooling: retireWithBody wrapper preserves status, statusText, headers and body", async () => {
-    const app = createApp({ ...quiet, pooling: true });
+    const app = new Honu({ ...quiet, pooling: true });
     app.get(
       "/w",
       () => new Response("body", { status: 201, statusText: "Made", headers: { "x-w": "1" } }),
@@ -428,7 +428,7 @@ describe("agent r5 — locks correct behavior", () => {
   });
 
   it("finalizer: staged-only headers ride on the 404 and on a notFound handler Response", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       c.set("X-Global", "1");
       await next();
@@ -438,7 +438,7 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.headers.get("x-global")).toBe("1");
     expect(await res.text()).toBe("Not Found");
 
-    const app2 = createApp(quiet);
+    const app2 = new Honu(quiet);
     app2.use(async (c, next) => {
       c.set("X-Global", "1");
       await next();
@@ -453,7 +453,7 @@ describe("agent r5 — locks correct behavior", () => {
 
   it("finalizer: HEAD + notFound handler Response + staged headers merges and strips", async () => {
     // R7: the finalizer never reads a committed body — no CL backfill.
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(async (c, next) => {
       c.set("X-Global", "1");
       await next();

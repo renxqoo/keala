@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { createApp, startBunServer, type ServeImplementation } from "../src/index.ts";
+import { Honu, startBunServer, type ServeImplementation } from "../src/index.ts";
 
 // Bun's real server handle shape: `reload` is the actual hot-reload API (the
 // old `update()` was fictional and has been removed from ServerHandle).
@@ -32,7 +32,7 @@ const fakeServe = (): {
 
 describe("startBunServer", () => {
   it("wires app.handle into the serve fetch handler and passes the server handle through the runtime so c.ip resolves", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       c.body = { ip: c.ip, url: c.url };
     });
@@ -53,7 +53,7 @@ describe("startBunServer", () => {
   });
 
   it("passes through listen options", () => {
-    const app = createApp();
+    const app = new Honu();
     const { impl, options } = fakeServe();
     startBunServer(
       app,
@@ -77,7 +77,7 @@ describe("startBunServer", () => {
   });
 
   it("handles null requestIP results", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.use(async (c) => {
       c.body = c.ip;
     });
@@ -92,7 +92,7 @@ describe("startBunServer", () => {
   });
 
   it("notifies via onListen after boot", async () => {
-    const app = createApp();
+    const app = new Honu();
     const onListen = vi.fn();
     const { impl } = fakeServe();
     startBunServer(app, { port: 0 }, onListen, impl);
@@ -101,14 +101,14 @@ describe("startBunServer", () => {
   });
 
   it("defaults to port 3000", () => {
-    const app = createApp();
+    const app = new Honu();
     const { impl, options } = fakeServe();
     startBunServer(app, {}, undefined, impl);
     expect(options()["port"]).toBe(3000);
   });
 
   it.skipIf(REAL_BUN)("throws a clear error without Bun and no injected implementation", () => {
-    const app = createApp();
+    const app = new Honu();
     const realBun = (globalThis as { Bun?: unknown }).Bun;
     delete (globalThis as { Bun?: unknown }).Bun;
     try {
@@ -119,7 +119,7 @@ describe("startBunServer", () => {
   });
 
   it("exposes stop on the returned handle", () => {
-    const app = createApp();
+    const app = new Honu();
     const { impl, stopped } = fakeServe();
     const server = startBunServer(app, {}, undefined, impl);
     expect(typeof server.stop).toBe("function");
@@ -130,7 +130,7 @@ describe("startBunServer", () => {
 
   it("wires a default serve error handler that routes through app.onerror", async () => {
     const errors: Error[] = [];
-    const app = createApp();
+    const app = new Honu();
     app.onError((err) => errors.push(err));
     const { impl, options } = fakeServe();
     startBunServer(app, {}, undefined, impl);
@@ -143,7 +143,7 @@ describe("startBunServer", () => {
   });
 
   it("a throwing error listener never breaks the serve error callback", async () => {
-    const app = createApp();
+    const app = new Honu();
     app.onError(() => {
       throw new Error("listener bug");
     });
@@ -154,7 +154,7 @@ describe("startBunServer", () => {
   });
 
   it("honors a custom onServeError", async () => {
-    const app = createApp();
+    const app = new Honu();
     const { impl, options } = fakeServe();
     startBunServer(
       app,
@@ -168,7 +168,7 @@ describe("startBunServer", () => {
   });
 
   it("dispatches websocket error events to the owning route", async () => {
-    const app = createApp();
+    const app = new Honu();
     const seen: Array<{ code: unknown; ctx: unknown }> = [];
     app.ws("/chat", {
       error: (ws, err, c) => {
@@ -189,7 +189,7 @@ describe("startBunServer", () => {
   });
 
   it("websocket error for an unknown route data key is a no-op", () => {
-    const app = createApp();
+    const app = new Honu();
     app.ws("/chat", {
       error: () => {
         throw new Error("must not run");
@@ -214,11 +214,11 @@ describe.skipIf(REAL_BUN)("app.listen argument parsing", () => {
   it("accepts (port), (port, cb), ({port, hostname}) and string ports", async () => {
     (globalThis as { Bun?: unknown }).Bun = { serve: impl };
     try {
-      const app = createApp();
+      const app = new Honu();
       const a = app.listen(3001);
       expect(a.port).toBe(3001);
 
-      const app2 = createApp();
+      const app2 = new Honu();
       let listened = false;
       const handle = app2.listen("3002", () => {
         listened = true;
@@ -227,12 +227,12 @@ describe.skipIf(REAL_BUN)("app.listen argument parsing", () => {
       expect(handle.port).toBe(3002);
       expect(listened).toBe(true);
 
-      const app3 = createApp();
+      const app3 = new Honu();
       const handle3 = app3.listen({ port: 3003, hostname: "127.0.0.1" });
       expect(handle3.port).toBe(3003);
       expect(handle3.hostname).toBe("127.0.0.1");
 
-      const app5 = createApp();
+      const app5 = new Honu();
       const handle5 = app5.listen(0);
       expect(handle5.port).toBe(0);
     } finally {

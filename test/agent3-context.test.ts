@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/index.ts";
+import { Honu } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { createCookies, type CookiesHost } from "../src/context/cookies.ts";
 import { acceptsType } from "../src/negotiation/accepts.ts";
@@ -23,7 +23,7 @@ const probe = async (
   settings: Record<string, unknown> = {},
 ): Promise<Context> => {
   let captured: Context | undefined;
-  const probing = createApp({ env: "test", ...settings });
+  const probing = new Honu({ env: "test", ...settings });
   probing.use(async (c) => {
     captured = c;
     c.body = "probed";
@@ -66,7 +66,7 @@ describe("agent3: signed cookie set() without keys (fail-open)", () => {
   });
 
   it("CONFIRMED-BUG: end-to-end — a signed set on a keyless app must not emit a Set-Cookie value", async () => {
-    const app = createApp({ env: "test" });
+    const app = new Honu({ env: "test" });
     app.use(async (c) => {
       c.cookies.set("sid", "secret", { signed: true });
       c.body = "ok";
@@ -132,7 +132,7 @@ describe("agent3: append() singleton header corruption", () => {
     // an array' — the same rule must hold for append(), which today builds
     // an array value that flattenHeaders emits as two pairs which the
     // runtime comma-joins into an invalid Content-Type on the wire.
-    const app = createApp({ env: "test" });
+    const app = new Honu({ env: "test" });
     let secondAppendThrew = false;
     app.use(async (c) => {
       c.append("Content-Type", "text/html; charset=utf-8");
@@ -148,7 +148,7 @@ describe("agent3: append() singleton header corruption", () => {
   });
 
   it("CONFIRMED-BUG: the wire must never carry a comma-joined Content-Type", async () => {
-    const app = createApp({ env: "test" });
+    const app = new Honu({ env: "test" });
     app.use(async (c) => {
       c.append("Content-Type", "text/html; charset=utf-8");
       // The duplicate append throws (same singleton rule as set()); the

@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { csrfToken, csrfTokenGuard } from "../src/middleware/csrf-token.ts";
 import { createHmac, randomBytes } from "node:crypto";
 
@@ -165,7 +165,7 @@ describe("csrfToken service", () => {
 describe("csrfTokenGuard middleware", () => {
   const guardedApp = (sessionId?: (c: { get(k: string): string }) => string | undefined) => {
     const service = csrfToken({ secret: "guard-secret" });
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(csrfTokenGuard({ service, sessionId }));
     app.post("/act", (c) => c.text("done"));
     app.get("/read", (c) => c.text("done"));
@@ -240,7 +240,7 @@ describe("csrfTokenGuard middleware", () => {
 
   it("a configured sessionId resolver yielding undefined is rejected", async () => {
     const service = csrfToken({ secret: "s" });
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(csrfTokenGuard({ service, sessionId: () => undefined }));
     app.post("/act", (c) => c.text("done"));
     const res = await app.handle(
@@ -252,7 +252,7 @@ describe("csrfTokenGuard middleware", () => {
 
   it("custom header names are honored", async () => {
     const service = csrfToken({ secret: "s" });
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(csrfTokenGuard({ service, header: "x-xsrf" }));
     app.post("/act", (c) => c.text("done"));
     const ok = await app.handle(

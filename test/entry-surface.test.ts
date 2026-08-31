@@ -13,8 +13,8 @@ import * as middleware from "../src/middleware/index.ts";
 
 const ROOT_EXPORTS = new Set([
   // core
-  "createApp",
-  "createRouter",
+  "Honu",
+  "Router",
   "compose",
   "direct",
   "NOOP_TAIL",

@@ -11,9 +11,9 @@
  */
 
 import {
-  createApp,
+  Honu,
   createBodyParser,
-  createRouter,
+  Router,
   hashPassword,
   html,
   streamSSE,
@@ -22,7 +22,7 @@ import {
 import { basicAuth, secureHeaders, serveStatic, validator } from "../src/middleware/index.ts";
 import { listen } from "../src/adapters/node.ts";
 
-const app = createApp({ keys: ["change-me"], env: "production" });
+const app = new Honu({ keys: ["change-me"], env: "production" });
 app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
 
 // Sunk routes degrade to their JS mirrors under Node — same paths, same
@@ -32,7 +32,7 @@ app.sink("/assets/*", { dir: "./examples/public" });
 
 app.get("/", (c) => c.html(html`<h1>honu · node adapter</h1>`));
 
-const api = createRouter({ prefix: "/api" });
+const api = new Router({ prefix: "/api" });
 api.use(secureHeaders());
 const UserSchema = {
   "~standard": {

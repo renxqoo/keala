@@ -10,9 +10,9 @@
  */
 
 import {
-  createApp,
+  Honu,
   createBodyParser,
-  createRouter,
+  Router,
   hashPassword,
   html,
   streamSSE,
@@ -27,7 +27,7 @@ import {
   validator,
 } from "../src/middleware/index.ts";
 
-const app = createApp({ keys: ["change-me"], env: "production" });
+const app = new Honu({ keys: ["change-me"], env: "production" });
 
 // --- plugins (context facades — safe alongside native sinks) ----------
 app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
@@ -51,7 +51,7 @@ app.get("/", (c) =>
   ),
 );
 
-const api = createRouter({ prefix: "/api" });
+const api = new Router({ prefix: "/api" });
 api.use(secureHeaders());
 const UserSchema = {
   "~standard": {

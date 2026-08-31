@@ -15,12 +15,12 @@ import {
   randString,
 } from "./agent-r6-prop-rig.mts";
 import { runProp } from "./agent-r6-prop-ops.mts";
-import { createApp } from "../src/index.ts";
+import { Honu } from "../src/index.ts";
 
 describe("INV-4 routing determinism", () => {
   it("dynamic patterns (optional / custom regex / wildcard / trailing slash) match deterministically", async () => {
     await runProp("dynamic-determinism", 120, async (rng) => {
-      const app = createApp({ ...quiet });
+      const app = new Honu({ ...quiet });
       app.get("/opt/:x?/tail", (c) => c.text(`opt:${c.params?.["x"] ?? "-"}`));
       app.get("/num/:n(\\d+)", (c) => c.text(`num:${c.params?.["n"]}`));
       app.get("/w/*", (c) => c.text(`w:${c.params?.["wildcard"]}`));
@@ -56,7 +56,7 @@ describe("INV-4 routing determinism", () => {
 
   it("100 consecutive matches are identical; encoding variants never land on a different route", async () => {
     await runProp("routing-determinism", 60, async (rng, _seed, ctx) => {
-      const app = createApp({ ...quiet });
+      const app = new Honu({ ...quiet });
       const registrations: Array<[string, string, string]> = [
         ["GET", "/a/b", "M1"],
         ["GET", "/a/:x", "M2"],
@@ -125,7 +125,7 @@ describe("INV-5 no-prototype-pollution", () => {
 
   it("random query/cookie/JSON inputs leave Object.prototype and globals untouched", async () => {
     await runProp("no-proto-pollution", 250, async (rng, _seed, ctx) => {
-      const app = createApp({ ...quiet, keys: ["r6-secret"] });
+      const app = new Honu({ ...quiet, keys: ["r6-secret"] });
       let queryProto: unknown = "unset";
       let queryHasProto = true;
       app.on("ALL", "/*", async (c) => {
@@ -175,7 +175,7 @@ describe("INV-5 no-prototype-pollution", () => {
 describe("INV-6 pooling isolation", () => {
   it("100 sequential requests never observe a previous request's own/symbol/state/cache data", async () => {
     await runProp("pooling-isolation", 12, async (rng) => {
-      const app = createApp({ ...quiet, pooling: true });
+      const app = new Honu({ ...quiet, pooling: true });
       const SYM = Symbol("r6leak");
       let baseline: (string | symbol)[] | null = null;
       const problems: string[] = [];
@@ -251,7 +251,7 @@ describe("INV-6 pooling isolation", () => {
 
   it("a late write on a context sitting in the pool never corrupts the next request", async () => {
     await runProp("pool-late-write-guard", 40, async (rng) => {
-      const app = createApp({ ...quiet, pooling: true });
+      const app = new Honu({ ...quiet, pooling: true });
       let guardFailures = 0;
       let corruptions = 0;
       app.get("/a", (c) => {

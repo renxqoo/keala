@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp, createError, type Context, type HttpErrorProps } from "../src/index.ts";
+import { Honu, createError, type Context, type HttpErrorProps } from "../src/index.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -22,7 +22,7 @@ const captureCtx = async (
   url = "http://localhost:3000/",
   init?: RequestInit,
 ): Promise<Context> => {
-  const app = createApp(quiet);
+  const app = new Honu(quiet);
   let captured: Context | undefined;
   app.use(async (c) => {
     captured = c;
@@ -52,7 +52,7 @@ describe("anomalies: c.throw argument matrix", () => {
     [401, "denied", { code: "A1" }, 401, "denied"],
   ];
   it.each(cases)("throw(%p, %p, %p)", async (status, message, props, wantStatus, wantBody) => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.throw(
         status as number,
@@ -66,7 +66,7 @@ describe("anomalies: c.throw argument matrix", () => {
   });
 
   it("throw with headers only in props still applies them", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.throw(410, { headers: { Allow: "GET" } });
     });
@@ -76,7 +76,7 @@ describe("anomalies: c.throw argument matrix", () => {
   });
 
   it("throw of a thrown error keeps original headers", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", async () => {
       throw createError(409, "clash", { headers: { "X-Conflict": "yes" } });
     });
@@ -126,7 +126,7 @@ describe("anomalies: body setter exotic values", () => {
   // failure escapes `app.handle` as a rejected promise. koa answered 500.
   // Intended behavior: res.status === 500. Locked phenomenon: TypeError.
   it("unserializable bodies (circular) answer 500, never reject app.handle", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {});
     app.get("/", (c) => {
       const cyclic: Record<string, unknown> = {};
@@ -139,7 +139,7 @@ describe("anomalies: body setter exotic values", () => {
   });
 
   it("unserializable bodies (BigInt) answer 500, never reject app.handle", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {});
     app.get("/", (c) => {
       c.body = 10n as never;
@@ -156,7 +156,7 @@ describe("anomalies: body setter exotic values", () => {
 
     ["64KB string", "x".repeat(64 * 1024)],
   ])("string body %s round-trips", async (_label, value) => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.body = value;
     });
@@ -166,7 +166,7 @@ describe("anomalies: body setter exotic values", () => {
   });
 
   it("empty Uint8Array responds 200 with empty body", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.body = new Uint8Array(0);
     });
@@ -176,7 +176,7 @@ describe("anomalies: body setter exotic values", () => {
   });
 
   it("JSON body with nested unicode survives", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.body = { deep: { emoji: "🎉", cjk: "中文", quote: '""' } };
     });
@@ -195,7 +195,7 @@ describe("anomalies: body setter exotic values", () => {
   });
 
   it("failing stream surfaces as 500", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.onError(() => {});
     app.get("/", (c) => {
       c.body = new ReadableStream({
@@ -225,7 +225,7 @@ describe("anomalies: header operations", () => {
   });
 
   it.each(["", " ", "x".repeat(16 * 1024)])("accepts value %s without crashing", async (value) => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.set("X-Long", value);
       c.body = "ok";
@@ -259,7 +259,7 @@ describe("anomalies: header operations", () => {
 
 describe("anomalies: message and etag inputs", () => {
   it.each(["", "ok", "with spaces", "unicode 中文"])("message %p is safe to set", async (msg) => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/", (c) => {
       c.status = 201;
       c.message = msg;

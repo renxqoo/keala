@@ -16,7 +16,7 @@ import { Router } from "@koa/router";
 import contentDispositionPkg from "content-disposition";
 import acceptsPkg from "accepts";
 
-import { createApp } from "../src/index.ts";
+import { Honu } from "../src/index.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
 import { contentDisposition } from "../src/utils/text.ts";
 import { acceptsType, acceptsEncoding } from "../src/negotiation/accepts.ts";
@@ -123,10 +123,10 @@ const driveKoa = async (
 };
 
 const driveBun = async (
-  setup: (app: ReturnType<typeof createApp>) => void,
+  setup: (app: InstanceType<typeof Honu>) => void,
   reqInit: ReqInit,
 ): Promise<Snapshot> => {
-  const app = createApp({ env: "test" } as const);
+  const app = new Honu({ env: "test" } as const);
   setup(app);
   const res = await app.handle(
     new Request(`http://localhost:3000${reqInit.url ?? "/"}`, {

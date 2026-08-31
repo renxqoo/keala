@@ -1,7 +1,7 @@
 // honu bench server (Bun runtime) — mirrors the other bench servers.
-import { createApp } from "../src/index.ts";
+import { Honu } from "../src/index.ts";
 
-const app = createApp();
+const app = new Honu();
 
 app.get("/text", (c) => c.text("hello world"));
 

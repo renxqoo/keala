@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
 import { validator, type StandardSchema } from "../src/middleware/validator.ts";
 import { cors, csrf } from "../src/middleware/cors.ts";
@@ -36,7 +36,7 @@ const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 describe("redteam P2: bodyParser boundaries (green)", () => {
   it("a lying small Content-Length is caught by the streamed guard when the body is read", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 1000 }));
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -60,7 +60,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   });
 
   it("jsonLimit=0 admits only empty bodies; negative limits behave like 0", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 0 }));
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -78,7 +78,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   });
 
   it("JSON top-level primitives round-trip (divergence ledger: object bodies pass through)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -95,7 +95,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   });
 
   it("a rejected bounded read stays rejected for every later reader", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 50 }));
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -125,7 +125,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   });
 
   it("formLimit is independent of jsonLimit (text route 413s, form route parses)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(createBodyParser({ jsonLimit: 100 }));
     app.post("/t", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -164,7 +164,7 @@ describe("redteam P2: validator (green)", () => {
         },
       },
     };
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post("/v", validator(boom), (c) => c.json({ ok: true }));
     const res = await app.handle(jsonBody("/v", {}));
     expect(res.status).toBe(500);
@@ -175,7 +175,7 @@ describe("redteam P2: validator (green)", () => {
     const emptyIssues: StandardSchema = {
       "~standard": { version: 1, validate: () => ({ issues: [] }) },
     };
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post("/e", validator(emptyIssues), (c) => c.json({ ok: true }));
     const res = await app.handle(jsonBody("/e", {}));
     expect(res.status).toBe(400);
@@ -186,7 +186,7 @@ describe("redteam P2: validator (green)", () => {
         validate: () => ({ issues: [{ message: "bad", path: ["a", "b"] }] }),
       },
     };
-    const app2 = createApp(quiet);
+    const app2 = new Honu(quiet);
     app2.post("/p", validator(withPath), (c) => c.json({ ok: true }));
     const res2 = await app2.handle(jsonBody("/p", {}));
     expect(res2.status).toBe(400);
@@ -194,7 +194,7 @@ describe("redteam P2: validator (green)", () => {
   });
 
   it("c.valid holds the parsed value behind the validator and undefined elsewhere", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.post("/a", validator(passthrough()), (c) =>
       c.json({ valid: (c as unknown as { valid?: unknown }).valid }),
     );
@@ -220,7 +220,7 @@ describe("redteam P2: validator (green)", () => {
 
 describe("redteam P2: csrf/cors matrix (green)", () => {
   it("csrf blocks cross-origin, cross-port, and missing Origin+Referer; passes same-origin", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(csrf());
     app.post("/x", (c) => c.text("done"));
     const host = "localhost:3000";
@@ -239,7 +239,7 @@ describe("redteam P2: csrf/cors matrix (green)", () => {
   });
 
   it("cors preflight: no header echo, no credentials header, 204, Vary: Origin", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(cors({ origin: ["https://a.example"], allowHeaders: ["X-Custom"] }));
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -260,7 +260,7 @@ describe("redteam P2: csrf/cors matrix (green)", () => {
   });
 
   it("cors: non-whitelisted and null origins are 403; no-origin requests carry no ACAO", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(cors({ origin: ["https://a.example"] }));
     app.get("/x", (c) => c.text("ok"));
     expect((await app.handle(req("/x", { headers: { origin: "https://b.example" } }))).status).toBe(
@@ -273,7 +273,7 @@ describe("redteam P2: csrf/cors matrix (green)", () => {
   });
 
   it("cors + csrf stacked: same-origin state changes pass with ACAO, cross-origin 403", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(cors({ origin: ["http://localhost:3000"] }));
     app.use(csrf());
     app.post("/x", (c) => c.text("done"));
@@ -300,7 +300,7 @@ describe("redteam P2: streams (green)", () => {
     const gate = new Promise<void>((resolve) => {
       setTimeout(resolve, 5000);
     });
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/s", (c) =>
       streamText(c, async (w) => {
         w.onAbort(() => calls.push("a1"));
@@ -322,7 +322,7 @@ describe("redteam P2: streams (green)", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/sse", (c) => streamSSE(c, () => gate, { heartbeat: 5 }));
     const res = await app.handle(req("/sse"));
     const reader = res.body!.getReader();
@@ -340,7 +340,7 @@ describe("redteam P2: streams (green)", () => {
   });
 
   it("a sync-throwing stream callback errors the body without leaking bytes", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/s", (c) =>
       stream(c, () => {
         throw new Error("secret-producer-failure");
@@ -351,7 +351,7 @@ describe("redteam P2: streams (green)", () => {
   });
 
   it("SSE event/id fields are CRLF-sanitized and multiline data fans out", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/sse", (c) =>
       streamSSE(c, (sse) => {
         sse.send({ event: "a\r\nb", id: "1\r2", data: "l1\nl2" });
@@ -369,7 +369,7 @@ describe("redteam P2: streams (green)", () => {
 
 describe("redteam P2: component protocol (green)", () => {
   it("a component whose install() throws fails loudly at use() time", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() =>
       app.use({
         name: "bad",
@@ -381,7 +381,7 @@ describe("redteam P2: component protocol (green)", () => {
   });
 
   it("decorate refuses duplicate keys and core context keys at setup time", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.decorate("feature", { enable: () => undefined });
     expect(() => app.decorate("feature", 2)).toThrow(/already defined/);
     // Core context members are guarded too — shadowing them silently changes
@@ -393,7 +393,7 @@ describe("redteam P2: component protocol (green)", () => {
   });
 
   it("decorate refuses per-request instance slots (params/bodyValue/…)", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     // These live as own slots on every context, not on the prototype — a
     // getter decoration would make every request throw in initContext.
     expect(() => app.decorateLazy("params", () => ({}))).toThrow(/already defined/);
@@ -405,13 +405,13 @@ describe("redteam P2: component protocol (green)", () => {
   });
 
   it("decorate rejects non-string and empty keys", () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.decorate(42 as unknown as string, 1)).toThrow(TypeError);
     expect(() => app.decorate("", 1)).toThrow(TypeError);
   });
 
   it("decorate('__proto__'/'constructor') refuses the keys, never pollutes Object.prototype", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     expect(() => app.decorate("__proto__", { polluted: true })).toThrow(TypeError);
     expect(() => app.decorate("constructor", () => 1)).toThrow(TypeError);
     app.get("/x", (c) => c.text("ok"));
@@ -423,7 +423,7 @@ describe("redteam P2: component protocol (green)", () => {
 
   it("components and middleware mix in one use() call; accessor decorates install lazily", async () => {
     const order: string[] = [];
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.use(
       (_c, next) => {
         order.push("mw1");

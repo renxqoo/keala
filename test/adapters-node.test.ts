@@ -7,7 +7,7 @@
 import { connect } from "node:net";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { createApp } from "../src/core/app.ts";
+import { Honu } from "../src/core/app.ts";
 import { listen, startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
 import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
 import { streamText } from "../src/helpers/streams.ts";
@@ -20,9 +20,9 @@ afterAll(() => {
 });
 
 const serve = async (
-  register: (app: ReturnType<typeof createApp>) => void,
+  register: (app: InstanceType<typeof Honu>) => void,
 ): Promise<{ server: NodeServerHandle; base: string }> => {
-  const app = createApp(quiet);
+  const app = new Honu(quiet);
   register(app);
   const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
   servers.push(server);
@@ -159,7 +159,7 @@ describe("node adapter: response bridging", () => {
   });
 
   it("signed cookies work end-to-end through the adapter", async () => {
-    const app = createApp({ ...quiet, keys: ["adapter-secret"] });
+    const app = new Honu({ ...quiet, keys: ["adapter-secret"] });
     app.get("/set", (c) => {
       c.cookies.set("sid", "session-1", { signed: true });
       c.body = "set";
@@ -180,7 +180,7 @@ describe("node adapter: response bridging", () => {
 
 describe("node adapter: server lifecycle", () => {
   it("stop() closes the port; stop(true) drops active connections", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x", (c) => {
       c.body = "ok";
     });
@@ -192,7 +192,7 @@ describe("node adapter: server lifecycle", () => {
   });
 
   it("onListen fires once the socket is bound", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     let fired = 0;
     const server = await listen(app, 0, "127.0.0.1", () => {
       fired++;
@@ -202,7 +202,7 @@ describe("node adapter: server lifecycle", () => {
   });
 
   it("handle.fetch() mirrors the Bun server handle shape", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x", (c) => {
       c.body = "direct";
     });
@@ -216,7 +216,7 @@ describe("node adapter: server lifecycle", () => {
   it.skipIf(typeof Bun !== "undefined")(
     "app.listen() refuses to serve without Bun.serve and points at the Node adapter",
     () => {
-      const app = createApp(quiet);
+      const app = new Honu(quiet);
       expect(() => app.listen(0)).toThrow(/Bun\.serve|startNodeServer/);
     },
   );
@@ -224,7 +224,7 @@ describe("node adapter: server lifecycle", () => {
 
 describe("node adapter: raw socket behavior", () => {
   it("websocket upgrade requests are refused with 501 at the wire level", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x", (c) => {
       c.body = "ok";
     });
@@ -248,7 +248,7 @@ describe("node adapter: raw socket behavior", () => {
   });
 
   it("an HTTP/1.0 request without Host still routes (fallback origin)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/legacy", (c) => {
       c.body = "old http";
     });
@@ -272,7 +272,7 @@ describe("node adapter: raw socket behavior", () => {
 
 describe("node adapter: failure surfaces", () => {
   it("repeated request headers arrive as an array value", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x-forwarded", (c) => {
       c.body = c.get("x-forwarded-for");
     });
@@ -303,7 +303,7 @@ describe("node adapter: failure surfaces", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/slow", (c) => {
       return gate.then(() => {
         c.body = "late";
@@ -321,7 +321,7 @@ describe("node adapter: failure surfaces", () => {
   });
 
   it("a response stream failing after headers destroys the socket", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/broken-stream", (c) => {
       c.status = 200;
       c.body = new ReadableStream<Uint8Array>({
@@ -350,7 +350,7 @@ describe("node adapter: failure surfaces", () => {
   });
 
   it("malformed HTTP answers 400 and drops the connection", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x", (c) => {
       c.body = "ok";
     });
@@ -369,7 +369,7 @@ describe("node adapter: failure surfaces", () => {
 
 describe("node adapter: bridge failures", () => {
   it("an unparseable absolute-form target is refused (parser 400 or bridge 500)", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x", (c) => {
       c.body = "ok";
     });
@@ -395,9 +395,9 @@ describe("node adapter: bridge failures", () => {
 
 describe("node adapter: review hardening", () => {
   it("a busy port rejects ready() instead of crashing", async () => {
-    const occupier = await listen(createApp(quiet), 0, "127.0.0.1").ready();
+    const occupier = await listen(new Honu(quiet), 0, "127.0.0.1").ready();
     servers.push(occupier);
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/x", (c) => {
       c.body = "ok";
     });
@@ -405,7 +405,7 @@ describe("node adapter: review hardening", () => {
   });
 
   it("absolute-form request targets route like origin-form", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/proxy-style", (c) => {
       c.body = "routed";
     });
@@ -430,7 +430,7 @@ describe("node adapter: review hardening", () => {
   });
 
   it("an IPv6-bound server answers Host-less HTTP/1.0 requests", async () => {
-    const app = createApp(quiet);
+    const app = new Honu(quiet);
     app.get("/legacy", (c) => {
       c.body = "old http";
     });
