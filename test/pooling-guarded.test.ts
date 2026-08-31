@@ -41,9 +41,12 @@ describe("guarded pooling", () => {
       return next();
     });
     app.get("/x", (c) => c.text("ok"));
-    await app.handle(new Request("http://localhost:3000/x"));
+    // Consume the bodies: retirement happens once the response body is
+    // consumed (streams outlive settle — the retire-on-settle race leaked
+    // request data into in-flight bodies; see test/agent3-lifecycle.test.ts).
+    await (await app.handle(new Request("http://localhost:3000/x"))).text();
     // A second request retires the first context into the pool.
-    await app.handle(new Request("http://localhost:3000/x"));
+    await (await app.handle(new Request("http://localhost:3000/x"))).text();
     const retired = held[0] as Context;
     expect(() => {
       (retired as unknown as { status: number }).status = 500;
@@ -64,9 +67,10 @@ describe("guarded pooling", () => {
       return next();
     });
     app.get("/x", (c) => c.text("ok"));
-    await app.handle(new Request("http://localhost:3000/x"));
-    await app.handle(new Request("http://localhost:3000/x"));
-    await app.handle(new Request("http://localhost:3000/x"));
+    // Bodies consumed → each context retires once its body is read.
+    await (await app.handle(new Request("http://localhost:3000/x"))).text();
+    await (await app.handle(new Request("http://localhost:3000/x"))).text();
+    await (await app.handle(new Request("http://localhost:3000/x"))).text();
     // The pool cycles: the first context comes back live with clean state.
     expect(held[0]).toBe(held[2]);
     const reused = held[2] as Context;

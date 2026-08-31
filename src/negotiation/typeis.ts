@@ -31,6 +31,12 @@ export const typeIs = (
       }
       continue;
     }
+    if (shorthand.startsWith("+")) {
+      // `+json` — structured-syntax suffix: matches any `<type>/<subtype>+json`
+      // (type-is expands it to `*/*+json`; the INCOMING type is the answer).
+      if ((incoming.split("/")[1] ?? "").endsWith(shorthand)) return incoming;
+      continue;
+    }
     if (shorthand.startsWith("*/")) {
       // `*/png` matches any type whose subtype is png.
       const subtype = shorthand.slice(2);

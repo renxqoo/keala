@@ -40,6 +40,9 @@ export interface RouteDef {
   path: string;
   handlers: RouteHandler[];
   name?: string;
+  /** Set by app.ws(): the wsRoutes key this def's upgrade handler closes
+   * over (mount() re-keys ws registrations under its prefix). */
+  wsKey?: string;
 }
 
 const KNOWN_METHOD_LIST = [
@@ -113,10 +116,11 @@ export const normalizePrefix = (prefix: string): string => {
  */
 const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): RouteTarget => {
   if (ir.isStatic) {
-    // Key by the DECODED path — the trie's static children key decoded
-    // segments, and the exact-match Map must agree with it (patterns like
-    // "/foo%20bar" and "/foo bar" share one route, just like in the trie).
-    const key = fullPath.indexOf("%") !== -1 ? decodeSegments(fullPath) : fullPath;
+    // Key by the CANONICAL path — decoded per segment exactly like the
+    // trie's static children, with "%" and "/" re-escaped inside decoded
+    // values so the flat key can never conflate "%2F" with a real separator
+    // (patterns like "/foo%20bar" and "/foo bar" still share one route).
+    const key = fullPath.indexOf("%") !== -1 ? canonicalKey(fullPath) : fullPath;
     let target = state.staticMap.get(key);
     if (target === undefined) {
       target = createTarget();
@@ -207,6 +211,7 @@ export const rebuildChains = (state: RouterState, globalMw: readonly RouteHandle
   for (const def of state.defs) bindDef(state, def, globalMw);
 };
 
+/** Register one definition; returns it (callers may tag it, e.g. wsKey). */
 export const registerDef = (
   state: RouterState,
   method: string,
@@ -214,7 +219,7 @@ export const registerDef = (
   handlers: RouteHandler[],
   name?: string,
   globalMw: readonly RouteHandler[] = [],
-): void => {
+): RouteDef => {
   const upper = method.toUpperCase();
   if (!KNOWN_METHODS.has(upper) && upper !== ALL) {
     throw new TypeError(`Unknown HTTP method: ${JSON.stringify(method)}`);
@@ -246,6 +251,7 @@ export const registerDef = (
   state.defs.push(def);
   if (name !== undefined) state.named.set(name, def);
   bindDef(state, def, globalMw);
+  return def;
 };
 
 const normalizePath = (path: string): string =>
@@ -257,10 +263,13 @@ const firstSegmentOf = (path: string): string =>
 /**
  * Boundary-aware path overlap: two paths conflict when they are the same
  * route, or when a wildcard prefix subtree of one contains the other.
+ * Comparison runs in the CANONICAL (decoded-per-segment) keyspace — the
+ * staticMap registers decoded keys, so a raw "/esc%20ped" and its decoded
+ * twin "/esc ped" are the same route and must be caught here too.
  */
 export const pathsConflict = (a: string, b: string): boolean => {
-  const aBase = firstSegmentOf(a);
-  const bBase = firstSegmentOf(b);
+  const aBase = firstSegmentOf(a.includes("%") ? canonicalKey(a) : a);
+  const bBase = firstSegmentOf(b.includes("%") ? canonicalKey(b) : b);
   if (aBase === bBase) return true;
   const aWild = a.endsWith("/*");
   const bWild = b.endsWith("/*");
@@ -274,11 +283,18 @@ export interface RouteMatch {
   params: Record<string, string> | null;
 }
 
-/** Decode every segment of a path independently (%2F stays one segment). */
-const decodeSegments = (path: string): string =>
+/**
+ * Canonical static-route key: decode each RAW segment independently (an
+ * escaped `%2F` never becomes a separator — the trie contract), then
+ * re-escape "%" and "/" inside the decoded value. The re-escaping keeps the
+ * key injective, so two paths land on the same key EXACTLY when their
+ * decoded segments are equal — i.e. precisely when the trie's per-segment
+ * static walk would reach the same node.
+ */
+const canonicalKey = (path: string): string =>
   path
     .split("/")
-    .map((segment) => decodeSegment(segment))
+    .map((segment) => decodeSegment(segment).replace(/%/g, "%25").replace(/\//g, "%2F"))
     .join("/");
 
 /** Try the fast matcher for a bucket; provably equivalent to the trie walk. */
@@ -323,10 +339,10 @@ export const matchRoute = (state: RouterState, path: string): RouteMatch | null 
     target = state.staticMap.get(stripped);
   }
   if (target === undefined && path.indexOf("%") !== -1) {
-    const decoded = decodeSegments(path);
+    const decoded = canonicalKey(path);
     target = state.staticMap.get(decoded);
     if (target === undefined && stripped !== path) {
-      target = state.staticMap.get(decodeSegments(stripped));
+      target = state.staticMap.get(canonicalKey(stripped));
     }
   }
   if (target !== undefined) return { target, params: null };
@@ -350,6 +366,15 @@ export const matchRoute = (state: RouterState, path: string): RouteMatch | null 
 
 // ---- URL building (named routes) ---------------------------------------------
 
+/**
+ * Percent-encode a path value: encodeURIComponent, except "/" stays a real
+ * separator (wildcard values span segments). Without this a value carrying
+ * "?", "#" or a space stops addressing the same resource (`?` becomes a
+ * query string — a silent round-trip break).
+ */
+const encodePathValue = (value: string): string =>
+  value.split("/").map(encodeURIComponent).join("/");
+
 export const buildURL = (
   segments: readonly CompiledSegment[],
   params: Record<string, string>,
@@ -357,7 +382,9 @@ export const buildURL = (
   const parts: string[] = [];
   for (const segment of segments) {
     if (segment.kind === "static") {
-      parts.push(segment.value);
+      // Compiled static segments are DECODED — re-encode for the wire so the
+      // built URL is canonical (a decoded "?" or "#" would change meaning).
+      parts.push(encodePathValue(segment.value));
       continue;
     }
     const value = params[segment.value];
@@ -365,11 +392,22 @@ export const buildURL = (
       if (segment.optional) continue;
       throw new Error(`Missing required parameter "${segment.value}" for url()`);
     }
-    parts.push(segment.kind === "wildcard" ? value : encodeURIComponent(value));
+    parts.push(segment.kind === "wildcard" ? encodePathValue(value) : encodeURIComponent(value));
   }
   if (parts.length === 0) return "/";
   const joined = parts.join("/");
   return joined.startsWith("/") ? joined : `/${joined}`;
+};
+
+/**
+ * Pattern segments of a redirect destination, or null when the destination is
+ * verbatim. Only a PATH may carry `:params`: absolute URLs
+ * ("https://host:port/x") contain scheme/port colons that are NOT parameter
+ * markers, and scheme-relative targets ("//host/x") are verbatim as well.
+ */
+export const redirectTargetSegments = (destination: string): readonly CompiledSegment[] | null => {
+  if (!destination.startsWith("/") || destination.startsWith("//")) return null;
+  return destination.includes(":") ? compilePattern(destination).segments : null;
 };
 
 export const urlFor = (

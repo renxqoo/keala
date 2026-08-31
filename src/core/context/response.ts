@@ -17,6 +17,7 @@ import {
   validateHeaderValue,
 } from "../../utils/text.ts";
 import { byteLengthOf, encodeUrlValue } from "../../utils/url.ts";
+import { sugarText, sugarJson, sugarHtml, TEXT_PLAIN, TEXT_HTML } from "./sugar.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestApi } from "./request.ts";
 
@@ -69,74 +70,11 @@ const basenameOf = (filename: string): string => {
   return slash === -1 ? filename : filename.slice(slash + 1);
 };
 
-const TEXT_PLAIN = "text/plain; charset=utf-8";
-const TEXT_HTML = "text/html; charset=utf-8";
-
-/**
- * Koa's `encodeurl`, UTF-8 correct: percent-encode characters unsafe in a
- * Location header (non-ASCII, controls, space, `"`, `'`, `<`, `>`, `` ` ``)
 /** Any explicit Content-Length is stale once a body lands (koa recomputes). */
 const clearTouchedLength = (c: ContextState): void => {
   if (c.headersRecord?.["content-length"] !== undefined) {
     delete c.headersRecord["content-length"];
   }
-};
-
-/**
- * The sugar helpers CONSUME the staged headers: whatever c.set()/c.cookies
- * wrote before the return is delivered inside the built Response, and the
- * staging record is cleared so the finalizer does not merge it a second time.
- * Only writes staged AFTER the sugar return hit the rule-4 merge path.
- */
-const consumeStaged = (
-  c: ContextState,
-  headers: Record<string, HeaderValue> | undefined,
-): Record<string, HeaderValue> | undefined => {
-  const merged = mergedHeadersOf(c, headers);
-  if (merged !== undefined && c.headersRecord !== null) c.headersRecord = null;
-  return merged;
-};
-
-/**
- * A ResponseInit headers value that preserves array entries (multi-value
- * headers like set-cookie) — record inits would join them into one line.
- */
-const headersInitOf = (
-  merged: Record<string, HeaderValue>,
-): Headers | Record<string, HeaderValue> => {
-  let hasArray = false;
-  for (const key of Object.keys(merged)) {
-    if (Array.isArray(merged[key])) {
-      hasArray = true;
-      break;
-    }
-  }
-  if (!hasArray) return merged;
-  const headers = new Headers();
-  for (const key of Object.keys(merged)) {
-    const value = merged[key] as HeaderValue;
-    if (Array.isArray(value)) {
-      for (const item of value) headers.append(key, item);
-    } else {
-      headers.set(key, value);
-    }
-  }
-  return headers;
-};
-
-/**
- * Merge the context's state-mode headers with per-call headers for the sugar
- * helpers. Undefined when neither exists (the bare fast path).
- */
-const mergedHeadersOf = (
-  c: ContextState,
-  headers: Record<string, HeaderValue> | undefined,
-): Record<string, HeaderValue> | undefined => {
-  const record = c.headersRecord;
-  if (record === null && headers === undefined) return undefined;
-  if (headers === undefined) return { ...record };
-  if (record === null) return { ...headers };
-  return { ...record, ...headers };
 };
 
 export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & ResponseApi = {
@@ -156,6 +94,10 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       throw new TypeError(`Invalid status code: ${JSON.stringify(code)}`);
     }
     this.flags |= 1;
+    // A status write AFTER a Response committed is a rewrite of that response
+    // — flag it so the finalizer rebuilds instead of returning the commit
+    // verbatim (the getter is commit-aware; the setter must be too).
+    if (this._res !== undefined) this.flags |= 16;
     if (this.statusValue !== code) this.messageValue = "";
     this.statusValue = code;
     if (isEmptyStatus(code)) {
@@ -401,7 +343,26 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (name !== "content-type" && name !== "content-length") validateHeaderName(name);
     const next = typeof value === "string" ? [value] : [...value];
     for (const entry of next) validateHeaderValue(name, entry);
-    const existing = this.headersRecord?.[name];
+    // RFC 9110 singletons: append must never manufacture a second value —
+    // the runtime would comma-join them into an invalid header (koa #1899).
+    const singleton = name === "content-type" || name === "content-length";
+    if (singleton && next.length > 1) {
+      throw new TypeError(`${field} is a singleton header and cannot be set to an array`);
+    }
+    let existing = this.headersRecord?.[name];
+    if (existing === undefined && this._res !== undefined && name !== "set-cookie") {
+      // Appending to a COMMITTED response: the committed value is the base
+      // the rebuild appends to — without this seed the merge would replace.
+      // (Set-Cookie is exempt: its rebuild semantics are pure append, so the
+      // committed cookies must not be duplicated into the staging record.)
+      const committedValues = [this._res.headers.get(name) ?? ""].filter(
+        (entry) => entry.length > 0,
+      );
+      if (committedValues.length === 1) existing = committedValues[0];
+    }
+    if (singleton && existing !== undefined) {
+      throw new TypeError(`${field} is a singleton header and cannot be appended to`);
+    }
     if (existing === undefined) {
       if (next.length === 1) {
         recordOf(this)[name] = next[0] ?? "";
@@ -417,7 +378,14 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     recordOf(this)[name] = list;
   },
   remove(field: string) {
-    if (this.headersRecord !== null) delete this.headersRecord[field.toLowerCase()];
+    const name = field.toLowerCase();
+    if (this.headersRecord !== null) delete this.headersRecord[name];
+    if (this._res !== undefined) {
+      // A committed Response IS the response — a removal must reach it on the
+      // rebuild path, not just the staging record (else it is a silent no-op).
+      (this.removedValue ??= []).push(name);
+      this.flags |= 16;
+    }
   },
   vary(field: string) {
     if (field.includes(",") || field.includes(" ")) {
@@ -439,49 +407,15 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (raw === undefined) return "";
     return Array.isArray(raw) ? raw.join(", ") : raw;
   },
-  text(body: string, status?: number, headers?: Record<string, HeaderValue>): Response {
-    const merged = consumeStaged(this, headers);
-    // An explicitly staged c.status wins over the default (hono parity).
-    const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
-    if (merged === undefined && status === undefined && staged === undefined) {
-      return new Response(body);
-    }
-    const st = status ?? staged ?? 200;
-    if (merged === undefined) return new Response(body, { status: st });
-    if (merged["content-type"] === undefined) merged["content-type"] = TEXT_PLAIN;
-    return new Response(body, { status: st, headers: headersInitOf(merged) });
+  // The sugar constructors live in core/context/sugar.ts (staged-header
+  // consumption, empty-status contract, statusText forwarding).
+  text(body, status, headers) {
+    return sugarText(this, body, status, headers);
   },
-  json(body: unknown, status?: number, headers?: Record<string, HeaderValue>): Response {
-    // `undefined` is not JSON-serializable (Response.json would throw a raw
-    // TypeError → 500). A handler doing c.json(findUser()) on a miss gets
-    // the same graceful "null" JSON.stringify produces for absent values.
-    const payload = body === undefined ? null : body;
-    const merged = consumeStaged(this, headers);
-    // Response.json sets `application/json` and serializes natively — 74ns
-    // cheaper than stringify + record init (see docs/AUDIT.md).
-    const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
-    if (merged === undefined && status === undefined && staged === undefined) {
-      return Response.json(payload);
-    }
-    return Response.json(
-      payload,
-      merged === undefined
-        ? { status: status ?? staged }
-        : {
-            ...(status === undefined && staged === undefined ? {} : { status: status ?? staged }),
-            headers: headersInitOf(merged),
-          },
-    );
+  json(body, status, headers) {
+    return sugarJson(this, body, status, headers);
   },
-  html(body: string, status?: number, headers?: Record<string, HeaderValue>): Response {
-    const merged = consumeStaged(this, headers);
-    const withType =
-      merged === undefined
-        ? { "content-type": TEXT_HTML }
-        : { ...merged, "content-type": TEXT_HTML };
-    const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
-    const st = status ?? staged;
-    if (st === undefined) return new Response(body, { headers: headersInitOf(withType) });
-    return new Response(body, { status: st, headers: headersInitOf(withType) });
+  html(body, status, headers) {
+    return sugarHtml(this, body, status, headers);
   },
 };

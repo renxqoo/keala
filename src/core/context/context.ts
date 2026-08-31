@@ -104,7 +104,8 @@ const contextApi: ThisType<Context> & {
 /** The base prototype shared by every app (before `decorate` extensions). */
 export const baseContextProto = mergeProtos(requestApi, responseApi, contextApi);
 
-const initContext = (c: Context): Context => {
+/** Assign the full internal slot set (fixed order, one hidden class). */
+const assignSlots = (c: Context): Context => {
   c.pathValue = null;
   c.urlValue = null;
   c.originalUrlValue = null;
@@ -117,6 +118,7 @@ const initContext = (c: Context): Context => {
   c.headersRecord = null;
   c.bodyValue = null;
   c.flags = 0;
+  c.removedValue = null;
   c._res = undefined;
   c.stateValue = null;
   c.cookiesValue = null;
@@ -126,6 +128,35 @@ const initContext = (c: Context): Context => {
   c.bodyCache = undefined;
   c.validValue = undefined;
   return c;
+};
+
+/**
+ * Own keys a healthy context may carry: every assignSlots slot (probed from a
+ * real assignment so the set cannot drift) plus the identity slots
+ * createContext/resetContext assign around it. Anything else is a handler's
+ * ad-hoc property (koa-idiomatic `c.user = …`) and must NOT survive a pool
+ * recycle: the next request would read the previous request's data
+ * (cross-request disclosure).
+ */
+const INTERNAL_SLOTS: ReadonlySet<string> = new Set([
+  ...Object.keys(assignSlots(Object.create(baseContextProto) as Context)),
+  "appValue",
+  "appSettings",
+  "rawRequest",
+  "runtimeValue",
+]);
+
+/**
+ * Strip a RECYCLED context's foreign own keys (handler-assigned ad-hoc
+ * properties — see INTERNAL_SLOTS). Fresh contexts skip this: an
+ * Object.create'd object carries no own properties, and the sweep on the
+ * no-pooling hot path measured +9% in-process per request (bench/M4).
+ */
+const sweepForeignKeys = (c: Context): void => {
+  const own = c as unknown as Record<string, unknown>;
+  for (const key of Object.keys(c)) {
+    if (!INTERNAL_SLOTS.has(key)) delete own[key];
+  }
 };
 
 /** Create the per-request context. One flat allocation, fixed field order. */
@@ -140,7 +171,7 @@ export const createContext = (
   c.rawRequest = raw;
   c.appSettings = app.settings;
   c.runtimeValue = runtime;
-  return initContext(c);
+  return assignSlots(c);
 };
 
 /** Reset a recycled context in place (pooling is opt-in; see app options). */
@@ -149,7 +180,8 @@ export const resetContext = (
   raw: Request,
   runtime: ContextState["runtimeValue"],
 ): Context => {
+  sweepForeignKeys(c);
   c.rawRequest = raw;
   c.runtimeValue = runtime;
-  return initContext(c);
+  return assignSlots(c);
 };

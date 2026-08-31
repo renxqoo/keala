@@ -146,7 +146,47 @@ export const extensionFromMime = (mime: string): string | null => {
 /** Extract the `charset` parameter of a content-type header, if present. */
 export const charsetFromContentType = (contentType: string): string => {
   if (!contentType) return "";
-  const match = /charset=\s*(?:'([^']*)'|"([^"]*)"|([^;\s]+))/i.exec(contentType);
-  const value = match?.[1] ?? match?.[2] ?? match?.[3];
-  return (value ?? "").toLowerCase();
+  for (const [name, value] of contentTypeParameters(contentType)) {
+    if (name === "charset") return value.toLowerCase();
+  }
+  return "";
+};
+
+/**
+ * Split a content type into its `;`-separated parameters (RFC 9110 grammar:
+ * optional whitespace around `=`, quoted values that may contain `;` or even
+ * a decoy `charset=`). Only parameters AFTER the type itself are yielded, so
+ * a `charset=` inside another parameter's quoted value can never win.
+ */
+const contentTypeParameters = function* (
+  contentType: string,
+): Generator<[name: string, value: string]> {
+  const parts: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (const ch of contentType) {
+    if (ch === '"') inQuotes = !inQuotes;
+    if (ch === ";" && !inQuotes) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  parts.push(current);
+  for (const part of parts.slice(1)) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const name = part.slice(0, eq).trim().toLowerCase();
+    if (name.length === 0) continue;
+    let value = part.slice(eq + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    yield [name, value];
+  }
 };

@@ -63,9 +63,8 @@ describe("audit: query parser complexity (fixed O(n^2) DoS)", () => {
     const parsed = parseQuery(search);
     const elapsed = Date.now() - start;
     expect(parsed).toBeTruthy();
-    // ~240KB input: linear parse is ~10ms; the old quadratic parse needed
-    // ~250ms on the same machine. 100ms separates the two by an order of
-    // magnitude without being flaky on slow runners.
+    // ~240KB input: linear parse ~10ms, the old quadratic one ~250ms —
+    // 100ms separates them without being flaky on slow runners.
     expect(elapsed).toBeLessThan(100);
   });
 
@@ -105,8 +104,7 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
 
   it.each(PROTO_TOKENS)("accepts*(%p) is a clean miss, not a crash", (token) => {
     expect(acceptsType("text/html", [token])).toBe(false);
-    // `text/*` prefix scoring calls server.split() — pre-fix this crashed on
-    // the leaked Object.prototype.
+    // `text/*` scoring calls server.split() — crashed on leaked Object.prototype.
     expect(acceptsType("text/*", [token])).toBe(false);
     expect(acceptsType("application/json", [token])).toBe(false);
     expect(acceptsCharset("utf-8", [token])).toBe(false);

@@ -78,6 +78,18 @@ export const resolveRelativeSegments = (
 export const isWithinRoot = (absolute: string, root: string, sep: string): boolean =>
   absolute === root || absolute.startsWith(`${root}${sep}`);
 
+/**
+ * Path-relative remainder of a mounted request, or null when the path is not
+ * under the prefix (the mount then declines: next()). Segment boundaries only
+ * — "/assets" owns "/assets" and "/assets/…", never "/assetsfoo".
+ */
+const stripPrefix = (path: string, prefix: string | undefined): string | null => {
+  if (prefix === undefined) return path;
+  if (path === prefix) return "/";
+  if (path.startsWith(`${prefix}/`)) return path.slice(prefix.length);
+  return null;
+};
+
 export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
   if (typeof options.root !== "string" || options.root.length === 0) {
     throw new TypeError("serveStatic({ root }) requires a directory path");
@@ -93,10 +105,11 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     if (c.method !== "GET" && c.method !== "HEAD") return next();
     const { resolve, sep } = nodePath();
     const root = (rootCache ??= resolve(options.root));
-    const relative =
-      options.prefix !== undefined && c.path.startsWith(options.prefix)
-        ? c.path.slice(options.prefix.length)
-        : c.path;
+    // A prefix owns its URL SUBTREE only — matching on a bare startsWith
+    // would strip "/assets" off "/assetsfoo" too and serve mounted files
+    // under URLs that belong to other routes.
+    const relative = stripPrefix(c.path, options.prefix);
+    if (relative === null) return next();
     if (relative.includes("\0")) {
       throw createError(400, "null byte in path", { expose: true });
     }
@@ -161,8 +174,9 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     };
     if (mime !== null) headers["content-type"] = mime;
 
-    // RFC 9110: If-None-Match decides when present — a mismatch serves 200
-    // (If-Modified-Since is only consulted without it); "*" matches anything.
+    // RFC 9110: If-None-Match decides when present — a match is a 304, a
+    // MISMATCH falls through to the full 200 representation (never an empty
+    // 200); If-Modified-Since is only consulted without If-None-Match.
     const ifNone = c.get("if-none-match");
     if (ifNone.length > 0) {
       const matched =
@@ -170,11 +184,12 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
         ifNone
           .split(",")
           .some((candidate) => candidate.trim().replace(/^W\//, "") === etag.slice(2));
-      return new Response(null, { status: matched ? 304 : 200, headers });
-    }
-    const ifModified = c.get("if-modified-since");
-    if (ifModified.length > 0 && Date.parse(ifModified) >= info.mtime.getTime() - 999) {
-      return new Response(null, { status: 304, headers });
+      if (matched) return new Response(null, { status: 304, headers });
+    } else {
+      const ifModified = c.get("if-modified-since");
+      if (ifModified.length > 0 && Date.parse(ifModified) >= info.mtime.getTime() - 999) {
+        return new Response(null, { status: 304, headers });
+      }
     }
     if (bunFile !== null) return new Response(bunFile(filePath), { headers });
     const bytes = await readFile(filePath).catch(() => null);

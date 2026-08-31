@@ -65,7 +65,12 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
   const eligible = (c: Context, res: Response): boolean => {
     if (c.method !== "GET" && c.method !== "HEAD") return false;
     if (res.status !== 200) return false;
+    // Identity-bearing requests never seed entries: Authorization AND the
+    // request Cookie header (a handler personalizing on the raw header —
+    // never touching the c.cookies facade — would otherwise be replayed to
+    // every other user of the same URL).
     if (c.get("authorization").length > 0) return false;
+    if (c.get("cookie").length > 0) return false;
     if (c.cookiesValue !== null) return false; // handler touched cookies
     const control = res.headers.get("cache-control") ?? "";
     if (NO_STORE.test(control)) return false;

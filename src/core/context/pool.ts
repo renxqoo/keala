@@ -97,4 +97,53 @@ export const createPool = (app: Application, liveProto: object): ContextPool => 
   } as ContextPool;
 };
 
+/**
+ * Retire `c` into the pool as soon as its response is SAFE to recycle.
+ * Null-body responses retire at once; bodied ones only once the consumer
+ * finishes (or cancels): the body is consumed AFTER handle() returns, and
+ * anything it captured (stream callbacks, onStreamError) must keep reading
+ * THIS request's context — recycling earlier leaks the next request's data
+ * into in-flight bodies. The wrapper observes completion pull-based, so
+ * backpressure passes through and nothing is buffered; a consumer that
+ * abandons the body without cancelling simply never returns the context.
+ */
+export const retireWithBody = (pool: ContextPool, c: Context, value: Response): Response => {
+  const body = value.body;
+  if (body === null) {
+    pool.release(c);
+    return value;
+  }
+  const reader = body.getReader();
+  let retired = false;
+  const retire = (): void => {
+    if (!retired) {
+      retired = true;
+      pool.release(c);
+    }
+  };
+  return new Response(
+    new ReadableStream({
+      async pull(controller) {
+        try {
+          const { done, value: chunk } = await reader.read();
+          if (done) {
+            controller.close();
+            retire();
+            return;
+          }
+          controller.enqueue(chunk);
+        } catch (err) {
+          retire();
+          controller.error(err);
+        }
+      },
+      cancel(reason) {
+        void reader.cancel(reason).catch(() => undefined);
+        retire();
+      },
+    }),
+    { status: value.status, statusText: value.statusText, headers: value.headers },
+  );
+};
+
 export { resetContext };

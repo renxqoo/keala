@@ -66,6 +66,10 @@ const mediaScore = (client: string, server: string): number => {
   if (client.endsWith("/*")) {
     return client.slice(0, -2) === server.split("/")[0] ? 2 : 0;
   }
+  if (client.startsWith("*/")) {
+    // `*/subtype` — wildcard type, concrete subtype (negotiator semantics).
+    return client.slice(2) === server.split("/")[1] ? 2 : 0;
+  }
   return client === server ? 3 : 0;
 };
 

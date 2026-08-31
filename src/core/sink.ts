@@ -142,14 +142,17 @@ export const registerSink = (
     const clone = source.clone();
     const bytes = await clone.arrayBuffer();
     const status = clone.status;
+    const statusText = clone.statusText;
     // clone.headers stays readable after the body is consumed; passing it as
     // ResponseInit preserves multi-value headers (e.g. multiple Set-Cookie).
     const headers = clone.headers;
     rebuild = () =>
-      // Fetch-spec null-body statuses reject a body at construction.
+      // Fetch-spec null-body statuses reject a body at construction. The
+      // statusText rides along — the native table reuses the original
+      // instance verbatim and the JS mirror must not diverge from it.
       bytes.byteLength === 0 || status === 204 || status === 205 || status === 304
-        ? new Response(null, { status, headers })
-        : new Response(bytes, { status, headers });
+        ? new Response(null, { status, statusText, headers })
+        : new Response(bytes, { status, statusText, headers });
     return rebuild();
   };
   const mirror: RouteHandler = () => (rebuild === null ? capture() : rebuild());

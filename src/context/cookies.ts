@@ -212,6 +212,12 @@ export const createCookies = (host: CookiesHost): CookiesFacade => {
     set(name, value, options = {}) {
       const keys = host.keys;
       const wantsSign = options.signed !== false && keys !== undefined && keys.length > 0;
+      // Fail CLOSED like the `cookies` package and like get() above: an
+      // explicit signed SET without keys must throw, never silently ship an
+      // unsigned cookie the app believes to be signed (forgeable sessions).
+      if (options.signed === true && !wantsSign) {
+        throw new Error(".keys required for signed cookies");
+      }
       // Koa's "get secure from request": an unset `secure` follows the
       // request's TLS state instead of defaulting to insecure.
       const effective: CookieOptions =

@@ -28,16 +28,24 @@ export const createEmitter = (): Emitter => {
   return {
     on: (event, listener) => add(event, listener),
     once(event, listener) {
-      const dispose = add(event, (...args: unknown[]) => {
+      // The wrapper records the ORIGINAL listener (the Node EventEmitter
+      // `.listener` contract) so off(event, original) removes it — a once()
+      // registration must be removable the same way an on() one is.
+      const wrapper: Listener & { listener?: Listener } = (...args: unknown[]) => {
         dispose();
         listener(...args);
-      });
+      };
+      wrapper.listener = listener;
+      const dispose = add(event, wrapper);
       return dispose;
     },
     off(event, listener) {
       const current = listeners.get(event);
       if (current === undefined) return;
-      const index = current.indexOf(listener);
+      const index = current.findIndex(
+        (registered) =>
+          registered === listener || (registered as { listener?: Listener }).listener === listener,
+      );
       if (index !== -1) current.splice(index, 1);
     },
     emit(event, ...args) {

@@ -17,7 +17,12 @@ import type { Context } from "../core/context/context.ts";
 export interface StandardSchema {
   readonly "~standard": {
     readonly version: 1;
-    validate(value: unknown): { readonly value?: unknown } | { readonly issues: unknown[] };
+    validate(
+      value: unknown,
+    ):
+      | { readonly value?: unknown }
+      | { readonly issues: unknown[] }
+      | Promise<{ readonly value?: unknown } | { readonly issues: unknown[] }>;
   };
 }
 
@@ -28,6 +33,14 @@ const isStandardSchema = (value: unknown): value is StandardSchema => {
 
 const decoder = new TextDecoder();
 const KIB = 1024;
+
+/**
+ * One c.valid installation per app, shared by EVERY validator() instance —
+ * apps routinely validate several routes with several schemas, and a
+ * per-instance registry would re-decorate and explode against
+ * app.decorate()'s already-defined guard at request time (500s).
+ */
+const VALIDATOR_APPS = new WeakSet<Application>();
 const issueLines = (issues: unknown[]): string => {
   const parts: string[] = [];
   for (const issue of issues.slice(0, 10)) {
@@ -50,11 +63,10 @@ export const validator = (schema: StandardSchema): RouteHandler => {
   if (!isStandardSchema(schema)) {
     throw new TypeError("validator() requires a Standard Schema (zod 4, valibot, typebox…)");
   }
-  const installed = new WeakSet<Application>();
   const ensureGetter = (c: Context): void => {
     const app = c.app;
-    if (installed.has(app)) return;
-    installed.add(app);
+    if (VALIDATOR_APPS.has(app)) return;
+    VALIDATOR_APPS.add(app);
     app.decorate("valid", {
       get(this: Context): unknown {
         return (this as { validValue?: unknown }).validValue;
@@ -77,7 +89,9 @@ export const validator = (schema: StandardSchema): RouteHandler => {
         c.throw(400, "request body is not valid JSON");
       }
     }
-    const result = schema["~standard"].validate(parsed);
+    // The spec allows validate() to return a Promise (async refinements) —
+    // await it, or a rejected payload would sail through unvalidated.
+    const result = await schema["~standard"].validate(parsed);
     if ("issues" in result) {
       const lines = issueLines(result.issues as unknown[]);
       throw createError(400, lines.length > 0 ? lines : "validation failed", { expose: true });

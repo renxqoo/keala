@@ -21,19 +21,13 @@ import type { Application } from "./app.ts";
 import type { Context } from "./context/context.ts";
 import { byteLengthOf } from "../utils/url.ts";
 import { isEmptyStatus, statusMessage } from "../http/status.ts";
+import { isLatin1 } from "../utils/text.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
 
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
 
 type HeaderEntries = string[][];
-
-const isLatin1 = (value: string): boolean => {
-  for (let i = 0; i < value.length; i++) {
-    if (value.charCodeAt(i) > 255) return false;
-  }
-  return true;
-};
 
 const countOf = (record: HeaderMap): number => {
   let n = 0;
@@ -89,23 +83,55 @@ const methodNotAllowed = (c: Context): Response | null => {
 };
 
 /**
- * Rule 4: headers written after a committed Response merge into it. The
+ * Rule 4: post-commit mutations rewrite the committed Response. Removals
+ * drop their headers, staged writes REPLACE their headers wholesale (they
+ * are the user's latest intent — arrays append as exact multi-values), and a
+ * post-commit `c.status`/`c.message` overrides the reason phrase. The
  * rebuild feeds `res.body` (a stream) to the constructor, which loses the
  * runtime's body-type content-type inference — restore it by sniffing the
  * payload when no content-type survives anywhere.
  */
-const mergeIntoCommitted = async (res: Response, record: HeaderMap): Promise<Response> => {
+const rebuildCommitted = async (c: Context, res: Response): Promise<Response> => {
   const headers = await mergedResponseHeaders(res);
-  // Deferred writes win on collision — they are the user's latest intent.
-  for (const key of Object.keys(record)) {
-    const value = record[key] as string | string[];
-    if (Array.isArray(value)) {
-      for (const item of value) headers.append(key, item);
-    } else {
-      headers.set(key, value);
+  const removed = c.removedValue;
+  if (removed !== null) {
+    for (const name of removed) headers.delete(name);
+  }
+  const record = c.headersRecord;
+  if (record !== null) {
+    for (const key of Object.keys(record)) {
+      const value = record[key] as string | string[];
+      if (key === "set-cookie") {
+        // Set-Cookie is add-only on the wire: staged cookies JOIN the
+        // committed ones (a late c.cookies.set adds a cookie, never replaces
+        // the ones the handler already sent). Removal goes through
+        // c.remove("Set-Cookie") — the removal list above.
+        if (Array.isArray(value)) {
+          for (const item of value) headers.append(key, item);
+        } else {
+          headers.append(key, value);
+        }
+        continue;
+      }
+      headers.delete(key);
+      if (Array.isArray(value)) {
+        for (const item of value) headers.append(key, item);
+      } else {
+        headers.set(key, value);
+      }
     }
   }
-  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  const overridden = (c.flags & 16) !== 0 && (c.flags & 1) !== 0;
+  const status = overridden ? c.statusValue : res.status;
+  const statusText =
+    overridden && c.messageValue.length > 0 && isLatin1(c.messageValue)
+      ? c.messageValue
+      : res.statusText;
+  return new Response(isEmptyStatus(status) ? null : res.body, {
+    status,
+    statusText,
+    headers,
+  });
 };
 
 /** Response headers for a rebuild; sniffs a text body when content-type is absent. */
@@ -199,7 +225,7 @@ const committedHead = async (res: Response): Promise<Response> => {
   if (length !== null) headers.set("content-length", String(length));
   if (headers.get("content-type") === null) {
     // Rebuilding from the stream loses the runtime's text inference (see
-    // mergeIntoCommitted) — HEAD responses deserve the same content-type the
+    // rebuildCommitted) — HEAD responses deserve the same content-type the
     // GET body would have carried.
     const sniffed = await sniffContentType(res);
     if (sniffed !== null) headers.set("content-type", sniffed);
@@ -360,13 +386,14 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
   const committed = c._res;
   if (committed !== undefined) {
     const record = c.headersRecord;
-    // Late c.set() writes merge into the committed Response (rule 4) — and a
-    // HEAD request still drops the body with a backfilled Content-Length.
-    // Rare paths (post-commit header writes, committed HEAD) go async; the
-    // common committed case returns synchronously.
-    if (record !== null && countOf(record) > 0) {
+    // Rule 4: a committed Response with post-commit mutations (staged
+    // headers, removals, a status/message override) is REBUILT; the common
+    // untouched commit returns synchronously as-is. HEAD still drops the
+    // body with a backfilled Content-Length on every path.
+    const dirty = (c.flags & 16) !== 0 || (record !== null && countOf(record) > 0);
+    if (dirty) {
       const head = c.method === "HEAD";
-      return mergeIntoCommitted(committed, record).then((merged) =>
+      return rebuildCommitted(c, committed).then((merged) =>
         head && merged.body !== null ? committedHead(merged) : merged,
       );
     }
@@ -375,11 +402,25 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
   }
   const head = c.method === "HEAD";
   if (untouched(c)) {
+    const record = c.headersRecord;
+    const staged = record !== null && countOf(record) > 0;
     const rejected = methodNotAllowed(c);
-    if (rejected !== null) return head ? stripBody(rejected) : rejected;
+    if (rejected !== null) {
+      // Global-middleware headers must reach synthesized 405/501/OPTIONS
+      // answers too (the koa contract: middleware output is never dropped).
+      if (!staged) return head ? stripBody(rejected) : rejected;
+      return rebuildCommitted(c, rejected).then((merged) => (head ? stripBody(merged) : merged));
+    }
     const notFound = app.notFoundHandler(c);
-    if (notFound instanceof Response)
-      return head && notFound.body !== null ? committedHead(notFound) : notFound;
+    if (notFound instanceof Response) {
+      // …and a notFound handler's Response is not exempt from them either.
+      if (!staged) {
+        return head && notFound.body !== null ? committedHead(notFound) : notFound;
+      }
+      return rebuildCommitted(c, notFound).then((merged) =>
+        head && merged.body !== null ? committedHead(merged) : merged,
+      );
+    }
   }
   return fromState(c, head);
 };

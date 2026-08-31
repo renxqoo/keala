@@ -8,7 +8,7 @@
  * route of the group; `param()` middleware runs for routes capturing `name`.
  */
 
-import { buildURL } from "./router.ts";
+import { buildURL, redirectTargetSegments } from "./router.ts";
 import { compilePattern } from "./pattern.ts";
 import type { RouteDef, RouteHandler } from "./router.ts";
 /** Standalone route group: registers routes now, mounts later. */
@@ -129,9 +129,10 @@ export const createRouter = (options: { prefix?: string } = {}): Router => {
       return router;
     },
     redirect(source, destination, code = 301) {
-      // A destination carrying `:params` is rebuilt from the matched route's
-      // captured values (koa-router behavior).
-      const destSegments = destination.includes(":") ? compilePattern(destination).segments : null;
+      // A destination PATH carrying `:params` is rebuilt from the matched
+      // route's captured values (koa-router behavior); absolute URLs and
+      // scheme-relative targets are verbatim Locations.
+      const destSegments = redirectTargetSegments(destination);
       add("GET", source, [
         (c) => {
           const target =

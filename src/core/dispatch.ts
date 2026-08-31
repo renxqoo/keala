@@ -3,9 +3,9 @@
  * and listen-argument parsing. Extracted from app.ts for the 500-line budget.
  */
 
-import type { Application } from "./app.ts";
-import type { Chain, RouteHandler, RouterState } from "../router/router.ts";
-import { registerDef } from "../router/router.ts";
+import type { Application, WebSocketHandlers } from "./app.ts";
+import type { Chain, RouteDef, RouteHandler, RouterState } from "../router/router.ts";
+import { normalizePrefix, registerDef } from "../router/router.ts";
 import { NOOP_TAIL } from "./compose.ts";
 import type { Context } from "./context/context.ts";
 import { finalize } from "./respond.ts";
@@ -67,6 +67,72 @@ export const wsUpgradeHandler =
     }
     return new Response(null);
   };
+
+/**
+ * Merge one mounted ws registration under the mount prefix: the copied def's
+ * upgrade handler closes over the OLD route key, so a fresh handler bound to
+ * the prefixed key is registered and the socket handlers travel with it.
+ * Duplicate keys are refused exactly like app.ws() does.
+ */
+export const mergeMountedWs = (
+  wsRoutes: Map<string, WebSocketHandlers>,
+  router: RouterState,
+  path: string,
+  subGlobal: readonly RouteHandler[],
+  def: RouteDef,
+  globalMw: readonly RouteHandler[],
+  handlers: ReadonlyMap<string, WebSocketHandlers>,
+): void => {
+  const socketHandlers = def.wsKey === undefined ? undefined : handlers.get(def.wsKey);
+  if (socketHandlers === undefined) {
+    throw new TypeError(`mount(): no ws handlers found for ${JSON.stringify(def.wsKey)}`);
+  }
+  const newKey = normalizePrefix(path) || "/";
+  if (wsRoutes.has(newKey)) {
+    throw new TypeError(
+      `app.ws(${JSON.stringify(newKey)}) is already registered — a duplicate would shadow it`,
+    );
+  }
+  wsRoutes.set(newKey, socketHandlers);
+  registerDef(
+    router,
+    def.method,
+    path,
+    [...subGlobal, wsUpgradeHandler(newKey)],
+    def.name,
+    globalMw,
+  ).wsKey = newKey;
+};
+
+/** Errors from OTHER realms (vm contexts, structured clones) fail instanceof
+ * but are still Errors by koa's toString-based contract — treat them as such. */
+const isErrorLike = (value: unknown): boolean =>
+  Object.prototype.toString.call(value) === "[object Error]";
+
+/**
+ * The app error hook (koa contract): null is a no-op, a non-Error is a loud
+ * TypeError; listeners hear every error, and only SERVER faults fall back to
+ * console logging (client-level 4xx / exposed errors are not faults).
+ */
+export const onAppError = (
+  app: Application,
+  emitter: { emit(event: string, ...args: unknown[]): boolean },
+  error: Error,
+  c?: Context,
+): void => {
+  if (error == null) return;
+  if (!(error instanceof Error) && !isErrorLike(error)) {
+    throw new TypeError(`non-error thrown: ${JSON.stringify(error)}`);
+  }
+  const heard = emitter.emit("error", error, c);
+  const status = (error as Partial<{ status: number }>).status;
+  const expose = (error as Partial<{ expose: boolean }>).expose;
+  const clientError =
+    status === 404 || expose === true || (typeof status === "number" && status < 500);
+  if (!heard && !app.silent && app.env !== "test" && !clientError) {
+    console.error(`\n  ${error.stack ?? error.message}\n  at ${c?.url ?? "unknown"}\n`);
+  }
+};
 
 /** Node-style plain errors may carry `.status` or `.statusCode`. */
 const errorStatusCode = (error: Error): number => {

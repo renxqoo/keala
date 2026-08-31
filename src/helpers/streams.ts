@@ -38,6 +38,7 @@ interface WriterInternal extends StreamWriter {
 
 const makeStream = (
   start: (writer: WriterInternal) => Promise<void> | void,
+  headers: Record<string, string>,
   onError?: (error: unknown) => void,
 ): Response => {
   const aborts: (() => void)[] = [];
@@ -90,27 +91,28 @@ const makeStream = (
       void reason;
     },
   });
-  return new Response(body, {
-    headers: { "content-type": "application/octet-stream", "x-content-type-options": "nosniff" },
-  });
+  return new Response(body, { headers });
 };
 
 /** Generic streaming response (binary chunks). */
 export const stream = (
   _c: Context,
   start: (writer: StreamWriter) => Promise<void> | void,
-): Response => makeStream(start);
+): Response =>
+  makeStream(start, {
+    "content-type": "application/octet-stream",
+    "x-content-type-options": "nosniff",
+  });
 
 /** Text streaming response. */
 export const streamText = (
   _c: Context,
   start: (writer: StreamWriter) => Promise<void> | void,
-): Response => {
-  const res = makeStream(start);
-  return new Response(res.body, {
-    headers: { "content-type": "text/plain; charset=utf-8" },
+): Response =>
+  makeStream(start, {
+    "content-type": "text/plain; charset=utf-8",
+    "x-content-type-options": "nosniff",
   });
-};
 
 export interface SSEMessage {
   event?: string;
@@ -190,15 +192,15 @@ export const streamSSE = (
       await start(sse);
       if (timer !== null) clearInterval(timer);
     },
+    {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      "x-content-type-options": "nosniff",
+    },
     () => {
       if (timer !== null) clearInterval(timer);
     },
   );
-  return new Response(res.body, {
-    headers: {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-    },
-  });
+  return res;
 };

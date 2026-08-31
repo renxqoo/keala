@@ -33,9 +33,12 @@ export interface ContextState {
   /**
    * Bit-packed response flags — one field write instead of four.
    * 1 = explicit status, 2 = explicit null body, 4 = multi-value header,
-   * 8 = content-length touched.
+   * 8 = content-length touched, 16 = post-commit rewrite (a committed
+   * Response must be rebuilt: status override, removal, or staged headers).
    */
   flags: number;
+  /** Header names removed AFTER a Response committed (rule-4 rebuild input). */
+  removedValue: string[] | null;
   // dual-mode commit slot (see core/compose.ts)
   _res: Response | undefined;
   // lazy facades

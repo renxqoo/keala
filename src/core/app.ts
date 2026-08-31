@@ -6,10 +6,8 @@
  * runs (single-handler routes skip composition entirely), and the finalizer
  * converts the context state into a web `Response`. Global middleware runs
  * for unmatched paths and unmatched methods too — koa's observable contract.
- *
- * `app.handle` is a fetch handler — exactly what `Bun.serve` wants. The Bun
- * adapter is the only module referencing the `Bun` global; the core also
- * runs under Node (tests).
+ * `app.handle` is a fetch handler — exactly what `Bun.serve` wants; the core
+ * also runs under Node (tests).
  */
 
 import type { AppOptions, Plugin as AppOptionsPlugin, ListenOptions, Runtime } from "../types.ts";
@@ -17,11 +15,14 @@ import { getPath } from "../utils/url.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
-import { createPool } from "./context/pool.ts";
+import { createPool, retireWithBody } from "./context/pool.ts";
+import { createDecorator } from "./context/decorate.ts";
 import { compose } from "./compose.ts";
 import {
   dispatchChain,
   finalizeGuarded,
+  mergeMountedWs,
+  onAppError,
   parseListenArgs,
   pluginInstallerOf,
   routeShortcut,
@@ -35,6 +36,7 @@ import {
   EMPTY_PARAMS,
   matchRoute,
   rebuildChains,
+  redirectTargetSegments,
   registerDef,
   normalizePrefix,
   urlFor,
@@ -43,7 +45,6 @@ import {
   type RouteHandler,
   type RouterState,
 } from "../router/router.ts";
-import { compilePattern } from "../router/pattern.ts";
 import { createRouter, isRouter } from "../router/group.ts";
 import type { Router } from "../router/group.ts";
 import { startBunServer, type ServerHandle } from "../adapters/bun.ts";
@@ -147,10 +148,8 @@ export interface Application {
 
 const defaultNotFound: NotFoundHandler = () => undefined;
 
-/** Errors from OTHER realms (vm contexts, structured clones) fail instanceof
- * but are still Errors by koa's toString-based contract — treat them as such. */
-const isErrorLike = (value: unknown): boolean =>
-  Object.prototype.toString.call(value) === "[object Error]";
+/** Routers carry no ws registrations — mount() reads an empty map for them. */
+const NO_WS_HANDLERS: ReadonlyMap<string, WebSocketHandlers> = new Map();
 
 export { createRouter, isRouter };
 
@@ -180,10 +179,9 @@ export const createApp = (options: AppOptions = {}): Application => {
   // after `app` exists (the pool captures it); handle() runs later still.
   const poolingEnabled = options.pooling === true;
   let pool: ReturnType<typeof createPool> | null = null;
-  // decorate() guard input: own slots of a real context (params, bodyValue,
-  // _res…), computed once on first decorate so new slots are guarded without
-  // maintaining a parallel list.
-  let contextSlots: Set<string> | null = null;
+  // decorate() implementation bound to this app's derived context prototype
+  // (collision guard included — see core/context/decorate.ts).
+  const decorateContext = createDecorator(contextProto);
 
   const app: Application = {
     env: options.env ?? process.env["NODE_ENV"] ?? "development",
@@ -282,16 +280,14 @@ export const createApp = (options: AppOptions = {}): Application => {
 
     ws(path, handlers) {
       if (poolingEnabled) {
-        // The socket keeps this request's context alive for the connection
-        // lifetime; pooling retires and recycles it under the next request
-        // (writes throw, reads leak foreign request state). Incompatible.
+        // Sockets keep this request's context alive for the connection
+        // lifetime; pooling would recycle it under the next request.
         throw new TypeError(
           "app.ws() cannot run with pooling: true — sockets retain contexts beyond the request lifetime",
         );
       }
       const routeKey = normalizePrefix(path) || "/";
-      // A duplicate registration would silently shadow the first handlers
-      // (the map entry) while chaining a second upgrade route — refuse it.
+      // A duplicate would silently shadow the first handlers — refuse it.
       if (wsRoutes.has(routeKey)) {
         throw new TypeError(
           `app.ws(${JSON.stringify(routeKey)}) is already registered — a duplicate would shadow it`,
@@ -299,8 +295,16 @@ export const createApp = (options: AppOptions = {}): Application => {
       }
       wsRoutes.set(routeKey, handlers);
       // The upgrade happens on ANY method hit; register ALL so method-based
-      // 405s never interfere with connection upgrades.
-      registerDef(router, "ALL", routeKey, [wsUpgradeHandler(routeKey)], undefined, globalMw);
+      // 405s never interfere. The def carries the ws key so mount() can
+      // re-key the registration under its prefix.
+      registerDef(
+        router,
+        "ALL",
+        routeKey,
+        [wsUpgradeHandler(routeKey)],
+        undefined,
+        globalMw,
+      ).wsKey = routeKey;
       return app;
     },
 
@@ -344,18 +348,39 @@ export const createApp = (options: AppOptions = {}): Application => {
       }
       // A mounted app (or router) carries its own middleware ahead of its routes.
       const subGlobal = isRouter(sub) ? sub.middleware : sub.globalMiddleware;
+      let mergedParams = false;
       for (const [name, handler] of paramMiddlewares) {
-        if (!router.paramMiddlewares.has(name)) router.paramMiddlewares.set(name, handler);
+        if (!router.paramMiddlewares.has(name)) {
+          router.paramMiddlewares.set(name, handler);
+          mergedParams = true;
+        }
       }
+      // Same contract as app.param(): newly merged param middleware must reach
+      // routes registered BEFORE the mount, not only later ones — one rebuild.
+      if (mergedParams) rebuildChains(router, globalMw);
       for (const def of defs) {
         const path = `${base}${def.path}` || "/";
+        // ws registrations re-key under the mount (see mergeMountedWs — an
+        // empty source map makes its own guard throw for router-typed subs).
+        if (def.wsKey !== undefined) {
+          mergeMountedWs(
+            wsRoutes,
+            router,
+            path,
+            subGlobal,
+            def,
+            globalMw,
+            isRouter(sub) ? NO_WS_HANDLERS : sub.wsRoutes,
+          );
+          continue;
+        }
         registerDef(router, def.method, path, [...subGlobal, ...def.handlers], def.name, globalMw);
       }
       return app;
     },
 
     redirect(source, destination, code = 301) {
-      const destSegments = destination.includes(":") ? compilePattern(destination).segments : null;
+      const destSegments = redirectTargetSegments(destination);
       registerDef(
         router,
         "GET",
@@ -383,46 +408,7 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     decorate(key, value) {
-      if (typeof key !== "string" || key.length === 0) {
-        throw new TypeError("app.decorate() requires a non-empty key");
-      }
-      // Shadowing a core context member or a previous decoration would
-      // silently change behavior under the caller's feet — refuse it loudly
-      // (Fastify-style) instead of last-writer-wins. Instance slots are
-      // probed from a real context so the guard can never drift from
-      // createContext's own shape.
-      contextSlots ??= new Set(
-        Object.keys(createContext(app, contextProto, new Request("http://localhost/"), undefined)),
-      );
-      if (
-        contextSlots.has(key) ||
-        key in baseContextProto ||
-        Object.prototype.hasOwnProperty.call(contextProto, key)
-      ) {
-        throw new TypeError(
-          `app.decorate(): "${key}" is already defined on the context — pick a distinct key`,
-        );
-      }
-      // A `{ get }` object installs a lazy accessor (plugins use this for
-      // request-side facades); anything else is a plain value.
-      if (
-        typeof value === "object" &&
-        value !== null &&
-        typeof (value as { get?: unknown }).get === "function"
-      ) {
-        Object.defineProperty(contextProto, key, {
-          get: (value as { get(): unknown }).get,
-          configurable: true,
-          enumerable: false,
-        });
-        return app;
-      }
-      Object.defineProperty(contextProto, key, {
-        value,
-        writable: true,
-        configurable: true,
-        enumerable: false,
-      });
+      decorateContext(key, value, app);
       return app;
     },
 
@@ -460,11 +446,9 @@ export const createApp = (options: AppOptions = {}): Application => {
       if (!poolingEnabled) return dispatchOf();
       // Guarded lifecycle: settle (sync or async), then retire to the pool —
       // a late write on the retired context throws instead of corrupting it.
+      // Bodies retire through retireWithBody (consumed after handle returns).
       const activePool = pool;
-      const release = (value: Response): Response => {
-        activePool.release(c);
-        return value;
-      };
+      const release = (value: Response): Response => retireWithBody(activePool, c, value);
       const settled = dispatchOf();
       return settled instanceof Promise ? settled.then(release) : release(settled);
     },
@@ -485,20 +469,8 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     onerror(error, c) {
-      // Koa contract: null is a no-op; a non-Error is a loud TypeError.
-      if (error == null) return;
-      if (!(error instanceof Error) && !isErrorLike(error)) {
-        throw new TypeError(`non-error thrown: ${JSON.stringify(error)}`);
-      }
-      const heard = emitter.emit("error", error, c);
-      // Koa: client-level errors (4xx / exposed) are not server faults — no log.
-      const status = (error as Partial<{ status: number }>).status;
-      const expose = (error as Partial<{ expose: boolean }>).expose;
-      const clientError =
-        status === 404 || expose === true || (typeof status === "number" && status < 500);
-      if (!heard && !app.silent && app.env !== "test" && !clientError) {
-        console.error(`\n  ${error.stack ?? error.message}\n  at ${c?.url ?? "unknown"}\n`);
-      }
+      // Koa-contract hook — implementation in dispatch.ts (onAppError).
+      onAppError(app, emitter, error, c);
     },
 
     toJSON() {

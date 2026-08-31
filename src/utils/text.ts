@@ -22,6 +22,14 @@ export const hasCrlf = (value: string): boolean => {
   return false;
 };
 
+/** Latin-1 check for statusText candidacy (the fetch API rejects the rest). */
+export const isLatin1 = (value: string): boolean => {
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 255) return false;
+  }
+  return true;
+};
+
 /** Names that must never become header fields (prototype hazards). */
 const FORBIDDEN_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 
@@ -78,6 +86,11 @@ export const contentDisposition = (
       throw new TypeError("fallback must be ASCII");
     }
     asciiName = isAscii ? filename : fallback;
+  } else {
+    // fallback:false suppresses the generated latin-1 fallback NAME only — a
+    // filename that is already ASCII IS its own `filename=` value (dropping
+    // it leaves legacy clients, which ignore filename*, with no name at all).
+    asciiName = isAscii ? filename : "";
   }
   let header = type;
   if (asciiName.length > 0) {
