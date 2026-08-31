@@ -60,11 +60,12 @@ export const validateHeaderName = (name: string): void => {
 };
 
 /**
- * Validate a header value: reject CR/LF/NUL anywhere (response splitting
- * guard) and any code unit above 0xFF — fetch `Headers` values are ByteStrings
- * (and node:http enforces latin-1), so a wider value throws at Response
- * construction. Rejecting at the WRITE site surfaces the bug where the
- * developer wrote it, instead of inside the finalizer.
+ * Validate a header value per RFC 9110 field-content: allowed are HTAB, SP,
+ * visible bytes and obs-text (0x80-0xFF). Everything else is rejected at the
+ * WRITE site — CR/LF/NUL guard response splitting, the remaining C0 controls
+ * and DEL are protocol-invalid exactly as node:http's ERR_INVALID_CHAR
+ * enforces, and code units above 0xFF cannot be ByteStrings. Surfacing the
+ * bug where the developer wrote it beats throwing inside the finalizer.
  */
 export const validateHeaderValue = (name: string, value: string): void => {
   for (let i = 0; i < value.length; i++) {
@@ -72,6 +73,11 @@ export const validateHeaderValue = (name: string, value: string): void => {
     if (code === 13 || code === 10 || code === 0) {
       throw new TypeError(
         `Invalid character in header content of "${name}": CR/LF/NUL are not allowed`,
+      );
+    }
+    if ((code < 0x20 && code !== 9) || code === 0x7f) {
+      throw new TypeError(
+        `Invalid character in header content of "${name}": control bytes are not field-content`,
       );
     }
     if (code > 0xff) {

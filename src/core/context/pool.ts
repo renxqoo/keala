@@ -3,15 +3,26 @@
  *
  * Opt-in via `createApp({ pooling: true })`. A settled context is retired by
  * SWAPPING its prototype to `deadContextProto` — every mutating accessor then
- * throws with a clear message, so fire-and-forget code holding a recycled
+ * throws with a clear message, so fire-and-forget code holding a retired
  * context cannot silently corrupt the next request. The live prototype is
  * restored on reset, and the whole guard costs the hot path nothing (the
  * check IS the prototype).
+ *
+ * Guarantee boundary: object identity cannot carry generations. The guard
+ * covers the window from retirement until the object's next acquire — writes
+ * in that window throw. Once the object is live again for a NEW request, a
+ * stale reference held by older user code (e.g. captured in a timer) is
+ * indistinguishable from the new owner's own writes; only a per-request proxy
+ * could separate them, and that would cost more than pooling saves. The
+ * framework covers what it CAN observe: registered floating `next()` branches
+ * (see core/branches.ts) hold off recycling until they settle. Retaining a
+ * context past its request's lifetime is unsupported on every path.
  */
 
 import type { Application } from "../app.ts";
 import type { Context } from "./context.ts";
 import { resetContext } from "./context.ts";
+import { drainBranches } from "../branches.ts";
 
 const RETIRED = "context retired: do not retain contexts past the request lifetime";
 
@@ -112,14 +123,25 @@ export const createPool = (app: Application, liveProto: object): ContextPool => 
  * finishes (or cancels): the body is consumed AFTER handle() returns, and
  * anything it captured (stream callbacks, onStreamError) must keep reading
  * THIS request's context — recycling earlier leaks the next request's data
- * into in-flight bodies. The wrapper observes completion pull-based, so
+ * into in-flight bodies. Registered floating branches hold off the final
+ * release until they settle. The wrapper observes completion pull-based, so
  * backpressure passes through and nothing is buffered; a consumer that
  * abandons the body without cancelling simply never returns the context.
  */
 export const retireWithBody = (pool: ContextPool, c: Context, value: Response): Response => {
+  let retired = false;
+  const retire = (): void => {
+    if (retired) return;
+    retired = true;
+    // A still-running floating branch owns this context's state — release
+    // only once it can no longer mutate.
+    const drain = drainBranches(c);
+    if (drain === null) pool.release(c);
+    else void drain.then(() => pool.release(c));
+  };
   const body = value.body;
   if (body === null) {
-    pool.release(c);
+    retire();
     return value;
   }
   // Evolving let: the reader type differs across the DOM/Bun stream libs —
@@ -131,19 +153,12 @@ export const retireWithBody = (pool: ContextPool, c: Context, value: Response): 
     // A body-locked Response is a handler bug — but the never-reject contract
     // on app.handle is absolute: recycle the context and answer a plain 500
     // instead of throwing out of (or rejecting) the handler pipeline.
-    pool.release(c);
+    retire();
     return new Response("Internal Server Error", {
       status: 500,
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
   }
-  let retired = false;
-  const retire = (): void => {
-    if (!retired) {
-      retired = true;
-      pool.release(c);
-    }
-  };
   return new Response(
     new ReadableStream({
       async pull(controller) {

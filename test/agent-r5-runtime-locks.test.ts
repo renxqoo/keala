@@ -206,7 +206,9 @@ describe("agent r5 — locks correct behavior", () => {
     expect(await r2.text()).toBe("base"); // proto value again, not req1-mutation
   });
 
-  it("finalizer: HEAD + dirty committed stream backfills Content-Length and merges headers", async () => {
+  it("finalizer: HEAD + dirty committed stream merges headers WITHOUT reading the body", async () => {
+    // R7-CORE-4: the finalizer never reads a committed body — an open producer
+    // must never block handle(). CL/CT stay what the Response itself exposes.
     const app = createApp(quiet);
     app.use(async (c, next) => {
       await next();
@@ -215,9 +217,9 @@ describe("agent r5 — locks correct behavior", () => {
     app.get("/", () => new Response(streamOf(["abc"])));
     const res = await drive(app, new Request("http://localhost:3000/", { method: "HEAD" }));
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-length")).toBe("3");
     expect(res.headers.get("x-late")).toBe("1");
-    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(res.headers.get("content-length")).toBeNull();
+    expect(res.headers.get("content-type")).toBeNull();
     expect(res.body).toBeNull();
   });
 
@@ -247,7 +249,10 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.body).toBeNull();
   });
 
-  it("finalizer: rebuild sniffs a binary committed body as application/octet-stream", async () => {
+  it("finalizer: dirty rebuild carries NO sniffed content-type (clean/dirty parity)", async () => {
+    // R7-CORE-3: sniffing required reading the body; the finalizer never
+    // reads committed bodies now. A bare bytes Response carries no CT on the
+    // dirty path either — exactly like the untouched commit path.
     const app = createApp(quiet);
     app.use(async (c, next) => {
       await next();
@@ -255,7 +260,8 @@ describe("agent r5 — locks correct behavior", () => {
     });
     app.get("/", () => new Response(new Uint8Array([0x00, 0x01, 0xff, 0xfe])));
     const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-type")).toBe("application/octet-stream");
+    expect(res.headers.get("x-late")).toBe("1");
+    expect(res.headers.get("content-type")).toBeNull();
     expect((await res.arrayBuffer()).byteLength).toBe(4);
   });
 
@@ -445,7 +451,8 @@ describe("agent r5 — locks correct behavior", () => {
     expect(await res2.text()).toBe("custom nf");
   });
 
-  it("finalizer: HEAD + notFound handler Response + staged headers merges, strips, backfills length", async () => {
+  it("finalizer: HEAD + notFound handler Response + staged headers merges and strips", async () => {
+    // R7: the finalizer never reads a committed body — no CL backfill.
     const app = createApp(quiet);
     app.use(async (c, next) => {
       c.set("X-Global", "1");
@@ -454,11 +461,10 @@ describe("agent r5 — locks correct behavior", () => {
     app.notFound(() => new Response("custom-nf-body", { status: 404 }));
     const res = await drive(app, new Request("http://localhost:3000/nope", { method: "HEAD" }));
     expect(res.status).toBe(404);
-    expect(res.headers.get("content-length")).toBe("14");
+    expect(res.headers.get("content-length")).toBeNull();
     expect(res.headers.get("x-global")).toBe("1");
     expect(res.body).toBeNull();
   });
-
   it("emitter: once() is removable by the original listener; emit reports listeners", () => {
     const em = createEmitter();
     const seen: string[] = [];

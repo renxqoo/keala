@@ -1,4 +1,10 @@
-/** Minimal event emitter (on/once/off/emit) — no classes, no allocations on emit paths without listeners. */
+/**
+ * Minimal event emitter (on/once/off/emit) — no classes, no allocations on
+ * emit paths without listeners. Duplicate-removal follows Node's
+ * EventEmitter order: off() removes the MOST RECENTLY registered matching
+ * instance, and non-function listeners are refused at subscription time
+ * (Node's ERR_INVALID_ARG_TYPE contract) instead of exploding at emit.
+ */
 
 export type Listener = (...args: unknown[]) => void;
 
@@ -10,17 +16,38 @@ export interface Emitter {
   listenerCount(event: string): number;
 }
 
+const assertListener = (listener: Listener): void => {
+  if (typeof listener !== "function") {
+    throw new TypeError("event listeners must be functions");
+  }
+};
+
+/** Index of the LAST registration matching `listener` (a once() wrapper via
+ *  its `.listener` alias), searching backwards like Node's removeListener. */
+const lastIndexOf = (list: readonly Listener[], listener: Listener): number => {
+  for (let i = list.length - 1; i >= 0; i--) {
+    const registered = list[i] as Listener;
+    if (registered === listener || (registered as { listener?: Listener }).listener === listener) {
+      return i;
+    }
+  }
+  return -1;
+};
+
 export const createEmitter = (): Emitter => {
   const listeners = new Map<string, Listener[]>();
 
   const add = (event: string, listener: Listener): (() => void) => {
+    assertListener(listener);
     const list = listeners.get(event);
     if (list === undefined) listeners.set(event, [listener]);
     else list.push(listener);
     return () => {
       const current = listeners.get(event);
       if (current === undefined) return;
-      const index = current.indexOf(listener);
+      // Backward too: the dispose belongs to ONE add() call — with duplicates
+      // registered, unhooking the newest match is the faithful proxy.
+      const index = lastIndexOf(current, listener);
       if (index !== -1) current.splice(index, 1);
     };
   };
@@ -40,12 +67,10 @@ export const createEmitter = (): Emitter => {
       return dispose;
     },
     off(event, listener) {
+      assertListener(listener);
       const current = listeners.get(event);
       if (current === undefined) return;
-      const index = current.findIndex(
-        (registered) =>
-          registered === listener || (registered as { listener?: Listener }).listener === listener,
-      );
+      const index = lastIndexOf(current, listener);
       if (index !== -1) current.splice(index, 1);
     },
     emit(event, ...args) {

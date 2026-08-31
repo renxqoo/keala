@@ -42,8 +42,19 @@ const makeStream = (
   onError?: (error: unknown) => void,
 ): Response => {
   const aborts: (() => void)[] = [];
+  // Cancellation is STATE, not just an event: a producer that registers its
+  // onAbort AFTER the consumer cancelled (any await before the first
+  // registration) must still run its cleanup immediately.
+  let cancelled = false;
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
   const encoder = new TextEncoder();
+  const runCleanup = (fn: () => void): void => {
+    try {
+      fn();
+    } catch {
+      // cleanup handlers must not break the cancel path
+    }
+  };
   const writer: WriterInternal = {
     _aborts: aborts,
     write(chunk) {
@@ -60,6 +71,10 @@ const makeStream = (
       return controllerRef?.desiredSize ?? null;
     },
     onAbort(fn) {
+      if (cancelled) {
+        runCleanup(fn);
+        return;
+      }
       aborts.push(fn);
     },
   };
@@ -81,13 +96,8 @@ const makeStream = (
     },
     cancel(reason) {
       controllerRef = null;
-      for (const fn of aborts.splice(0)) {
-        try {
-          fn();
-        } catch {
-          // cleanup handlers must not break the cancel path
-        }
-      }
+      cancelled = true;
+      for (const fn of aborts.splice(0)) runCleanup(fn);
       void reason;
     },
   });

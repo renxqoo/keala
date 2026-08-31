@@ -12,9 +12,10 @@
  *  - flattened [name, value] pairs when multi-value headers exist
  *
  * Inherited response contracts (docs/MIGRATION.md §3): empty-status header
- * cleanup, HEAD Content-Length backfill (computed from the would-be body,
- * exactly like koa), non-Latin-1 statusText fallback, and the
- * set-cookie/multi-value precondition for the fast paths.
+ * cleanup, HEAD Content-Length for state-mode bodies and sugar HEAD returns
+ * (computed from the would-be body value — committed bodies are never read),
+ * non-Latin-1 statusText fallback, and the set-cookie/multi-value
+ * precondition for the fast paths.
  */
 
 import type { Application } from "./app.ts";
@@ -100,12 +101,13 @@ const methodNotAllowed = (c: Context): Response | null => {
  * post-commit `c.status`/`c.message`/`c.body` writes (flags 32/64/128 — set
  * by the accessors only when a Response is already committed) override the
  * status, reason phrase and body respectively. Pre-commit staging never
- * leaks in: the commit superseded it. The rebuild feeds the body to the
- * constructor, which loses the runtime's body-type content-type inference —
- * restore it by sniffing the payload when no content-type survives anywhere.
+ * leaks in: the commit superseded it. The rebuild NEVER reads the committed
+ * body — content-type/length metadata comes from what the Response itself
+ * exposes, so an OPEN stream producer can never block the finalizer (a
+ * body is the adapter's/client's to consume, not the framework's).
  */
-const rebuildCommitted = async (c: Context, res: Response): Promise<Response> => {
-  const headers = await mergedResponseHeaders(res);
+const rebuildCommitted = (c: Context, res: Response): Response => {
+  const headers = mergedResponseHeaders(res);
   const removed = c.removedValue;
   if (removed !== null) {
     for (const name of removed) headers.delete(name);
@@ -155,104 +157,28 @@ const rebuildCommitted = async (c: Context, res: Response): Promise<Response> =>
   return new Response(body, { status, statusText, headers });
 };
 
-/** Response headers for a rebuild; sniffs a text body when content-type is absent. */
-const mergedResponseHeaders = async (res: Response): Promise<Headers> => {
+/** Response headers for a rebuild: the committed headers as-is — content-type
+ *  inference stays whatever the Response itself carries. */
+const mergedResponseHeaders = (res: Response): Headers => {
   const headers = new Headers();
   for (const [key, value] of res.headers.entries()) {
     if (key === "set-cookie") continue; // appended individually below
     headers.set(key, value);
   }
   for (const cookie of res.headers.getSetCookie()) headers.append("set-cookie", cookie);
-  if (headers.get("content-type") === null) {
-    const sniffed = await sniffContentType(res);
-    if (sniffed !== null) headers.set("content-type", sniffed);
-  }
   return headers;
 };
 
 /**
- * A bare `new Response(string)` gets `text/plain` from the runtime only while
- * the body is still a string; rebuilding from the stream turns it into
- * `application/octet-stream`. Sniff a bounded PREFIX to decide (rare path —
- * only post-commit header writes land here). A prefix is enough: sniffing
- * exists to catch binary payloads, and buffering whole multi-MB bodies for a
- * header decision is a memory-amplification vector.
- */
-const SNIFF_BUDGET = 8192;
-/** HEAD Content-Length backfill budget — larger bodies simply omit the header. */
-const HEAD_LENGTH_BUDGET = 1 << 20;
-
-const boundedRead = async (
-  res: Response,
-  budget: number,
-): Promise<{ bytes: Uint8Array; truncated: boolean } | null> => {
-  try {
-    const reader = res.clone().body?.getReader();
-    if (reader === undefined) return null;
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    let truncated = false;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      total += value.byteLength;
-      if (total > budget) {
-        truncated = true;
-        // NEVER await cancel(): on a cloned (teed) body under undici the
-        // cancel promise never settles — awaiting it hangs the request.
-        void reader.cancel().catch(() => undefined);
-        break;
-      }
-    }
-    const merged = new Uint8Array(total);
-    let at = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, at);
-      at += chunk.byteLength;
-    }
-    return { bytes: merged, truncated };
-  } catch {
-    return null; // unreadable body — let the runtime decide
-  }
-};
-
-const sniffContentType = async (res: Response): Promise<string | null> => {
-  const read = await boundedRead(res, SNIFF_BUDGET);
-  if (read === null) return null;
-  const text = new TextDecoder("utf-8", { fatal: false }).decode(read.bytes);
-  return text.includes("\uFFFD") ? "application/octet-stream" : "text/plain; charset=utf-8";
-};
-
-/**
- * Drop the body of a committed/notFound Response for HEAD requests,
- * backfilling Content-Length from the would-be body (koa contract).
+ * Drop the body of a Response while keeping its headers verbatim — the HEAD
+ * view of a committed/notFound Response. Content-Length is NOT backfilled
+ * from a body read: koa computes it from the would-be body VALUE, which the
+ * sugar helpers attach at construction for HEAD; a hand-built Response
+ * exposes only what its own headers say, and an open stream has no knowable
+ * finite length.
  */
 const stripBody = (res: Response): Response =>
   new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
-
-/** Exact Content-Length of a committed body, bounded — no whole-body reads. */
-const committedLength = async (res: Response): Promise<number | null> => {
-  if (res.headers.get("content-length") !== null) return null;
-  const read = await boundedRead(res, HEAD_LENGTH_BUDGET);
-  if (read === null || read.truncated) return null;
-  return read.bytes.byteLength;
-};
-
-/** HEAD view of a committed Response: no body, Content-Length backfilled. */
-const committedHead = async (res: Response): Promise<Response> => {
-  const length = await committedLength(res);
-  const headers = new Headers(res.headers);
-  if (length !== null) headers.set("content-length", String(length));
-  if (headers.get("content-type") === null) {
-    // Rebuilding from the stream loses the runtime's text inference (see
-    // rebuildCommitted) — HEAD responses deserve the same content-type the
-    // GET body would have carried.
-    const sniffed = await sniffContentType(res);
-    if (sniffed !== null) headers.set("content-type", sniffed);
-  }
-  return new Response(null, { status: res.status, statusText: res.statusText, headers });
-};
 
 type BodyData = string | Uint8Array | ReadableStream | Blob | null;
 
@@ -440,15 +366,13 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
     // Rule 4: a committed Response with post-commit mutations (staged
     // headers, removals, a status/message override) is REBUILT; the common
     // untouched commit returns synchronously as-is. HEAD still drops the
-    // body with a backfilled Content-Length on every path.
+    // body on every path.
     const dirty = (c.flags & 16) !== 0 || (record !== null && countOf(record) > 0);
     if (dirty) {
-      const head = c.method === "HEAD";
-      return rebuildCommitted(c, committed).then((merged) =>
-        head && merged.body !== null ? committedHead(merged) : merged,
-      );
+      const merged = rebuildCommitted(c, committed);
+      return c.method === "HEAD" && merged.body !== null ? stripBody(merged) : merged;
     }
-    if (c.method === "HEAD" && committed.body !== null) return committedHead(committed);
+    if (c.method === "HEAD" && committed.body !== null) return stripBody(committed);
     return committed;
   }
   const head = c.method === "HEAD";
@@ -460,17 +384,17 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
       // Global-middleware headers must reach synthesized 405/501/OPTIONS
       // answers too (the koa contract: middleware output is never dropped).
       if (!staged) return head ? stripBody(rejected) : rejected;
-      return rebuildCommitted(c, rejected).then((merged) => (head ? stripBody(merged) : merged));
+      const merged = rebuildCommitted(c, rejected);
+      return head ? stripBody(merged) : merged;
     }
     const notFound = app.notFoundHandler(c);
     if (notFound instanceof Response) {
       // …and a notFound handler's Response is not exempt from them either.
       if (!staged) {
-        return head && notFound.body !== null ? committedHead(notFound) : notFound;
+        return head && notFound.body !== null ? stripBody(notFound) : notFound;
       }
-      return rebuildCommitted(c, notFound).then((merged) =>
-        head && merged.body !== null ? committedHead(merged) : merged,
-      );
+      const merged = rebuildCommitted(c, notFound);
+      return head && merged.body !== null ? stripBody(merged) : merged;
     }
   }
   return fromState(c, head);

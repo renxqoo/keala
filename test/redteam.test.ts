@@ -142,7 +142,10 @@ describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
     app.get("/x", () => new Response("ok", { headers: [["set-cookie", "early=1; Path=/"]] }));
     const res = await app.handle(req("http://localhost/x", { method: "HEAD" }));
     expect(await text(res)).toBe("");
-    expect(res.headers.get("content-length")).toBe("2");
+    // R7: the finalizer never reads committed bodies — no derived CL on a
+    // hand-built Response; the late cookie still joins the committed one.
+    expect(res.headers.get("content-length")).toBeNull();
+    expect(res.headers.getSetCookie().sort()).toEqual(["early=1; Path=/", "late=1; Path=/"]);
   });
 
   it("green: HEAD x committed (no deferred writes) backfills CL and drops the body", async () => {

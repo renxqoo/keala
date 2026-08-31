@@ -389,14 +389,14 @@ describe("redteam P2: component protocol (green)", () => {
     expect(() => app.decorate("body", "x")).toThrow(/already defined/);
     expect(() => app.decorate("status", 200)).toThrow(/already defined/);
     // Accessor decorations fall under the same rule.
-    expect(() => app.decorate("status", { get: () => 200 })).toThrow(/already defined/);
+    expect(() => app.decorateLazy("status", () => 200)).toThrow(/already defined/);
   });
 
   it("decorate refuses per-request instance slots (params/bodyValue/…)", () => {
     const app = createApp(quiet);
     // These live as own slots on every context, not on the prototype — a
     // getter decoration would make every request throw in initContext.
-    expect(() => app.decorate("params", { get: () => ({}) })).toThrow(/already defined/);
+    expect(() => app.decorateLazy("params", () => ({}))).toThrow(/already defined/);
     expect(() => app.decorate("bodyValue", 1)).toThrow(/already defined/);
     expect(() => app.decorate("_res", null)).toThrow(/already defined/);
     expect(() => app.decorate("rawRequest", {})).toThrow(/already defined/);
@@ -431,8 +431,8 @@ describe("redteam P2: component protocol (green)", () => {
       },
       {
         name: "greeter",
-        install(target: { decorate: (k: string, v: unknown) => void }) {
-          target.decorate("answer", { get: () => 42 });
+        install(target: { decorateLazy: (k: string, v: () => unknown) => void }) {
+          target.decorateLazy("answer", () => 42);
         },
       },
       (_c, next) => {

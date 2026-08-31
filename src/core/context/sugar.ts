@@ -13,6 +13,7 @@
  */
 
 import type { HeaderValue } from "../../types.ts";
+import { byteLengthOf } from "../../utils/url.ts";
 import { isEmptyStatus } from "../../http/status.ts";
 import { isStatusText } from "../../utils/text.ts";
 import type { ContextState } from "./state.ts";
@@ -115,6 +116,35 @@ const emptyStatusResponse = (
     ...(clean !== undefined ? { headers: headersInitOf(clean) } : {}),
   });
 
+/**
+ * HEAD view built AT CONSTRUCTION: no body, exact Content-Length from the
+ * would-be payload. The finalizer never reads committed bodies (an open
+ * producer must not block it), so the koa HEAD-CL contract is honored where
+ * the payload is still a known value — right here.
+ */
+const sugarHead = (
+  merged: Record<string, HeaderValue> | undefined,
+  contentType: string | undefined,
+  bodyLength: number,
+  status: number | undefined,
+  statusText: string | undefined,
+): Response => {
+  const record: Record<string, HeaderValue> = merged === undefined ? {} : { ...merged };
+  if (contentType !== undefined && record["content-type"] === undefined) {
+    record["content-type"] = contentType;
+  }
+  record["content-length"] = String(bodyLength);
+  return new Response(null, {
+    status: status ?? 200,
+    ...(statusText !== undefined ? { statusText } : {}),
+    headers: headersInitOf(record),
+  });
+};
+
+/** UTF-8 byte length of a sugar payload (string or raw bytes). */
+const payloadLength = (body: string | Uint8Array): number =>
+  typeof body === "string" ? byteLengthOf(body) : body.byteLength;
+
 export const sugarText = (
   c: ContextState,
   body: string,
@@ -125,20 +155,31 @@ export const sugarText = (
   // An explicitly staged c.status wins over the default (hono parity).
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
   const statusText = stagedStatusText(c);
+  const st = status ?? staged;
+  if (st !== undefined && isEmptyStatus(st)) {
+    return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
+  }
+  if (c.rawRequest.method === "HEAD") {
+    return sugarHead(
+      merged,
+      TEXT_PLAIN,
+      payloadLength(body as string | Uint8Array),
+      st,
+      statusText,
+    );
+  }
   if (merged === undefined && status === undefined && staged === undefined) {
     // Bare path only when nothing is staged — a staged c.message must ride
     // along as statusText exactly like the state-mode finalizer.
     if (statusText === undefined) return new Response(body);
     return new Response(body, { statusText });
   }
-  const st = status ?? staged ?? 200;
-  if (isEmptyStatus(st)) return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
   if (merged === undefined) {
     return new Response(body, { status: st, ...(statusText !== undefined ? { statusText } : {}) });
   }
   if (merged["content-type"] === undefined) merged["content-type"] = TEXT_PLAIN;
   return new Response(body, {
-    status: st,
+    status: st as number,
     ...(statusText !== undefined ? { statusText } : {}),
     headers: headersInitOf(merged),
   });
@@ -159,12 +200,24 @@ export const sugarJson = (
   // cheaper than stringify + record init (see docs/AUDIT.md).
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
   const statusText = stagedStatusText(c);
+  const st = status ?? staged;
+  if (st !== undefined && isEmptyStatus(st)) {
+    return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
+  }
+  if (c.rawRequest.method === "HEAD") {
+    // The HEAD view serializes once, here — Response.json would attach a body.
+    return sugarHead(
+      merged,
+      "application/json",
+      byteLengthOf(JSON.stringify(payload) ?? "null"),
+      st,
+      statusText,
+    );
+  }
   if (merged === undefined && status === undefined && staged === undefined) {
     if (statusText === undefined) return Response.json(payload);
     return Response.json(payload, { statusText });
   }
-  const st = status ?? staged ?? 200;
-  if (isEmptyStatus(st)) return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
   return Response.json(
     payload,
     merged === undefined
@@ -209,6 +262,15 @@ export const sugarHtml = (
       ...statusInit,
       headers: headersInitOf(dropContentHeaders(withType) ?? {}),
     });
+  }
+  if (c.rawRequest.method === "HEAD") {
+    return sugarHead(
+      withType,
+      undefined,
+      payloadLength(body as string | Uint8Array),
+      st,
+      statusText,
+    );
   }
   if (st === undefined && statusText === undefined) {
     return new Response(body, { headers: headersInitOf(withType) });

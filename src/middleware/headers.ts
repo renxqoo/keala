@@ -3,6 +3,7 @@
  */
 
 import type { RouteHandler } from "../router/router.ts";
+import { isHttpError } from "../http/errors.ts";
 
 export interface SecureHeadersOptions {
   /** HSTS max-age in seconds. Off by default — only meaningful behind TLS. */
@@ -97,8 +98,19 @@ export const logger = (options: LoggerOptions = {}): RouteHandler => {
   const write = options.write ?? ((line: string): void => console.log(line));
   return async (c, next) => {
     const start = performance.now();
-    await next();
-    const id = (c.state as { requestId?: string }).requestId ?? "-";
-    write(`${c.method} ${c.path} -> ${c.status} ${Math.round(performance.now() - start)}ms ${id}`);
+    // The one-line-per-request contract includes failures, like the finally
+    // blocks of secureHeaders/requestId — a throwing downstream still logs.
+    try {
+      await next();
+      const id = (c.state as { requestId?: string }).requestId ?? "-";
+      write(
+        `${c.method} ${c.path} -> ${c.status} ${Math.round(performance.now() - start)}ms ${id}`,
+      );
+    } catch (err) {
+      const status = isHttpError(err) ? err.status : 500;
+      const id = (c.state as { requestId?: string }).requestId ?? "-";
+      write(`${c.method} ${c.path} -> ${status} ${Math.round(performance.now() - start)}ms ${id}`);
+      throw err;
+    }
   };
 };

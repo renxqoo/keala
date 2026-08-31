@@ -57,9 +57,18 @@ describe("negotiation matrix: Accept q-value table", () => {
     ["  ", ["text/html"], false],
     [";", ["text/html"], false],
     ["text/html;", ["text/html"], "text/html"],
-    ["text/html;q=", ["text/html"], "text/html"],
-    ["text/html;q=abc", ["text/html"], "text/html"],
-  ])("malformed header %j falls back to server order", (header, provided, expected) => {
+    // R7-NEG-3 (negotiator parity): a q that is not a qvalue drops the ITEM,
+    // never promotes it to q=1 — with no acceptable range left, NOTHING is
+    // acceptable (negotiator answers [] for both provided lists).
+    ["text/html;q=", ["text/html", "application/json"], false],
+    ["text/html;q=abc", ["text/html", "application/json"], false],
+    ["text/html;q=abc", ["text/html"], false],
+    [
+      "text/html;q=abc, application/json;q=0.5",
+      ["text/html", "application/json"],
+      "application/json",
+    ],
+  ])("malformed q drops the item instead of gaining quality", (header, provided, expected) => {
     expect(acceptsType(header, provided)).toBe(expected);
   });
 });

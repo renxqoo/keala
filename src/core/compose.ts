@@ -14,6 +14,7 @@
  */
 
 import type { Next } from "../types.ts";
+import { registerBranch } from "./branches.ts";
 
 /** Anything a handler may return: a committed Response, or nothing. */
 export type HandlerResult = Response | void;
@@ -55,6 +56,7 @@ const makeLevel =
   <C extends MiddlewareContext>(handler: Handler<C>, downstream: Level<C>): Level<C> =>
   (c, tail) => {
     let advanced = false;
+    let floated: Promise<void> | undefined;
     const result = handler(c, () => {
       if (advanced) {
         throw new Error("next() called multiple times in the same middleware");
@@ -68,6 +70,7 @@ const makeLevel =
         // silently — the response has already been committed by design.
         // (Synchronous chains return undefined here and pay nothing.)
         void (downstreamResult as Promise<void>).catch(() => undefined);
+        floated = downstreamResult as Promise<void>;
       }
       return downstreamResult as Promise<void>;
     });
@@ -76,6 +79,10 @@ const makeLevel =
         commit(c, settled as HandlerResult);
       });
     }
+    // Sync return AFTER calling next(): the only statically detectable
+    // floating branch. Register it so a pooled context is never recycled
+    // while this branch can still mutate it (see core/branches.ts).
+    if (floated !== undefined) registerBranch(c, floated);
     commit(c, result);
     return undefined;
   };

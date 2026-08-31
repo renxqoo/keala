@@ -177,10 +177,14 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   set query(value: QueryMap) {
     // Koa 3: assigning an object rewrites the query string on the request;
     // the next read re-parses from the rewritten URL (round-trip semantics).
-    const url = this.url;
-    const base = url.slice(0, url.indexOf("?") === -1 ? url.length : url.indexOf("?"));
+    // splitUrl keeps the fragment, exactly like the querystring/search
+    // setters beside this one.
+    const parts = splitUrl(this.url);
     const serialized = stringifyQuery(value);
-    this.url = serialized.length === 0 ? base : `${base}?${serialized}`;
+    this.url =
+      serialized.length === 0
+        ? parts.path + parts.hash
+        : `${parts.path}?${serialized}${parts.hash}`;
   },
   set querystring(value: string) {
     const parts = splitUrl(this.url);

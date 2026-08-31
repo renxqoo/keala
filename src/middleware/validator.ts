@@ -73,10 +73,8 @@ export const validator = (schema: StandardSchema): RouteHandler => {
     const app = c.app;
     if (VALIDATOR_APPS.has(app)) return;
     VALIDATOR_APPS.add(app);
-    app.decorate("valid", {
-      get(this: Context): unknown {
-        return (this as { validValue?: unknown }).validValue;
-      },
+    app.decorateLazy("valid", function (this: Context): unknown {
+      return (this as { validValue?: unknown }).validValue;
     });
   };
 

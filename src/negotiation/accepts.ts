@@ -7,18 +7,19 @@
  * prefix matching and server-preference fallback.
  */
 
-import { expandShorthand } from "../utils/mime.ts";
+import { contentTypeParameters, expandShorthand } from "../utils/mime.ts";
 
 export interface Preference {
   value: string;
   q: number;
   order: number;
   /**
-   * Non-q parameters on the range ("level=1"), normalized `name=value` with
-   * a lowercase name — null when absent (the hot path). Media negotiation
-   * requires every parameter to be present-and-equal on the server type
-   * (negotiator's specify()); provided values are bare types, so any range
-   * carrying parameters is inapplicable to them.
+   * Media parameters on the range ("level=1"), normalized `name=value` with a
+   * lowercase name — null when absent (the hot path). Only parameters seen
+   * BEFORE the q weight count: later ones are accept-ext metadata. Media
+   * negotiation requires every parameter to be present-and-equal on the
+   * server type (negotiator's specify()), and provided values are parsed for
+   * parameters the same way.
    */
   params: readonly string[] | null;
 }
@@ -46,7 +47,10 @@ const splitHeader = (header: string): string[] => {
 /**
  * Parse a preference header into entries (header order preserved).
  * Unlike `parsePreferences`, q=0 entries are KEPT — explicit-refusal
- * detection (`identity;q=0`, `gzip;q=0`) needs them.
+ * detection (`identity;q=0`, `gzip;q=0`) needs them. Items whose q parameter
+ * is not a valid qvalue are dropped entirely (negotiator semantics: NaN
+ * quality never compares positive, so a `q=bogus` item must not fall back to
+ * the q=1 default and outrank real preferences).
  */
 export const parsePreferenceEntries = (header: string | null): Preference[] => {
   if (header == null || header.length === 0) return [];
@@ -56,21 +60,29 @@ export const parsePreferenceEntries = (header: string | null): Preference[] => {
     const value = (segments[0] ?? "").trim().toLowerCase();
     if (value.length === 0) continue;
     let q = 1;
+    let weighted = false;
+    let malformed = false;
     let params: string[] | null = null;
     for (let i = 1; i < segments.length; i++) {
       const param = (segments[i] ?? "").trim();
-      if (param.startsWith("q=") || param.startsWith("Q=")) {
+      if (!weighted && (param.startsWith("q=") || param.startsWith("Q="))) {
+        weighted = true;
         const parsed = Number.parseFloat(param.slice(2));
-        if (!Number.isNaN(parsed)) q = Math.min(Math.max(parsed, 0), 1);
+        if (Number.isNaN(parsed)) {
+          malformed = true;
+          break;
+        }
+        q = Math.min(Math.max(parsed, 0), 1);
         continue;
       }
+      if (weighted) continue; // accept-ext after the weight: metadata, not a media constraint
       const eq = param.indexOf("=");
       if (eq === -1) continue;
       const name = param.slice(0, eq).trim().toLowerCase();
       if (name.length === 0) continue;
       (params ??= []).push(`${name}=${param.slice(eq + 1).trim()}`);
     }
-    out.push({ value, q, order: out.length, params });
+    if (!malformed) out.push({ value, q, order: out.length, params });
   }
   return out;
 };
@@ -85,21 +97,48 @@ export const parsePreferences = (header: string | null): Preference[] =>
     .sort((a, b) => b.q - a.q || a.order - b.order);
 
 /**
+ * Split a PROVIDED media type into its type token and parameter map (values
+ * compared lowercased — negotiator's specify()). Provided strings may legally
+ * carry parameters ("text/html;level=1"), so the server side is parsed just
+ * like the client ranges.
+ */
+const serverMediaOf = (server: string): { type: string; params: Map<string, string> } => {
+  const semi = server.indexOf(";");
+  const type = (semi === -1 ? server : server.slice(0, semi)).trim().toLowerCase();
+  const params = new Map<string, string>();
+  if (semi !== -1) {
+    for (const [name, value] of contentTypeParameters(server)) {
+      params.set(name, value.toLowerCase());
+    }
+  }
+  return { type, params };
+};
+
+/**
  * Score a client media range against a concrete server type (0 = no match).
- * A range carrying parameters never matches a bare server type.
+ * Client parameters ("level=1") constrain the representation: every one must
+ * be present-and-equal on the server type, and a fully constrained EXACT
+ * match outranks the bare exact match (negotiator's +1 params specificity).
  */
 const mediaScore = (pref: Preference, server: string): number => {
-  if (pref.params !== null) return 0;
+  const { type, params: serverParams } = serverMediaOf(server);
   const client = pref.value;
-  if (client === "*" || client === "*/*") return 1;
-  if (client.endsWith("/*")) {
-    return client.slice(0, -2) === server.split("/")[0] ? 2 : 0;
+  let score: number;
+  if (client === "*" || client === "*/*") score = 1;
+  else if (client.endsWith("/*")) score = client.slice(0, -2) === type.split("/")[0] ? 2 : 0;
+  else if (client.startsWith("*/")) score = client.slice(2) === type.split("/")[1] ? 2 : 0;
+  else score = client === type ? 3 : 0;
+  if (score === 0) return 0;
+  if (pref.params !== null) {
+    for (const entry of pref.params) {
+      const eq = entry.indexOf("=");
+      const name = entry.slice(0, eq);
+      const value = entry.slice(eq + 1).toLowerCase();
+      if (serverParams.get(name) !== value) return 0;
+    }
+    if (score === 3) score += 1;
   }
-  if (client.startsWith("*/")) {
-    // `*/subtype` — wildcard type, concrete subtype (negotiator semantics).
-    return client.slice(2) === server.split("/")[1] ? 2 : 0;
-  }
-  return client === server ? 3 : 0;
+  return score;
 };
 
 /** Score an encoding/charset token (exact or wildcard). */

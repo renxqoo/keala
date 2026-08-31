@@ -81,13 +81,14 @@ export const isWithinRoot = (absolute: string, root: string, sep: string): boole
 /**
  * Path-relative remainder of a mounted request, or null when the path is not
  * under the prefix (the mount then declines: next()). Segment boundaries only
- * — "/assets" owns "/assets" and "/assets/…", never "/assetsfoo".
+ * — "/assets" owns "/assets" and "/assets/…", never "/assetsfoo". "/" (and a
+ * trailing-slash form like "/assets/") normalize to the root/segment form so
+ * every canonical prefix spelling owns the same subtree.
  */
-const stripPrefix = (path: string, prefix: string | undefined): string | null => {
-  if (prefix === undefined) return path;
-  if (path === prefix) return "/";
-  if (path.startsWith(`${prefix}/`)) return path.slice(prefix.length);
-  return null;
+const stripPrefixOf = (rawPrefix: string | undefined): string | undefined => {
+  if (rawPrefix === undefined) return undefined;
+  if (rawPrefix.length > 1 && rawPrefix.endsWith("/")) return rawPrefix.slice(0, -1);
+  return rawPrefix;
 };
 
 export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
@@ -95,6 +96,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     throw new TypeError("serveStatic({ root }) requires a directory path");
   }
   const indexName = options.index === undefined ? "index.html" : options.index;
+  const prefix = stripPrefixOf(options.prefix);
   // Resolved on the first request — keeps the path bridge out of setup.
   let rootCache: string | null = null;
 
@@ -107,8 +109,12 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     const root = (rootCache ??= resolve(options.root));
     // A prefix owns its URL SUBTREE only — matching on a bare startsWith
     // would strip "/assets" off "/assetsfoo" too and serve mounted files
-    // under URLs that belong to other routes.
-    const relative = stripPrefix(c.path, options.prefix);
+    // under URLs that belong to other routes. "/" or "" is the root mount.
+    let relative: string | null;
+    if (prefix === undefined || prefix === "" || prefix === "/") relative = c.path;
+    else if (c.path === prefix) relative = "/";
+    else if (c.path.startsWith(`${prefix}/`)) relative = c.path.slice(prefix.length);
+    else relative = null;
     if (relative === null) return next();
     if (relative.includes("\0")) {
       throw createError(400, "null byte in path", { expose: true });

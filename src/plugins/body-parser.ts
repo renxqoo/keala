@@ -115,7 +115,9 @@ const assertFormPartBudget = (bytes: Uint8Array, contentType: string, limit: num
     for (let i = 0; i < bytes.length; i++) {
       if (bytes[i] === ampersand) separators++;
     }
-    const parts = separators + 1;
+    // An EMPTY body holds zero parts — `separators + 1` would invent one and
+    // reject the empty form against a zero budget.
+    const parts = bytes.length === 0 ? 0 : separators + 1;
     if (parts > limit) tooManyParts(parts);
   }
 };
@@ -123,12 +125,23 @@ const assertFormPartBudget = (bytes: Uint8Array, contentType: string, limit: num
 interface BodyCacheState {
   bytes: Promise<Uint8Array> | null;
   facade: RequestBodyFacade | null;
+  /** Memoized reader results (DESIGN "body 单次性"): every consumer in the
+   *  onion sees the SAME parsed value. json wraps its value — `null` is a
+   *  legitimate JSON result and must stay distinguishable from "not read". */
+  json: { value: unknown } | null;
+  text: string | null;
+  formData: FormData | null;
+  blob: Blob | null;
 }
 
 const cacheOf = (c: Context): BodyCacheState =>
   ((c as { bodyCache?: BodyCacheState }).bodyCache ??= {
     bytes: null,
     facade: null,
+    json: null,
+    text: null,
+    formData: null,
+    blob: null,
   } as BodyCacheState);
 
 /**
@@ -196,61 +209,78 @@ export interface RequestBodyFacade {
 
 const decoder = new TextDecoder();
 
+const assertLimit = (name: string, value: number | undefined): void => {
+  if (value === undefined) return;
+  // NaN compares false against every bound and would silently disarm the
+  // limit; Infinity is a misconfiguration, not "unlimited" — pass a large
+  // finite number when you really mean that.
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new TypeError(`bodyParser ${name} must be a non-negative finite number`);
+  }
+};
+
 export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
   const jsonLimit = options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const textLimit = options.textLimit ?? options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const formLimit = options.formLimit ?? DEFAULT_FORM_LIMIT;
   const formPartLimit = options.formPartLimit ?? DEFAULT_PART_LIMIT;
 
-  if (
-    (options.jsonLimit !== undefined && options.jsonLimit < 0) ||
-    (options.textLimit !== undefined && options.textLimit < 0) ||
-    (options.formLimit !== undefined && options.formLimit < 0) ||
-    (options.formPartLimit !== undefined && options.formPartLimit < 0)
-  ) {
-    throw new TypeError("bodyParser limits must be non-negative");
-  }
+  assertLimit("jsonLimit", options.jsonLimit);
+  assertLimit("textLimit", options.textLimit);
+  assertLimit("formLimit", options.formLimit);
+  assertLimit("formPartLimit", options.formPartLimit);
   return {
     name: "bodyParser",
     install(app: Application): void {
       // The effective json limit, published so co-installed readers (the
       // validator) enforce exactly what the app configured.
       app.decorate("bodyJsonLimit", jsonLimit);
-      app.decorate("req", {
-        get(this: Context): RequestBodyFacade {
-          const cache = cacheOf(this);
-          if (cache.facade !== null) return cache.facade;
-          const read = (limit: number): Promise<Uint8Array> => readBodyLimited(this, limit);
-          cache.facade = {
-            json: async () => {
-              const bytes = await read(jsonLimit);
-              if (bytes.byteLength === 0) return null;
-              try {
-                return JSON.parse(decoder.decode(bytes));
-              } catch {
-                throw createError(400, "request body is not valid JSON", { expose: true });
-              }
-            },
-            text: async () => decoder.decode(await read(textLimit)),
-            arrayBuffer: () => read(jsonLimit),
-            blob: async () => new Blob([await read(jsonLimit)]),
-            formData: async () => {
-              const bytes = await read(formLimit);
-              const contentType = this.header("content-type") || "application/octet-stream";
-              assertFormPartBudget(bytes, contentType, formPartLimit);
-              try {
-                return (await new Response(bytes, {
-                  headers: { "content-type": contentType },
-                }).formData()) as FormData;
-              } catch {
-                throw createError(400, "request body is not decodable form data", {
-                  expose: true,
-                });
-              }
-            },
-          };
-          return cache.facade;
-        },
+      app.decorateLazy("req", function (this: Context): RequestBodyFacade {
+        const cache = cacheOf(this);
+        if (cache.facade !== null) return cache.facade;
+        const read = (limit: number): Promise<Uint8Array> => readBodyLimited(this, limit);
+        cache.facade = {
+          json: async () => {
+            if (cache.json !== null) return cache.json.value;
+            const bytes = await read(jsonLimit);
+            if (bytes.byteLength === 0) {
+              cache.json = { value: null };
+              return null;
+            }
+            try {
+              const parsed: unknown = JSON.parse(decoder.decode(bytes));
+              cache.json = { value: parsed };
+              return parsed;
+            } catch {
+              throw createError(400, "request body is not valid JSON", { expose: true });
+            }
+          },
+          text: async () => {
+            if (cache.text !== null) return cache.text;
+            return (cache.text = decoder.decode(await read(textLimit)));
+          },
+          arrayBuffer: () => read(jsonLimit),
+          blob: async () => {
+            if (cache.blob !== null) return cache.blob;
+            return (cache.blob = new Blob([await read(jsonLimit)]));
+          },
+          formData: async () => {
+            if (cache.formData !== null) return cache.formData;
+            const bytes = await read(formLimit);
+            const contentType = this.header("content-type") || "application/octet-stream";
+            assertFormPartBudget(bytes, contentType, formPartLimit);
+            try {
+              return (cache.formData = (await new Response(bytes, {
+                headers: { "content-type": contentType },
+              }).formData()) as FormData);
+            } catch {
+              throw createError(400, "request body is not decodable form data", {
+                expose: true,
+              });
+            }
+          },
+        };
+        return cache.facade;
       });
     },
   };

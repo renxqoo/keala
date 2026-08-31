@@ -192,24 +192,37 @@ describe("RT-F4: csrf fallback MAC is NUL-delimiter-attack-proof", () => {
 });
 
 // ---------------------------------------------------------------------------
-describe("RT-F5: HEAD on committed responses never buffers unbounded bodies", () => {
-  it("small committed bodies backfill an exact Content-Length", async () => {
+describe("RT-F5: HEAD on committed responses never reads the body", () => {
+  // R7-CORE-4: the finalizer performs NO body reads — small, huge and OPEN
+  // committed bodies answer HEAD identically and promptly, carrying exactly
+  // the headers the Response itself exposes (sugar HEAD returns attach CL at
+  // construction; hand-built Responses carry only what their headers say).
+  it("hand-built committed bodies carry no derived Content-Length", async () => {
     const app = createApp(quiet);
     app.get("/small", () => new Response("hello world"));
     const res = await app.handle(new Request("http://localhost:3000/small", { method: "HEAD" }));
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-length")).toBe("11");
+    expect(res.headers.get("content-length")).toBeNull();
     expect(await res.text()).toBe("");
   });
 
-  it("bodies over the 1 MiB budget omit Content-Length instead of buffering", async () => {
+  it("an open committed stream answers HEAD promptly without blocking", async () => {
+    const gate = new Promise<void>(() => {}); // never settles — no strand: we cancel
     const app = createApp(quiet);
-    const big = "x".repeat(2 * 1024 * 1024);
-    app.get("/big", () => new Response(big));
-    const res = await app.handle(new Request("http://localhost:3000/big", { method: "HEAD" }));
+    app.get("/open", () => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([0x61]));
+        },
+        pull() {
+          void gate; // a slow producer: the second chunk never arrives
+        },
+      });
+      return new Response(body);
+    });
+    const res = await app.handle(new Request("http://localhost:3000/open", { method: "HEAD" }));
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe("");
-    // The header is absent — computing it would require reading 2 MiB.
+    expect(res.body).toBeNull();
     expect(res.headers.get("content-length")).toBeNull();
   });
 });

@@ -213,12 +213,14 @@ describe("agent3 — investigated and cleared", () => {
     expect(await res.text()).toBe("Internal Server Error");
   });
 
-  it("clear: HEAD on a committed Response backfills content-length", async () => {
+  it("clear: HEAD on a committed Response strips the body without reading it", async () => {
+    // R7: no body reads in the finalizer — CL stays what the Response itself
+    // exposes (sugar helpers attach it at construction for HEAD instead).
     const app = createApp(quiet);
     app.get("/x", () => new Response("committed-body"));
     const res = await app.handle(req("/x", { method: "HEAD" }));
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-length")).toBe("14");
+    expect(res.headers.get("content-length")).toBeNull();
     expect(await res.text()).toBe("");
   });
 });

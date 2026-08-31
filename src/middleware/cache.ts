@@ -57,16 +57,26 @@ const cacheControlTokens = (header: string): Set<string> => {
   return tokens;
 };
 
-const textualBody = (res: Response): Promise<string | Uint8Array | null> => {
+/**
+ * Capture the replayable body: text for plain textual representations, RAW
+ * BYTES when a content-encoding is present — decoding an encoded payload as
+ * `.text()` corrupts it (invalid UTF-8 becomes U+FFFD and re-encodes
+ * differently), so an encoded representation must round-trip byte-exactly.
+ */
+const captureBody = (res: Response): Promise<string | Uint8Array | null> => {
   const type = (res.headers.get("content-type") ?? "").split(";")[0]?.trim() ?? "";
   // A MISSING content-type is textual per D1: a bare string body carries no
   // framework CT at construction (Bun only sets text/plain at send time), so
   // requiring the header would silently disable caching on the Bun runtime.
   if (type !== "" && !TEXTUAL.test(type)) return Promise.resolve(null);
-  return res
-    .clone()
-    .text()
-    .catch(() => null);
+  const clone = res.clone();
+  if (res.headers.get("content-encoding") !== null) {
+    return clone
+      .arrayBuffer()
+      .then((buf) => new Uint8Array(buf))
+      .catch(() => null);
+  }
+  return clone.text().catch(() => null);
 };
 
 /**
@@ -133,9 +143,14 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     headers.set("x-cache", "hit");
     if (c.method === "HEAD") {
       const head = new Headers(headers);
-      if (head.get("content-length") === null && typeof entry.body === "string") {
-        // UTF-8 byte length — .length would undercount non-ASCII bodies.
-        head.set("content-length", String(encoder.encode(entry.body).byteLength));
+      if (head.get("content-length") === null) {
+        // The wire length of the STORED representation: UTF-8 byte length for
+        // text entries, byteLength for already-encoded byte entries.
+        const bytes =
+          typeof entry.body === "string"
+            ? encoder.encode(entry.body).byteLength
+            : entry.body.byteLength;
+        head.set("content-length", String(bytes));
       }
       return new Response(null, { status: 200, headers: head });
     }
@@ -177,12 +192,12 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     if (stateMode && !isTextualStateBody(c.bodyValue)) return;
     // Materialize the equivalent Response (without committing it) so
     // eligibility and capture see the same object the finalizer will build.
-    // The discard is safe: nothing consumed the body (textualBody reads a
+    // The discard is safe: nothing consumed the body (captureBody reads a
     // clone), and the finalizer re-derives an identical Response from the
     // untouched state.
     const res = c._res ?? (await finalize(c.app, c));
     if (!eligible(c, res)) return;
-    const body = await textualBody(res);
+    const body = await captureBody(res);
     if (body === null || body.length === 0) return;
 
     const headers: [string, string][] = [];

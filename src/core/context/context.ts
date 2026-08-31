@@ -10,6 +10,7 @@
 import type { Application } from "../app.ts";
 import { createError, type HttpErrorProps } from "../../http/errors.ts";
 import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
+import { clearBranches } from "../branches.ts";
 import type { HeaderMap } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
 import { requestApi } from "./request.ts";
@@ -129,6 +130,9 @@ const assignSlots = (c: Context): Context => {
   // pool recycle — cross-request disclosure).
   c.bodyCache = undefined;
   c.validValue = undefined;
+  // A recycled object starts a new generation with no outstanding branches
+  // (any leftover registration belongs to the previous request).
+  clearBranches(c);
   return c;
 };
 

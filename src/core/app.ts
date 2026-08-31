@@ -16,7 +16,7 @@ import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
 import { createPool, retireWithBody } from "./context/pool.ts";
-import { createDecorator } from "./context/decorate.ts";
+import { createDecorators } from "./context/decorate.ts";
 import { compose } from "./compose.ts";
 import {
   dispatchChain,
@@ -116,6 +116,11 @@ export interface Application {
   notFound(handler: NotFoundHandler): Application;
   /** Extend every context with a property or method (setup time only). */
   decorate(key: string, value: unknown): Application;
+  /**
+   * Extend every context with a LAZY accessor (setup time only). The value
+   * form never sniffs shapes — accessors must opt in explicitly.
+   */
+  decorateLazy(key: string, getter: (this: Context) => unknown): Application;
   /** Fetch-style request handler — the heart of the framework. */
   handle(request: Request, runtime?: Runtime): Response | Promise<Response>;
   /** Alias for `handle`, useful for adapters. */
@@ -178,9 +183,9 @@ export const createApp = (options: AppOptions = {}): Application => {
   // after `app` exists (the pool captures it); handle() runs later still.
   const poolingEnabled = options.pooling === true;
   let pool: ReturnType<typeof createPool> | null = null;
-  // decorate() implementation bound to this app's derived context prototype
-  // (collision guard included — see core/context/decorate.ts).
-  const decorateContext = createDecorator(contextProto);
+  // decorate()/decorateLazy() implementations bound to this app's derived
+  // context prototype (collision guard included — see core/context/decorate.ts).
+  const decorators = createDecorators(contextProto);
 
   const app: Application = {
     env: options.env ?? process.env["NODE_ENV"] ?? "development",
@@ -407,7 +412,12 @@ export const createApp = (options: AppOptions = {}): Application => {
     },
 
     decorate(key, value) {
-      decorateContext(key, value, app);
+      decorators.decorate(key, value, app);
+      return app;
+    },
+
+    decorateLazy(key, getter) {
+      decorators.decorateLazy(key, getter as (this: never) => unknown, app);
       return app;
     },
 

@@ -11,11 +11,48 @@
 export type QueryValue = string | string[];
 export type QueryMap = Record<string, QueryValue>;
 
-const decode = (input: string): string => {
+const HEX_PAIR = /^[0-9a-fA-F]{2}$/;
+
+/** decodeURIComponent over one run of consecutive VALID escapes, verbatim on failure. */
+const decodeRun = (run: string): string => {
   try {
-    return decodeURIComponent(input.replace(/\+/g, " "));
+    return decodeURIComponent(run);
   } catch {
-    return input;
+    return run;
+  }
+};
+
+/**
+ * Node `querystring` recovery semantics: `+` is a space and each escape is
+ * decoded independently, so a single malformed `%ZZ` stays verbatim WITHOUT
+ * disabling the valid escapes around it. Consecutive valid escapes are
+ * decoded as one run so multi-byte UTF-8 sequences (`%E4%B8%AD`) reassemble.
+ */
+const decode = (input: string): string => {
+  const s = input.includes("+") ? input.replaceAll("+", " ") : input;
+  if (!s.includes("%")) return s;
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    let out = "";
+    let run = "";
+    let i = 0;
+    while (i < s.length) {
+      const ch = s[i] as string;
+      if (ch === "%" && i + 2 < s.length && HEX_PAIR.test(s.slice(i + 1, i + 3))) {
+        run += s.slice(i, i + 3);
+        i += 3;
+        continue;
+      }
+      if (run.length > 0) {
+        out += decodeRun(run);
+        run = "";
+      }
+      out += ch;
+      i++;
+    }
+    if (run.length > 0) out += decodeRun(run);
+    return out;
   }
 };
 

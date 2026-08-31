@@ -69,7 +69,7 @@ interface Ctx {
   flags: number; // 位打包：显式状态/空体/多值头/长度触碰
   // body 消费缓存（P1 设计、P2 实现，见 §6.3）
   bodyCache: { text?: string; json?: unknown; formData?: FormData } | null;
-  // 扩展（decorate 协议，统一根原型，防 megamorphic）
+  // 扩展（decorate 协议，统一根原型，防 megamorphic；值语义，惰性访问器显式走 decorateLazy）
   [k: symbol]: unknown;
 }
 ```
@@ -85,7 +85,7 @@ interface Ctx {
 5. **错误路径**：链中 throw → `onError(err, c)`；HTTPError 携带可选 Response；onError 结果同样可被外层改写。
 6. **body 单次性**：`c.req.json()/text()/formData()/arrayBuffer()/blob()` 全部记忆化到 `bodyCache`（洋葱内多次调用安全）；需重读用 `c.req.clone()`。
 
-**终结器（respond）**：状态与都为默认（200、无自定义头、string/Uint8Array body）→ **裸 `new Response(body)`**（D1，80ns 地板）；有自定义头 → `new Response(body, { headers: Headers 实例 })`（实测比 record init 快 60ns）；JSON 糖走 `Response.json(obj)`（省 74ns）；set-cookie 数组/多值头 → flatten 分支（判定条件全部保留）；204/205/304 清 content 头、HEAD 回填 Content-Length、statusText Latin-1 守卫——**判定全部保留**。流响应原样返回，`observeStream` 错误观察改为 opt-in（默认关闭，省 567ns/响应并恢复背压）。
+**终结器（respond）**：状态与都为默认（200、无自定义头、string/Uint8Array body）→ **裸 `new Response(body)`**（D1，80ns 地板）；有自定义头 → `new Response(body, { headers: Headers 实例 })`（实测比 record init 快 60ns）；JSON 糖走 `Response.json(obj)`（省 74ns）；set-cookie 数组/多值头 → flatten 分支（判定条件全部保留）；204/205/304 清 content 头、HEAD 回填 Content-Length（状态模式从 body 值计算；return 模式由 sugar 助手在 HEAD 时构造期附带精确 CL——**终结器永不读取已提交 body**，开放流生产者不可能阻塞它）、statusText Latin-1 守卫——**判定全部保留**。流响应原样返回，`observeStream` 错误观察改为 opt-in（默认关闭，省 567ns/响应并恢复背压）。
 
 ## 5. 路由（混合结构 + 双发射 IR）
 

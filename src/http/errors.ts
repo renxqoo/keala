@@ -128,7 +128,9 @@ export const createError = (
     error.cause = source;
   }
   for (const [key, value] of Object.entries(extra ?? {})) {
-    if (key === "message" || key === "expose" || key === "status") continue;
+    // `statusCode` is an alias of `status` (http-errors): letting props set
+    // them independently would mint an internally inconsistent HttpError.
+    if (key === "message" || key === "expose" || key === "status" || key === "statusCode") continue;
     (error as unknown as Record<string, unknown>)[key] = value;
   }
   return error;
@@ -146,6 +148,17 @@ export const isHttpError = (value: unknown): value is HttpError =>
 /** Wrap non-Error throwables so downstream handling always sees an Error. */
 export const normalizeError = (value: unknown): Error => {
   if (value instanceof Error) return value;
-  const message = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+  // TOTAL function: BigInt and circular structures make JSON.stringify
+  // throw — the error path must never fail while normalizing a throwable.
+  let message: string;
+  if (typeof value === "string") {
+    message = value;
+  } else {
+    try {
+      message = JSON.stringify(value) ?? String(value);
+    } catch {
+      message = String(value);
+    }
+  }
   return new Error(message, { cause: value });
 };
