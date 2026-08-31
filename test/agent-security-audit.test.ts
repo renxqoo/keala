@@ -227,6 +227,7 @@ describe("audit: signed cookie integrity and Keygrip compatibility", () => {
   it("get(name, { signed: true }) fails CLOSED without keys (was: raw trust)", () => {
     const cookies = createCookies({
       cookieHeader: "sid=admin",
+      requestSecure: false,
       keys: undefined,
       responseHeaders: {},
     });
@@ -236,6 +237,7 @@ describe("audit: signed cookie integrity and Keygrip compatibility", () => {
   it("default unsigned read without keys keeps returning raw (koa parity)", () => {
     const cookies = createCookies({
       cookieHeader: "sid=admin",
+      requestSecure: false,
       keys: undefined,
       responseHeaders: {},
     });

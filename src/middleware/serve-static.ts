@@ -1,19 +1,22 @@
 /**
  * serveStatic — file responses with the security ordering from the audit:
- * decode → normalize → containment check, null-byte rejection, symlink
- * denial (opt-in via lstat), nosniff, weak ETag + Last-Modified/304.
+ * segment → decode-per-segment → normalize → containment check, null-byte
+ * rejection, empty-segment refusal, GET/HEAD-only methods, symlink denial
+ * (opt-in via lstat), nosniff, weak ETag + Last-Modified/304.
  *
- * Path handling is separator-correct for the host: on Windows a backslash is
- * a filesystem separator, so an escaped `%5C` must collapse exactly like `/`
- * (and the containment check compares with the platform separator). The
- * fs/path bridges load with the FIRST request — importing this middleware
- * costs nothing at idle.
+ * Splitting the RAW path on "/" before any decoding is what closes the
+ * path-confusion bypass: an escaped `%2F` (or `%5C` on Windows) decodes to a
+ * literal character INSIDE one segment and can never re-introduce a
+ * separator the router never saw — a guard at `/guarded/*` therefore cannot
+ * be sidestepped with `/guarded%2Fsecret`. The fs/path bridges load with
+ * the FIRST request — importing this middleware costs nothing at idle.
  */
 
 import { createError } from "../http/errors.ts";
 import type { RouteHandler } from "../router/router.ts";
 import { nodeFsPromises, nodePath } from "../utils/node-lazy.ts";
 import { mimeFromExtension } from "../utils/mime.ts";
+import { decodeSegment } from "../router/pattern.ts";
 
 // Bun.file bodies are zero-copy (sendfile) with automatic Content-Length and
 // Range handling; Node keeps the buffered readFile path.
@@ -34,25 +37,39 @@ export interface ServeStaticOptions {
   prefix?: string;
 }
 
-/** On Windows both separators reach the filesystem; everywhere else a
- * backslash is an ordinary filename character and must stay one. */
-const WINDOWS_SEPARATORS = /[\\/]/;
-
 /**
- * Collapse a decoded request path into safe segments (dropping empty and ".",
- * resolving ".."). Exported for cross-platform tests — `windowsSeparators`
- * decides whether `\` behaves as a separator.
+ * Resolve a RAW (still-encoded) request path into safe file segments.
+ * Returns null for ambiguous paths (empty interior segments — `//x`, `a//b`)
+ * which must be refused rather than collapsed: collapsing them would let a
+ * path the router never routed reach the filesystem.
+ *
+ * Exported for cross-platform tests. `windowsSeparators` decides whether a
+ * decoded `\` splits within a segment (on Windows it is a filesystem
+ * separator; everywhere else it is an ordinary filename character).
  */
-export const cleanSegments = (decoded: string, windowsSeparators: boolean): string[] => {
-  const parts = decoded.split(windowsSeparators ? WINDOWS_SEPARATORS : "/");
+export const resolveRelativeSegments = (
+  rawPath: string,
+  windowsSeparators: boolean,
+): string[] | null => {
+  const parts = rawPath.split("/");
+  parts.shift(); // the leading "" before "/"
+  if (parts.length === 1 && (parts[0] ?? "") === "") parts.length = 0;
+  else if (parts.length > 0 && parts[parts.length - 1] === "") parts.length--; // trailing "/"
   const segments: string[] = [];
   for (const part of parts) {
-    if (part.length === 0 || part === ".") continue;
-    if (part === "..") {
+    if (part.length === 0) return null;
+    const decoded = decodeSegment(part); // malformed escapes stay verbatim
+    // A decoded separator is impossible in a real filename — carrying it
+    // would re-introduce a separator the router never saw (%2F, %5C on
+    // Windows). Refuse instead of resolving. On POSIX a backslash is an
+    // ordinary filename character and stays one.
+    if (decoded.includes("/") || (windowsSeparators && decoded.includes("\\"))) return null;
+    if (decoded === ".") continue;
+    if (decoded === "..") {
       segments.pop();
       continue;
     }
-    segments.push(part);
+    segments.push(decoded);
   }
   return segments;
 };
@@ -69,10 +86,13 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
   // Resolved on the first request — keeps the path bridge out of setup.
   let rootCache: string | null = null;
 
-  return async (c) => {
+  return async (c, next) => {
+    // Static files answer GET/HEAD only — anything else falls through
+    // (koa-static/express behavior; POST returning file content surprises
+    // caches and CSRF assumptions).
+    if (c.method !== "GET" && c.method !== "HEAD") return next();
     const { resolve, sep } = nodePath();
     const root = (rootCache ??= resolve(options.root));
-    const windows = sep === "\\";
     const relative =
       options.prefix !== undefined && c.path.startsWith(options.prefix)
         ? c.path.slice(options.prefix.length)
@@ -80,15 +100,10 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     if (relative.includes("\0")) {
       throw createError(400, "null byte in path", { expose: true });
     }
-    // decode → normalize; traversal collapses INSIDE the request path, but the
-    // resolved absolute path must still stay under root (defense in depth).
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(relative);
-    } catch {
-      decoded = relative;
-    }
-    const segments = cleanSegments(decoded, windows);
+    // Segment FIRST, decode each segment, then normalize; the resolved
+    // absolute path must still stay under root (defense in depth).
+    const segments = resolveRelativeSegments(relative, sep === "\\");
+    if (segments === null) throw createError(404);
     if (segments.some((s) => s.includes("\0"))) {
       throw createError(400, "null byte in path", { expose: true });
     }
@@ -124,7 +139,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       // ANY symlink component under root — a linked directory just as much
       // as a linked file — is denied, even when it points back inside root.
       // (root itself may legitimately be a symlink.)
-      const parts = absolute.slice(root.length + 1).split(windows ? WINDOWS_SEPARATORS : "/");
+      const parts = absolute.slice(root.length + 1).split(sep === "\\" ? /[\\/]/ : "/");
       let walked = root;
       for (const part of parts) {
         walked = `${walked}${sep}${part}`;

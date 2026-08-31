@@ -8,6 +8,7 @@
  */
 
 import type { RouteHandler } from "../router/router.ts";
+import { parsePreferences } from "../negotiation/accepts.ts";
 
 const wyhashOf = (bytes: Uint8Array): string | null => {
   const hash = (
@@ -56,6 +57,9 @@ export const etag = (): RouteHandler => {
   return async (c, next) => {
     await next();
     if (c._res !== undefined) return; // committed responses pass through
+    // Validators only negotiate safe methods — a 304 for POST would tell
+    // the client a state change "already happened" (hono corpus lock).
+    if (c.method !== "GET" && c.method !== "HEAD") return;
     const status = c.statusValue;
     if (status !== 200 && status !== 201) return;
     if (c.has("etag")) return;
@@ -122,12 +126,22 @@ const webGzip = async (input: Uint8Array): Promise<Uint8Array> => {
  * Bun.gzipSync / zlib.gzipSync) and, on Bun, several times faster than the
  * node:zlib callback bridge it replaced.
  */
+
+/**
+ * q-aware gzip acceptance (RFC 9110 §12.5.3): `gzip;q=0` is an explicit
+ * refusal, `*` accepts anything, and the decision reuses the same
+ * preference parser as c.acceptsEncodings.
+ */
 const acceptsGzip = (header: string): boolean => {
-  for (const part of header.split(",")) {
-    if (part.trim().split(";")[0]?.trim() === "gzip") return true;
+  for (const pref of parsePreferences(header)) {
+    if (pref.value === "gzip" || pref.value === "*") return true;
   }
   return false;
 };
+
+/** Extensions of inherently-compressed payloads — re-compressing wastes CPU. */
+const COMPRESSED_TYPE =
+  /(?:^|\/)(?:png|jpe?g|gif|webp|avif|woff2?|zstd|br|zip|gz|mp4|webm|mp3|ogg|wav|pdf)(?:;|$)/;
 
 export const compress = (options: CompressOptions = {}): RouteHandler => {
   const gzip = options.gzip ?? webGzip;
@@ -142,6 +156,11 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
     c.append("Vary", "Accept-Encoding");
     if (c._res !== undefined) return;
     if (c.has("content-encoding")) return;
+    // no-transform is the origin's explicit instruction to intermediaries.
+    const cacheControl = c.resHeader("Cache-Control") ?? "";
+    if (/(?:^|,)\s*no-transform\s*(?:,|$)/i.test(cacheControl)) return;
+    // Partial content has range semantics — re-encoding breaks them.
+    if (c.statusValue === 206) return;
     const body = c.bodyValue;
     let bytes: Uint8Array | null = null;
     if (typeof body === "string") bytes = encoder.encode(body);
@@ -154,6 +173,8 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
       bytes = body;
     }
     if (bytes === null || bytes.byteLength < 200) return; // tiny bodies grow
+    const contentType = c.resHeader("Content-Type") ?? "";
+    if (COMPRESSED_TYPE.test(contentType.toLowerCase())) return;
     const packed = await gzip(bytes);
     if (packed.byteLength >= bytes.byteLength) return;
     c.bodyValue = packed;

@@ -287,7 +287,16 @@ describe("response facade (flat context)", () => {
     const withReferrer = await app.handle(
       new Request("http://localhost:3000/", { headers: { Referrer: "http://x.dev/prev" } }),
     );
-    expect(withReferrer.headers.get("location")).toBe("http://x.dev/prev");
+    // Hardening divergence from koa: BOTH back spellings gate the Referrer
+    // on same-origin — a cross-origin Referrer falls back to alt instead of
+    // being forwarded verbatim (open-redirect defense).
+    expect(withReferrer.headers.get("location")).toBe("/fallback");
+    const sameOrigin = await app.handle(
+      new Request("http://localhost:3000/", {
+        headers: { Referrer: "http://localhost:3000/prev" },
+      }),
+    );
+    expect(sameOrigin.headers.get("location")).toBe("http://localhost:3000/prev");
 
     const plain = makeApp();
     plain.use(async (c) => {

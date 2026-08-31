@@ -66,6 +66,13 @@ const contextApi: ThisType<Context> & {
       get cookieHeader(): string | null {
         return c.rawRequest.headers.get("cookie");
       },
+      // Koa's "get secure from request": cookies set over a secure request
+      // (incl. proxy-trusted x-forwarded-proto) carry Secure unless the
+      // caller explicitly opts out — session-downgrade protection behind an
+      // https-terminating proxy.
+      get requestSecure(): boolean {
+        return c.secure;
+      },
       keys: this.appValue.keys,
       responseHeaders: headers,
     });

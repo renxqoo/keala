@@ -208,8 +208,10 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       return;
     }
     if (value instanceof ReadableStream) {
-      // Koa only clears Content-Length when replacing a previous body.
-      if (this.bodyValue !== null && this.bodyValue !== value) this.remove("Content-Length");
+      // A stream has unknown length by construction — any pre-existing
+      // Content-Length describes a DIFFERENT payload and desyncs the
+      // response behind every proxy.
+      this.remove("Content-Length");
       return;
     }
     if (value instanceof Blob) {
@@ -222,6 +224,9 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
         this.statusValue = value.status;
         this.flags |= 1;
       }
+      // Drop any stale length FIRST — the response's own (authoritative)
+      // headers are copied right after and re-establish it when present.
+      this.remove("Content-Length");
       for (const key of value.headers.keys()) {
         // set-cookie is multi-value: get() would join values with ", " and
         // collapse distinct cookies — append each individually.
@@ -336,7 +341,8 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     this.redirect(alt || "/");
   },
   redirect(url: string, alt = "/") {
-    const raw = url === "back" ? this.get("referrer") || alt || "/" : url;
+    if (url === "back") return this.back(alt); // one same-origin gate, both spellings
+    const raw = url;
     // Koa: absolute URLs are normalized through URL; Location is encodeurl'd
     // so non-ASCII targets never break the header.
     let target = raw;
@@ -380,6 +386,11 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       validateHeaderValue(name, value);
       recordOf(this)[name] = value;
       return;
+    }
+    // RFC 9110 singletons: multiple Content-Type/Length values would be
+    // comma-joined into an invalid header — refuse instead (koa #1899).
+    if (name === "content-type" || name === "content-length") {
+      throw new TypeError(`${field} is a singleton header and cannot be set to an array`);
     }
     for (const entry of value) validateHeaderValue(name, entry);
     this.flags |= 4;
@@ -441,15 +452,19 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     return new Response(body, { status: st, headers: headersInitOf(merged) });
   },
   json(body: unknown, status?: number, headers?: Record<string, HeaderValue>): Response {
+    // `undefined` is not JSON-serializable (Response.json would throw a raw
+    // TypeError → 500). A handler doing c.json(findUser()) on a miss gets
+    // the same graceful "null" JSON.stringify produces for absent values.
+    const payload = body === undefined ? null : body;
     const merged = consumeStaged(this, headers);
     // Response.json sets `application/json` and serializes natively — 74ns
     // cheaper than stringify + record init (see docs/AUDIT.md).
     const staged = (this.flags & 1) !== 0 ? this.statusValue : undefined;
     if (merged === undefined && status === undefined && staged === undefined) {
-      return Response.json(body);
+      return Response.json(payload);
     }
     return Response.json(
-      body,
+      payload,
       merged === undefined
         ? { status: status ?? staged }
         : {

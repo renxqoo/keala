@@ -56,7 +56,9 @@ describe("serializeCookie", () => {
     expect(serializeCookie("a", "1", { sameSite: "none" })).toContain("SameSite=None");
     expect(serializeCookie("a", "1", { sameSite: false })).not.toContain("SameSite");
     expect(serializeCookie("a", "1", { priority: "high" })).toContain("Priority=High");
-    expect(serializeCookie("a", "1", { partitioned: true })).toContain("Partitioned");
+    expect(serializeCookie("a", "1", { partitioned: true, secure: true })).toContain("Partitioned");
+    // CHIPS: Partitioned without Secure is refused — browsers would drop it.
+    expect(() => serializeCookie("a", "1", { partitioned: true })).toThrow(/secure/);
   });
 
   it("rejects invalid names and values", () => {

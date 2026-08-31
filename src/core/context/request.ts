@@ -61,6 +61,20 @@ const IPV4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const IPV6 = /^[0-9a-f]*:[0-9a-f:]*$/i;
 const IDEMPOTENT = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE"]);
 const NO_CACHE = /(?:^|,)\s*?no-cache\s*?(?:,|$)/;
+const IPV4_WITH_PORT = /^\d{1,3}(?:\.\d{1,3}){3}:\d+$/;
+const BRACKETED_WITH_PORT = /^\[[0-9a-f:]+\]:\d+$/i;
+
+/**
+ * Strip an explicit port from a forwarded-for entry ("23.243.1.1:38242" —
+ * Azure-style proxies). Only the two unambiguous shapes are touched: a
+ * dotted quad with a port and a bracketed IPv6 with a port. A bare
+ * (unbracketed) IPv6 literal is left alone — its colons ARE the address.
+ */
+const stripPort = (entry: string): string => {
+  if (IPV4_WITH_PORT.test(entry)) return entry.slice(0, entry.lastIndexOf(":"));
+  if (BRACKETED_WITH_PORT.test(entry)) return entry.slice(0, entry.indexOf("]") + 1);
+  return entry;
+};
 
 const flatten = (args: readonly (string | string[])[]): string[] => {
   const out: string[] = [];
@@ -203,17 +217,20 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return this.rawRequest.headers.get(name) ?? "";
   },
   get host(): string {
+    // Strip userinfo (user:pass@host) — only the authority is trusted, in
+    // BOTH sources: a crafted "evil.com:fake@legitimate.com" in
+    // X-Forwarded-Host or Host must never leak into origin/href/back().
+    const stripUserinfo = (value: string): string => {
+      const at = value.lastIndexOf("@");
+      return at === -1 ? value : value.slice(at + 1);
+    };
     if (this.appSettings.proxy) {
       // Koa: only the first entry of a chained X-Forwarded-Host is trusted.
-      const forwarded = this.get("x-forwarded-host").split(",")[0]?.trim() ?? "";
+      const forwarded = stripUserinfo(this.get("x-forwarded-host").split(",")[0]?.trim() ?? "");
       if (forwarded.length > 0) return forwarded;
     }
-    const header = this.get("host");
-    if (header.length > 0) {
-      // Strip userinfo (user:pass@host) — Koa trusts only the authority.
-      const at = header.lastIndexOf("@");
-      return at === -1 ? header : header.slice(at + 1);
-    }
+    const header = stripUserinfo(this.get("host"));
+    if (header.length > 0) return header;
     return authorityOf(this.rawRequest.url);
   },
   get hostname(): string {
@@ -243,7 +260,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     if (raw.length === 0) return [];
     const ips = raw
       .split(",")
-      .map((ip) => ip.trim())
+      .map((ip) => stripPort(ip.trim()))
       .filter((ip) => ip.length > 0);
     const max = this.appSettings.maxIpsCount;
     return max !== undefined && max > 0 ? ips.slice(-max) : ips;

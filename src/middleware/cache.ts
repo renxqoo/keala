@@ -32,6 +32,9 @@ interface CacheEntry {
 }
 
 const NO_STORE = /(?:^|,)\s*(?:no-store|private)\s*(?:,|$)/;
+// A field-specific no-cache names a header the response depends on —
+// Set-Cookie responses must not be replayed from the framework cache.
+const NO_CACHE_FIELD = /(?:^|,)\s*no-cache\s*=\s*"(?:set-cookie|\*)"\s*(?:,|$)/i;
 const TEXTUAL = /^(?:text\/|application\/(?:json|javascript|xml|graphql))/;
 const encoder = new TextEncoder();
 
@@ -66,6 +69,7 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     if (c.cookiesValue !== null) return false; // handler touched cookies
     const control = res.headers.get("cache-control") ?? "";
     if (NO_STORE.test(control)) return false;
+    if (NO_CACHE_FIELD.test(control)) return false;
     if (res.headers.get("vary") !== null) return false;
     if (res.headers.getSetCookie().length > 0) return false;
     return true;

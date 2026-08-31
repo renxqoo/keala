@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
 
+const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
+
 const quiet = { env: "test" } as const;
 
 describe("ported parity security semantics", () => {
@@ -121,5 +123,109 @@ describe("ported parity security semantics", () => {
     const res = await app.handle(new Request("http://localhost:3000/nowhere"));
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// koa corpus locks — behaviors that existed but were never locked by a test
+// (found by the corpus absorption audit; each maps to a koa test case)
+// ---------------------------------------------------------------------------
+
+describe("koa corpus locks", () => {
+  it("back() REJECTS a cross-origin Referrer (open-redirect defense)", async () => {
+    const app = createApp(quiet);
+    app.get("/back", (c) => c.redirect("back", "/alt"));
+    const res = await app.handle(
+      req("/back", { headers: { referer: "https://evil.example/login" } }),
+    );
+    expect(res.headers.get("location")).toBe("/alt"); // never the foreign origin
+    const scheme = await app.handle(
+      req("/back", { headers: { referer: "//evil.example/login/" } }),
+    );
+    expect(scheme.headers.get("location")).toBe("/alt");
+    // Same-origin absolute referrer IS honored.
+    const same = await app.handle(
+      req("/back", { headers: { referer: "http://localhost:3000/prev" } }),
+    );
+    expect(same.headers.get("location")).toBe("http://localhost:3000/prev");
+  });
+
+  it("redirect normalizes absolute targets through URL (backslash-at stays a path)", async () => {
+    const app = createApp(quiet);
+    app.get("/r", (c) => c.redirect("http://google.com\\@apple.com"));
+    const res = await app.handle(req("/r"));
+    // The \@ must never become a userinfo separator (koa redirect.test:17):
+    // the backslash normalizes to a path slash, @ lands in the PATH.
+    expect(res.headers.get("location")).toBe("http://google.com/@apple.com");
+    expect(res.status).toBe(302);
+  });
+
+  it("attachment: type option, ?-mask fallback, basename, and invalid types", async () => {
+    const app = createApp(quiet);
+    app.get("/inline", (c) => {
+      c.attachment("doc.pdf", { type: "inline" });
+      c.body = "x";
+    });
+    const inline = await app.handle(req("/inline"));
+    expect(inline.headers.get("content-disposition")).toContain("inline");
+    // No-extension filenames keep the disposition but gain no content-type.
+    app.get("/noext", (c) => {
+      c.attachment("path/to/README");
+      c.body = "x";
+    });
+    const noext = await app.handle(req("/noext"));
+    expect(noext.headers.get("content-disposition")).toContain("README");
+    // Path separators never reach the header.
+    app.get("/basename", (c) => {
+      c.attachment("path/to/tobi.png");
+      c.body = "x";
+    });
+    const base = await app.handle(req("/basename"));
+    expect(base.headers.get("content-disposition")).not.toContain("/");
+    expect(base.headers.get("content-type")).toContain("image/png");
+    // Invalid disposition types throw.
+    app.get("/badtype", (c) => {
+      c.attachment("f.txt", { type: "attachment; evil" });
+      c.body = "x";
+    });
+    expect((await app.handle(req("/badtype"))).status).toBe(500);
+  });
+
+  it("errors carrying statusCode (not status) are honored; invalid statuses coerce to 500", async () => {
+    const app = createApp(quiet);
+    app.get("/teapot", () => {
+      const err = new Error("short and stout") as Error & { statusCode: number };
+      err.statusCode = 418;
+      throw err;
+    });
+    expect((await app.handle(req("/teapot"))).status).toBe(418);
+    app.get("/junk", () => {
+      const err = new Error("junk") as Error & { status: unknown };
+      err.status = "notnumber";
+      throw err;
+    });
+    expect((await app.handle(req("/junk"))).status).toBe(500);
+  });
+
+  it("hostname resolves bracketed IPv6 through URL semantics", async () => {
+    const app = createApp(quiet);
+    app.get("/h", (c) => {
+      c.body = c.hostname;
+    });
+    const v6 = await app.handle(
+      new Request("http://[2001:cdba:0000:0000:0000:0000:3257:9652]:8080/h"),
+    );
+    expect(await v6.text()).toBe("[2001:cdba::3257:9652]");
+    // Under the fetch model an invalid bracketed host never REACHES the
+    // framework — the Request constructor itself refuses it.
+    expect(() => new Request("http://[not-v6]:8080/h")).toThrow();
+  });
+
+  it("c.URL exposes the live WHATWG URL view", async () => {
+    const app = createApp(quiet);
+    app.get("/u", (c) => {
+      c.body = c.URL instanceof URL ? c.URL.pathname : "not a URL";
+    });
+    expect(await (await app.handle(req("/u"))).text()).toBe("/u");
   });
 });

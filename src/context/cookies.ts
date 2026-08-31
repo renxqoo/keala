@@ -24,6 +24,10 @@ export interface CookieOptions {
 
 export type SigningKeys = (string | Uint8Array)[];
 
+/** Browsers cap cookie lifetimes at 400 days — the serializer enforces it. */
+const MAX_COOKIE_AGE_SECONDS = 400 * 24 * 60 * 60;
+const MAX_COOKIE_AGE_MS = MAX_COOKIE_AGE_SECONDS * 1000;
+
 const base64Url = (input: Uint8Array): string => Buffer.from(input).toString("base64url");
 
 // The crypto bridge loads with the first signed cookie — unsigned apps never
@@ -53,15 +57,22 @@ export const unsign = (signed: string, keys: SigningKeys): string | false => {
   return false;
 };
 
+/**
+ * Trim ONLY header whitespace (SP/HTAB/CR/LF). JS `trim()` also strips
+ * U+00A0 and other Unicode spaces — that collapsed `\u00a0dummy=evil` onto
+ * `dummy` before name validation could reject it (silent cookie override).
+ */
+const trimHeaderWs = (value: string): string => value.replace(/^[\t\r\n ]+|[\t\r\n ]+$/g, "");
+
 /** Parse a `Cookie` request header into a null-prototype map. */
 export const parseCookies = (header: string | null): Record<string, string> => {
   const out: Record<string, string> = Object.create(null);
   if (header == null || header.length === 0) return out;
   for (const part of header.split(";")) {
     const eq = part.indexOf("=");
-    const name = eq === -1 ? part.trim() : part.slice(0, eq).trim();
+    const name = eq === -1 ? trimHeaderWs(part) : trimHeaderWs(part.slice(0, eq));
     if (name.length === 0 || !isValidCookieName(name)) continue;
-    const raw = eq === -1 ? "" : part.slice(eq + 1).trim();
+    const raw = eq === -1 ? "" : trimHeaderWs(part.slice(eq + 1));
     if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
       out[name] = tryDecode(raw.slice(1, -1));
       continue;
@@ -98,11 +109,19 @@ export const serializeCookie = (
     if (!Number.isFinite(options.maxAge)) {
       throw new TypeError("cookie maxAge must be a finite number");
     }
+    // Browsers silently cap at 400 days — refuse instead of shipping a
+    // cookie that will not survive with the configured lifetime.
+    if (Math.abs(options.maxAge) > MAX_COOKIE_AGE_SECONDS) {
+      throw new TypeError("cookie maxAge cannot exceed 400 days");
+    }
     header += `; Max-Age=${Math.trunc(options.maxAge)}`;
   }
   if (options.expires !== undefined) {
     if (!(options.expires instanceof Date)) {
       throw new TypeError("cookie expires must be a Date");
+    }
+    if (options.expires.getTime() - Date.now() > MAX_COOKIE_AGE_MS) {
+      throw new TypeError("cookie expires cannot exceed 400 days out");
     }
     header += `; Expires=${options.expires.toUTCString()}`;
   }
@@ -133,7 +152,14 @@ export const serializeCookie = (
       header += `; SameSite=${site.charAt(0).toUpperCase()}${site.slice(1)}`;
     }
   }
-  if (options.partitioned === true) header += "; Partitioned";
+  if (options.partitioned === true) {
+    // Partitioned cookies are CHIPS-required to be Secure; browsers drop
+    // the pairing silently — refuse at serialization instead.
+    if (options.secure !== true) {
+      throw new TypeError("partitioned cookies require { secure: true }");
+    }
+    header += "; Partitioned";
+  }
   if (options.secure === true) header += "; Secure";
   if (options.httpOnly === true) header += "; HttpOnly";
   return header;
@@ -153,6 +179,8 @@ export interface CookiesFacade {
 export interface CookiesHost {
   /** Request `Cookie` header (null when absent). */
   readonly cookieHeader: string | null;
+  /** Whether the request arrived over TLS (drives the derived `Secure`). */
+  readonly requestSecure: boolean;
   /** App signing keys (may be undefined for unsigned apps). */
   readonly keys: SigningKeys | undefined;
   /** Response header map receiving `Set-Cookie` values. */
@@ -184,10 +212,14 @@ export const createCookies = (host: CookiesHost): CookiesFacade => {
     set(name, value, options = {}) {
       const keys = host.keys;
       const wantsSign = options.signed !== false && keys !== undefined && keys.length > 0;
+      // Koa's "get secure from request": an unset `secure` follows the
+      // request's TLS state instead of defaulting to insecure.
+      const effective: CookieOptions =
+        options.secure === undefined && host.requestSecure ? { ...options, secure: true } : options;
       const serialized = serializeCookie(
         name,
         wantsSign ? sign(value, keys[0] as string | Uint8Array) : value,
-        options,
+        effective,
       );
       const existing = host.responseHeaders["set-cookie"];
       if (options.overwrite === true || existing === undefined) {

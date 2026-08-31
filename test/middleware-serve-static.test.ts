@@ -9,7 +9,11 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../src/core/app.ts";
-import { cleanSegments, isWithinRoot, serveStatic } from "../src/middleware/serve-static.ts";
+import {
+  isWithinRoot,
+  resolveRelativeSegments,
+  serveStatic,
+} from "../src/middleware/serve-static.ts";
 
 const quiet = { env: "test" } as const;
 let root = "";
@@ -109,6 +113,40 @@ describe("serveStatic: security matrix", () => {
     }
   });
 
+  it("%2F / double-slash path confusion never resolves into a subdirectory (hono parity)", async () => {
+    // The router saw ONE segment ("guarded%2Fsecret.txt") — the static layer
+    // must refuse to decode that into guarded/secret.txt and serve it.
+    await mkdir(join(root, "guarded"));
+    await writeFile(join(root, "guarded", "secret.txt"), "TOP SECRET");
+    const app = createApp(quiet);
+    app.use(serveStatic({ root }));
+    for (const path of [
+      "/guarded%2Fsecret.txt",
+      "/guarded%2fsecret.txt",
+      "//guarded/secret.txt",
+      "/guarded//secret.txt",
+    ]) {
+      const res = await app.handle(req(path));
+      expect(res.status, path).toBe(404);
+      expect(await res.text(), path).not.toBe("TOP SECRET");
+    }
+    // The plainly-routed path still serves normally.
+    const ok = await app.handle(req("/guarded/secret.txt"));
+    expect(ok.status).toBe(200);
+    expect(await ok.text()).toBe("TOP SECRET");
+  });
+
+  it("only GET/HEAD are served; other methods fall through", async () => {
+    const app = createApp(quiet);
+    app.use(serveStatic({ root }));
+    for (const method of ["POST", "DELETE", "PUT"]) {
+      const res = await app.handle(new Request(`http://localhost:3000/app.js`, { method }));
+      expect(res.status, method).toBe(404); // fell through to not-found
+    }
+    const head = await app.handle(new Request("http://localhost:3000/app.js", { method: "HEAD" }));
+    expect(head.status).toBe(200);
+  });
+
   it("null bytes answer 400", async () => {
     const res = await appWith().handle(req("/%00a.js"));
     expect(res.status).toBe(400);
@@ -136,15 +174,28 @@ describe("serveStatic: security matrix", () => {
 });
 
 describe("serveStatic: platform separators", () => {
-  it("cleanSegments collapses traversal on both separators under Windows rules", () => {
-    // A backslash is a filesystem separator on Windows: "%5C" escapes must
-    // collapse exactly like "/" instead of surviving as one segment.
-    expect(cleanSegments("a/..\\..\\..\\secret", true)).toEqual(["secret"]);
-    expect(cleanSegments("..\\..\\secret", true)).toEqual(["secret"]);
-    expect(cleanSegments("sub\\deep.css", true)).toEqual(["sub", "deep.css"]);
-    // On POSIX a backslash is an ordinary filename character.
-    expect(cleanSegments("a\\b.css", false)).toEqual(["a\\b.css"]);
-    expect(cleanSegments("a/../b/./c//d", false)).toEqual(["b", "c", "d"]);
+  it("segments split BEFORE decoding; decoded separators are refused", () => {
+    // The router saw ONE segment — a decoded separator inside it can never
+    // be a real filename, and carrying it would re-introduce a separator
+    // the router never saw (the %2F path-confusion bypass). Refused, always.
+    expect(resolveRelativeSegments("/guarded%2Fsecret", false)).toBeNull();
+    expect(resolveRelativeSegments("/a%2fb/c", false)).toBeNull();
+    expect(resolveRelativeSegments("/..%2F..%2Fx", false)).toBeNull();
+    // On Windows a decoded backslash is refused the same way; on POSIX it is
+    // an ordinary filename character.
+    expect(resolveRelativeSegments("/a%5Cb", true)).toBeNull();
+    expect(resolveRelativeSegments("/a%5Cb", false)).toEqual(["a\\b"]);
+    // Plain traversal collapses; trailing slash tolerated.
+    expect(resolveRelativeSegments("/a/../../secret", false)).toEqual(["secret"]);
+    expect(resolveRelativeSegments("/a/../b/./c/d", false)).toEqual(["b", "c", "d"]);
+    expect(resolveRelativeSegments("/sub/", false)).toEqual(["sub"]);
+    expect(resolveRelativeSegments("/", false)).toEqual([]);
+  });
+
+  it("empty interior segments are refused (null), never collapsed", () => {
+    expect(resolveRelativeSegments("//guarded/secret", false)).toBeNull();
+    expect(resolveRelativeSegments("/a//b", false)).toBeNull();
+    expect(resolveRelativeSegments("/a/b//", false)).toBeNull();
   });
 
   it("isWithinRoot compares with the platform separator", () => {
@@ -184,14 +235,14 @@ describe("serveStatic: coverage top-up", () => {
   });
 });
 
-describe("cleanSegments: boundary inputs", () => {
+describe("resolveRelativeSegments: boundary inputs", () => {
   it("empty and dot-only paths collapse to nothing on either platform", () => {
     for (const windows of [false, true]) {
-      expect(cleanSegments("", windows)).toEqual([]);
-      expect(cleanSegments(".", windows)).toEqual([]);
-      expect(cleanSegments("./.", windows)).toEqual([]);
-      expect(cleanSegments("..", windows)).toEqual([]);
-      expect(cleanSegments("a/..", windows)).toEqual([]);
+      expect(resolveRelativeSegments("/", windows)).toEqual([]);
+      expect(resolveRelativeSegments("/.", windows)).toEqual([]);
+      expect(resolveRelativeSegments("/./.", windows)).toEqual([]);
+      expect(resolveRelativeSegments("/..", windows)).toEqual([]);
+      expect(resolveRelativeSegments("/a/..", windows)).toEqual([]);
     }
   });
 });

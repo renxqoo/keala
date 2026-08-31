@@ -157,7 +157,7 @@ describe("cookies matrix: serialization option table", () => {
     ["sameSite none", { sameSite: "none" }, "sid=1; SameSite=None"],
     ["sameSite true", { sameSite: true }, "sid=1; SameSite=Strict"],
     ["sameSite false", { sameSite: false }, "sid=1"],
-    ["partitioned", { partitioned: true }, "sid=1; Partitioned"],
+    ["partitioned", { partitioned: true, secure: true }, "sid=1; Partitioned; Secure"],
     ["priority low", { priority: "low" }, "sid=1; Priority=Low"],
     ["priority medium", { priority: "medium" }, "sid=1; Priority=Medium"],
     ["priority high", { priority: "high" }, "sid=1; Priority=High"],

@@ -147,6 +147,11 @@ export interface Application {
 
 const defaultNotFound: NotFoundHandler = () => undefined;
 
+/** Errors from OTHER realms (vm contexts, structured clones) fail instanceof
+ * but are still Errors by koa's toString-based contract — treat them as such. */
+const isErrorLike = (value: unknown): boolean =>
+  Object.prototype.toString.call(value) === "[object Error]";
+
 export { createRouter, isRouter };
 
 export const createApp = (options: AppOptions = {}): Application => {
@@ -482,7 +487,7 @@ export const createApp = (options: AppOptions = {}): Application => {
     onerror(error, c) {
       // Koa contract: null is a no-op; a non-Error is a loud TypeError.
       if (error == null) return;
-      if (!(error instanceof Error)) {
+      if (!(error instanceof Error) && !isErrorLike(error)) {
         throw new TypeError(`non-error thrown: ${JSON.stringify(error)}`);
       }
       const heard = emitter.emit("error", error, c);

@@ -85,6 +85,13 @@ export const compilePattern = (path: string): PatternIR => {
       segments.push({ kind: "param", value: body, pattern, optional });
       continue;
     }
+    // A `*` inside a would-be STATIC segment ("**", "/assets*") is not a
+    // wildcard here — it would silently register as a literal and match
+    // nothing. Fail the registration instead of letting the route dead-end.
+    // (Custom param patterns may legitimately contain `*`.)
+    if (raw.includes("*")) {
+      throw new TypeError(`Wildcard "*" must be its own final segment: ${JSON.stringify(path)}`);
+    }
     segments.push({ kind: "static", value: decodeSegment(raw), pattern: null, optional: false });
   }
   let dynamic = 0;

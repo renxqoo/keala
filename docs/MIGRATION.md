@@ -101,6 +101,21 @@
 
 14. **入口简化 + 版本叙事清理（2026-08-31）**：入口面在 #13 基础上再简化——只保留 `bun-koa/middleware`（聚合）与 `bun-koa/adapters/*` 两个独立层；plugin（body-parser）与 helpers（streams/html/password）回归根入口（实测增量 <0.5MB：根导入 20.4MB 中位 ≈ 纯核心 20.4，省掉按文件导入的仪式感）；`./plugins/*`、`./helpers/*` 子路径导出移除。同时清除 v1/v2 版本叙事——本仓库首个上线版本即 1.0.0（package.json 2.0.0→1.0.0），文档三件套改名（v2-DESIGN/AUDIT/MIGRATION→DESIGN/AUDIT/MIGRATION），redteam-v2* 测试改名，全部"v1/v2"文案改为中性的 koa/旧原型/本框架表述（保留 `/v1/` 路由夹具、`fnv1a` 哈希名、Standard Schema v1 外部规范等合法出现）。验证：双运行时 1286/1267 全绿，表面锁更新（根=34 导出：核心+plugin+helpers，无中间件），dist 双运行时导入验证，publint 干净，smoke/example/soak 全过。
 
+15. **四路上游审计加固轮（2026-08-31，TDD 全循环）**：四个子代理并行核查——koa 测试语料（73 文件/209 用例抽查）、hono 测试语料（~1000 相关用例）、hono GitHub issues（~246 open 逐题过滤/35 深查）、koa GitHub issues（40 open+近一年 closed，全部带可执行复现）。确认 11 个真实缺陷并全部修复（先写失败测试后实现；stash src/ 验证 24 测试变红、恢复全绿，证明逐测试咬合）：
+    - **serveStatic 路径混淆绕过**（hono 语料，最重）：先整路径解码再切分使 `%2F`/`//` 把守卫外路径解析进守卫子树（实测 200+文件内容）。改为**原始切分→逐段解码→解码含分隔符即拒绝**；空内部段拒绝；仅 GET/HEAD（hono#5223）。
+    - **redirect("back") 开放重定向不一致**（koa 语料锁测试当场抓获）：back() 有同源门、redirect("back") 原样转发 Referrer——统一走同一道门（跨源→alt）。
+    - **Cookie NBSP 名折叠覆盖**（hono 语料）：`trim()` 剥 U+00A0 使 ` dummy=evil` 折叠成 dummy+last-wins=静默覆盖；改为仅 trim SP/HTAB/CR/LF。
+    - **XFH userinfo 未剥离**（koa host.test）：`evil.com:fake@legitimate.com` 渗入 c.host/origin/href/back 的同源比较；两个来源统一 stripUserinfo。
+    - **stale Content-Length**（koa#1939）：换流式/Response body 残留旧 CL（代理后失步）；顺带发现并消灭死代码（原防护比较的是已重新赋值的 bodyValue，恒假）。流分支无条件清、Response 分支先清再拷贝自身权威头。
+    - **Content-Type 数组单例**（koa#1899）：数组值静默逗号连接成非法头；set() 对 content-type/content-length 数组抛 TypeError（对象形态经递归同守卫）。
+    - **compress 四门**（hono#5310+语料）：q=0 拒绝（复用 parsePreferences）、`*` 接受、no-transform 跳过、206 跳过、内在压缩类型跳过。
+    - **etag 方法门**（hono 语料）：POST+If-None-Match 曾回 304；仅 GET/HEAD 协商。
+    - **XFF 端口剥离**（koa#827，2016 年开至今）：`ip:port`/`[v6]:port` 剥端口，裸 IPv6 不动。
+    - **Cookie 护栏**：>400 天 maxAge/expires、Partitioned 无 Secure 抛错（浏览器会静默丢弃）；**secure 从请求推导**（koa "get secure from request"：https/proxy-XFP 请求未显式 secure 时自动加）。
+    - **json(undefined) 优雅降级**（hono#2343）→ "null"；**`**`/后缀 `*` 注册期抛错**（原静默字面量死路由）；**跨 realm Error 容忍**（onerror toString 判定，vm 域错误不再炸 TypeError）。
+    - 补锁 8 项 koa 语义（back 拒绝向、`\@` 归一化、attachment type/basename/invalid、statusCode 回退、IPv6 压缩、c.URL、多段 pattern 分歧、畸形 cookie 值分歧）；PARITY.md 再生（27 处指向已删除 parity 文件的陈旧引用改指现存测试、response/is 与 currentContext 两行误判改 DIVERGE、10 条新分歧入表）。cookie secure 推导/etag 方法门等以分歧表记录。
+    - 验证：Node 1317 / 真 Bun 1298 全绿；覆盖率 96.97/91.4/96.03/98.6 四项全部高于上轮；进程内 hono 平局保持（371/363、463/467）；smoke/example/soak 全过。
+
 ## 5. 总验收清单（P4 出口）
 
 1. 性能：G1-G12 全过（相对比值口径）；BENCH.md 用新方法学重测（机器/Bun 版本/日期），含 bun-koa/hono/raw + 1000 路由 + HTTP + p99 + 内存
