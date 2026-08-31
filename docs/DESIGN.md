@@ -1,4 +1,4 @@
-# bun-koa — 设计文档（定稿）
+# honu — 设计文档（定稿）
 
 状态：已按 4 路子代理审计（性能/安全/功能/迁移）修订，用户已批准三项关键决策。
 前置阅读：`docs/AUDIT.md`（审计裁决记录）、`docs/MIGRATION.md`（逐条迁移矩阵）。
@@ -11,7 +11,7 @@
 | --- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | D1  | content-type 与 hono 保持一致                | 快速路径返回**裸 `new Response(body)`**，不写 content-type。Bun HTTP 层自动补 `text/plain; charset=utf-8`；`c.text()`/`c.body=` 语义 = hono。进程内消费者看不到 CT 属预期行为，写入文档。 |
 | D2  | WebSocket + validator 纳入，**组件化可插拔** | 两者均为独立组件，核心零依赖；不装组件零成本。                                                                                                                                            |
-| D3  | 双运行时保留                                 | 核心代码不引用 `Bun` 全局；Node + Bun 双跑测试；bench 三方对比（bun-koa / hono / raw）。                                                                                                  |
+| D3  | 双运行时保留                                 | 核心代码不引用 `Bun` 全局；Node + Bun 双跑测试；bench 三方对比（honu / hono / raw）。                                                                                                  |
 | D4  | 消灭 koa3 闭包税                             | 保留注册期预编译链（每请求零 dispatch 闭包）；所有扩展点不允许引入每请求闭包分配。                                                                                                        |
 | D5  | 功能组件化可插拔                             | 见 §6 插件协议。核心 = 路由 + 洋葱 + Context + respond，其余皆组件。                                                                                                                      |
 
@@ -163,16 +163,16 @@ body 解析默认上限（见 §6 bodyParser）；pooling 保持 **opt-in** + gu
 
 ## 8. 性能门禁体系（相对比值 + ABAB，审计 P0-2 修订）
 
-基准纪律：ABAB 交错批（bun-koa/raw/hono 同进程同批次循环，每框架 ≥5 批取中位+IQR）；预热至连续 3 批变异 <2%；drain 必须消费 body（堵假快）；整套 ≥3 遍取中位；判定带 ±5% 噪声带；Bun 版本/机器/日期写入 BENCH.md。
+基准纪律：ABAB 交错批（honu/raw/hono 同进程同批次循环，每框架 ≥5 批取中位+IQR）；预热至连续 3 批变异 <2%；drain 必须消费 body（堵假快）；整套 ≥3 遍取中位；判定带 ±5% 噪声带；Bun 版本/机器/日期写入 BENCH.md。
 
 | 门禁                        | 判定                                                                      | 阶段  |
 | --------------------------- | ------------------------------------------------------------------------- | ----- |
-| G1 进程内 text              | bun-koa ≥ 0.90 × 同 run raw                                               | P1    |
-| G2 进程内 param             | bun-koa ≥ 1.05 × 同 run hono                                              | P1    |
+| G1 进程内 text              | honu ≥ 0.90 × 同 run raw                                               | P1    |
+| G2 进程内 param             | honu ≥ 1.05 × 同 run hono                                              | P1    |
 | G3 分配预算                 | param 路径每请求 JS 分配 ≤3（现状 ~10）                                   | P1    |
-| G4 HTTP 吞吐                | bun-koa ≥ 0.98 × hono（100 与 1000 路由、hit+miss）                       | P1/P4 |
-| G5 p99 延迟                 | bun-koa ≤ 1.10 × hono                                                     | P4    |
-| G6 路由规模                 | 1000 路由（含**共享首段**形态与 404 miss）bun-koa ≥ 4 × hono              | P1    |
+| G4 HTTP 吞吐                | honu ≥ 0.98 × hono（100 与 1000 路由、hit+miss）                       | P1/P4 |
+| G5 p99 延迟                 | honu ≤ 1.10 × hono                                                     | P4    |
+| G6 路由规模                 | 1000 路由（含**共享首段**形态与 404 miss）honu ≥ 4 × hono              | P1    |
 | G7 并发                     | Promise.all 批量 in-flight 下 G1/G2 不回退                                | P1    |
 | G8 流/SSE                   | 流响应无 observeStream 税（opt-in 关闭时 ≤ 1.1× raw stream）              | P2    |
 | G9 JSON                     | `c.json()` 走 Response.json 杠杆（≥1.15× koa）                            | P1    |
@@ -182,7 +182,7 @@ body 解析默认上限（见 §6 bodyParser）；pooling 保持 **opt-in** + gu
 
 ## 9. 双运行时（D3）
 
-核心（app/compose/context/router/respond/utils）不引用 `Bun` 全局——`Bun.serve`/`requestIP`/`routes` 全部经 `adapters/bun.ts` 注入；Node 下 `app.handle` 完整可用（vitest 双跑）；Bun-only 组件（websocket/nativeSink/responseCache 的 Date 处理等）在 Node 下 `install()` 抛明确错误或跳过（`skipIf(!isBun)` 测试模式）。bench 对比固定三方：bun-koa / hono（同版本钉死）/ raw，双运行时数据并列展示。
+核心（app/compose/context/router/respond/utils）不引用 `Bun` 全局——`Bun.serve`/`requestIP`/`routes` 全部经 `adapters/bun.ts` 注入；Node 下 `app.handle` 完整可用（vitest 双跑）；Bun-only 组件（websocket/nativeSink/responseCache 的 Date 处理等）在 Node 下 `install()` 抛明确错误或跳过（`skipIf(!isBun)` 测试模式）。bench 对比固定三方：honu / hono（同版本钉死）/ raw，双运行时数据并列展示。
 
 ## 10. 阶段计划（修订版）
 

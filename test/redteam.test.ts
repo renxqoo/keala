@@ -441,7 +441,7 @@ describe("redteam — RT-8 floating next rejection", () => {
 // ---------------------------------------------------------------------------
 // RT-10 (MEDIUM): the sugar helpers advertise hono-compatible signatures, but
 // hono keeps a status set beforehand (c.status(201); c.text("x") -> 201);
-// bun-koa answers 200 (html shares the same code path). Root:
+// honu answers 200 (html shares the same code path). Root:
 // src/core/context/response.ts text/json/html use `status ?? 200` and never
 // consult c.statusValue.
 // ---------------------------------------------------------------------------

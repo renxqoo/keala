@@ -1,7 +1,7 @@
 /**
  * Entry-surface contract: the ROOT entry carries the app surface (core, the
  * body plugin, in-handler helpers) while middleware stays at the
- * `bun-koa/middleware` aggregate and adapters at `bun-koa/adapters/<name>`.
+ * `honu/middleware` aggregate and adapters at `honu/adapters/<name>`.
  * These locks keep the split honest — middleware sneaking back into the root
  * barrel would re-add its idle-memory cost for every importer.
  */

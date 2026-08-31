@@ -1,9 +1,9 @@
-# bun-koa — deliberate divergences (supersedes the parity-security (archived residue) ledger below)
+# honu — deliberate divergences (supersedes the parity-security (archived residue) ledger below)
 
 The rewrite intentionally drops the koa three-object context in favor of
 one flat context (see docs/DESIGN.md). Semantics that CHANGED on purpose:
 
-| Area                     | Koa                                                            | bun-koa                                                                                                                                                                                    |
+| Area                     | Koa                                                            | honu                                                                                                                                                                                    |
 | ------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Content-type             | auto `text/plain; charset=utf-8` / markup sniff to `text/html` | D1: no framework CT for string bodies (runtime provides `text/plain`); `c.html()`/`c.type` for explicit                                                                                    |
 | `c.body = object`        | serialized eagerly; getter returns the string                  | stored as object; getter returns the object; `Response.json` finalization                                                                                                                  |
@@ -22,7 +22,7 @@ one flat context (see docs/DESIGN.md). Semantics that CHANGED on purpose:
 | Password hashing         | —                                                              | `hashPassword`/`verifyPassword` (WebCrypto PBKDF2 default; `bunPasswordHasher()` argon2id opt-in — Bun 1.4.0's native verify + node:crypto.scrypt are broken on some platforms)            |
 | WS error event           | —                                                              | `ws.error(ws, err, c)` handler wired through the adapter                                                                                                                                   |
 | Serve error callback     | —                                                              | `Bun.serve({error})` default → app error hook + plain 500; `onServeError` overrides                                                                                                        |
-| Node runtime             | —                                                              | official adapter `bun-koa/adapters/node` (streaming body bridge, pipeline backpressure, set-cookie fanout, 400/500/501 failure surfaces; ws stays Bun-only)                                |
+| Node runtime             | —                                                              | official adapter `honu/adapters/node` (streaming body bridge, pipeline backpressure, set-cookie fanout, 400/500/501 failure surfaces; ws stays Bun-only)                                |
 | Lazy native bridges      | —                                                              | node:crypto/fs/path load on first use (`createRequire` sync-lazy); idle import ≈ 2.8MB less RSS on Bun                                                                                     |
 | redirect("back") gating  | raw Referrer forwarded verbatim                                | BOTH `back()` and `redirect("back", alt)` gate the Referrer on same-origin; cross-origin falls back to alt (open-redirect defense — found via the koa corpus audit)                        |
 | Cookie secure derivation | `secure` only from options                                     | an unset `secure` follows the request's TLS state (incl. proxy-trusted `x-forwarded-proto`); explicit `secure: false` still opts out (koa "get secure from request")                       |
@@ -33,7 +33,7 @@ one flat context (see docs/DESIGN.md). Semantics that CHANGED on purpose:
 | Wildcard registration    | —                                                              | `**`, `/assets*` (a `*` inside a would-be static segment) throw at registration instead of silently matching nothing                                                                       |
 | etag negotiation         | —                                                              | validators only negotiate GET/HEAD — POST/PUT with `If-None-Match` answers 200, never a 304 (hono corpus)                                                                                  |
 | compress acceptance      | —                                                              | q-aware: `gzip;q=0` is a refusal; `*` accepts; `Cache-Control: no-transform`, 206 responses and inherently-compressed types are never re-encoded (hono#5310 + corpus)                      |
-|                          | Entry surface                                                  | root package = core + middleware                                                                                                                                                           | root = core only (hono/fastify-shaped); `bun-koa/middleware` aggregate; plugins/helpers/adapters per-file (aggregates deliberately omitted: single-member, à-la-carte, mutually exclusive); root import ≈ 2.7MB lighter than the old everything-barrel, ~30% lighter than hono's root under the same probe |
+|                          | Entry surface                                                  | root package = core + middleware                                                                                                                                                           | root = core only (hono/fastify-shaped); `honu/middleware` aggregate; plugins/helpers/adapters per-file (aggregates deliberately omitted: single-member, à-la-carte, mutually exclusive); root import ≈ 2.7MB lighter than the old everything-barrel, ~30% lighter than hono's root under the same probe |
 | Param variants           | single layer list (independent regexes)                        | trie positions carry same-name pattern variants; conflicting param NAMES still throw at registration                                                                                       |
 | decorate / ws duplicates | last-writer-wins                                               | `decorate()` duplicate/core keys and duplicate `app.ws()` paths throw at setup (no silent shadowing)                                                                                       |
 | form data budgets        | —                                                              | `formData()` is byte-budgeted (formLimit) AND part-budgeted (formPartLimit, default 1000 — memory-amplification fence)                                                                     |
@@ -86,7 +86,7 @@ memory regression versus the Bun.file sendfile path.
 Exhaustive per-file audit against the official suites cloned into `.parity/`:
 koa@3.2.1 (`__tests__`), @koa/router@13.0.0 (`test/`), hono@4.13.5 (`src/*.test.ts`).
 
-| Upstream file                      | cases | status  | bun-koa verification                                                                                                                                                              |
+| Upstream file                      | cases | status  | honu verification                                                                                                                                                              |
 | ---------------------------------- | ----: | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | load-with-esm.test.js              |     4 | N/A     | Node CJS/ESM loader specifics                                                                                                                                                     |
 | context/assert.test.js             |     1 | OK      | test/app.test.ts (ctx.assert)                                                                                                                                                     |
@@ -120,7 +120,7 @@ koa@3.2.1 (`__tests__`), @koa/router@13.0.0 (`test/`), hono@4.13.5 (`src/*.test.
 | response/vary.test.js              |     3 | OK      | test/response.test.ts (dedupe/token guard)                                                                                                                                        |
 | response/writable.test.js          |     3 | N/A     | Node res writable state                                                                                                                                                           |
 | lib/search-params.test.js          |     8 | OK      | test/parity-security.test.ts (archived residue) (query setter stringify) + utils.test.ts (parse)                                                                                  |
-| request/accept.test.js             |     2 | N/A     | ctx.accept negotiator instance API; bun-koa exposes accepts()/accepts*() instead                                                                                                  |
+| request/accept.test.js             |     2 | N/A     | ctx.accept negotiator instance API; honu exposes accepts()/accepts*() instead                                                                                                  |
 | request/accepts.test.js            |     9 | OK      | test/request.test.ts + negotiation.test.ts + parity-security.test.ts (archived residue) (extensions)                                                                              |
 | request/acceptsCharsets.test.js    |     5 | OK      | test/negotiation.test.ts + coverage-gaps-4                                                                                                                                        |
 | request/acceptsEncodings.test.js   |     4 | OK      | test/negotiation.test.ts (identity RFC7231, q=0)                                                                                                                                  |
@@ -173,9 +173,9 @@ koa@3.2.1 (`__tests__`), @koa/router@13.0.0 (`test/`), hono@4.13.5 (`src/*.test.
   registered custom pattern wins — a later plain `:id` stays constrained by
   an earlier `:id(\d+)` at the same position (@koa/router would match both).
 - **Multiple controllers for multiple matching routes** (@koa/router runs every
-  matching layer): bun-koa dispatches the single best match (static > param >
+  matching layer): honu dispatches the single best match (static > param >
   wildcard). Multi-match chains would restructure the dispatch hot path.
-- **`router.use()` timing (gh-182)**: bun-koa runs router middleware on every
+- **`router.use()` timing (gh-182)**: honu runs router middleware on every
   request that reaches the router; @koa/router gates it on route matches.
 - **`strict` / `host` / `exclusive` router options**: accepted but inert.
 - **fetch-run-time behaviors we cannot override**: string bodies always end up

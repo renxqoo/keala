@@ -1,4 +1,4 @@
-// bun-koa bench server (Bun runtime) — mirrors the other bench servers.
+// honu bench server (Bun runtime) — mirrors the other bench servers.
 import { createApp } from "../src/index.ts";
 
 const app = createApp();

@@ -45,7 +45,7 @@ const GO_LABEL = GO_AVAILABLE
 
 const SERVERS = [
   { name: "raw Bun.serve (bun 1.4)", cmd: ["bun", "bench/server-raw.ts"], port: 4104 },
-  { name: "bun-koa (bun 1.4)", cmd: ["bun", "bench/server-bun-koa.ts"], port: 4103 },
+  { name: "honu (bun 1.4)", cmd: ["bun", "bench/server-honu.ts"], port: 4103 },
   { name: "hono 4 (bun 1.4)", cmd: ["bun", "bench/server-hono.ts"], port: 4102 },
   { name: `koa 3 (${NODE_LABEL})`, cmd: ["node", "bench/server-koa.mjs"], port: 4101 },
   { name: `fastify 5 (${NODE_LABEL})`, cmd: ["node", "bench/server-fastify.mjs"], port: 4105 },
@@ -73,8 +73,8 @@ const SCALE_SERVERS = [
     scale: true,
   },
   {
-    name: "bun-koa (bun 1.4)",
-    cmd: ["bun", "bench/server-bun-koa-scale.ts"],
+    name: "honu (bun 1.4)",
+    cmd: ["bun", "bench/server-honu-scale.ts"],
     port: 4113,
     scale: true,
   },
@@ -270,7 +270,7 @@ const main = async () => {
     }
 
     const lines = [];
-    lines.push("# bun-koa performance report", "");
+    lines.push("# honu performance report", "");
     lines.push(`Generated: ${new Date().toISOString()}`, "");
     lines.push("- Load tool: autocannon (4 client workers — one process saturates at ~177k req/s)");
     lines.push(
@@ -283,7 +283,7 @@ const main = async () => {
       "- Ratio lines carry each side's run-to-run noise (±spread); a ratio inside the noise band is a TIE, not a win",
     );
     lines.push(
-      `- Runtimes: ${BUN_LABEL} (raw / bun-koa / hono) vs ${NODE_LABEL} (koa / fastify)${GO_AVAILABLE ? ` vs ${GO_LABEL}` : ""}`,
+      `- Runtimes: ${BUN_LABEL} (raw / honu / hono) vs ${NODE_LABEL} (koa / fastify)${GO_AVAILABLE ? ` vs ${GO_LABEL}` : ""}`,
     );
     lines.push("- Loopback HTTP/1.1 keep-alive; identical response shapes on every framework");
     lines.push(
@@ -310,13 +310,13 @@ const main = async () => {
           `| ${instance.name.split(" (")[0]}${instance.scale ? " (scale)" : ""} | ${instance.name.match(/\((.*)\)/)?.[1] ?? ""} | ${Math.round(median(entry.rps)).toLocaleString("en-US")} | ${spreadOf(entry.rps)} |`,
         );
       }
-      const ours = entries.find((e) => e.instance.name.startsWith("bun-koa"));
+      const ours = entries.find((e) => e.instance.name.startsWith("honu"));
       for (const other of ["koa 3", "fastify 5", "hono 4", "raw Bun", "go net/http"]) {
         const ref = entries.find((e) => e.instance.name.startsWith(other) && e !== ours);
         if (ours && ref && ref !== ours) {
           const ratio = median(ours.entry.rps) / median(ref.entry.rps);
           lines.push(
-            `- bun-koa vs ${other}: **${ratio.toFixed(2)}x** (${spreadOf(ours.entry.rps)} / ${spreadOf(ref.entry.rps)})`,
+            `- honu vs ${other}: **${ratio.toFixed(2)}x** (${spreadOf(ours.entry.rps)} / ${spreadOf(ref.entry.rps)})`,
           );
         }
       }

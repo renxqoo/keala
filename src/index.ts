@@ -1,17 +1,17 @@
 /**
- * bun-koa — hono-fast, onion-ergonomic, Bun-native.
+ * honu — hono-fast, onion-ergonomic, Bun-native.
  *
  * The ROOT entry is the app surface: core (app factory, router, composition,
  * context, errors, cookie signing) plus the plugin and the in-handler
- * helpers. Middleware lives at `bun-koa/middleware` (aggregate) or
- * `bun-koa/middleware/<name>` (per file); the Node adapter at
- * `bun-koa/adapters/node` — those two are the only split-out tiers (the
+ * helpers. Middleware lives at `honu/middleware` (aggregate) or
+ * `honu/middleware/<name>` (per file); the Node adapter at
+ * `honu/adapters/node` — those two are the only split-out tiers (the
  * middleware tier is the heavy one; adapters are a mutually exclusive
  * runtime choice).
  *
  * ```ts
- * import { createApp } from "bun-koa";
- * import { cors } from "bun-koa/middleware";
+ * import { createApp } from "honu";
+ * import { cors } from "honu/middleware";
  *
  * const app = createApp({ keys: ["secret"] })
  *

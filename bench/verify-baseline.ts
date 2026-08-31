@@ -1,4 +1,4 @@
-// One-shot verification of the in-process baseline: raw vs bun-koa vs hono.
+// One-shot verification of the in-process baseline: raw vs honu vs hono.
 // Not part of the repo's benchmark suite; exists to re-verify claims for the
 // refactor plan. Run: bun bench/verify-baseline.ts
 import { createApp } from "../src/index.ts";
@@ -33,7 +33,7 @@ const suites: Suite[] = [
     run: rawHandler,
   },
   {
-    name: "bun-koa text",
+    name: "honu text",
     run: (req) => app.handle(req) as Response,
   },
   {
@@ -45,7 +45,7 @@ const suites: Suite[] = [
     run: rawHandler,
   },
   {
-    name: "bun-koa param",
+    name: "honu param",
     run: (req) => app.handle(req) as Response,
   },
   {

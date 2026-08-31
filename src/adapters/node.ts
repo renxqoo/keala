@@ -9,8 +9,8 @@
  * refused before routing.
  *
  * ```ts
- * import { createApp } from "bun-koa";
- * import { listen } from "bun-koa/adapters/node";
+ * import { createApp } from "honu";
+ * import { listen } from "honu/adapters/node";
  *
  * const app = createApp();
  * app.get("/", (c) => { c.body = "hello"; });

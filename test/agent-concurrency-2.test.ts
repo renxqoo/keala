@@ -235,7 +235,7 @@ describe("stream bodies", () => {
 
   // Documented divergence (was an inherited koa CONFIRMED-BUG): Koa pipes the body
   // through `Stream.pipeline(stream, res, err => ctx.onerror(err))` so a
-  // mid-flight body failure reaches the app's error channel. bun-koa hands the raw
+  // mid-flight body failure reaches the app's error channel. honu hands the raw
   // stream to the fetch `Response` and — by design (docs/DESIGN.md §4) —
   // made stream error observation an OPT-IN feature (`observeStream`, off by
   // default to save 567ns/response and restore backpressure). The opt-in

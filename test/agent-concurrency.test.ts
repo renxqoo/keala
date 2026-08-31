@@ -131,7 +131,7 @@ describe("same-request interleaving: query cache", () => {
     expect(observed).toEqual([true, "yes"]);
   });
 
-  // bun-koa follows koa here (design contract #8 lists `query` among the five
+  // honu follows koa here (design contract #8 lists `query` among the five
   // cache-invalidating url writers): the assignment rewrites the query string
   // and the next read re-parses the stringified form. koa's verbatim-stash
   // deviation is gone, so this now locks plain Koa semantics.

@@ -2,13 +2,13 @@
  * The middleware aggregate — every per-request pipeline factory in one import.
  *
  * ```ts
- * import { createApp } from "bun-koa";
- * import { cors, bodyLimit, serveStatic } from "bun-koa/middleware";
+ * import { createApp } from "honu";
+ * import { cors, bodyLimit, serveStatic } from "honu/middleware";
  * ```
  *
  * Apps typically grab several middleware at setup time, so the whole tier is
  * importable at once. Memory-minimal consumers import per file instead
- * (`bun-koa/middleware/auth`) — only the used factory's module loads.
+ * (`honu/middleware/auth`) — only the used factory's module loads.
  */
 
 export { basicAuth, bearerAuth, type BasicAuthOptions, type BearerAuthOptions } from "./auth.ts";

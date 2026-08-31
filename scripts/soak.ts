@@ -112,7 +112,7 @@ const driveConcurrent = async (label: string): Promise<void> => {
   if (!pass) process.exitCode = 1;
 };
 
-console.log(`bun-koa soak — ${ROUNDS} rounds x ${PER_ROUND.toLocaleString()} (Bun ${Bun.version})`);
+console.log(`honu soak — ${ROUNDS} rounds x ${PER_ROUND.toLocaleString()} (Bun ${Bun.version})`);
 
 for (let round = 0; round < ROUNDS; round++) {
   await driveInProcess(`round ${round} A in-process`);

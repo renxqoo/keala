@@ -1,4 +1,4 @@
-# bun-koa
+# honu
 
 **High-performance onion-model web framework for [Bun 1.4+](https://bun.sh).**
 Hono's speed and feature surface, Koa's middleware ergonomics — one flat
@@ -14,15 +14,15 @@ negotiation, signed cookies, 405/Allow synthesis and the full onion model.
 A Go `net/http` reference is included in the harness: on the comparison box
 Go leads every JS runtime (raw Bun.serve included) by ~10–15% on throughput
 and decisively on memory — the gap is the runtime's HTTP stack, not
-framework tax (bun-koa adds nothing on top of it versus hono).
+framework tax (honu adds nothing on top of it versus hono).
 See `bench/BENCH.md`.
 
 ```bash
-bun add bun-koa
+bun add honu
 ```
 
 ```ts
-import { createApp } from "bun-koa";
+import { createApp } from "honu";
 
 const app = createApp({ keys: ["signing-secret"] });
 
@@ -48,7 +48,7 @@ app.listen(3000);
 Route groups mount by table merge (404s fall through to the parent):
 
 ```ts
-import { createRouter } from "bun-koa";
+import { createRouter } from "honu";
 
 const api = createRouter({ prefix: "/v1" });
 api.param("oid", async (c, next) => {
@@ -68,10 +68,10 @@ subpaths while the root stays the one-import app surface:
 
 | Entry                     | What it gives you                                                                      | Loads               |
 | ------------------------- | -------------------------------------------------------------------------------------- | ------------------- |
-| `bun-koa`                 | createApp / createRouter / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
-| `bun-koa/middleware`      | every middleware factory in one import                                                 | the middleware tier |
-| `bun-koa/middleware/cors` | one factory                                                                            | that file only      |
-| `bun-koa/adapters/node`   | the Node listener (bun/node are exclusive)                                             | that file only      |
+| `honu`                 | createApp / createRouter / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
+| `honu/middleware`      | every middleware factory in one import                                                 | the middleware tier |
+| `honu/middleware/cors` | one factory                                                                            | that file only      |
+| `honu/adapters/node`   | the Node listener (bun/node are exclusive)                                             | that file only      |
 
 - **middleware** — per-request pipeline functions: `app.use(cors())`
 - **plugins** — setup-time installers (`install(app)`), decorate contexts: `app.use(createBodyParser())`
@@ -95,8 +95,8 @@ import {
   timeout,
   serveStatic,
   validator,
-} from "bun-koa/middleware"; // the aggregate — or per file: bun-koa/middleware/cors
-import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "bun-koa";
+} from "honu/middleware"; // the aggregate — or per file: honu/middleware/cors
+import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "honu";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req.json()/text()/formData()…
 // formData() is double-budgeted: formLimit bytes AND formPartLimit parts
@@ -184,7 +184,7 @@ writes are staged; the last committer wins; untouched requests hit
 
 ## Migrating from koa
 
-| Koa                                                     | bun-koa                                                 |
+| Koa                                                     | honu                                                 |
 | ------------------------------------------------------- | ------------------------------------------------------- |
 | `ctx.request.get("x")`                                  | `c.get("x")`                                            |
 | `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                         |
@@ -202,7 +202,7 @@ their object shape on `c.body` reads.
 
 ## Why it's fast
 
-| Koa (Node)                                        | bun-koa (Bun)                                                                    |
+| Koa (Node)                                        | honu (Bun)                                                                    |
 | ------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Recompiles dispatch closure **per request**       | Chain compiled **once** at registration time                                     |
 | Every middleware hop wrapped in `Promise.resolve` | Fully-sync chains return with **zero promises**                                  |
@@ -226,7 +226,7 @@ their object shape on `c.body` reads.
 | `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                                                                              |
 | `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                            |
 | `app.handle(request, runtime?)`                                                | Fetch-style handler; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                                                                            |
-| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `bun-koa/adapters/node` |
+| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `honu/adapters/node` |
 | `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                               |
 | `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                                                                         |
 | `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                         |
@@ -274,8 +274,8 @@ its own subpath so importing the framework never loads the node:http bridge
 on Bun:
 
 ```ts
-import { createApp } from "bun-koa";
-import { listen } from "bun-koa/adapters/node";
+import { createApp } from "honu";
+import { listen } from "honu/adapters/node";
 
 const app = createApp();
 app.get("/", (c) => {
@@ -289,7 +289,7 @@ with real backpressure, fans out `set-cookie`, answers malformed HTTP with
 400, and exposes `port/hostname/stop/fetch/ready()` mirroring the Bun handle
 shape. Websockets are Bun-only: `app.ws()` routes answer 501 and raw Upgrade
 requests are refused at the wire. Node native modules (crypto/fs) are loaded
-lazily everywhere — an idle `import "bun-koa"` costs no bridges (~2.8MB less
+lazily everywhere — an idle `import "honu"` costs no bridges (~2.8MB less
 RSS on Bun); the crypto bridge loads with the first signed cookie / CSRF
 fallback / password verify.
 
@@ -354,4 +354,4 @@ src/
 ```
 
 MIT license. Primary runtime Bun ≥ 1.4 (also runs under Node via
-`bun-koa/adapters/node`).
+`honu/adapters/node`).

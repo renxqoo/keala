@@ -1,7 +1,7 @@
 /**
  * Round-6 DIFFERENTIAL audit vs real hono 4.13.5 (node_modules/hono).
  *
- * Harness: the same requests are driven against bun-koa (`app.handle(req)`)
+ * Harness: the same requests are driven against honu (`app.handle(req)`)
  * and hono (`app.fetch(req)`) — both fetch-style — and the observable
  * responses compared. CONFIRMED BUG -> `it()` asserts the CORRECT
  * (hono-referenced) behavior and FAILS against the current src/.
@@ -16,15 +16,15 @@
  *   entry; the fetch Headers record-init APPENDS every entry, producing a
  *   comma-joined INVALID singleton header:
  *     c.text("hi", 200, { "Content-Type": "text/plain" })
- *       bun-koa "text/plain, text/plain; charset=utf-8"  hono "text/plain"
+ *       honu "text/plain, text/plain; charset=utf-8"  hono "text/plain"
  *     c.set("x-foo","staged") + c.text("hi",200,{ "X-Foo":"call" })
- *       bun-koa "staged, call"  hono "call"
+ *       honu "staged, call"  hono "call"
  *
  * R6-2 MEDIUM src/core/context/sugar.ts:180-181 (sugarHtml)
  *   sugarHtml unconditionally overwrites content-type with TEXT_HTML, so the
  *   caller's own content-type is discarded even in canonical lowercase:
  *     c.html("<i>x</i>", 200, { "content-type": "text/plain" })
- *       bun-koa "text/html; charset=utf-8"  hono "text/plain"
+ *       honu "text/html; charset=utf-8"  hono "text/plain"
  *   (hono's setDefaultContentType spreads the DEFAULT first, user headers
  *   after — the caller always wins; sugarText honors a lowercase override,
  *   sugarHtml has no override path at all.)
@@ -41,19 +41,19 @@
  *   duplicate param name: last wins  express/@koa/router (hono: first wins)
  *   staged c.set content-type survives c.text()   koa (hono overwrites default)
  *   c.json(undefined) -> "null"      valid JSON (hono ships an EMPTY body)
- *   sugar 204/304 -> clean empty     bun-koa (hono c.text(x,204) throws -> 500)
+ *   sugar 204/304 -> clean empty     honu (hono c.text(x,204) throws -> 500)
  *   c.body = null -> 204             koa (hono c.body(null) -> 200)
  *   c.redirect -> 302 + koa body     koa (hono: bare 302, no body/type)
  *   405 + Allow, OPTIONS -> 200      @koa/router allowedMethods (hono 404s)
  *   not-found body "Not Found"       koa (hono: "404 Not Found")
  *   query repeats -> arrays, empty names kept    koa querystring.parse
- *   unsafe query keys dropped        bun-koa security contract
+ *   unsafe query keys dropped        honu security contract
  *   middleware Response after next() rewrites    koa state semantics
  *   HEAD backfills Content-Length; c.path stays percent-encoded   koa
- *   param regex is per-segment       bun-koa trie contract (hono `{...}` spans "/")
+ *   param regex is per-segment       honu trie contract (hono `{...}` spans "/")
  * Open questions (NOT red-tested): hono matches static/param by REGISTRATION
  * ORDER; hono's getPath uses decodeURI so reserved escapes (`%3B`) stay
- * escaped while bun-koa decodes into one canonical space; hono's mid-path
+ * escaped while honu decodes into one canonical space; hono's mid-path
  * `:x?` keeps the "?" in the name and never serves the skip variant; the bare
  * `*` captures under params.wildcard (hono: unnamed); `//` answers the root
  * route (hono 404s).
@@ -302,7 +302,7 @@ describe("documents intentional divergence: c.path stays percent-encoded (koa; h
   });
 });
 
-describe("documents intentional divergence: a custom param pattern is tested per SEGMENT (bun-koa trie contract); hono's {…} patterns can span '/'", () => {
+describe("documents intentional divergence: a custom param pattern is tested per SEGMENT (honu trie contract); hono's {…} patterns can span '/'", () => {
   it("'/file/:f(.+\\.png)' does not match multi-segment values", async () => {
     const app = createApp(quiet);
     app.get("/file/:f(.+\\.png)", (c) => c.json({ ...c.params }));
@@ -314,12 +314,12 @@ describe("documents intentional divergence: a custom param pattern is tested per
 });
 
 // ---------------------------------------------------------------------------
-// Differential locks — behavior where bun-koa and hono 4.13.5 AGREE; locked
+// Differential locks — behavior where honu and hono 4.13.5 AGREE; locked
 // here so the divergences above cannot regress into equivalence bugs.
 // ---------------------------------------------------------------------------
 describe("differential locks: matching agrees with hono on the encoded-path matrix", () => {
   const CASES: Array<[string, string, string, number, Record<string, string> | null]> = [
-    // [bun-koa pattern, hono pattern, request path, expected status, expected params]
+    // [honu pattern, hono pattern, request path, expected status, expected params]
     ["/users/:id", "/users/:id", "/users/42", 200, { id: "42" }],
     ["/users/:id", "/users/:id", "/users/%2Fadmin", 200, { id: "/admin" }],
     ["/users/:id", "/users/:id", "/users/%252F", 200, { id: "%2F" }],

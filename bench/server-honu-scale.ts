@@ -1,4 +1,4 @@
-// bun-koa scale server: 1000 static routes only (dedicated process so the
+// honu scale server: 1000 static routes only (dedicated process so the
 // base scenarios stay unpolluted).
 import { createApp } from "../src/index.ts";
 
