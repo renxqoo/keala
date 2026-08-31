@@ -6,7 +6,7 @@
  *
  * Everything except the listener is the same code: the JS mirrors of the
  * native sinks serve /health and /assets/* on every runtime, `app.listen()`
- * is replaced by `listen()` from "@renxqoo/honu/node", and websocket
+ * is replaced by `listen()` from "@honu/core/node", and websocket
  * routes would answer 501 here (ws is Bun-only) — this twin registers none.
  */
 

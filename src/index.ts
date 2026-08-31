@@ -3,15 +3,15 @@
  *
  * The ROOT entry is the app surface: core (the Honu class, router,
  * context, errors, cookie signing) plus the plugin and the in-handler
- * helpers. Middleware lives at `@renxqoo/honu/middleware` (aggregate) or
- * `@renxqoo/honu/middleware/<name>` (per file); the Node adapter at
- * `@renxqoo/honu/node` — those two are the only split-out tiers (the
+ * helpers. Middleware lives at `@honu/core/middleware` (aggregate) or
+ * `@honu/core/middleware/<name>` (per file); the Node adapter at
+ * `@honu/core/node` — those two are the only split-out tiers (the
  * middleware tier is the heavy one; adapters are a mutually exclusive
  * runtime choice).
  *
  * ```ts
- * import { Honu } from "@renxqoo/honu";
- * import { cors } from "@renxqoo/honu/middleware";
+ * import { Honu } from "@honu/core";
+ * import { cors } from "@honu/core/middleware";
  *
  * const app = new Honu({ keys: ["secret"] })
  *

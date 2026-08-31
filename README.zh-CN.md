@@ -6,13 +6,13 @@
 [Bun 1.4+](https://bun.sh)，零依赖。**
 
 ```bash
-bun add @renxqoo/honu
+bun add @honu/core
 ```
 
 ## 快速开始
 
 ```ts
-import { Honu } from "@renxqoo/honu";
+import { Honu } from "@honu/core";
 
 const app = new Honu();
 
@@ -30,7 +30,7 @@ app.listen(3000);
 路由分组通过表合并挂载（未命中的路径穿透到父级，404 不会被吞掉）：
 
 ```ts
-import { Router } from "@renxqoo/honu";
+import { Router } from "@honu/core";
 
 const api = new Router({ prefix: "/v1" });
 api.param("oid", async (c, next) => {
@@ -44,7 +44,7 @@ app.mount("/api", api);
 同样跑在 Node 上 —— 同一个应用，多一行导入：
 
 ```ts
-import { listen } from "@renxqoo/honu/node";
+import { listen } from "@honu/core/node";
 listen(app, 3000);
 ```
 
@@ -89,10 +89,10 @@ listen(app, 3000);
 
 | 入口                   | 提供什么                                                                    | 加载量             |
 | ---------------------- | --------------------------------------------------------------------------- | ------------------ |
-| `@renxqoo/honu`                 | Honu / Router / compose / Context / errors / cookies / bodyParser / helpers | 应用面             |
-| `@renxqoo/honu/middleware`      | 一次导入拿到全部中间件工厂                                                  | 整个 middleware 层 |
-| `@renxqoo/honu/middleware/cors` | 单个工厂                                                                    | 仅该文件           |
-| `@renxqoo/honu/node`   | Node 监听器（bun/node 互斥）                                                | 仅该文件           |
+| `@honu/core`                 | Honu / Router / compose / Context / errors / cookies / bodyParser / helpers | 应用面             |
+| `@honu/core/middleware`      | 一次导入拿到全部中间件工厂                                                  | 整个 middleware 层 |
+| `@honu/core/middleware/cors` | 单个工厂                                                                    | 仅该文件           |
+| `@honu/core/node`   | Node 监听器（bun/node 互斥）                                                | 仅该文件           |
 
 - **middleware** —— 逐请求的管道函数：`app.use(cors())`
 - **plugins** —— 安装期的安装器（`install(app)`），为 context 装饰成员：`app.use(createBodyParser())`
@@ -116,8 +116,8 @@ import {
   timeout,
   serveStatic,
   validator,
-} from "@renxqoo/honu/middleware"; // 聚合入口 —— 也可按文件导入：honu/middleware/cors
-import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "@renxqoo/honu";
+} from "@honu/core/middleware"; // 聚合入口 —— 也可按文件导入：honu/middleware/cors
+import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "@honu/core";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN：安装 c.req.json()/text()/formData()…
 // formData() 采用双重预算：formLimit 字节 AND formPartLimit 个部件
@@ -245,7 +245,7 @@ Range），在 Node 下则缓冲后输出。`streamSSE` 在心跳之外，还通
 | `app.mount(prefix, routerOrApp)`                                               | 表合并挂载（404 穿透到父级）；子应用的全局中间件会被前置                                                                                      |
 | `app.param(name, mw)`                                                          | 作用于所有捕获该参数的路由的中间件                                                                                                            |
 | `app.handle(request, runtime?)`                                                | fetch 风格处理器；`runtime = { server?, remote?, env? }` 为 `c.ip` 和 websocket 升级提供数据                                                  |
-| `app.listen(port?, host?, cb?)`                                                | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `@renxqoo/honu/node` 的 `listen()` |
+| `app.listen(port?, host?, cb?)`                                                | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `@honu/core/node` 的 `listen()` |
 | `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | 把静态路由沉入 Bun 原生路由表；在运行中的服务器上热重载该表                                                                                   |
 | `app.onError(fn)` / `app.notFound(fn)`                                         | 错误订阅与自定义 404；`silent`/`env: "test"` 会抑制默认日志                                                                                   |
 | `app.decorate(key, value)`                                                     | 扩展每个 context（安装期进行；重复/核心 key 抛错 —— 绝不静默遮蔽）                                                                            |
@@ -292,8 +292,8 @@ priority overwrite signed`。签名采用 HMAC-SHA256 并支持密钥轮换
 在 Bun 上导入框架永远不会加载 node:http 桥接：
 
 ```ts
-import { Honu } from "@renxqoo/honu";
-import { listen } from "@renxqoo/honu/node";
+import { Honu } from "@honu/core";
+import { listen } from "@honu/core/node";
 
 const app = new Honu();
 app.get("/", (c) => {
@@ -368,5 +368,5 @@ src/
   utils/        url/query/text/mime 工具、node-lazy（惰性内建桥接）
 ```
 
-MIT 许可证。主运行时 Bun ≥ 1.4（也可通过 `@renxqoo/honu/node` 在
+MIT 许可证。主运行时 Bun ≥ 1.4（也可通过 `@honu/core/node` 在
 Node 下运行）。
