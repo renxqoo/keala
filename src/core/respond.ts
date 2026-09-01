@@ -108,6 +108,17 @@ const methodNotAllowed = (c: Context): Response | null => {
  */
 const rebuildCommitted = (c: Context, res: Response): Response => {
   const headers = mergedResponseHeaders(res);
+  // A post-commit body write (flag 128) REPLACES the committed body — the
+  // committed Response's body-describing headers describe the OLD body and
+  // must not ride along: a stale content-length desyncs the byte stream on
+  // keep-alive/proxied connections (the error path does the same cleanup
+  // for the same reason). Staged record headers still apply on top below.
+  if ((c.flags & 128) !== 0) {
+    headers.delete("content-length");
+    headers.delete("transfer-encoding");
+    headers.delete("content-encoding");
+    headers.delete("content-type");
+  }
   const removed = c.removedValue;
   if (removed !== null) {
     for (const name of removed) headers.delete(name);

@@ -284,18 +284,22 @@ export class Keala implements Application {
         `app.ws(${JSON.stringify(routeKey)}) is already registered — a duplicate would shadow it`,
       );
     }
-    this.wsRoutes.set(routeKey, handlers);
     // The upgrade happens on ANY method hit; register ALL so method-based
     // 405s never interfere. The def carries the ws key so mount() can
-    // re-key the registration under its prefix.
-    registerDef(
+    // re-key the registration under its prefix. Registration FIRST — a
+    // throwing registerDef (sunk overlap, bad pattern) must not strand the
+    // wsRoutes key: the HTTP route would not exist while the key stays
+    // occupied, bricking every later registration under it.
+    const def = registerDef(
       this.router,
       "ALL",
       routeKey,
       [wsUpgradeHandler(routeKey)],
       undefined,
       this.#globalMw,
-    ).wsKey = routeKey;
+    );
+    this.wsRoutes.set(routeKey, handlers);
+    def.wsKey = routeKey;
     return this;
   }
 

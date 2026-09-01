@@ -8,7 +8,12 @@
  * route of the group; `param()` middleware runs for routes capturing `name`.
  */
 
-import { assertRedirectCaptures, buildURL, redirectTargetSegments } from "./router.ts";
+import {
+  assertRedirectCaptures,
+  buildURL,
+  normalizePrefix,
+  redirectTargetSegments,
+} from "./router.ts";
 import { compilePattern } from "./pattern.ts";
 import type { RouteDef, RouteHandler } from "./router.ts";
 import type { Application } from "../core/application.ts";
@@ -26,7 +31,10 @@ export class Router {
     if (raw.length > 0 && raw.charCodeAt(0) !== 47 /* "/" */) {
       throw new TypeError(`Router prefix must start with "/": ${JSON.stringify(raw)}`);
     }
-    this.#prefix = raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
+    // The SAME canonical form as every other prefix site: "/" (and "") are
+    // the identity mount — keeping a bare "/" here manufactured "//path"
+    // defs that compilePattern rightly refuses.
+    this.#prefix = normalizePrefix(raw);
   }
 
   #add(method: string, path: string, handlers: RouteHandler[], name?: string): void {

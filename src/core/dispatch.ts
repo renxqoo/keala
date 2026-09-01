@@ -131,14 +131,22 @@ export const mergeMountedWs = (
       `app.ws(${JSON.stringify(newKey)}) is already registered — a duplicate would shadow it`,
     );
   }
+  // Registration FIRST, key claim SECOND (same transactionality rule as
+  // app.ws(): a throwing registerDef must not strand the wsRoutes key).
+  const rekeyed = registerDef(
+    router,
+    def.method,
+    path,
+    [wsUpgradeHandler(newKey)],
+    def.name,
+    globalMw,
+    [...(def.prefixMiddleware ?? []), ...subGlobal],
+  );
   wsRoutes.set(newKey, socketHandlers);
   // Same merge contract as the non-ws mount path: the def's own prefix
   // middleware (baked by a nested mount of the sub-app) survives the
   // re-key, running inside the sub-app's global middleware.
-  registerDef(router, def.method, path, [wsUpgradeHandler(newKey)], def.name, globalMw, [
-    ...(def.prefixMiddleware ?? []),
-    ...subGlobal,
-  ]).wsKey = newKey;
+  rekeyed.wsKey = newKey;
 };
 
 /** Errors from OTHER realms (vm contexts, structured clones) fail instanceof
