@@ -282,6 +282,19 @@ app.get("/health", (c) => c.text("ok"));
 app.get("/*", markdownHandler); // only what nothing else claimed
 ```
 
+Middleware that belongs to one static path or subtree can be scoped at setup:
+
+```ts
+app.use("/oauth/*", auth()); // matches /oauth itself and descendants
+app.use("/health", probeHeaders()); // exact path only
+```
+
+Scoped layers keep registration order and still run for in-scope 404/405/
+automatic OPTIONS responses. Registered routes outside the scope pay no
+request-time prefix check: applicable layers are selected while chains are
+compiled. Scope patterns are deliberately limited to static exact paths and
+a final standalone `/*`; params/regex/infix wildcards throw at registration.
+
 In `env: "development"`, keala warns when a matched route never ran because a
 middleware stopped the chain — one line per (method, path), zero overhead in
 production (rules: `docs/DESIGN.md` §2).
@@ -363,9 +376,10 @@ Divergences worth knowing: `c.body` is the **response** body (hono's request
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `new Keala(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                   |
 | `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                      |
+| `app.use(path, ...mw)`                                                         | Exact static or trailing-`/*` scoped middleware; applies to in-scope 404/405 too                                                                                |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                               |
 | `app.on(method, path, ...handlers)`                                            | Any method, any case                                                                                                                                            |
-| `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                                                                   |
+| `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); applicable sub-app global/scoped middleware is prepended                                                                 |
 | `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                 |
 | `app.handle(request, runtime?)`                                                | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                            |
 | `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node` |

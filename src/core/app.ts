@@ -1,18 +1,7 @@
 /**
- * The application — `new Keala()`.
- *
- * Request pipeline (docs/DESIGN.md §2): routing happens at the TOP of the
- * pipeline (not as an onion layer), the matched route's precompiled chain
- * runs (single-handler routes skip composition entirely), and the finalizer
- * converts the context state into a web `Response`. Global middleware runs
- * for unmatched paths and unmatched methods too — koa's observable contract.
- * `app.handle` is a fetch handler — exactly what `Bun.serve` wants; the core
- * also runs under Node (tests).
- *
- * The public surface is the structural `Application` interface
- * (core/application.ts); this class implements it over private fields. The
- * functional core (compose/dispatch/respond/router) is untouched by the
- * class shell — it consumes `app` structurally.
+ * The `new Keala()` shell. Routing selects a precompiled chain before the
+ * onion runs; dispatch/finalization remain in the functional core. `handle`
+ * is a fetch handler for Bun and Node, while Application is its public type.
  */
 
 import type { AppOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
@@ -22,7 +11,15 @@ import type { RequestSettings } from "./context/settings.ts";
 import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
 import { createPool, type ContextPool } from "./context/pool.ts";
 import { createDecorators, type Decorators } from "./context/decorate.ts";
-import { compose } from "./compose.ts";
+import {
+  createMiddlewareStack,
+  fallbackMiddlewareForPath,
+  hasMiddlewareForPath,
+  middlewareForRoute as middlewareForRegisteredRoute,
+  rebaseMountedMiddleware,
+  registerMiddleware,
+  type MiddlewareStack,
+} from "./middleware-stack.ts";
 import {
   dispatchChain,
   finalizeGuarded,
@@ -52,6 +49,7 @@ import {
 } from "../router/router.ts";
 import { isRouter } from "../router/group.ts";
 import type { Router } from "../router/group.ts";
+import { compilePattern } from "../router/pattern.ts";
 import { startBunServer, type ServerHandle } from "../adapters/bun.ts";
 import { buildNativeRoutes, registerSink, type NativeSinkEntry } from "./sink.ts";
 import {
@@ -86,15 +84,11 @@ export class Keala implements Application {
   readonly wsRoutes: Map<string, WebSocketHandlers> = new Map();
   readonly nativeSinks: Map<string, NativeSinkEntry> = new Map();
 
-  // Field initializers run top-to-bottom BEFORE the constructor body:
-  // #contextProto must exist before #decorators derives from it.
-  // Derived per app: decorate() writes land on this prototype, never on the
-  // shared base — one app's extensions must not leak into another's contexts.
+  // Per-app prototype: decorators never leak into another application.
   #contextProto: object = Object.create(baseContextProto);
   #decorators: Decorators = createDecorators(this.#contextProto);
   #emitter = createEmitter();
-  #globalMw: RouteHandler[] = [];
-  #globalChain: Chain | null = null;
+  #middleware: MiddlewareStack = createMiddlewareStack();
   #notFoundHandler: NotFoundHandler = defaultNotFound;
   #serverHandle: ServerHandle | null = null;
   // Sticky: a listen({nativeRoutes: false}) opt-out must survive later
@@ -128,33 +122,29 @@ export class Keala implements Application {
     return this.router.defs;
   }
   get globalMiddleware(): readonly RouteHandler[] {
-    return this.#globalMw;
+    return this.#middleware.global;
+  }
+  middlewareForRoute(path: string, pathOffset = 0): readonly RouteHandler[] {
+    return middlewareForRegisteredRoute(this.#middleware, path, pathOffset);
   }
   get notFoundHandler(): NotFoundHandler {
     return this.#notFoundHandler;
   }
 
-  use(...args: (RouteHandler | AppOptionsPlugin)[]): Application {
-    for (const mw of args) {
-      const installer = pluginInstallerOf(mw);
-      if (installer !== null) {
-        installer(this);
-        continue;
-      }
-      if (typeof mw !== "function") {
-        throw new TypeError("app.use() requires a middleware function or plugin");
-      }
-      if (this.nativeSinks.size > 0) {
-        throw new TypeError(
-          "app.use(fn) cannot run alongside sunk routes — the native routing table bypasses global middleware",
-        );
-      }
-      this.#globalMw.push(mw);
-    }
+  use(...middleware: (RouteHandler | AppOptionsPlugin)[]): Application;
+  use(pattern: string, ...middleware: RouteHandler[]): Application;
+  use(...args: (string | RouteHandler | AppOptionsPlugin)[]): Application {
+    const changed = registerMiddleware(
+      this.#middleware,
+      this.router.sunkPaths,
+      this.nativeSinks.size,
+      args,
+      pluginInstallerOf,
+      this,
+    );
     // Late middleware re-composes every route chain — O(routes), a
     // documented setup-time cost.
-    this.#globalChain = compose(this.#globalMw) as Chain;
-    rebuildChains(this.router, this.#globalMw);
+    if (changed) rebuildChains(this.router, this.#middleware);
     return this;
   }
 
@@ -163,7 +153,7 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "GET", [
+    return routeShortcut(this, this.router, this.#middleware, "GET", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
@@ -174,7 +164,7 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "POST", [
+    return routeShortcut(this, this.router, this.#middleware, "POST", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
@@ -185,7 +175,7 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "PUT", [
+    return routeShortcut(this, this.router, this.#middleware, "PUT", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
@@ -196,7 +186,7 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "PATCH", [
+    return routeShortcut(this, this.router, this.#middleware, "PATCH", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
@@ -207,7 +197,7 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "DELETE", [
+    return routeShortcut(this, this.router, this.#middleware, "DELETE", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
@@ -218,7 +208,7 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "HEAD", [
+    return routeShortcut(this, this.router, this.#middleware, "HEAD", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
@@ -229,7 +219,7 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "OPTIONS", [
+    return routeShortcut(this, this.router, this.#middleware, "OPTIONS", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
@@ -240,19 +230,19 @@ export class Keala implements Application {
     pathOrHandler?: string | RouteHandler,
     ...rest: RouteHandler[]
   ): Application {
-    return routeShortcut(this, this.router, this.#globalMw, "ALL", [
+    return routeShortcut(this, this.router, this.#middleware, "ALL", [
       pathOrName,
       ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
       ...rest,
     ]);
   }
   on(method: string, path: string, ...handlers: RouteHandler[]): Application {
-    registerDef(this.router, method, path, handlers, undefined, this.#globalMw);
+    registerDef(this.router, method, path, handlers, undefined, this.#middleware);
     return this;
   }
 
   sink(path: string, response: Response | { dir: string }): Application {
-    registerSink(this.router, this.nativeSinks, path, response, this.#globalMw);
+    registerSink(this.router, this.nativeSinks, path, response, this.#middleware);
     if (this.#serverHandle !== null && this.#nativeRoutesEnabled) {
       this.#serverHandle.reload({ routes: buildNativeRoutes(this.nativeSinks) });
     }
@@ -296,7 +286,7 @@ export class Keala implements Application {
       routeKey,
       [wsUpgradeHandler(routeKey)],
       undefined,
-      this.#globalMw,
+      this.#middleware,
     );
     this.wsRoutes.set(routeKey, handlers);
     def.wsKey = routeKey;
@@ -317,7 +307,7 @@ export class Keala implements Application {
     }
     this.router.paramMiddlewares.set(name, middleware);
     // Existing routes capturing this param pick it up on rebuild.
-    rebuildChains(this.router, this.#globalMw);
+    rebuildChains(this.router, this.#middleware);
     return this;
   }
 
@@ -332,6 +322,7 @@ export class Keala implements Application {
         : prefix.endsWith("/") && prefix.length > 1
           ? prefix.slice(0, -1)
           : prefix;
+    const mountOffset = compilePattern(base || "/").segments.length;
     // Snapshot: registering into this app must not alias the live array
     // being iterated (self-referential mounts would otherwise grow forever).
     const defs = [...(isRouter(sub) ? sub.defs : sub.router.defs)];
@@ -342,7 +333,6 @@ export class Keala implements Application {
       );
     }
     // A mounted app (or router) carries its own middleware ahead of its routes.
-    const subGlobal = isRouter(sub) ? sub.middleware : sub.globalMiddleware;
     let mergedParams = false;
     for (const [name, handler] of paramMiddlewares) {
       if (!this.router.paramMiddlewares.has(name)) {
@@ -352,9 +342,16 @@ export class Keala implements Application {
     }
     // Same contract as app.param(): newly merged param middleware must reach
     // routes registered BEFORE the mount, not only later ones — one rebuild.
-    if (mergedParams) rebuildChains(this.router, this.#globalMw);
+    if (mergedParams) rebuildChains(this.router, this.#middleware);
     for (const def of defs) {
       const path = `${base}${def.path}` || "/";
+      const subMiddleware = isRouter(sub)
+        ? sub.middleware
+        : sub.middlewareForRoute(def.path, mountOffset);
+      const mountedMiddleware = [
+        ...rebaseMountedMiddleware(def.prefixMiddleware ?? [], mountOffset),
+        ...subMiddleware,
+      ];
       // ws registrations re-key under the mount (see mergeMountedWs — an
       // empty source map makes its own guard throw for router-typed subs).
       if (def.wsKey !== undefined) {
@@ -370,27 +367,26 @@ export class Keala implements Application {
           this.wsRoutes,
           this.router,
           path,
-          subGlobal,
+          mountedMiddleware,
           def,
-          this.#globalMw,
+          this.#middleware,
           isRouter(sub) ? NO_WS_HANDLERS : sub.wsRoutes,
         );
         continue;
       }
       // The def's OWN prefix middleware (baked when the sub-app itself
-      // mounted a router) runs INSIDE this app's sub-global — dropping it
+      // mounted a router) runs INSIDE this app's mounted middleware — dropping
       // here silently stripped every inner router's use() middleware on a
-      // nested remount. Inner first, wrapping sub-global after.
-      registerDef(this.router, def.method, path, def.handlers, def.name, this.#globalMw, [
-        ...(def.prefixMiddleware ?? []),
-        ...subGlobal,
+      // nested remount. Inner first, wrapping mounted middleware after.
+      registerDef(this.router, def.method, path, def.handlers, def.name, this.#middleware, [
+        ...mountedMiddleware,
       ]);
     }
     return this;
   }
 
   redirect(source: string, destination: string, code = 301): Application {
-    registerRedirect(this.router, source, destination, code, this.#globalMw);
+    registerRedirect(this.router, source, destination, code, this.#middleware);
     return this;
   }
 
@@ -445,15 +441,18 @@ export class Keala implements Application {
             this,
             c,
             chain,
-            this.router.devTrace ? { method, path, marked: this.#globalMw.length > 0 } : undefined,
+            this.router.devTrace
+              ? { method, path, marked: hasMiddlewareForPath(this.#middleware, path) }
+              : undefined,
           );
         }
         for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
       }
       // No handler: global middleware still runs (koa contract), then the
       // finalizer decides between 405/501/OPTIONS and not-found.
-      if (this.#globalChain === null) return finalizeGuarded(this, c);
-      return dispatchChain(this, c, this.#globalChain);
+      const fallback = fallbackMiddlewareForPath(this.#middleware, path);
+      if (fallback === null) return finalizeGuarded(this, c);
+      return dispatchChain(this, c, fallback);
     };
 
     this.#pool ??= createPool(this, this.#contextProto);

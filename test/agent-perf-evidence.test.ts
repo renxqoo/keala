@@ -34,27 +34,46 @@ app.get(
 );
 
 const requestFor = (path: string) => new Request(`http://localhost:3000${path}`);
+const baselineResponse = (): Promise<Response> => Promise.resolve(new Response("x"));
 
 describe("perf evidence: budgets (ratio fences)", () => {
   it("mixed bench mix stays under a generous ratio budget", { timeout: 30_000 }, async () => {
     const paths = ["/text", "/json", "/users/7", "/mw"];
     const requests = paths.map((p) => requestFor(p));
-    const baselineResponse = (): Response => new Response("x");
-    for (let i = 0; i < 4_000; i++) await app.handle(requests[i % 4]!); // warm
-    const N = 20_000;
-    const t0 = performance.now();
-    for (let i = 0; i < N; i++) baselineResponse();
-    const baselineNs = ((performance.now() - t0) * 1e6) / N;
-    const start = performance.now();
-    for (let i = 0; i < N; i++) {
-      const res = await app.handle(requests[i % 4]!);
-      if (res.status !== 200) throw new Error("unexpected status in budget loop");
+    for (let i = 0; i < 4_000; i++) {
+      await baselineResponse();
+      await app.handle(requests[i % 4]!);
     }
-    const nsPerReq = ((performance.now() - start) * 1e6) / N;
-    // Reference ratio ~5x on Bun/Apple Silicon (framework incl. Response
-    // construction vs bare construction). 10x headroom trips on structural
-    // regressions while passing under coverage instrumentation.
-    expect(nsPerReq / baselineNs).toBeLessThan(10);
+    const batch = 5_000;
+    const samples = 9;
+    let baselineStatus = 0;
+    const ratios: number[] = [];
+    const measureBaseline = async (): Promise<number> => {
+      const start = performance.now();
+      for (let i = 0; i < batch; i++) baselineStatus += (await baselineResponse()).status;
+      return performance.now() - start;
+    };
+    const measureApp = async (): Promise<number> => {
+      const start = performance.now();
+      for (let i = 0; i < batch; i++) {
+        const res = await app.handle(requests[i % 4]!);
+        if (res.status !== 200) throw new Error("unexpected status in budget loop");
+      }
+      return performance.now() - start;
+    };
+    for (let sample = 0; sample < samples; sample++) {
+      // Rotate order so neither side owns a systematically colder window.
+      const baselineFirst = sample % 2 === 0;
+      const baselineMs = baselineFirst ? await measureBaseline() : 0;
+      const appMs = await measureApp();
+      const pairedBaselineMs = baselineFirst ? baselineMs : await measureBaseline();
+      ratios.push(appMs / pairedBaselineMs);
+    }
+    expect(baselineStatus).toBe(batch * samples * 200);
+    // Reference ratio ~5x on Bun/Apple Silicon (framework vs the same settled
+    // fetch-handler boundary). 10x headroom trips on structural regressions
+    // while passing under coverage instrumentation.
+    expect(ratios.toSorted((a, b) => a - b)[Math.floor(samples / 2)]).toBeLessThan(10);
   });
 
   it.skipIf(!isBun)(

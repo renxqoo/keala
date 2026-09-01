@@ -25,6 +25,7 @@ import { isEmptyStatus, statusMessage } from "../http/status.ts";
 import { isStatusText } from "../utils/text.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
+import { isImplicitTextResponse, TEXT_PLAIN } from "./context/sugar.ts";
 
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
 
@@ -120,8 +121,12 @@ const rebuildCommitted = (c: Context, res: Response): Response => {
     headers.delete("content-type");
   }
   const removed = c.removedValue;
+  let contentTypeRemoved = false;
   if (removed !== null) {
-    for (const name of removed) headers.delete(name);
+    for (const name of removed) {
+      headers.delete(name);
+      if (name === "content-type") contentTypeRemoved = true;
+    }
   }
   const record = c.headersRecord;
   if (record !== null) {
@@ -146,6 +151,18 @@ const rebuildCommitted = (c: Context, res: Response): Response => {
         headers.set(key, value);
       }
     }
+  }
+  // A c.text() Response rebuilt from `res.body` no longer carries Bun's
+  // internal string-body type: the body is now a ReadableStream and Bun.serve
+  // emits application/octet-stream. Restore only that known implicit type;
+  // an explicit removal or post-commit body replacement must still win.
+  if (
+    (c.flags & 128) === 0 &&
+    !contentTypeRemoved &&
+    !headers.has("content-type") &&
+    isImplicitTextResponse(res)
+  ) {
+    headers.set("content-type", TEXT_PLAIN);
   }
   const statusOverridden = (c.flags & 32) !== 0;
   const status = statusOverridden ? c.statusValue : res.status;

@@ -29,7 +29,7 @@ export interface RouteTarget {
   /**
    * Raw handler layers per method, in registration order — the composition
    * SOURCE. A duplicate path+method registration appends LAYERS here and the
-   * chain is recomposed once over `[...globalMw, ...layers]`; composing the
+   * chain is recomposed once over `[...appMiddleware, ...layers]`; composing the
    * previous CHAIN under the new one (the old model) embedded the global
    * middleware once per duplicate and re-ran it every request.
    */

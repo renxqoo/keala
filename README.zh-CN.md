@@ -266,6 +266,18 @@ app.get("/health", (c) => c.text("ok"));
 app.get("/*", markdownHandler); // 只接住没被认领的请求
 ```
 
+只属于某个静态路径或子树的中间件可以在安装期限定作用域：
+
+```ts
+app.use("/oauth/*", auth()); // 匹配 /oauth 本身及全部子路径
+app.use("/health", probeHeaders()); // 只匹配精确路径
+```
+
+作用域层保持注册顺序，并且仍会覆盖作用域内的 404、405 与自动 OPTIONS。
+作用域外的已注册路由没有请求期前缀判断：适用层在编译路由链时已经选定。
+pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则或中段通配会在
+注册期抛错。
+
 `env: "development"` 下，中间件停掉链导致已命中路由从未执行时，keala 会
 按 (method, path) 警告一次；生产环境零开销（规则详见 `docs/DESIGN.md` §2）。
 
@@ -344,9 +356,10 @@ app.get("/*", markdownHandler); // 只接住没被认领的请求
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `new Keala(options?)`                                                          | 应用类（koa 风格的 `new`）。选项：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`subdomainOffset`、`env`、`silent`                 |
 | `app.use(...mw)`                                                               | 全局中间件，编译进每条路由链（延迟 `use` 会重新组合）                                                                                 |
+| `app.use(path, ...mw)`                                                         | 静态精确路径或末尾 `/*` 作用域中间件；同样覆盖作用域内的 404/405                                                                      |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | 路由注册；命名形式 `app.get(name, path, ...handlers)`                                                                                 |
 | `app.on(method, path, ...handlers)`                                            | 任意方法、任意大小写                                                                                                                  |
-| `app.mount(prefix, routerOrApp)`                                               | 表合并挂载（404 穿透到父级）；子应用的全局中间件会被前置                                                                              |
+| `app.mount(prefix, routerOrApp)`                                               | 表合并挂载（404 穿透到父级）；子应用适用的全局/作用域中间件会被前置                                                                   |
 | `app.param(name, mw)`                                                          | 作用于所有捕获该参数的路由的中间件                                                                                                    |
 | `app.handle(request, runtime?)`                                                | fetch 风格处理器 → `Promise<Response>`，永不 reject；`runtime = { server?, remote?, env? }` 为 `c.ip` 和 websocket 升级提供数据       |
 | `app.listen(port?, host?, cb?)`                                                | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `keala/node` 的 `listen()` |

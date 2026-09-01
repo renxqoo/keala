@@ -14,6 +14,7 @@ import {
 } from "../router/router.ts";
 import { NOOP_TAIL } from "./compose.ts";
 import type { Context } from "./context/context.ts";
+import type { MiddlewareStack } from "./middleware-stack.ts";
 import { FLAG_CHAIN_STALLED, FLAG_ROUTE_REACHED } from "./context/state.ts";
 import { retireWithBody, type ContextPool } from "./context/pool.ts";
 import { finalize } from "./respond.ts";
@@ -34,7 +35,7 @@ export const pluginInstallerOf = (value: unknown): ((app: Application) => void) 
 export const routeShortcut = (
   app: Application,
   router: RouterState,
-  globalMw: RouteHandler[],
+  middleware: MiddlewareStack,
   method: string,
   args: unknown[],
 ): Application => {
@@ -43,9 +44,9 @@ export const routeShortcut = (
     throw new TypeError("Route registration requires a path string");
   }
   if (typeof second === "string") {
-    registerDef(router, method, second, rest as RouteHandler[], first, globalMw);
+    registerDef(router, method, second, rest as RouteHandler[], first, middleware);
   } else if (typeof second === "function") {
-    registerDef(router, method, first, [second, ...rest], undefined, globalMw);
+    registerDef(router, method, first, [second, ...rest], undefined, middleware);
   } else {
     throw new TypeError("Route registration requires at least one handler");
   }
@@ -62,7 +63,7 @@ export const registerRedirect = (
   source: string,
   destination: string,
   code: number,
-  globalMw: readonly RouteHandler[],
+  middleware: MiddlewareStack,
 ): void => {
   const destSegments = redirectTargetSegments(destination);
   if (destSegments !== null) assertRedirectCaptures(source, destSegments);
@@ -78,7 +79,7 @@ export const registerRedirect = (
       },
     ],
     undefined,
-    globalMw,
+    middleware,
   );
 };
 
@@ -116,9 +117,9 @@ export const mergeMountedWs = (
   wsRoutes: Map<string, WebSocketHandlers>,
   router: RouterState,
   path: string,
-  subGlobal: readonly RouteHandler[],
+  mountedMiddleware: readonly RouteHandler[],
   def: RouteDef,
-  globalMw: readonly RouteHandler[],
+  middleware: MiddlewareStack,
   handlers: ReadonlyMap<string, WebSocketHandlers>,
 ): void => {
   const socketHandlers = def.wsKey === undefined ? undefined : handlers.get(def.wsKey);
@@ -139,13 +140,13 @@ export const mergeMountedWs = (
     path,
     [wsUpgradeHandler(newKey)],
     def.name,
-    globalMw,
-    [...(def.prefixMiddleware ?? []), ...subGlobal],
+    middleware,
+    mountedMiddleware,
   );
   wsRoutes.set(newKey, socketHandlers);
   // Same merge contract as the non-ws mount path: the def's own prefix
   // middleware (baked by a nested mount of the sub-app) survives the
-  // re-key, running inside the sub-app's global middleware.
+  // re-key, running inside the mounted app's applicable middleware.
   rekeyed.wsKey = newKey;
 };
 

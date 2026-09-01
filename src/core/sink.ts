@@ -10,8 +10,9 @@
  * Eligibility is deliberately narrow and loud: a sunk route bypasses the
  * onion entirely, so anything that needs per-request JS refuses to sink
  * instead of silently diverging between the two layers. Concretely:
- *  - no global middleware may be registered (`app.use(fn)` throws while
- *    sinks exist — the native table would skip it),
+ *  - no global or overlapping scoped middleware may be registered
+ *    (`app.use()` throws while a conflicting native sink exists — the native
+ *    table would skip it),
  *  - no param middleware may be registered,
  *  - a sunk path may not overlap any JS route path (either direction —
  *    the native table wins at runtime, so overlap is a silent-shadow bug),
@@ -31,6 +32,7 @@ import {
   type RouteHandler,
   type RouterState,
 } from "../router/router.ts";
+import { middlewareConflictForPath, type MiddlewareStack } from "./middleware-stack.ts";
 
 /** A prebuilt static response (Bun reuses the instance natively). */
 export interface NativeStaticSink {
@@ -62,7 +64,7 @@ export const registerSink = (
   sinks: Map<string, NativeSinkEntry>,
   path: string,
   value: Response | { dir: string },
-  globalMw: readonly RouteHandler[],
+  middleware: MiddlewareStack,
 ): void => {
   if (typeof path !== "string" || path.length === 0 || !path.startsWith("/")) {
     throw new TypeError(`sink path must be an absolute path, got ${JSON.stringify(path)}`);
@@ -70,9 +72,15 @@ export const registerSink = (
   if (sinks.has(path)) {
     throw new TypeError(`sink ${path} is already registered`);
   }
-  if (globalMw.length > 0) {
+  const middlewareConflict = middlewareConflictForPath(middleware, path);
+  if (middlewareConflict !== null) {
+    if (middlewareConflict === "global") {
+      throw new TypeError(
+        "app.sink() requires an app without global middleware — the native routing table bypasses it",
+      );
+    }
     throw new TypeError(
-      "app.sink() requires an app without global middleware — the native routing table bypasses it",
+      `app.sink() conflicts with ${middlewareConflict} middleware — the native routing table would bypass it`,
     );
   }
   if (router.paramMiddlewares.size > 0) {
@@ -143,8 +151,8 @@ export const registerSink = (
     // route does not serve the bare prefix (it falls through to fetch), so
     // the twin answers "/assets" and "/assets/" with the index on BOTH
     // runtimes.
-    registerDef(router, "GET", path, [handler], undefined, globalMw);
-    registerDef(router, "GET", prefix || "/", [handler], undefined, globalMw);
+    registerDef(router, "GET", path, [handler], undefined, middleware);
+    registerDef(router, "GET", prefix || "/", [handler], undefined, middleware);
     for (const def of router.defs.slice(firstDef)) router.sunkPaths.add(def.path);
     return;
   }
@@ -172,7 +180,7 @@ export const registerSink = (
     return rebuild();
   };
   const mirror: RouteHandler = () => (rebuild === null ? capture() : rebuild());
-  registerDef(router, "GET", path, [mirror], undefined, globalMw);
+  registerDef(router, "GET", path, [mirror], undefined, middleware);
   markSunk();
 };
 

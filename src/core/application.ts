@@ -37,6 +37,8 @@ export interface Application {
   listenerCount(event: string): number;
   /** Register global middleware or a plugin (compiled into every route chain). */
   use(...middleware: (RouteHandler | AppOptionsPlugin)[]): Application;
+  /** Register static exact-path or trailing-wildcard scoped middleware. */
+  use(pattern: string, ...middleware: RouteHandler[]): Application;
   /** Register a route. Named form: get(name, path, ...handlers). */
   get(path: string, ...handlers: RouteHandler[]): Application;
   get(name: string, path: string, ...handlers: RouteHandler[]): Application;
@@ -112,8 +114,10 @@ export interface Application {
   readonly notFoundHandler: NotFoundHandler;
   /** Registered route definitions (inspection/tests). */
   readonly stack: readonly RouteDef[];
-  /** Global middleware stack (consumed whole by `mount`). */
+  /** Global middleware stack, exposed for inspection and mount compatibility. */
   readonly globalMiddleware: readonly RouteHandler[];
+  /** Setup-time view used by mount() to preserve scoped registration order. */
+  middlewareForRoute(path: string, pathOffset?: number): readonly RouteHandler[];
   readonly router: RouterState;
   readonly settings: RequestSettings;
   readonly env: string;

@@ -85,6 +85,41 @@ describe("app pipeline", () => {
     expect(ct === null || ct === "text/plain;charset=UTF-8").toBe(true);
   });
 
+  it("keeps the implicit text type when post-next middleware rebuilds c.text()", async () => {
+    const app = new Keala(quiet);
+    app.use(async (c, next) => {
+      await next();
+      c.set("x-late", "1");
+    });
+    app.get("/text", (c) => c.text("plain"));
+
+    const res = await app.handle(req("/text"));
+    expect(res.headers.get("content-type") ?? "").toMatch(/^text\/plain(?:;|$)/i);
+    expect(res.headers.get("x-late")).toBe("1");
+    expect(await res.text()).toBe("plain");
+  });
+
+  it("does not resurrect an explicitly removed or replaced text content-type", async () => {
+    const removed = new Keala(quiet);
+    removed.use(async (c, next) => {
+      await next();
+      c.remove("content-type");
+      c.set("x-late", "1");
+    });
+    removed.get("/text", (c) => c.text("plain"));
+    expect((await removed.handle(req("/text"))).headers.get("content-type")).toBeNull();
+
+    const replaced = new Keala(quiet);
+    replaced.use(async (c, next) => {
+      await next();
+      c.body = new Uint8Array([1, 2, 3]);
+    });
+    replaced.get("/text", (c) => c.text("plain"));
+    const replacedRes = await replaced.handle(req("/text"));
+    expect(replacedRes.headers.get("content-type")).toBeNull();
+    expect(new Uint8Array(await replacedRes.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
   it("c.json returns application/json through the native static", async () => {
     const app = new Keala(quiet);
     app.get("/j", (c) => c.json({ ok: true }));

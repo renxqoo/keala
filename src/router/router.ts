@@ -19,6 +19,11 @@
 import { compose, direct, type Composed, type Handler } from "../core/compose.ts";
 import type { Context } from "../core/context/context.ts";
 import { FLAG_ROUTE_REACHED } from "../core/context/state.ts";
+import {
+  EMPTY_MIDDLEWARE_STACK,
+  middlewareForRoute,
+  type MiddlewareStack,
+} from "../core/middleware-stack.ts";
 import type { CompiledSegment, PatternIR } from "./pattern.ts";
 import { compilePattern, decodeSegment, paramNamesOf } from "./pattern.ts";
 import {
@@ -211,10 +216,10 @@ const markRouteReached: RouteHandler = (c, next) => {
 
 const chainOf = (
   handlers: readonly RouteHandler[],
-  globalMw: readonly RouteHandler[],
+  appMiddleware: readonly RouteHandler[],
   devTrace: boolean,
 ): Chain => {
-  if (globalMw.length === 0) {
+  if (appMiddleware.length === 0) {
     // No middleware ahead of the route: nothing can swallow it — the marker
     // (and, for one handler, composition itself) is unnecessary.
     return handlers.length === 1
@@ -222,14 +227,15 @@ const chainOf = (
       : (compose(handlers) as Chain);
   }
   return compose(
-    devTrace ? [...globalMw, markRouteReached, ...handlers] : [...globalMw, ...handlers],
+    devTrace ? [...appMiddleware, markRouteReached, ...handlers] : [...appMiddleware, ...handlers],
   ) as Chain;
 };
 
 /** Index + compose the chain for ONE definition (incremental registration). */
-const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHandler[]): void => {
+const bindDef = (state: RouterState, def: RouteDef, middleware: MiddlewareStack): void => {
   const ir = compilePattern(def.path);
   const targets = indexPattern(state, ir, def.path);
+  const appMiddleware = middlewareForRoute(middleware, def.path);
   // Koa order along the chain: the sub-router's use() middleware (if this
   // def came through mount()) runs BEFORE param middleware, the handler last.
   const handlers = [
@@ -245,7 +251,7 @@ const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHand
     const previous = target.layers.get(def.method) as RouteHandler[] | undefined;
     const layers = previous === undefined ? handlers : [...previous, ...handlers];
     target.layers.set(def.method, layers);
-    target.methods.set(def.method, chainOf(layers, globalMw, state.devTrace));
+    target.methods.set(def.method, chainOf(layers, appMiddleware, state.devTrace));
     target.allowed.add(def.method);
     if (def.method === ALL) target.allowed.add("*");
     if (def.method === "GET") target.allowed.add("HEAD");
@@ -261,9 +267,9 @@ const resetIndex = (state: RouterState): void => {
 };
 
 /** Full re-index + recompose (middleware stack or param middleware changed). */
-export const rebuildChains = (state: RouterState, globalMw: readonly RouteHandler[]): void => {
+export const rebuildChains = (state: RouterState, middleware: MiddlewareStack): void => {
   resetIndex(state);
-  for (const def of state.defs) bindDef(state, def, globalMw);
+  for (const def of state.defs) bindDef(state, def, middleware);
 };
 
 /** Register one definition; returns it (callers may tag it, e.g. wsKey). */
@@ -273,7 +279,7 @@ export const registerDef = (
   path: string,
   handlers: RouteHandler[],
   name?: string,
-  globalMw: readonly RouteHandler[] = [],
+  middleware: MiddlewareStack = EMPTY_MIDDLEWARE_STACK,
   prefixMiddleware?: readonly RouteHandler[],
 ): RouteDef => {
   const upper = method.toUpperCase();
@@ -314,12 +320,12 @@ export const registerDef = (
   state.defs.push(def);
   if (name !== undefined) state.named.set(name, def);
   try {
-    bindDef(state, def, globalMw);
+    bindDef(state, def, middleware);
   } catch (err) {
     state.defs.pop();
     if (name !== undefined && previousNamed === undefined) state.named.delete(name);
     else if (name !== undefined) state.named.set(name, previousNamed as RouteDef);
-    rebuildChains(state, globalMw); // discard partial index mutations wholesale
+    rebuildChains(state, middleware); // discard partial index mutations wholesale
     throw err;
   }
   return def;

@@ -124,22 +124,28 @@ const assertFormPartBudget = (bytes: Uint8Array, contentType: string, limit: num
 
 interface BodyCacheState {
   bytes: Promise<Uint8Array> | null;
+  /** Limit already enforced by `bytes`; equal/larger readers can reuse the
+   * exact in-flight promise, while a smaller reader adds one post-read check. */
+  bytesLimit: number;
   facade: RequestBodyFacade | null;
-  /** Memoized reader results (DESIGN "body 单次性"): every consumer in the
-   *  onion sees the SAME parsed value. json wraps its value — `null` is a
-   *  legitimate JSON result and must stay distinguishable from "not read". */
-  json: { value: unknown } | null;
-  text: string | null;
-  formData: FormData | null;
-  blob: Blob | null;
+  /** Memoize the IN-FLIGHT work, not only its settled value. Concurrent
+   * onion consumers therefore share one decode/parse and one terminal
+   * failure, and callers receive the exact same Promise. */
+  json: Promise<unknown> | null;
+  text: Promise<string> | null;
+  arrayBuffer: Promise<Uint8Array> | null;
+  formData: Promise<FormData> | null;
+  blob: Promise<Blob> | null;
 }
 
 const cacheOf = (c: Context): BodyCacheState =>
   ((c as { bodyCache?: BodyCacheState }).bodyCache ??= {
     bytes: null,
+    bytesLimit: 0,
     facade: null,
     json: null,
     text: null,
+    arrayBuffer: null,
     formData: null,
     blob: null,
   } as BodyCacheState);
@@ -148,74 +154,79 @@ const cacheOf = (c: Context): BodyCacheState =>
  * Read the request body once, bounded. Content-Length above the limit fails
  * fast; streamed reads count bytes and abort at the boundary.
  */
-export const readBodyLimited = async (c: Context, limit: number): Promise<Uint8Array> => {
+export const readBodyLimited = (c: Context, limit: number): Promise<Uint8Array> => {
   const cache = cacheOf(c);
   if (cache.bytes !== null) {
     // The body is already consumed — but THIS reader's limit still applies.
-    const bytes = await cache.bytes;
-    if (bytes.byteLength > limit) {
-      throw createError(413, `request body exceeds the ${limit} byte limit`, {
-        expose: true,
-        code: "payload_too_large",
-      });
-    }
-    return bytes;
+    if (limit >= cache.bytesLimit) return cache.bytes;
+    return cache.bytes.then((bytes) => {
+      if (bytes.byteLength > limit) {
+        throw createError(413, `request body exceeds the ${limit} byte limit`, {
+          expose: true,
+          code: "payload_too_large",
+        });
+      }
+      return bytes;
+    });
   }
   const declared = c.reqLength;
   if (declared !== undefined && declared > limit) {
-    throw createError(413, `request body of ${declared} bytes exceeds the ${limit} byte limit`, {
-      expose: true,
-      code: "payload_too_large",
-    });
+    return Promise.reject(
+      createError(413, `request body of ${declared} bytes exceeds the ${limit} byte limit`, {
+        expose: true,
+        code: "payload_too_large",
+      }),
+    );
   }
-  const read = (async () => {
+  const read = (() => {
     const body = c.raw.body;
-    if (body === null) return new Uint8Array(0);
+    if (body === null) return Promise.resolve(new Uint8Array(0));
     if (declared !== undefined) {
       // Declared-length fast path (the common case — every real client
-      // declares): ONE native arrayBuffer() read. With the declared length
-      // already verified ≤ limit up front, HTTP framing pins delivery, and
-      // the post-read guard fails closed on a lying-length stream. Measured
-      // ~2x the native floor versus the reader loop it replaced (per-read
-      // promises + chunk bookkeeping), DOGFOOD-R2 C1.
-      const buffer = await c.raw.arrayBuffer();
-      if (buffer.byteLength > limit) {
-        throw createError(413, `request body exceeds the ${limit} byte limit`, {
-          expose: true,
-          code: "payload_too_large",
-        });
+      // declares): ONE native bytes() read, which already returns the desired
+      // Uint8Array on Bun 1.4 and Node 22. The post-read guard fails closed on
+      // a lying-length stream without an ArrayBuffer wrapper/view allocation.
+      const requestWithBytes = c.raw as Request & { bytes(): Promise<Uint8Array> };
+      return requestWithBytes.bytes().then((bytes: Uint8Array) => {
+        if (bytes.byteLength > limit) {
+          throw createError(413, `request body exceeds the ${limit} byte limit`, {
+            expose: true,
+            code: "payload_too_large",
+          });
+        }
+        return bytes;
+      });
+    }
+    return (async () => {
+      const reader = body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > limit) {
+          await reader.cancel().catch(() => undefined);
+          throw createError(413, `request body exceeds the ${limit} byte limit`, {
+            expose: true,
+            code: "payload_too_large",
+          });
+        }
+        chunks.push(value);
       }
-      // A zero-copy view: exact fill, or the delivered bytes of a truncated
-      // stream, alike.
-      return new Uint8Array(buffer, 0, buffer.byteLength);
-    }
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > limit) {
-        await reader.cancel().catch(() => undefined);
-        throw createError(413, `request body exceeds the ${limit} byte limit`, {
-          expose: true,
-          code: "payload_too_large",
-        });
+      // A single-chunk body needs no reassembly copy.
+      if (chunks.length === 1) return chunks[0] as Uint8Array;
+      const out = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.byteLength;
       }
-      chunks.push(value);
-    }
-    // A single-chunk body needs no reassembly copy.
-    if (chunks.length === 1) return chunks[0] as Uint8Array;
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return out;
+      return out;
+    })();
   })();
   cache.bytes = read;
+  cache.bytesLimit = limit;
   return read;
 };
 
@@ -267,51 +278,55 @@ export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
         const cache = cacheOf(this);
         if (cache.facade !== null) return cache.facade;
         const read = (limit: number): Promise<Uint8Array> => readBodyLimited(this, limit);
-        cache.facade = {
-          json: async () => {
-            if (cache.json !== null) return cache.json.value;
-            const bytes = await read(jsonLimit);
-            if (bytes.byteLength === 0) {
-              cache.json = { value: null };
-              return null;
-            }
-            try {
-              const parsed: unknown = JSON.parse(decoder.decode(bytes));
-              cache.json = { value: parsed };
-              return parsed;
-            } catch {
-              throw createError(400, "request body is not valid JSON", {
-                expose: true,
-                code: "invalid_json",
-              });
-            }
+        const facade: RequestBodyFacade = {
+          json: () => {
+            if (cache.json !== null) return cache.json;
+            cache.json = read(jsonLimit).then((bytes) => {
+              if (bytes.byteLength === 0) return null;
+              try {
+                return JSON.parse(decoder.decode(bytes)) as unknown;
+              } catch {
+                throw createError(400, "request body is not valid JSON", {
+                  expose: true,
+                  code: "invalid_json",
+                });
+              }
+            });
+            return cache.json;
           },
-          text: async () => {
+          text: () => {
             if (cache.text !== null) return cache.text;
-            return (cache.text = decoder.decode(await read(textLimit)));
+            return (cache.text = read(textLimit).then((bytes) => decoder.decode(bytes)));
           },
-          arrayBuffer: () => read(jsonLimit),
-          blob: async () => {
+          arrayBuffer: () => {
+            if (cache.arrayBuffer !== null) return cache.arrayBuffer;
+            return (cache.arrayBuffer = read(jsonLimit));
+          },
+          blob: () => {
             if (cache.blob !== null) return cache.blob;
-            return (cache.blob = new Blob([await read(jsonLimit)]));
+            return (cache.blob = read(jsonLimit).then((bytes) => new Blob([bytes])));
           },
-          formData: async () => {
+          formData: () => {
             if (cache.formData !== null) return cache.formData;
-            const bytes = await read(formLimit);
             const contentType = this.header("content-type") || "application/octet-stream";
-            assertFormPartBudget(bytes, contentType, formPartLimit);
-            try {
-              return (cache.formData = (await new Response(bytes, {
+            const parsed = read(formLimit).then((bytes) => {
+              assertFormPartBudget(bytes, contentType, formPartLimit);
+              return new Response(bytes, {
                 headers: { "content-type": contentType },
-              }).formData()) as FormData);
-            } catch {
-              throw createError(400, "request body is not decodable form data", {
-                expose: true,
-              });
-            }
+              })
+                .formData()
+                .catch(() => {
+                  throw createError(400, "request body is not decodable form data", {
+                    expose: true,
+                  });
+                }) as unknown as Promise<FormData>;
+            });
+            cache.formData = parsed;
+            return parsed;
           },
         };
-        return cache.facade;
+        cache.facade = facade;
+        return facade;
       });
     },
   };
