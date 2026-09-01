@@ -182,7 +182,35 @@ fail(console.error + static 500)`；`onAppError`/`errorStatusCode`/`isErrorLike`
 附带结构清理：错误漏斗抽为 `core/error-response.ts`（dispatch 500 行预算）；
 `finalizeGuarded` 删除运行时不可达的 Promise 分支；`sanitizeEmptyStatus` 去重。
 
-### 10.5 行为增量声明
+### 10.5 性能轮：错误路径成本解剖与三项优化
+
+`bench/error-profile.ts`（a–h 变体分解，fresh-process）定位差距构成：
+
+| 层                                | keala | Hono |        差 |
+| --------------------------------- | ----: | ---: | --------: |
+| 快乐路径机器底座（预构建响应）    |   198 |  185 |      平价 |
+| 错误路径 + 预构建响应（纯漏斗差） |  ~577 | ~486 | **+91ns** |
+| 错误路径 + 构建信封（c.json）     | ~1000 | ~790 |    +210ns |
+
+据此实施三项优化（全量 1957/1936 用例与 review 锁保护下）：
+
+1. **takeover 跳过 context reset**——reset 只服务内置路径（从状态构造），
+   接管路径的 Response 已建成，合并按名排除 content 头，池化回收自带
+   重置；reset 移入 `builtinErrorResponse`。
+2. **`mapperFailed` 提升为模块级**——去掉每错误一次的闭包分配。
+3. **decline 快速路径**——无 staged 头/无 error.headers/非 HEAD/带体状态
+   时直接构造逐字节相同的内置响应，绕过 staged-state + finalize 全套机器
+   （decline 1040 → ~915ns，从最慢形态变为与接管持平）。
+
+**剩余差距的诚实归因**（~91ns 漏斗 + ~50ns 糖前奏）：买的是 Hono 没有的
+保证——恒为 HttpError 的契约、不可用 Response 守卫（review 轮修复的三类
+P1 wire 损坏正是 Hono 会直接放行的形态）、staged 头合并语义、响亮失败。
+错误路径本身是冷路径（业务 4xx 走 `c.throw` 直通，无分类成本）；快乐路径
+keala 持续快于 Hono（427 vs 516 / 320 vs 346）。带 body 读取与每请求分配
+的完整基准会把 ~150ns 的契约成本放大成 ~25–30% 的表观差距——数字入档，
+不做进一步的守卫裁剪换取纳秒。
+
+### 10.6 行为增量声明
 
 除返回 Response 接管外，仅一处行为增量：mapper 抛错/拒绝时框架
 console.error 该错误（原先完全静默）。此外 koa 的 `onerror` 方法、事件面、

@@ -44,6 +44,19 @@ const staticServerError = (method: string | undefined): Response =>
 const isThenable = (value: unknown): value is PromiseLike<unknown> =>
   typeof (value as Partial<PromiseLike<unknown>>)?.then === "function";
 
+/**
+ * The mapper failure path must stay LOUD: its own bug answers the static 500
+ * AND is console.error'd — an envelope bug must never fail silently.
+ * Module-level (no per-error closure): the funnel runs this only on bugs.
+ */
+const mapperFailed = (c: Context, mapperErr: unknown): Response => {
+  const normalized = normalizeError(mapperErr);
+  console.error(
+    `\n  error mapper failed: ${normalized.stack ?? normalized.message}\n  at ${c.url ?? "unknown"}\n`,
+  );
+  return staticServerError(c.method);
+};
+
 const buildErrorResponse = (
   app: Application,
   c: Context,
@@ -53,37 +66,18 @@ const buildErrorResponse = (
   // non-HttpError throwables classify in place as an unexposed 500 (real
   // Errors keep their own identity/stack; frozen ones fall back to a wrap).
   const error = toHttpError(err);
-  // A stale committed response must not shadow the error. The reset is
-  // shared by the built-in and mapper paths; headers the chain already
-  // staged ride along (koa parity — security headers must still cover error
-  // pages); only content-DESCRIBING headers drop, they describe the body
-  // that failed to ship.
-  c._res = undefined;
-  const record = c.headersRecord;
-  if (record !== null) {
-    delete record["content-type"];
-    delete record["content-length"];
-    delete record["transfer-encoding"];
-    delete record["content-encoding"];
-  }
-  c.bodyValue = null;
-  c.messageValue = "";
-  c.flags = 0;
 
   const mapper = app.errorMapper;
   if (mapper === undefined) {
     consoleFallback(app, c.url, error);
     return builtinErrorResponse(app, c, error);
   }
-  // The mapper failure path must stay LOUD: its own bug answers the static
-  // 500 AND is console.error'd — an envelope bug must never fail silently.
-  const fail = (mapperErr: unknown): Response => {
-    const normalized = normalizeError(mapperErr);
-    console.error(
-      `\n  error mapper failed: ${normalized.stack ?? normalized.message}\n  at ${c.url ?? "unknown"}\n`,
-    );
-    return staticServerError(c.method);
-  };
+  // TAKEOVER FAST PATH: a mapper returning a Response bypasses the context
+  // reset entirely — the Response is already built, nothing reads the stale
+  // state (retirement resets pooled contexts; the merge excludes
+  // content-describing headers by name). The reset only exists for the
+  // built-in path, which constructs FROM that state — see
+  // builtinErrorResponse. One reset's worth of writes saved per takeover.
   try {
     const out = mapper(error, c);
     if (isThenable(out)) {
@@ -92,12 +86,12 @@ const buildErrorResponse = (
       // through the never-reject boundary (review round finding).
       return Promise.resolve(out).then(
         (res) => finalizeMapperResponse(app, c, res, error),
-        (mapperErr: unknown) => fail(mapperErr),
+        (mapperErr: unknown) => mapperFailed(c, mapperErr),
       );
     }
     return finalizeMapperResponse(app, c, out, error);
   } catch (mapperErr) {
-    return fail(mapperErr);
+    return mapperFailed(c, mapperErr);
   }
 };
 
@@ -206,6 +200,42 @@ const builtinErrorResponse = (
   c: Context,
   error: HttpError,
 ): Response | Promise<Response> => {
+  // A stale committed response must not shadow the error; the built-in
+  // constructs FROM this state, so reset it here. Headers the chain staged
+  // ride along (koa parity — security headers must still cover error
+  // pages); only content-DESCRIBING headers drop (they describe the body
+  // that failed to ship). The takeover path skips this entirely.
+  c._res = undefined;
+  const record = c.headersRecord;
+  if (record !== null) {
+    delete record["content-type"];
+    delete record["content-length"];
+    delete record["transfer-encoding"];
+    delete record["content-encoding"];
+  }
+  c.bodyValue = null;
+  c.messageValue = "";
+  c.flags = 0;
+  // FAST PATH: nothing staged, nothing to replay, not HEAD, bodied status —
+  // construct the exact same bytes directly and skip the staged-state
+  // machinery + finalize walk entirely (the default app's every error page).
+  // Byte-equivalence with the staged path is locked by the R4.3 tests.
+  if (
+    c.headersRecord === null &&
+    error.headers === undefined &&
+    c.method !== "HEAD" &&
+    !isEmptyStatus(error.status)
+  ) {
+    return new Response(
+      error.expose === true
+        ? error.message
+        : statusMessage(error.status) || "Internal Server Error",
+      {
+        status: error.status,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      },
+    );
+  }
   for (const [field, value] of Object.entries(error.headers ?? {})) {
     // The error path must never throw; skip headers that fail validation.
     try {
