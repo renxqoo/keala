@@ -19,7 +19,7 @@
 ### 2.1 API
 
 ```ts
-type ErrorMapper = (error: HttpError, c: Context) => Response | Promise<Response> | void;
+type ErrorMapper = (error: HttpError, c: Context) => Response | void | Promise<Response | void>;
 
 app.onError(mapper): Application;
 ```
@@ -30,9 +30,9 @@ app.onError(mapper): Application;
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **单槽**：重复注册抛 `TypeError`（与 `app.ws` 重复注册同风格）；多方协作在各自的函数里组合，不靠隐式多播                                                                                                                              |
 | 2   | 到达 mapper 的错误**恒为 HttpError**（带合法 `.status`）；非 HttpError 的抛出物在漏斗入口**原地分类**为 500（`expose:false`）——真实 Error 保持自身对象/名字/栈（零新增栈捕获），非 Error 抛出物经 `normalizeError` 归一并携带 `cause` |
-| 3   | 返回 `Response` → 接管：HEAD 请求剥 body；`error.headers` 与安全 staged 头 **if-absent** 合并（mapper 自设的头永远赢；content 描述头永不补）                                                                                          |
+| 3   | 返回 `Response` → 接管：HEAD 请求剥 body；`error.headers` 与安全 staged 头 **if-absent** 合并（mapper 自设的头永远赢；content 描述头永不补）；运行时不可变 Headers 在确需合并时重建一次                                               |
 | 4   | 返回 `void` → 内置默认响应（text/plain，非 expose 的 message 永不泄露）                                                                                                                                                               |
-| 5   | 返回 thenable → await；mapper 抛错/拒绝 → static 500（HEAD 感知）且**框架 console.error 该错误**——mapper 的 bug 必出声，不再静默                                                                                                      |
+| 5   | 返回 thenable → await；mapper 抛错/拒绝或返回非 Response/非 `undefined` → static 500（HEAD 感知）且**框架 console.error 该错误**——mapper 的 bug 必出声，不再静默                                                                      |
 | 6   | 未注册 mapper + 5xx + 非 test env → 框架 console.error；注册后日志完全是 mapper 的副作用（想静默就注册一个空函数，显式优于 `silent` 开关）                                                                                            |
 | 7   | 覆盖范围 = 错误漏斗全体：chain 抛错（handler/middleware/`c.throw`）、finalize 失败（不可序列化 body 等，koa 中间件结构上永远看不到的路径）、ws upgrade 拒绝；不含路由未中 404（`app.notFound` 管）与响应开始后的流中断（物理限制）    |
 | 8   | `app.handle` 永不 reject（既有边界不变）                                                                                                                                                                                              |
@@ -106,10 +106,10 @@ app.onError(mapper): Application;
 
 ## 9. 验收
 
-- [x] §6 六组行为锁全绿；全量 Node（1904 passed）/ Bun（1880 passed）/ build / smoke / example 通过
+- [x] §6 六组行为锁全绿；全量 Node（1962 passed）/ Bun（1940 passed）/ build / smoke / example / soak 通过
 - [x] 删除清单落地（emitter 模块、off/emit/listenerCount、silent、statusCode 别名、第三方回退链、onAppError 分类豁免），无残留死代码
 - [x] 快乐路径零回退（ABBA 四案例 IQR 带内平价）；错误路径对拍数字入档（§10.2）
-- [x] 覆盖率 97.25/92.04/96.13/98.55，四项均高于 R4.2 基线 97.15/91.89/96.03/98.53
+- [x] 覆盖率 97.27/92.07/96.16/98.57，四项均不低于 R4.3 复核前基线 97.25/92.04/96.13/98.55
 - [x] README 错误处理章节重写、DESIGN §2.2 已随方案修订
 
 ## 10. 实施记录
@@ -215,3 +215,33 @@ keala 持续快于 Hono（427 vs 516 / 320 vs 346）。带 body 读取与每请�
 除返回 Response 接管外，仅一处行为增量：mapper 抛错/拒绝时框架
 console.error 该错误（原先完全静默）。此外 koa 的 `onerror` 方法、事件面、
 `silent`、`statusCode` 别名按用户裁决直接删除，未保留过渡期。
+
+### 10.7 最终生产复核与消费者验证
+
+最终复核新增并修复三类契约缺口：
+
+1. 非 `undefined` 的非法 mapper 返回值过去会静默 decline，可能泄露原始
+   4xx 状态/消息并掩盖企业信封故障；现与 mapper 抛错同样响亮失败为静态 500。
+2. Node 的 `Response.redirect()` 暴露不可变 Headers，过去会静默丢失
+   `WWW-Authenticate`/安全头；现仅在确需合并时复制头并重建一次 Response，
+   body 流只转移、不读取、不缓冲，`Set-Cookie` 多值保持。
+3. 多值头夹一个非法值时，过去会丢弃其后的合法兄弟值；现逐值验证、只丢
+   非法项。`ErrorMapper` 类型同步允许 `Promise<void>`，异步观察后 decline
+   不再需要类型断言。
+
+同步 Response mapper 改为品牌判断优先，删除常见路径上的 thenable 属性探测
+和重复类型判断；无 HEAD/空状态/待合并头时直接返回。fresh-process 六轮交替：
+完整 JSON 信封修复后中位数 1155ns，修复前 1167ns（约 -1%，IQR 重叠，按
+**零回退**判定，不宣称真实性能提升）；decline 998ns vs 987ns（约 +1%，同样
+在噪声内）。同轮 Hono JSON 信封 852ns；差距来自本文保留的 HttpError 归一、
+不可用 Response 守卫、HEAD/空状态消毒和头继承保证，不以删除生产安全契约换分。
+
+Tillgate 源码与锁文件未修改。临时把其已安装 `keala` 指向本分支构建产物后，
+`@tillgate/http`、gateway、admin-api、client-api、trace-receiver 共 718 项测试
+通过，关键两个包非缓存 TypeScript 检查通过；依赖目录随后原样恢复，Tillgate
+工作树保持 clean。
+
+并行全套复核还暴露两处性能门禁使用墙钟成对计时，在其他 Vitest worker 抢占
+单侧窗口时会制造 50% 以上的假回退。两套异步比例门禁改用 `process.cpuUsage`
+（保留原比例阈值）后，目标性能文件连续四轮、Bun 全套连续两轮稳定通过；
+fresh-process 仍作为真实性能结论的唯一依据。

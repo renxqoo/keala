@@ -242,7 +242,7 @@ const MAPPERS: readonly MapperFactory[] = [
     make: () => async () => ({ nope: true }) as unknown as Response,
   },
   {
-    // thenable resolving with non-Response garbage -> decline
+    // thenable resolving with non-Response garbage -> loud static 500
     id: "thenable-garbage",
     requests: 1,
     make: () => () =>

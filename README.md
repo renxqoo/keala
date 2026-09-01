@@ -359,11 +359,13 @@ app.onError((error, c) => {
   internal messages never leak unless you opt in (`expose: true`).
 - A takeover Response keeps its own headers; `error.headers`
   (e.g. `WWW-Authenticate`) and staged security headers are merged only into
-  absent slots. HEAD bodies are stripped.
+  absent slots. Immutable runtime Responses are rebuilt once when a merge is
+  required; HEAD bodies are stripped.
 - The funnel covers **everything**: handler/middleware throws, `c.throw`,
   finalize failures (unserializable bodies) and ws upgrade rejections.
 - A failing mapper answers the static 500 and the framework console.errors
-  the mapper bug — envelope bugs are never silent.
+  the mapper bug — envelope bugs are never silent. Only `undefined` declines;
+  any other non-Response return is treated as the same loud mapper failure.
 - No mapper registered + 5xx + non-test env keeps the framework console
   fallback; register `app.onError(() => {})` to silence it explicitly.
 - `app.notFound(fn)` must **return** a Response. It runs inside the

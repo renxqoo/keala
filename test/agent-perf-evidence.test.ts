@@ -2,10 +2,10 @@
  * Performance evidence: regression fences, NOT measurements.
  *
  * The budget fence is a RATIO against a raw-Response baseline measured in the
- * same process and batch loop — machine speed and coverage instrumentation
- * scale both loops alike, so the fence holds under `vitest --coverage` and on
- * any host. Structural fences assert the zero-allocation invariants the fast
- * paths depend on.
+ * same process and batch loop. Timed async fences use process CPU time so
+ * parallel Vitest worker scheduling cannot charge unrelated wall-clock wait
+ * to only one side. Structural fences assert the zero-allocation invariants
+ * the fast paths depend on.
  */
 
 import { describe, expect, it } from "vitest";
@@ -49,17 +49,19 @@ describe("perf evidence: budgets (ratio fences)", () => {
     let baselineStatus = 0;
     const ratios: number[] = [];
     const measureBaseline = async (): Promise<number> => {
-      const start = performance.now();
+      const start = process.cpuUsage();
       for (let i = 0; i < batch; i++) baselineStatus += (await baselineResponse()).status;
-      return performance.now() - start;
+      const elapsed = process.cpuUsage(start);
+      return elapsed.user + elapsed.system;
     };
     const measureApp = async (): Promise<number> => {
-      const start = performance.now();
+      const start = process.cpuUsage();
       for (let i = 0; i < batch; i++) {
         const res = await app.handle(requests[i % 4]!);
         if (res.status !== 200) throw new Error("unexpected status in budget loop");
       }
-      return performance.now() - start;
+      const elapsed = process.cpuUsage(start);
+      return elapsed.user + elapsed.system;
     };
     for (let sample = 0; sample < samples; sample++) {
       // Rotate order so neither side owns a systematically colder window.

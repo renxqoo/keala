@@ -30,7 +30,7 @@ const medianOf = (xs: number[]): number => {
   return sorted[Math.floor(sorted.length / 2)] as number;
 };
 
-/** Alternate two ops A/B/A/B within each sample; return per-op medians (ns). */
+/** Alternate A/B; CPU time excludes parallel-worker scheduler wait. */
 const measurePair = async (
   opA: () => Promise<unknown>,
   opB: () => Promise<unknown>,
@@ -45,9 +45,10 @@ const measurePair = async (
   const timesA: number[] = [];
   const timesB: number[] = [];
   const timed = async (op: () => Promise<unknown>): Promise<number> => {
-    const start = performance.now();
+    const start = process.cpuUsage();
     for (let i = 0; i < batch; i++) await op();
-    return ((performance.now() - start) * 1e6) / batch;
+    const elapsed = process.cpuUsage(start);
+    return ((elapsed.user + elapsed.system) * 1e3) / batch;
   };
   for (let sample = 0; sample < samples; sample++) {
     if (sample % 2 === 0) {

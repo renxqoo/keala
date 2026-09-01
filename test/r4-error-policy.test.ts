@@ -129,6 +129,21 @@ describe("R4.3 error policy: async mapper", () => {
     expect(await res.text()).toBe("async-503");
   });
 
+  it("an async observer may decline after its side effect", async () => {
+    let observed = false;
+    const app = boot((a) => {
+      a.get("/boom", (c) => c.throw(422, "invalid", { expose: true }));
+      a.onError(async () => {
+        await Promise.resolve();
+        observed = true;
+      });
+    });
+    const res = await app.handle(requestFor("/boom"));
+    expect(observed).toBe(true);
+    expect(res.status).toBe(422);
+    expect(await res.text()).toBe("invalid");
+  });
+
   it("mapper rejection settles to static 500 without escaping app.handle", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
@@ -167,6 +182,28 @@ describe("R4.3 error policy: mapper failure", () => {
       expect(await res.text()).toBe("Internal Server Error");
       expect(consoleError).toHaveBeenCalledTimes(1);
       expect(consoleError.mock.calls.flat().join(" ")).toContain("envelope bug");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it.each([
+    ["sync", () => "not-a-response"],
+    ["async", async () => ({ nope: true })],
+  ])("%s invalid return answers a loud static 500 instead of declining", async (_kind, mapper) => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const app = boot((a) => {
+        a.get("/boom", (c) => c.throw(422, "client-visible", { expose: true }));
+        a.onError(mapper as never);
+      });
+      const res = await app.handle(requestFor("/boom"));
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe("Internal Server Error");
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError.mock.calls.flat().join(" ")).toContain(
+        "error mapper must return a Response, a thenable, or undefined",
+      );
     } finally {
       consoleError.mockRestore();
     }
@@ -214,23 +251,62 @@ describe("R4.3 error policy: header merge (if-absent)", () => {
     expect(res.headers.get("retry-after")).toBe("5");
   });
 
+  it("an invalid array item drops alone without discarding valid sibling values", async () => {
+    const app = boot((a) => {
+      a.get("/cookies", (c) =>
+        c.throw(401, "no", {
+          expose: true,
+          headers: { "set-cookie": ["a=1; Path=/", "bad\r\nvalue", "b=2; Path=/"] },
+        }),
+      );
+      a.onError(() => new Response("unauthorized", { status: 401 }));
+    });
+    const res = await app.handle(requestFor("/cookies"));
+    expect(res.headers.getSetCookie()).toEqual(["a=1; Path=/", "b=2; Path=/"]);
+  });
+
   // Bun 1.4 mutates even redirect Headers (R4.1 finding) — the immutable
   // branch only exists on Node runtimes.
   it.skipIf(typeof Bun !== "undefined")(
-    "an immutable takeover Response ships untouched when the merge cannot write",
+    "an immutable takeover Response is rebuilt so protocol headers are not lost",
     async () => {
       const app = boot((a) => {
+        a.use((c, next) => {
+          void c.set("x-security", "staged");
+          return next();
+        });
         a.get("/red", (c) =>
           c.throw(302, "go", { expose: true, headers: { "x-would-merge": "yes" } }),
         );
         // Response.redirect produces an immutable Headers on Node — the
-        // if-absent merge must swallow the TypeError, not fail the request.
+        // framework must rebuild it rather than silently discard protocol
+        // and security headers.
         a.onError(() => Response.redirect("http://localhost:3000/elsewhere"));
       });
       const res = await app.handle(requestFor("/red"));
       expect(res.status).toBe(302);
       expect(res.headers.get("location")).toBe("http://localhost:3000/elsewhere");
-      expect(res.headers.get("x-would-merge")).toBeNull();
+      expect(res.headers.get("x-would-merge")).toBe("yes");
+      expect(res.headers.get("x-security")).toBe("staged");
+    },
+  );
+
+  it.skipIf(typeof Bun !== "undefined")(
+    "an immutable takeover is also rebuilt when only staged headers need merging",
+    async () => {
+      const app = boot((a) => {
+        a.use((c, next) => {
+          void c.set("x-security", "staged-only");
+          return next();
+        });
+        a.get("/red", () => {
+          throw new Error("redirect through mapper");
+        });
+        a.onError(() => Response.redirect("http://localhost:3000/elsewhere"));
+      });
+      const res = await app.handle(requestFor("/red"));
+      expect(res.status).toBe(302);
+      expect(res.headers.get("x-security")).toBe("staged-only");
     },
   );
 

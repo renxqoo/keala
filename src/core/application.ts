@@ -26,7 +26,10 @@ import type { NativeSinkEntry } from "./sink.ts";
  * void keeps the built-in response — side effects in the same function are
  * the observation story. Single slot: a second registration throws.
  */
-export type ErrorMapper = (error: HttpError, c: Context) => Response | Promise<Response> | void;
+export type ErrorMapper = (
+  error: HttpError,
+  c: Context,
+) => Response | void | Promise<Response | void>;
 export type NotFoundHandler = (c: Context) => Response | void;
 
 /** Bun-native websocket event handlers (the `ws` argument IS Bun's socket). */

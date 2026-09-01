@@ -80,30 +80,46 @@ const buildErrorResponse = (
   // builtinErrorResponse. One reset's worth of writes saved per takeover.
   try {
     const out = mapper(error, c);
+    // The overwhelmingly common enterprise mapper is synchronous and returns
+    // a Response. Brand-check it first: probing `.then` and then brand-checking
+    // again added two redundant operations to every mapped error.
+    if (out instanceof Response) return finalizeTakeoverResponse(c, out, error);
+    if (out === undefined) return builtinErrorResponse(app, c, error);
     if (isThenable(out)) {
       // ADOPT through Promise.resolve: a hand-rolled thenable's .then may
       // return anything — verbatim .then() chaining once leaked undefined
       // through the never-reject boundary (review round finding).
       return Promise.resolve(out).then(
-        (res) => finalizeMapperResponse(app, c, res, error),
+        (res) => finalizeMapperResult(app, c, res, error),
         (mapperErr: unknown) => mapperFailed(c, mapperErr),
       );
     }
-    return finalizeMapperResponse(app, c, out, error);
+    return invalidMapperResult(c);
   } catch (mapperErr) {
     return mapperFailed(c, mapperErr);
   }
 };
 
-/** Apply the takeover rules to a mapper's return value (R4.3 rules 3-4). */
-const finalizeMapperResponse = (
+const invalidMapperResult = (c: Context): Response =>
+  mapperFailed(c, new TypeError("error mapper must return a Response, a thenable, or undefined"));
+
+/** Validate the asynchronously adopted value, then apply rules 3-4. */
+const finalizeMapperResult = (
   app: Application,
   c: Context,
   res: unknown,
   error: HttpError,
 ): Response => {
-  // void — or any non-Response garbage — declines to the built-in response.
-  if (!(res instanceof Response)) return builtinErrorResponse(app, c, error) as Response;
+  // Only the contract's explicit `void` declines. Treat every other value as
+  // a mapper bug: silently accepting a wrong return type can leak the
+  // original error body/status and hides a broken enterprise envelope.
+  if (res === undefined) return builtinErrorResponse(app, c, error) as Response;
+  if (!(res instanceof Response)) return invalidMapperResult(c);
+  return finalizeTakeoverResponse(c, res, error);
+};
+
+/** Apply takeover wire-safety and merge rules to a known Response. */
+const finalizeTakeoverResponse = (c: Context, res: Response, error: HttpError): Response => {
   // A takeover must be SERVABLE. Error-type Responses (Response.error()) and
   // consumed or pre-locked bodies would corrupt the wire — or the NEXT
   // request when the mapper returns a cached module-level Response, a
@@ -120,13 +136,22 @@ const finalizeMapperResponse = (
     );
     return staticServerError(c.method);
   }
+  // Common envelope fast path: no transformation or inherited headers are
+  // required. Returning here avoids the larger merge routine entirely.
+  if (
+    c.method !== "HEAD" &&
+    !isEmptyStatus(res.status) &&
+    error.headers === undefined &&
+    c.headersRecord === null
+  ) {
+    return res;
+  }
   let out = res;
   // RFC 9110 §8.6: 204/304 MUST NOT carry a body — sanitized exactly like
   // the committed-Response path (Bun constructs it, undici refuses).
   if (isEmptyStatus(res.status) && res.body !== null) out = sanitizeEmptyStatus(res);
   if (c.method === "HEAD" && out.body !== null) out = stripBody(out);
-  mergeAbsentHeaders(out, error, c.headersRecord);
-  return out;
+  return mergeAbsentHeaders(out, error, c.headersRecord);
 };
 
 /**
@@ -154,26 +179,47 @@ const isMergeForbidden = (name: string): boolean =>
  * while values APPEND, so staged multi-value headers (Set-Cookie rotation)
  * keep every value like the built-in path does. One invalid entry drops
  * alone — a bad header must never cost WWW-Authenticate or the staged
- * security headers. An immutable Headers object simply rejects every write
- * (each caught) and ships exactly what the mapper built.
+ * security headers. Runtime-created Responses may expose immutable Headers
+ * (notably Response.redirect on Node); in that case the Response is rebuilt
+ * once with mutable copied headers so protocol/security headers are not lost.
  */
-const mergeAbsentHeaders = (res: Response, error: HttpError, staged: HeaderMap | null): void => {
-  const headers = res.headers;
+const applyAbsentHeaders = (
+  headers: Headers,
+  error: HttpError,
+  staged: HeaderMap | null,
+): boolean => {
   const errorHeaders = error.headers;
   if (errorHeaders !== undefined) {
     for (const [field, value] of Object.entries(errorHeaders)) {
       if (isMergeForbidden(field)) continue;
       try {
         if (headers.has(field)) continue;
-        if (Array.isArray(value)) {
-          for (const item of value) headers.append(field, String(item));
-        } else {
-          headers.set(field, String(value));
-        }
       } catch {
-        // Invalid name/value from an error object — drop it alone. Bun's
-        // Headers.has() itself throws on malformed names, so the has() call
-        // lives inside this guard too.
+        // Headers.has() can only reject a malformed name; immutable guards
+        // reject writes, not reads. Drop this field without touching peers.
+        continue;
+      }
+      const multiValue = Array.isArray(value);
+      const values = multiValue ? value : [value];
+      for (const item of values) {
+        try {
+          if (multiValue) {
+            headers.append(field, String(item));
+          } else {
+            headers.set(field, String(item));
+          }
+        } catch {
+          // Distinguish a malformed VALUE (drop only that array item) from a
+          // valid write rejected by an immutable Headers guard (request one
+          // rebuild). The name was already validated by headers.has().
+          try {
+            const probe = new Headers();
+            probe.append(field, String(item));
+            return false;
+          } catch {
+            // Invalid value — keep scanning valid siblings.
+          }
+        }
       }
     }
   }
@@ -188,10 +234,45 @@ const mergeAbsentHeaders = (res: Response, error: HttpError, staged: HeaderMap |
         mergedNames.add(name);
         headers.append(name, value);
       } catch {
-        // Invalid staged header — drop it alone.
+        try {
+          const probe = new Headers();
+          probe.append(name, value);
+          return false;
+        } catch {
+          // Invalid staged header — drop it alone.
+        }
       }
     }
   }
+  return true;
+};
+
+const mutableHeaderCopy = (source: Headers): Headers => {
+  const headers = new Headers();
+  for (const [name, value] of source.entries()) {
+    if (name !== "set-cookie") headers.append(name, value);
+  }
+  for (const cookie of source.getSetCookie()) headers.append("set-cookie", cookie);
+  return headers;
+};
+
+const mergeAbsentHeaders = (
+  res: Response,
+  error: HttpError,
+  staged: HeaderMap | null,
+): Response => {
+  if (applyAbsentHeaders(res.headers, error, staged)) return res;
+
+  // A valid mutation failed, so the runtime guard is immutable. Rebuilding
+  // transfers the still-unconsumed body stream without reading or buffering
+  // it and preserves multi-value Set-Cookie entries exactly.
+  const rebuilt = new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: mutableHeaderCopy(res.headers),
+  });
+  void applyAbsentHeaders(rebuilt.headers, error, staged);
+  return rebuilt;
 };
 
 /** The built-in text/plain error response — the decline default. */

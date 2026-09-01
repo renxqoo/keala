@@ -315,24 +315,38 @@ pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则�
 | `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` —— Bun.serve 已内建                                |
 | `new Hono({ strict: false })`                      | 没有 strict 模式：`/path` 与 `/path/` 是同一条路由                    |
 | `new URL(c.req.url())`                             | `c.url` 是 path+search（koa 形态）；绝对地址是 `c.raw.url`            |
-| `app.onError(fn)` 产出错误响应                     | `app.onError` 只观察 —— 抛 `createError(status, { expose })`          |
+| `app.onError(fn)` 产出错误响应                     | 同样返回 Response；额外支持返回 void 使用内置响应                     |
 | `app.notFound(fn)` 可以 throw                      | 必须 `return` Response —— throw 落入通用 500 路径                     |
 
 值得知道的差异：`c.body` 是**响应**体（hono 的请求体在 `c.raw` 或解析
 插件上）；中间件按 koa 语义运行 —— 见
 
-## 错误处理：onError、onerror、notFound
+## 错误处理：onError、notFound
 
-- `app.onError(fn)` 订阅的是**观察者**（类型化的日志/遥测钩子）——它
-  不产出错误响应；`app.onerror(err, c)` 是 koa 的日志钩子（emit 给
-  监听器 + 兜底 console），同样不产出。客户端看到的响应永远由 keala
-  的错误路径根据被抛出的错误构建：`throw createError(404, "gone",
-{ expose: true })` 决定状态与消息；未知错误类型渲染为不透明的 500。
-- 需要自定义错误信封？在最外层中间件里包住链：
-  `app.use(async (c, next) => { try { await next() } catch (e) { return envelope(c, e) } })`。
-- `app.notFound(fn)` 必须 **return** 一个 Response。它在 finalizer 内
-  执行，throw 会落入通用错误路径 —— keala 的 `createError` 按
-  status/expose 渲染，其余一律 500。
+`app.onError(mapper)` 是唯一错误入口（单槽；重复注册会抛错）：
+
+```ts
+app.onError((error, c) => {
+  // 副作用就是观察机制：在这里统一日志与遥测
+  if (error.status >= 500) logger.error({ err: error.stack, url: c.url });
+  // 返回 Response 接管错误响应；不返回则使用 keala 内置响应
+  return c.json({ error: { code: error.code ?? `HTTP_${error.status}` } }, error.status);
+});
+```
+
+- mapper 恒定收到 `HttpError`（`status`/`expose`/`code`/`headers`）；普通
+  抛出物会被归类为不暴露细节的 500。
+- 接管响应保留自身头；`error.headers`（如 `WWW-Authenticate`）和已暂存
+  的安全头只补空位。运行时给出的不可变 Response 会在确需合并时重建
+  一次；HEAD 响应会剥除 body。
+- 错误漏斗覆盖 handler/middleware 抛错、`c.throw`、finalize 失败和 ws
+  upgrade 拒绝。
+- mapper 抛错、拒绝或返回非 Response/非 `undefined` 值时，框架会响亮
+  `console.error` 并返回静态 500；只有 `undefined` 表示使用内置响应。
+- 未注册 mapper 时，非 test 环境的 5xx 保留框架 console 兜底；注册
+  `app.onError(() => {})` 可显式静默。
+- `app.notFound(fn)` 必须 **return** 一个 Response；其中抛错会进入通用
+  错误漏斗。
   [全局中间件与路由顺序](#全局中间件与路由顺序--头号陷阱)。
 
 ## 为什么快
@@ -354,7 +368,7 @@ pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则�
 
 | 成员                                                                           | 说明                                                                                                                                  |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Keala(options?)`                                                          | 应用类（koa 风格的 `new`）。选项：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`subdomainOffset`、`env`、`silent`                 |
+| `new Keala(options?)`                                                          | 应用类（koa 风格的 `new`）。选项：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`subdomainOffset`、`env`                           |
 | `app.use(...mw)`                                                               | 全局中间件，编译进每条路由链（延迟 `use` 会重新组合）                                                                                 |
 | `app.use(path, ...mw)`                                                         | 静态精确路径或末尾 `/*` 作用域中间件；同样覆盖作用域内的 404/405                                                                      |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | 路由注册；命名形式 `app.get(name, path, ...handlers)`                                                                                 |
@@ -364,7 +378,7 @@ pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则�
 | `app.handle(request, runtime?)`                                                | fetch 风格处理器 → `Promise<Response>`，永不 reject；`runtime = { server?, remote?, env? }` 为 `c.ip` 和 websocket 升级提供数据       |
 | `app.listen(port?, host?, cb?)`                                                | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `keala/node` 的 `listen()` |
 | `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | 把静态路由沉入 Bun 原生路由表；在运行中的服务器上热重载该表                                                                           |
-| `app.onError(fn)` / `app.notFound(fn)`                                         | 错误订阅与自定义 404；`silent`/`env: "test"` 会抑制默认日志                                                                           |
+| `app.onError(mapper)` / `app.notFound(fn)`                                     | 单槽错误映射器（`Response \| void`）与自定义 404；`env: "test"` 抑制默认 console 兜底                                                 |
 | `app.decorate(key, value)`                                                     | 扩展每个 context（安装期进行；重复/核心 key 抛错 —— 绝不静默遮蔽）                                                                    |
 | `app.ws(path, handlers)`                                                       | WebSocket 路由（仅 Bun；重复路径在安装时抛错）                                                                                        |
 | `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)` | 重定向路由与命名 URL 构建                                                                                                             |
