@@ -276,7 +276,9 @@ don't handle, or use c.throw() to reject intentionally.
 ```
 
 有意的拒绝（`c.throw`、抛错）不会警告；生产与 test 环境编出的链不含
-标记 —— 零开销。
+标记 —— 零开销。同一 dev 模式还会在**非终端**中间件（路由级或
+`Router.use`）不调 `next()` 也未产出响应时警告 —— 这种请求正走向一个
+静默的 404。
 
 ## 从 koa 迁移
 
@@ -311,10 +313,26 @@ don't handle, or use c.throw() to reject intentionally.
 | `app.fetch(req)` → `Response \| Promise<Response>` | `await app.handle(req)` → 恒为 `Promise<Response>`，永不 reject       |
 | `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` —— Bun.serve 已内建                                |
 | `new Hono({ strict: false })`                      | 没有 strict 模式：`/path` 与 `/path/` 是同一条路由                    |
+| `new URL(c.req.url())`                             | `c.url` 是 path+search（koa 形态）；绝对地址是 `c.raw.url`            |
+| `app.onError(fn)` 产出错误响应                     | `app.onError` 只观察 —— 抛 `createError(status, { expose })`          |
+| `app.notFound(fn)` 可以 throw                      | 必须 `return` Response —— throw 落入通用 500 路径                     |
 
 值得知道的差异：`c.body` 是**响应**体（hono 的请求体在 `c.raw` 或解析
 插件上）；中间件按 koa 语义运行 —— 见
-[全局中间件与路由顺序](#全局中间件与路由顺序--头号陷阱)。
+
+## 错误处理：onError、onerror、notFound
+
+- `app.onError(fn)` 订阅的是**观察者**（类型化的日志/遥测钩子）——它
+  不产出错误响应；`app.onerror(err, c)` 是 koa 的日志钩子（emit 给
+  监听器 + 兜底 console），同样不产出。客户端看到的响应永远由 keala
+  的错误路径根据被抛出的错误构建：`throw createError(404, "gone",
+{ expose: true })` 决定状态与消息；未知错误类型渲染为不透明的 500。
+- 需要自定义错误信封？在最外层中间件里包住链：
+  `app.use(async (c, next) => { try { await next() } catch (e) { return envelope(c, e) } })`。
+- `app.notFound(fn)` 必须 **return** 一个 Response。它在 finalizer 内
+  执行，throw 会落入通用错误路径 —— keala 的 `createError` 按
+  status/expose 渲染，其余一律 500。
+  [全局中间件与路由顺序](#全局中间件与路由顺序--头号陷阱)。
 
 ## 为什么快
 

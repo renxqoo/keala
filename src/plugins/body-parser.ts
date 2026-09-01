@@ -154,7 +154,10 @@ export const readBodyLimited = async (c: Context, limit: number): Promise<Uint8A
     // The body is already consumed — but THIS reader's limit still applies.
     const bytes = await cache.bytes;
     if (bytes.byteLength > limit) {
-      throw createError(413, `request body exceeds the ${limit} byte limit`, { expose: true });
+      throw createError(413, `request body exceeds the ${limit} byte limit`, {
+        expose: true,
+        code: "payload_too_large",
+      });
     }
     return bytes;
   }
@@ -162,11 +165,31 @@ export const readBodyLimited = async (c: Context, limit: number): Promise<Uint8A
   if (declared !== undefined && declared > limit) {
     throw createError(413, `request body of ${declared} bytes exceeds the ${limit} byte limit`, {
       expose: true,
+      code: "payload_too_large",
     });
   }
   const read = (async () => {
-    const reader = c.raw.body?.getReader();
-    if (reader === undefined) return new Uint8Array(0);
+    const body = c.raw.body;
+    if (body === null) return new Uint8Array(0);
+    if (declared !== undefined) {
+      // Declared-length fast path (the common case — every real client
+      // declares): ONE native arrayBuffer() read. With the declared length
+      // already verified ≤ limit up front, HTTP framing pins delivery, and
+      // the post-read guard fails closed on a lying-length stream. Measured
+      // ~2x the native floor versus the reader loop it replaced (per-read
+      // promises + chunk bookkeeping), DOGFOOD-R2 C1.
+      const buffer = await c.raw.arrayBuffer();
+      if (buffer.byteLength > limit) {
+        throw createError(413, `request body exceeds the ${limit} byte limit`, {
+          expose: true,
+          code: "payload_too_large",
+        });
+      }
+      // A zero-copy view: exact fill, or the delivered bytes of a truncated
+      // stream, alike.
+      return new Uint8Array(buffer, 0, buffer.byteLength);
+    }
+    const reader = body.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
     for (;;) {
@@ -175,10 +198,15 @@ export const readBodyLimited = async (c: Context, limit: number): Promise<Uint8A
       total += value.byteLength;
       if (total > limit) {
         await reader.cancel().catch(() => undefined);
-        throw createError(413, `request body exceeds the ${limit} byte limit`, { expose: true });
+        throw createError(413, `request body exceeds the ${limit} byte limit`, {
+          expose: true,
+          code: "payload_too_large",
+        });
       }
       chunks.push(value);
     }
+    // A single-chunk body needs no reassembly copy.
+    if (chunks.length === 1) return chunks[0] as Uint8Array;
     const out = new Uint8Array(total);
     let offset = 0;
     for (const chunk of chunks) {
@@ -252,7 +280,10 @@ export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
               cache.json = { value: parsed };
               return parsed;
             } catch {
-              throw createError(400, "request body is not valid JSON", { expose: true });
+              throw createError(400, "request body is not valid JSON", {
+                expose: true,
+                code: "invalid_json",
+              });
             }
           },
           text: async () => {

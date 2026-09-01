@@ -67,7 +67,15 @@ export { resolveRelativeSegments, isWithinRoot, findSymlink } from "./utils/path
 export type { QueryMap, QueryValue } from "./utils/query.ts";
 export { startBunServer, type ServerHandle, type ServeImplementation } from "./adapters/bun.ts";
 export { compilePattern, type CompiledSegment, type PatternIR } from "./router/pattern.ts";
-export type { AppOptions, HeaderValue, ListenOptions, ResponseBody, Runtime } from "./types.ts";
+export type {
+  AppOptions,
+  HeaderValue,
+  ListenOptions,
+  ResponseBody,
+  Runtime,
+  Next,
+} from "./types.ts";
+export type { RouteHandler } from "./router/router.ts";
 export type { Plugin } from "./types.ts";
 export type { NativeSinkEntry, NativeStaticSink, NativeDirSink } from "./core/sink.ts";
 export {

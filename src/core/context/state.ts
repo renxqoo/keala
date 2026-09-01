@@ -39,7 +39,13 @@ export interface ContextState {
    * 64 = message written AFTER the commit (messageValue wins the reason
    * phrase), 128 = body written AFTER the commit (bodyValue wins the body),
    * 256 = dev tracing: a matched route's own layers were reached
-   * (DOGFOOD-R1 C4 — set by the chain marker, never on the prod hot path).
+   * (DOGFOOD-R1 C4 — set by the chain marker, never on the prod hot path),
+   * 512 = dev tracing enabled for this context (set at creation only when
+   * app.env === "development" — DOGFOOD-R2 C2; compose reads it to gate the
+   * stall bit, production pays one AND per level and never writes),
+   * 1024 = dev tracing: a NON-terminal middleware level returned without
+   * calling next() and without a response — the chain stalled (the request
+   * will answer 404 unless something upstream produced a response).
    * The post-commit flags are the ONLY rebuild inputs — anything staged
    * before the commit was already superseded by the committed Response.
    */
@@ -62,3 +68,11 @@ export interface ContextState {
 /** Flag 256 — dev route tracing (see `flags`). Shared by the router's chain
  *  marker (writer) and dispatch's swallowed-route warning (reader). */
 export const FLAG_ROUTE_REACHED = 256;
+
+/** Flag 512 — dev chain tracing enabled (context creation, dev env only). */
+export const FLAG_DEV_CHAIN = 512;
+
+/** Flag 1024 — a non-terminal middleware level stalled the chain (void
+ *  return, no next, no response). Written by compose, read by dispatch's
+ *  stall warning (DOGFOOD-R2 C2). */
+export const FLAG_CHAIN_STALLED = 1024;

@@ -15,6 +15,7 @@
 
 import type { Next } from "../types.ts";
 import { registerBranch } from "./branches.ts";
+import { FLAG_CHAIN_STALLED, FLAG_DEV_CHAIN } from "./context/state.ts";
 
 /** Anything a handler may return: a committed Response, or nothing. */
 export type HandlerResult = Response | void;
@@ -37,6 +38,33 @@ export type Composed<C extends MiddlewareContext> = Level<C>;
 
 const terminal: Level<MiddlewareContext> = (_c, tail) => tail();
 
+/**
+ * Dev-only stall tracing (DOGFOOD-R2 C2): a NON-terminal level that settles
+ * with void, never called next(), is a dead stop — everything downstream
+ * (including the route handler) never runs and the request answers 404.
+ * The migration-round trap. Production contexts never set FLAG_DEV_CHAIN,
+ * so the check costs one AND and never writes. A terminal handler's void
+ * return is the contract ("untouched → notFound") and is exempt.
+ */
+const markStalled = (
+  c: MiddlewareContext,
+  advanced: boolean,
+  hasDownstream: boolean,
+  result: HandlerResult | undefined,
+): void => {
+  const flags = (c as { flags?: number }).flags;
+  if (
+    flags === undefined ||
+    advanced ||
+    !hasDownstream ||
+    (result !== undefined && result !== null) ||
+    (flags & FLAG_DEV_CHAIN) === 0
+  ) {
+    return;
+  }
+  (c as unknown as { flags: number }).flags = flags | FLAG_CHAIN_STALLED;
+};
+
 /** Commit a settled handler result; undefined means "keep the current slot". */
 const commit = (c: MiddlewareContext, ret: HandlerResult): void => {
   if (ret === undefined || ret === null) return;
@@ -52,9 +80,14 @@ const commit = (c: MiddlewareContext, ret: HandlerResult): void => {
   throw new TypeError(`handler returned ${typeof ret}; only Response, undefined or null are valid`);
 };
 
-const makeLevel =
-  <C extends MiddlewareContext>(handler: Handler<C>, downstream: Level<C>): Level<C> =>
-  (c, tail) => {
+const makeLevel = <C extends MiddlewareContext>(
+  handler: Handler<C>,
+  downstream: Level<C>,
+): Level<C> => {
+  // A level whose downstream is the shared terminal is the LAST handler —
+  // its void return is the contract, not a stall.
+  const hasDownstream = downstream !== (terminal as unknown as Level<C>);
+  return (c, tail) => {
     let advanced = false;
     let floated: Promise<void> | undefined;
     const result = handler(c, () => {
@@ -77,6 +110,7 @@ const makeLevel =
     if (result instanceof Promise) {
       return result.then((settled) => {
         commit(c, settled as HandlerResult);
+        markStalled(c, advanced, hasDownstream, settled as HandlerResult | undefined);
       });
     }
     // Sync return AFTER calling next(): the only statically detectable
@@ -84,8 +118,10 @@ const makeLevel =
     // while this branch can still mutate it (see core/branches.ts).
     if (floated !== undefined) registerBranch(c, floated);
     commit(c, result);
+    markStalled(c, advanced, hasDownstream, result);
     return undefined;
   };
+};
 
 /**
  * Compile a handler stack into a single callable. The result is cached by the

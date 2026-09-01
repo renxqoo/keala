@@ -14,7 +14,7 @@ import {
 } from "../router/router.ts";
 import { NOOP_TAIL } from "./compose.ts";
 import type { Context } from "./context/context.ts";
-import { FLAG_ROUTE_REACHED } from "./context/state.ts";
+import { FLAG_CHAIN_STALLED, FLAG_ROUTE_REACHED } from "./context/state.ts";
 import { retireWithBody, type ContextPool } from "./context/pool.ts";
 import { finalize } from "./respond.ts";
 import { isHttpError, normalizeError } from "../http/errors.ts";
@@ -227,14 +227,30 @@ export const settleHandle = (
   return settled instanceof Promise ? settled : Promise.resolve(settled);
 };
 
-/** Dev-only trace of which matched route a chain was dispatched for. */
+/** Dev-only trace of which matched route a chain was dispatched for.
+ * `marked` = the R1 route-reached marker is compiled into this chain
+ * (global middleware exists); without it the swallow check is skipped —
+ * the marker could never have been set. */
 export interface RouteTrace {
   method: string;
   path: string;
+  marked: boolean;
 }
 
-/** One swallowed-route warning per (app, method, path) — never per request. */
+/** One swallowed-route/stalled-chain warning per (app, method, path). */
 const swallowWarned = new WeakMap<Application, Set<string>>();
+
+const warnOnce = (app: Application, key: string, message: string): boolean => {
+  let seen = swallowWarned.get(app);
+  if (seen === undefined) {
+    seen = new Set<string>();
+    swallowWarned.set(app, seen);
+  }
+  if (seen.has(key)) return false;
+  seen.add(key);
+  console.warn(message);
+  return true;
+};
 
 /**
  * Dev-only (DOGFOOD-R1 C4): the koa contract compiles global middleware INTO
@@ -244,19 +260,39 @@ const swallowWarned = new WeakMap<Application, Set<string>>();
  * success path only: a thrown rejection (c.throw / throw) is an intentional
  * koa pattern and stays silent. Production/test chains never compile the
  * marker, so the flags check alone is the whole prod cost (one AND).
+ * Returns true when it warned (the R2 stall warning then stays silent —
+ * same root cause, better message).
  */
-const warnIfSwallowed = (app: Application, c: Context, trace: RouteTrace | undefined): void => {
-  if (trace === undefined || (c.flags & FLAG_ROUTE_REACHED) !== 0) return;
-  let seen = swallowWarned.get(app);
-  if (seen === undefined) {
-    seen = new Set<string>();
-    swallowWarned.set(app, seen);
+const warnIfSwallowed = (app: Application, c: Context, trace: RouteTrace): boolean => {
+  if (!trace.marked || (c.flags & FLAG_ROUTE_REACHED) !== 0) return false;
+  return warnOnce(
+    app,
+    `${trace.method} ${trace.path}`,
+    `keala(dev): ${trace.method} ${trace.path} matched a route but its handler never ran — global middleware returned before calling next(). Call next() for requests you don't handle, or use c.throw() to reject intentionally.`,
+  );
+};
+
+/**
+ * Dev-only (DOGFOOD-R2 C2): a NON-terminal middleware (route-scoped or
+ * Router.use prefix — positions the R1 warning cannot see) settled with
+ * void, never called next(), and nothing in the chain produced a response:
+ * the request is heading for a silent notFound 404. Legit shapes stay
+ * silent: a terminal handler's void return IS the contract, state-style
+ * responses without next() set the response, throws take the error path.
+ */
+const warnIfStalled = (app: Application, c: Context, trace: RouteTrace): void => {
+  if (
+    (c.flags & FLAG_CHAIN_STALLED) === 0 ||
+    c._res !== undefined ||
+    (c.flags & 1) !== 0 ||
+    c.bodyValue !== null
+  ) {
+    return;
   }
-  const key = `${trace.method} ${trace.path}`;
-  if (seen.has(key)) return;
-  seen.add(key);
-  console.warn(
-    `keala(dev): ${key} matched a route but its handler never ran — global middleware returned before calling next(). Call next() for requests you don't handle, or use c.throw() to reject intentionally.`,
+  warnOnce(
+    app,
+    `${trace.method} ${trace.path}`,
+    `keala(dev): ${trace.method} ${trace.path} stalled without a response — a middleware returned before calling next() and no handler ran, so keala answers 404. Every non-terminal middleware must call next() or produce a response.`,
   );
 };
 
@@ -280,7 +316,9 @@ export const dispatchChain = (
   // The swallow warning runs BEFORE finalize (finalize reads flags, never
   // resets them — but check-first keeps the order irrelevant).
   const finish = (): Response | Promise<Response> => {
-    warnIfSwallowed(app, c, trace);
+    if (trace !== undefined && !warnIfSwallowed(app, c, trace)) {
+      warnIfStalled(app, c, trace);
+    }
     return finalizeGuarded(app, c);
   };
   // Fully synchronous middleware chains settle without a single promise.

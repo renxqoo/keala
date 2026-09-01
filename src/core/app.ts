@@ -434,11 +434,15 @@ export class Keala implements Application {
             : undefined) ??
           (match.target.methods.get("ALL") as Chain | undefined);
         if (chain !== undefined) {
-          // Dev tracing only (DOGFOOD-R1 C4): the marker is compiled in
-          // exactly when global middleware exists — only then can one swallow
-          // the route — so the trace object follows the same condition.
-          const traced = this.router.devTrace && this.#globalMw.length > 0;
-          return dispatchChain(this, c, chain, traced ? { method, path } : undefined);
+          // Dev tracing only (DOGFOOD-R1 C4 swallow + R2 C2 stall): one
+          // small object per request in dev; `marked` mirrors whether the
+          // route-reached marker is compiled in (global middleware exists).
+          return dispatchChain(
+            this,
+            c,
+            chain,
+            this.router.devTrace ? { method, path, marked: this.#globalMw.length > 0 } : undefined,
+          );
         }
         for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
       }

@@ -14,6 +14,8 @@ export interface HttpError extends Error {
   statusCode: number;
   /** Whether the error message is safe to show to clients. */
   expose: boolean;
+  /** Machine-readable identifier when the throw site provided one (DOGFOOD-R2 C4). */
+  code?: string;
   /** Extra headers to attach to the error response. */
   headers?: HeaderMap;
 }
@@ -65,6 +67,12 @@ export interface HttpErrorProps {
   message?: string;
   expose?: boolean;
   headers?: HeaderMap;
+  /**
+   * Machine-readable error identifier (e.g. "invalid_json", "payload_too_large")
+   * — lets consumers branch on `error.code` instead of matching message text
+   * (DOGFOOD-R2 C4). Free-form; keala's own throw sites use snake_case.
+   */
+  code?: string;
   [key: string]: unknown;
 }
 

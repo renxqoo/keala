@@ -292,7 +292,10 @@ don't handle, or use c.throw() to reject intentionally.
 ```
 
 Intentional rejections (`c.throw`, thrown errors) never warn; production and
-test environments compile the chains without the marker — zero overhead.
+test environments compile the chains without the marker — zero overhead. The
+same dev mode also warns when any NON-terminal middleware (route-scoped or
+`Router.use`) returns without calling `next()` and without producing a
+response — the request is heading for a silent 404.
 
 ## Migrating from koa
 
@@ -328,10 +331,27 @@ their object shape on `c.body` reads.
 | `app.fetch(req)` → `Response \| Promise<Response>` | `await app.handle(req)` → always `Promise<Response>`, never rejects                                        |
 | `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` — Bun.serve baked in                                                                    |
 | `new Hono({ strict: false })`                      | no strict mode: `/path` and `/path/` are the same route                                                    |
+| `new URL(c.req.url())`                             | `c.url` is path+search (koa form); the absolute URL is `c.raw.url`                                         |
+| `app.onError(fn)` shapes the error response        | `app.onError` only observes — throw `createError(status, { expose })`                                      |
+| `app.notFound(fn)` may throw                       | must `return` a Response — a throw answers the generic 500 path                                            |
 
 Divergences worth knowing: `c.body` is the **response** body (hono's request
-body lives on `c.raw` or the parser plugin); middleware runs koa-style — see
-[Global middleware and routing order](#global-middleware-and-routing-order--the-1-trap).
+
+## Error handling: onError, onerror, notFound
+
+- `app.onError(fn)` subscribes an **observer** (typed log/telemetry hook) —
+  it never produces the error response. `app.onerror(err, c)` is koa's log
+  hook (emit to listeners + fallback console) and doesn't either. What the
+  CLIENT sees is always built by keala's error path from the thrown error:
+  `throw createError(404, "gone", { expose: true })` controls status and
+  message; unknown error types render an opaque 500.
+- Need a custom error envelope? Wrap the chain in your own outermost
+  middleware: `app.use(async (c, next) => { try { await next() } catch (e) { return envelope(c, e) } })`.
+- `app.notFound(fn)` must **return** a Response. It runs inside the
+  finalizer; a throw there lands in the generic error path — a keala
+  `createError` renders by status/expose, anything else answers 500.
+  body lives on `c.raw` or the parser plugin); middleware runs koa-style — see
+  [Global middleware and routing order](#global-middleware-and-routing-order--the-1-trap).
 
 ## Why it's fast
 

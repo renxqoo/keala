@@ -11,6 +11,7 @@ import type { Application } from "../app.ts";
 import { createError, type HttpErrorProps } from "../../http/errors.ts";
 import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
 import { clearBranches } from "../branches.ts";
+import { FLAG_DEV_CHAIN } from "./state.ts";
 import type { HeaderMap } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
 import { requestApi } from "./request.ts";
@@ -179,7 +180,10 @@ export const createContext = (
   c.rawRequest = raw;
   c.appSettings = app.settings;
   c.runtimeValue = runtime;
-  return assignSlots(c);
+  assignSlots(c);
+  // Dev chain tracing (DOGFOOD-R2 C2): one bit, written only in dev.
+  if (app.env === "development") c.flags |= FLAG_DEV_CHAIN;
+  return c;
 };
 
 /** Reset a recycled context in place (pooling is opt-in; see app options). */
@@ -191,5 +195,7 @@ export const resetContext = (
   sweepForeignKeys(c);
   c.rawRequest = raw;
   c.runtimeValue = runtime;
-  return assignSlots(c);
+  assignSlots(c);
+  if (c.appValue.env === "development") c.flags |= FLAG_DEV_CHAIN;
+  return c;
 };
