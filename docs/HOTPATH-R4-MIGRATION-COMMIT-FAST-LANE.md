@@ -1,6 +1,6 @@
 # R4.1 — committed header Fast 通道迁移文档
 
-> 状态：定稿
+> 状态：实施中
 > 迁移单元：外层 middleware 在 `await next()` 后修改已提交 Response header
 > 旧实现：6 个核心文件约 1,813 行；相关 rule-4/committed 回归分布于 15 个测试文件
 > 目标位置：`src/core/committed-headers.ts` 与现有 response/finalizer 接线
@@ -104,7 +104,7 @@ app.get("/", (c) => c.text("hello"));
 
 ## 7. 验收
 
-- [ ] mutable 普通 set/remove 不新建 Response/Headers、不物化 staged record
+- [ ] mutable 普通 set/remove 不新建 Response/Headers；只保留一份与旧 staging 等量的观察镜像
 - [ ] immutable/复杂 header 自动 fallback，输出与 R3 逐字节等价
 - [ ] 后续 status/body rewrite 保留较早 fast header，rule-4 顺序正确
 - [ ] HEAD/204/304/stream/Set-Cookie/error/notFound/405 全回归
@@ -117,5 +117,16 @@ app.get("/", (c) => c.text("hello"));
 
 ## 8. 实施记录
 
-用户已确认完整实施。实现从行为锁与基准锁开始，所有 fast/fallback、双运行时、性能与
-只读消费者门禁通过后一次核销。
+### 8.1 第一波：行为锁与核心 Fast 通道
+
+- 新增 per-context Headers guard 三态；普通 set/remove/单值 append/vary 原地应用，
+  Set-Cookie、singleton、多值、status/body 保持 Semantic fallback。
+- 保留观察镜像与 removal tombstone；外层提交新 Response 时 compose 清除 applied 状态，
+  finalizer 在新响应上重放，避免优化改变 last-write-wins。
+- 抓到并修复两个真实边界：disturbed/locked body 不得被 Fast 通道伪装成 200；Bun 1.4
+  的隐式 `c.text()` 类型在首次原地写时必须显式物化，否则进程内 Content-Type 为空。
+- 修复存量缺陷：post-commit `c.type = null` 原先只删 staged record，无法删除已提交
+  Content-Type；现在统一走 removal 语义。
+- 新增 22 个集中用例，其中 10 组把 Fast 与强制 Semantic fallback 做逐字节差分。
+  Node 1909 passed / 2 skipped；Bun 1886 passed / 25 skipped。首轮 fmt、typecheck、build、
+  smoke 通过；lint 无新增 warning/error（仓库既有 warning 保持）。

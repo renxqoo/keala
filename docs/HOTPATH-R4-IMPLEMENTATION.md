@@ -1,6 +1,6 @@
 # HOTPATH-R4 — 企业级执行架构施工图
 
-> 状态：定稿
+> 状态：实施中
 > 设计基线：[HOTPATH-R4-DESIGN.md](./HOTPATH-R4-DESIGN.md)
 > 首个迁移单元：[HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md](./HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md)
 

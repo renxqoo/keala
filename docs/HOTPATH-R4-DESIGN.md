@@ -133,9 +133,11 @@ committed Response headers 为源。这样较早的直接写不会丢失，较�
 
 ### 5.1 每请求热路径
 
-- Fast header-only 路径：零 `new Response`、零 `new Headers`、不物化
-  `headersRecord`、不分配 removal list、不新增 Promise/闭包；时间 O(1) 加 header
-  实现本身成本。
+- Fast header-only 路径：零 `new Response`、零 `new Headers`、不新增 Promise/闭包；
+  复用与旧 staging 路径同量级的一个 prototype-less 观察镜像（remove 复用既有
+  tombstone list），不增加第二份记录；时间 O(1) 加 header 实现本身成本。该镜像是
+  保持 `c.has()/resHeader()` 以及外层新 Response replay 语义所必需，不能为零分配数字
+  删除公开行为。
 - Semantic fallback：维持 O(header count) 时间与空间；绝不读取、clone 或等待
   committed body，尤其是 open/locked/disturbed stream。
 - capability 只占固定 context slot 或 flags；pool recycle 后为 unknown；无全局无界表。

@@ -7,25 +7,30 @@
  * content-type behavior: the runtime adds `text/plain` / `application/json`).
  */
 
-import type { HeaderMap, HeaderValue, ResponseBody } from "../../types.ts";
+import type { HeaderValue, ResponseBody } from "../../types.ts";
 import { isEmptyStatus, isRedirectStatus, statusMessage } from "../../http/status.ts";
 import { expandContentType } from "../../utils/mime.ts";
-import {
-  contentDisposition,
-  escapeHtml,
-  validateHeaderName,
-  validateHeaderValue,
-} from "../../utils/text.ts";
+import { contentDisposition, escapeHtml, validateHeaderValue } from "../../utils/text.ts";
 import { byteLengthOf, encodeUrlValue } from "../../utils/url.ts";
 import { sugarText, sugarJson, sugarHtml, TEXT_PLAIN, TEXT_HTML } from "./sugar.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestApi } from "./request.ts";
+import {
+  appendResponseHeader,
+  hasResponseHeader,
+  removeResponseHeader,
+  responseHeaderValue,
+  setResponseHeader,
+  stagedHeadersOf,
+  varyResponseHeader,
+} from "./headers.ts";
 
 export interface ResponseApi {
   status: number;
   message: string;
   body: ResponseBody;
-  type: string;
+  get type(): string;
+  set type(value: string | null | undefined);
   length: number | undefined;
   etag: string;
   lastModified: Date | undefined;
@@ -49,13 +54,6 @@ export interface ResponseApi {
   json(body: unknown, status?: number, headers?: Record<string, HeaderValue>): Response;
   html(body: string, status?: number, headers?: Record<string, HeaderValue>): Response;
 }
-
-/** Materialize the lazy header record on first response write. */
-// Prototype-less by design: inherited keys (`constructor`, `__proto__`)
-// must never surface as header values or accept prototype writes — an
-// app echoing user-controlled names through c.append() would otherwise
-// corrupt internal state.
-const recordOf = (c: ContextState): HeaderMap => (c.headersRecord ??= Object.create(null));
 
 const normalizeDispositionType = (type: string | undefined): string => {
   if (type === undefined) return "attachment";
@@ -203,7 +201,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       return;
     }
     if (value instanceof Blob) {
-      recordOf(this)["content-length"] = String(value.size);
+      stagedHeadersOf(this)["content-length"] = String(value.size);
       return;
     }
     if (value instanceof Response) {
@@ -236,7 +234,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
   },
   set type(value: string | null | undefined) {
     if (value === null || value === undefined) {
-      if (this.headersRecord !== null) delete this.headersRecord["content-type"];
+      this.remove("Content-Type");
       return;
     }
     // Koa: shorthand/extension values expand to full MIME types with charset;
@@ -244,11 +242,11 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     // runtime default).
     const full = expandContentType(value);
     if (full === null) {
-      if (this.headersRecord !== null) delete this.headersRecord["content-type"];
+      this.remove("Content-Type");
       return;
     }
     validateHeaderValue("content-type", full);
-    recordOf(this)["content-type"] = full;
+    stagedHeadersOf(this)["content-type"] = full;
   },
   get length(): number | undefined {
     const raw = this.headersRecord?.["content-length"];
@@ -270,7 +268,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (this.headersRecord?.["transfer-encoding"] !== undefined) return;
     const n = Math.trunc(Number(value));
     this.flags |= 8;
-    recordOf(this)["content-length"] = String(Number.isNaN(n) ? 0 : n);
+    stagedHeadersOf(this)["content-length"] = String(Number.isNaN(n) ? 0 : n);
   },
   get etag(): string {
     return this.resHeader("ETag");
@@ -314,7 +312,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (base.lastIndexOf(".") !== -1 && !this.has("Content-Type")) {
       const ext = base.slice(base.lastIndexOf(".") + 1);
       const mime = expandContentType(ext);
-      if (mime !== null) recordOf(this)["content-type"] = mime;
+      if (mime !== null) stagedHeadersOf(this)["content-type"] = mime;
     }
   },
   back(alt?: string): void {
@@ -368,110 +366,22 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     }
   },
   set(field: string | Record<string, HeaderValue>, value?: HeaderValue) {
-    if (typeof field === "object") {
-      for (const key of Object.keys(field)) {
-        this.set(key, field[key] as HeaderValue);
-      }
-      return;
-    }
-    if (value === undefined || value === null) return;
-    if (typeof value === "number" || typeof value === "boolean") {
-      this.set(field, String(value));
-      return;
-    }
-    const name = field.toLowerCase();
-    if (name !== "content-type" && name !== "content-length") validateHeaderName(name);
-    if (typeof value === "string") {
-      validateHeaderValue(name, value);
-      recordOf(this)[name] = value;
-      return;
-    }
-    // RFC 9110 singletons: multiple Content-Type/Length values would be
-    // comma-joined into an invalid header — refuse instead (koa #1899).
-    if (name === "content-type" || name === "content-length") {
-      throw new TypeError(`${field} is a singleton header and cannot be set to an array`);
-    }
-    for (const entry of value) validateHeaderValue(name, entry);
-    this.flags |= 4;
-    recordOf(this)[name] = [...value];
+    setResponseHeader(this, field, value);
   },
   append(field: string, value: HeaderValue) {
-    const name = field.toLowerCase();
-    if (name !== "content-type" && name !== "content-length") validateHeaderName(name);
-    const next = typeof value === "string" ? [value] : [...value];
-    for (const entry of next) validateHeaderValue(name, entry);
-    // RFC 9110 singletons: append must never manufacture a second value —
-    // the runtime would comma-join them into an invalid header (koa #1899).
-    const singleton = name === "content-type" || name === "content-length";
-    if (singleton && next.length > 1) {
-      throw new TypeError(`${field} is a singleton header and cannot be set to an array`);
-    }
-    let existing = this.headersRecord?.[name];
-    if (existing === undefined && this._res !== undefined && name !== "set-cookie") {
-      // Appending to a COMMITTED response: the committed value is the base
-      // the rebuild appends to — without this seed the merge would replace.
-      // (Set-Cookie is exempt: its rebuild semantics are pure append, so the
-      // committed cookies must not be duplicated into the staging record.)
-      const committedValues = [this._res.headers.get(name) ?? ""].filter(
-        (entry) => entry.length > 0,
-      );
-      if (committedValues.length === 1) existing = committedValues[0];
-    }
-    if (singleton && existing !== undefined) {
-      throw new TypeError(`${field} is a singleton header and cannot be appended to`);
-    }
-    if (existing === undefined) {
-      if (next.length === 1) {
-        recordOf(this)[name] = next[0] ?? "";
-        return;
-      }
-      this.flags |= 4;
-      recordOf(this)[name] = next;
-      return;
-    }
-    this.flags |= 4;
-    const list = Array.isArray(existing) ? [...existing] : [existing];
-    list.push(...next);
-    recordOf(this)[name] = list;
+    appendResponseHeader(this, field, value);
   },
   remove(field: string) {
-    const name = field.toLowerCase();
-    if (this.headersRecord !== null) delete this.headersRecord[name];
-    if (this._res !== undefined) {
-      // A committed Response IS the response — a removal must reach it on the
-      // rebuild path, not just the staging record (else it is a silent no-op).
-      (this.removedValue ??= []).push(name);
-      this.flags |= 16;
-    }
+    removeResponseHeader(this, field);
   },
   vary(field: string) {
-    if (field.includes(",") || field.includes(" ")) {
-      throw new TypeError("Vary field must be a single token");
-    }
-    // Seed the dedupe from EVERY source: the staging record AND a committed
-    // response's own Vary — a post-commit vary() must JOIN the committed
-    // value, never replace it (dropped Vary tokens corrupt cache variants).
-    const staged = this.headersRecord?.["vary"];
-    const stagedText =
-      staged === undefined ? "" : Array.isArray(staged) ? staged.join(", ") : staged;
-    const committedText = this._res !== undefined ? (this._res.headers.get("vary") ?? "") : "";
-    const current = stagedText.length > 0 ? stagedText : committedText;
-    const tokens = current
-      .split(",")
-      .map((token) => token.trim())
-      .filter((token) => token.length > 0);
-    if (!tokens.some((token) => token.toLowerCase() === field.toLowerCase())) {
-      tokens.push(field);
-    }
-    this.set("Vary", tokens.join(", "));
+    varyResponseHeader(this, field);
   },
   has(field: string): boolean {
-    return this.headersRecord?.[field.toLowerCase()] !== undefined;
+    return hasResponseHeader(this, field);
   },
   resHeader(field: string): string {
-    const raw = this.headersRecord?.[field.toLowerCase()];
-    if (raw === undefined) return "";
-    return Array.isArray(raw) ? raw.join(", ") : raw;
+    return responseHeaderValue(this, field);
   },
   // The sugar constructors live in core/context/sugar.ts (staged-header
   // consumption, empty-status contract, statusText forwarding).

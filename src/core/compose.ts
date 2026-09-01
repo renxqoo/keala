@@ -15,7 +15,12 @@
 
 import type { Next } from "../types.ts";
 import { registerBranch } from "./branches.ts";
-import { FLAG_CHAIN_STALLED, FLAG_DEV_CHAIN } from "./context/state.ts";
+import {
+  FLAG_CHAIN_STALLED,
+  FLAG_COMMITTED_HEADERS_APPLIED,
+  FLAG_DEV_CHAIN,
+} from "./context/state.ts";
+import { COMMITTED_HEADERS_UNKNOWN } from "./committed-headers.ts";
 
 /** Anything a handler may return: a committed Response, or nothing. */
 export type HandlerResult = Response | void;
@@ -25,6 +30,9 @@ export interface MiddlewareContext {
   state: Record<string, unknown>;
   /** Committed response slot — managed by compose, read by the finalizer. */
   _res: Response | undefined;
+  /** Present on the real Context; optional keeps compose reusable in tests. */
+  committedHeadersState?: number;
+  flags?: number;
 }
 
 export type Handler<C extends MiddlewareContext = MiddlewareContext> = (
@@ -69,6 +77,12 @@ const markStalled = (
 const commit = (c: MiddlewareContext, ret: HandlerResult): void => {
   if (ret === undefined || ret === null) return;
   if (ret instanceof Response) {
+    if (c._res !== ret) {
+      if (c.committedHeadersState !== undefined) {
+        c.committedHeadersState = COMMITTED_HEADERS_UNKNOWN;
+      }
+      if (c.flags !== undefined) c.flags &= ~FLAG_COMMITTED_HEADERS_APPLIED;
+    }
     c._res = ret;
     return;
   }

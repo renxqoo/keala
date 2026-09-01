@@ -26,6 +26,7 @@ import { isStatusText } from "../utils/text.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
 import { isImplicitTextResponse, TEXT_PLAIN } from "./context/sugar.ts";
+import { FLAG_COMMITTED_HEADERS_APPLIED } from "./context/state.ts";
 
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
 
@@ -395,7 +396,12 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
     // headers, removals, a status/message override) is REBUILT; the common
     // untouched commit returns synchronously as-is. HEAD still drops the
     // body on every path.
-    const dirty = (c.flags & 16) !== 0 || (record !== null && countOf(record) > 0);
+    const applied = (c.flags & FLAG_COMMITTED_HEADERS_APPLIED) !== 0;
+    const semanticOverride = (c.flags & (32 | 64 | 128)) !== 0;
+    const dirty =
+      semanticOverride ||
+      ((c.flags & 16) !== 0 && !applied) ||
+      (!applied && record !== null && countOf(record) > 0);
     if (dirty) {
       const merged = rebuildCommitted(c, committed);
       return c.method === "HEAD" && merged.body !== null ? stripBody(merged) : merged;

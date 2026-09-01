@@ -11,6 +11,7 @@ import type { Application } from "../app.ts";
 import { createError, type HttpErrorProps } from "../../http/errors.ts";
 import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
 import { clearBranches } from "../branches.ts";
+import { COMMITTED_HEADERS_UNKNOWN, markCommittedHeadersStaged } from "../committed-headers.ts";
 import { FLAG_DEV_CHAIN } from "./state.ts";
 import type { HeaderMap } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
@@ -65,6 +66,11 @@ const contextApi: ThisType<Context> & {
     // (same semantics as koa); arrays are detected by the finalizer without
     // needing the multi-value flag. Null-proto like recordOf() — inherited
     // keys must never surface on the header record.
+    // The facade writes the record directly. If earlier post-commit header
+    // operations were applied in place, materializing this writer turns the
+    // mirror back into semantic rebuild input so a later cookie cannot be
+    // skipped by the finalizer.
+    markCommittedHeadersStaged(c);
     const headers = (c.headersRecord ??= Object.create(null) as HeaderMap);
     const cookies = createCookies({
       get cookieHeader(): string | null {
@@ -120,6 +126,7 @@ const assignSlots = (c: Context): Context => {
   c.statusValue = 404;
   c.messageValue = "";
   c.headersRecord = null;
+  c.committedHeadersState = COMMITTED_HEADERS_UNKNOWN;
   c.bodyValue = null;
   c.flags = 0;
   c.removedValue = null;

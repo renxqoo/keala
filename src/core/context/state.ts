@@ -10,6 +10,7 @@ import type { QueryMap } from "../../utils/query.ts";
 import type { HeaderMap, ResponseBody, Runtime } from "../../types.ts";
 import type { RequestSettings } from "./settings.ts";
 import type { Application } from "../app.ts";
+import type { CommittedHeadersState } from "../committed-headers.ts";
 
 export interface ContextState {
   appValue: Application;
@@ -29,6 +30,8 @@ export interface ContextState {
   statusValue: number;
   messageValue: string;
   headersRecord: HeaderMap | null;
+  /** Mutability guard of the currently committed Response's Headers. */
+  committedHeadersState: CommittedHeadersState;
   bodyValue: ResponseBody;
   /**
    * Bit-packed response flags — one field write instead of four.
@@ -46,6 +49,10 @@ export interface ContextState {
    * 1024 = dev tracing: a NON-terminal middleware level returned without
    * calling next() and without a response — the chain stalled (the request
    * will answer 404 unless something upstream produced a response).
+   * 2048 = every header/removal currently mirrored in response state was
+   * already applied to the committed Response in place. The finalizer may
+   * return that Response verbatim unless a status/message/body rewrite also
+   * exists. A later staged operation or a newer Response commit clears it.
    * The post-commit flags are the ONLY rebuild inputs — anything staged
    * before the commit was already superseded by the committed Response.
    */
@@ -76,3 +83,6 @@ export const FLAG_DEV_CHAIN = 512;
  *  return, no next, no response). Written by compose, read by dispatch's
  *  stall warning (DOGFOOD-R2 C2). */
 export const FLAG_CHAIN_STALLED = 1024;
+
+/** Flag 2048 — mirrored header changes already applied to committed Response. */
+export const FLAG_COMMITTED_HEADERS_APPLIED = 2048;
