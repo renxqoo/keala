@@ -1,8 +1,9 @@
 # HOTPATH-R4 — 企业级执行架构施工图
 
-> 状态：R4.1 已核销
+> 状态：R4.1–R4.3 已核销；R4.4 施工图已定稿、实施中
 > 设计基线：[HOTPATH-R4-DESIGN.md](./HOTPATH-R4-DESIGN.md)
 > 首个迁移单元：[HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md](./HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md)
+> 当前迁移单元：[HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md](./HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md)
 
 ## 1. 旧实现审计结论
 
@@ -202,3 +203,21 @@ timeout。网络/客户端饱和摊薄了进程内收益，但没有 wire 回退
 - [x] body 预算始终默认强制，不用不安全模式参加同语义排名
 - [x] Set-Cookie/cookies、多值数组与 status/body 保持完整 Semantic fallback
 - [x] R4.1 完整实施并核销，不留下占位代码
+
+## 9. R4.4 施工追加
+
+R4.4 不复用 R4.1 的 header fast-lane 假设，而是两个可独立回滚的纵向单元：
+
+1. 先扩展 fresh-process harness，加入 0/1/3/6 层全局 passthrough 的 probe 矩阵；
+2. 删除 `handle` 与同步 `dispatchChain` 的无条件闭包，在不改变公开 Promise 契约的前提
+   下建立同步收尾快路；
+3. 用表驱动测试锁定洋葱前后序、双 next、浮动 next、sync/async throw、route fallback、
+   pooling，并根据剖析结果选择专用链编译器或保留通用 compose；
+4. body parser 先锁 declared/chunked/lying/UTF-8/malformed/并发/跨 reader/小限额复检，
+   再将 cache、facade 与 reader 方法重写为单一固定形状状态机；
+5. 每个子单元分别跑前后 fresh-process 中位数。目标场景没有统计显著收益，或非目标
+   热路径稳定回退超过 3%，该实现不进入后续门禁；
+6. 最后运行 fmt、lint、typecheck、build、Node、Bun、coverage、smoke、example、soak，
+   再以本地构建替换依赖执行 Tillgate 只读验证并确认其工作树无变化。
+
+逐文件审计、测试矩阵、预算与停止条件以当前迁移单元文档为准。

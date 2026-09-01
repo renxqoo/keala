@@ -1,12 +1,13 @@
 # HOTPATH-R4 — 企业级多通道执行架构设计基线
 
-> 状态：R4.1 已核销
+> 状态：R4.1–R4.3 已核销；R4.4 设计已定稿、实施中
 > 级别：大
 > 基线提交：`fa532f9`（R3 已核销）
-> 工作分支：`codex/hotpath-r4-execution-plan`
+> 工作分支：`codex/hotpath-r4-4-core-rewrite`
 > 范围：仅 keala；Tillgate 只允许只读测试，不修改源码或生成物。
 > 施工图：[HOTPATH-R4-IMPLEMENTATION.md](./HOTPATH-R4-IMPLEMENTATION.md)
 > 首个迁移单元：[HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md](./HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md)
+> 当前迁移单元：[HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md](./HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md)
 
 ## 1. 目标与成功定义
 
@@ -64,12 +65,19 @@ echo 慢 28.9%，但 Hono 对照没有强制字节预算，不能作为同安全
   回退链。详见
   [HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md](./HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md)。
 
-### 2.3 不提供不安全 JSON 快路
+### 2.3 安全 JSON 快路是默认生产契约
 
 强制 body limit、谎报 Content-Length 复核、流式超限取消及 reader memo 是 keala 的
 生产契约。R4 不加入默认裸 `request.json()`，也不把安全性藏在 benchmark-only 开关。
-若未来需要受信任内网的裸读取，它必须是显式 plugin/route policy，并与安全默认值分开
-计分；本轮不处理。
+R4.4 重写其内部状态机、分配与 continuation，但不得移除 declared-length 预检、实际
+字节复核、chunked 逐块计数与取消、跨 reader 原始字节 memo、同 reader in-flight
+Promise/结果 memo。性能排名只采用这些条件均相同的 Hono 对照。
+
+### 2.4 R4.4 不新增公开 API
+
+探针执行器和 body reader 都是内部替换：`app.use` 洋葱顺序、双 `next()` 错误、浮动
+分支隔离、`app.handle()` 永不 reject、`c.req` 五个 reader 的类型/结果/对象与 Promise
+同一性均保持。没有 fast/unsafe 开关，也不要求应用声明同步 handler。
 
 ## 3. 内部执行模型
 
@@ -177,8 +185,10 @@ R4 按可独立回滚的纵向单元推进：
    [HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md](./HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md)：
    onError 单槽化返回 Response 接管，emitter/silent/statusCode 兼容面删除；
    错误路径 897ns——快于 koa 式中间件 18%、与 Hono 带内平价，快乐路径零改动）；
-4. **R4.4 生命周期与过载控制**：drain、in-flight、accept/reject、deadline 分开定约；
-5. **R4.5 可观测性低税接口**：仅在订阅时付费，默认热路径零分配。
+4. **R4.4 核心热路径重写**：全局洋葱链固定税与安全 JSON reader 状态机，详见
+   [HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md](./HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md)；
+5. **R4.5 生命周期与过载控制**：drain、in-flight、accept/reject、deadline 分开定约；
+6. **R4.6 可观测性低税接口**：仅在订阅时付费，默认热路径零分配。
 
 每一项都必须先形成自己的 MIGRATION 文档，上一项核销不自动授权下一项编码。
 
@@ -196,6 +206,8 @@ R4 按可独立回滚的纵向单元推进：
   不保留任何兼容逻辑，纯兼容机制直接删除；onError 单槽化为唯一错误入口
   （返回 Response 接管）；错误处理方案以真实业务用法（企业信封、集中映射、
   零泄露默认、协议头不丢）为验收形态。
+- **用户裁决**（R4.4）：下一阶段回到探针固定税和安全 JSON 读取热路径，不继续削减
+  错误路径安全守卫；允许内部重写，目标是在同安全/正确性语义下整体超过 Hono。
 
 ## 8. 总体验收
 
