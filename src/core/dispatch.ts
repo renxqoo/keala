@@ -8,13 +8,20 @@ import type { Chain, RouteDef, RouteHandler, RouterState } from "../router/route
 import {
   assertRedirectCaptures,
   buildURL,
+  EMPTY_PARAMS,
+  matchRoute,
   normalizePrefix,
   redirectTargetSegments,
   registerDef,
 } from "../router/router.ts";
+import { getPath } from "../utils/url.ts";
 import { NOOP_TAIL } from "./compose.ts";
 import type { Context } from "./context/context.ts";
-import type { MiddlewareStack } from "./middleware-stack.ts";
+import {
+  fallbackMiddlewareForPath,
+  hasMiddlewareForPath,
+  type MiddlewareStack,
+} from "./middleware-stack.ts";
 import { FLAG_CHAIN_STALLED, FLAG_ROUTE_REACHED } from "./context/state.ts";
 import { retireWithBody, type ContextPool } from "./context/pool.ts";
 import { errorResponse } from "./error-response.ts";
@@ -172,23 +179,23 @@ export const finalizeGuarded = (app: Application, c: Context): Response | Promis
  * dispatcher's own guards already answer error Responses.
  */
 export const settleHandle = (
-  pool: ContextPool,
+  pool: ContextPool | null,
   pooling: boolean,
   c: Context,
-  dispatch: () => Response | Promise<Response>,
+  settled: Response | Promise<Response>,
 ): Promise<Response> => {
-  let settled: Response | Promise<Response>;
   if (!pooling) {
-    settled = dispatch();
-  } else {
-    // Guarded lifecycle: settle (sync or async), then retire to the pool —
-    // a late write on the retired context throws instead of corrupting it.
-    // Bodies retire through retireWithBody (consumed after handle returns).
-    const release = (value: Response): Response => retireWithBody(pool, c, value);
-    const out = dispatch();
-    settled = out instanceof Promise ? out.then(release) : release(out);
+    return settled instanceof Promise ? settled : Promise.resolve(settled);
   }
-  return settled instanceof Promise ? settled : Promise.resolve(settled);
+  if (pool === null) throw new TypeError("pooling dispatch requires a context pool");
+  // Guarded lifecycle: settle (sync or async), then retire to the pool — a
+  // late write on the retired context throws instead of corrupting it. The
+  // async branch alone needs a per-request continuation; synchronous chains
+  // retire inline and cross the public Promise boundary once.
+  if (settled instanceof Promise) {
+    return settled.then((value) => retireWithBody(pool, c, value));
+  }
+  return Promise.resolve(retireWithBody(pool, c, settled));
 };
 
 /** Dev-only trace of which matched route a chain was dispatched for.
@@ -279,15 +286,65 @@ export const dispatchChain = (
   // synchronous middleware chains settle without a single extra promise.
   // The swallow warning runs BEFORE finalize (finalize reads flags, never
   // resets them — but check-first keeps the order irrelevant).
-  const finish = (): Response | Promise<Response> => {
-    if (trace !== undefined && !warnIfSwallowed(app, c, trace)) {
-      warnIfStalled(app, c, trace);
-    }
-    return finalizeGuarded(app, c);
-  };
   // Fully synchronous middleware chains settle without a single promise.
   if (settled !== undefined && typeof (settled as PromiseLike<void>).then === "function") {
-    return (settled as Promise<void>).then(finish, (err: unknown) => errorResponse(app, c, err));
+    return (settled as Promise<void>).then(
+      () => finishDispatch(app, c, trace),
+      (err: unknown) => errorResponse(app, c, err),
+    );
   }
-  return finish();
+  return finishDispatch(app, c, trace);
+};
+
+const finishDispatch = (
+  app: Application,
+  c: Context,
+  trace: RouteTrace | undefined,
+): Response | Promise<Response> => {
+  if (trace !== undefined && !warnIfSwallowed(app, c, trace)) {
+    warnIfStalled(app, c, trace);
+  }
+  return finalizeGuarded(app, c);
+};
+
+/**
+ * Match and dispatch one request without manufacturing a request-local
+ * closure in `Application.handle`. Registration has already selected and
+ * compiled each route's applicable middleware; request time only chooses the
+ * chain or the precompiled fallback.
+ */
+export const dispatchRequest = (
+  app: Application,
+  c: Context,
+  router: RouterState,
+  middleware: MiddlewareStack,
+  request: Request,
+): Response | Promise<Response> => {
+  const path = getPath(request.url);
+  const match = matchRoute(router, path);
+  if (match !== null) {
+    c.params = match.params ?? EMPTY_PARAMS;
+    const rawMethod = request.method;
+    const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
+    // Express-style convenience: HEAD falls back to the GET handler.
+    const chain =
+      (match.target.methods.get(method) as Chain | undefined) ??
+      (method === "HEAD" ? (match.target.methods.get("GET") as Chain | undefined) : undefined) ??
+      (match.target.methods.get("ALL") as Chain | undefined);
+    if (chain !== undefined) {
+      return dispatchChain(
+        app,
+        c,
+        chain,
+        router.devTrace
+          ? { method, path, marked: hasMiddlewareForPath(middleware, path) }
+          : undefined,
+      );
+    }
+    for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
+  }
+  // No handler: global middleware still runs (koa contract), then the
+  // finalizer decides between 405/501/OPTIONS and not-found.
+  const fallback = fallbackMiddlewareForPath(middleware, path);
+  return fallback === null ? finalizeGuarded(app, c) : dispatchChain(app, c, fallback);
 };

@@ -5,7 +5,6 @@
  */
 
 import type { AppOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
-import { getPath } from "../utils/url.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
@@ -13,16 +12,13 @@ import { createPool, type ContextPool } from "./context/pool.ts";
 import { createDecorators, type Decorators } from "./context/decorate.ts";
 import {
   createMiddlewareStack,
-  fallbackMiddlewareForPath,
-  hasMiddlewareForPath,
   middlewareForRoute as middlewareForRegisteredRoute,
   rebaseMountedMiddleware,
   registerMiddleware,
   type MiddlewareStack,
 } from "./middleware-stack.ts";
 import {
-  dispatchChain,
-  finalizeGuarded,
+  dispatchRequest,
   mergeMountedWs,
   pluginInstallerOf,
   registerRedirect,
@@ -31,10 +27,7 @@ import {
   wsUpgradeHandler,
 } from "./dispatch.ts";
 import {
-  type Chain,
   createRouterState,
-  EMPTY_PARAMS,
-  matchRoute,
   rebuildChains,
   registerDef,
   normalizePrefix,
@@ -417,44 +410,9 @@ export class Keala implements Application {
         ? createContext(this, this.#contextProto, request, runtime)
         : resetContext(recycled, request, runtime);
 
-    const dispatchOf = (): Response | Promise<Response> => {
-      const path = getPath(request.url);
-      const match = matchRoute(this.router, path);
-      if (match !== null) {
-        c.params = match.params ?? EMPTY_PARAMS;
-        const rawMethod = request.method;
-        const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
-        // Express-style convenience: HEAD falls back to the GET handler.
-        const chain =
-          (match.target.methods.get(method) as Chain | undefined) ??
-          (method === "HEAD"
-            ? (match.target.methods.get("GET") as Chain | undefined)
-            : undefined) ??
-          (match.target.methods.get("ALL") as Chain | undefined);
-        if (chain !== undefined) {
-          // Dev tracing only (DOGFOOD-R1 C4 swallow + R2 C2 stall): one
-          // small object per request in dev; `marked` mirrors whether the
-          // route-reached marker is compiled in (global middleware exists).
-          return dispatchChain(
-            this,
-            c,
-            chain,
-            this.router.devTrace
-              ? { method, path, marked: hasMiddlewareForPath(this.#middleware, path) }
-              : undefined,
-          );
-        }
-        for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
-      }
-      // No handler: global middleware still runs (koa contract), then the
-      // finalizer decides between 405/501/OPTIONS and not-found.
-      const fallback = fallbackMiddlewareForPath(this.#middleware, path);
-      if (fallback === null) return finalizeGuarded(this, c);
-      return dispatchChain(this, c, fallback);
-    };
-
-    this.#pool ??= createPool(this, this.#contextProto);
-    return settleHandle(this.#pool, this.#poolingEnabled, c, dispatchOf);
+    const settled = dispatchRequest(this, c, this.router, this.#middleware, request);
+    if (this.#poolingEnabled) this.#pool ??= createPool(this, this.#contextProto);
+    return settleHandle(this.#pool, this.#poolingEnabled, c, settled);
   }
 
   callback(): (request: Request, runtime?: Runtime) => Promise<Response> {

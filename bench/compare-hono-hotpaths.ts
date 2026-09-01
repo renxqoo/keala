@@ -31,6 +31,9 @@ type CaseName =
   | "error"
   | "error-mw";
 const pass = (_c: Context, next: () => Promise<void>) => next();
+const asyncPass = async (_c: Context, next: () => Promise<void>): Promise<void> => {
+  await next();
+};
 // Kept local so the same harness can run against the R3 worktree, where the
 // capability constant does not exist and this unused bit is harmless.
 const FORCE_IMMUTABLE_HEADERS = 1 << 13;
@@ -75,9 +78,6 @@ if (framework === "keala") {
     app.get("/livez", (c) => c.json({ status: "ok" }));
   } else if (caseName.startsWith("probe-global-")) {
     const count = Number.parseInt(caseName.slice("probe-global-".length), 10);
-    const asyncPass = async (_c: Context, next: () => Promise<void>): Promise<void> => {
-      await next();
-    };
     for (let index = 0; index < count; index++) {
       app.use(caseName.endsWith("-async") ? asyncPass : pass);
     }
