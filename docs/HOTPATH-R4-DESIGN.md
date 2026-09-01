@@ -46,14 +46,23 @@ echo 慢 28.9%，但 Hono 对照没有强制字节预算，不能作为同安全
 - `app.handle()` 始终返回 Promise 且不 reject；Bun 与 Node 的结果一致；
 - 不可变或未知来源的 Response 自动落回现有重建通道，用户不需要声明来源。
 
-### 2.2 既有 `onError` 契约冻结
+### 2.2 `onError` 错误响应策略（R4.3 修订）
 
-`app.onError((error, c) => void)` 是**观察事件**，不是错误响应映射器。R4 不得改变返回
-值含义、调用次数或异常传播规则，也不得借用同名 API 实现 Hono 风格 response hook。
+> 本节原文（「onError 契约冻结为观察事件、错误响应策略须另命名 `app.catch`」）
+> 已按用户裁决废止——项目无存量用户，不保留兼容逻辑。修订后契约：
 
-若未来引入错误响应策略，必须使用新的名字并单独定稿：候选为
-`app.catch((error, c) => Response | Promise<Response>)`。它不属于首个迁移单元；在
-命名、与观察事件的时序、handler 自身失败的静态 500 规则确认前不得实现。
+- `app.onError(mapper)` 是**唯一**错误入口，**单槽**（重复注册抛 `TypeError`）；
+- `type ErrorMapper = (error: HttpError, c: Context) => Response | Promise<Response> | void`；
+  返回 Response 接管错误响应（HEAD 剥体 + `error.headers`/安全 staged 头 if-absent
+  合并），返回 void 走内置默认（永不泄露非 expose 的 message）；
+- mapper 抛错/拒绝 → static 500 且框架 console.error（不静默）；`app.handle`
+  永不 reject；
+- 覆盖整个错误漏斗：chain 抛错、finalize 失败、ws upgrade 拒绝；404 未中归
+  `app.notFound`；
+- 随本修订删除纯兼容机制：emitter 多播模块、`off/emit/listenerCount`、
+  `KealaOptions.silent`、`HttpError.statusCode` 别名、第三方 `.statusCode`
+  回退链。详见
+  [HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md](./HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md)。
 
 ### 2.3 不提供不安全 JSON 快路
 
@@ -180,6 +189,10 @@ R4 按可独立回滚的纵向单元推进：
 - **用户裁决**：现有 `onError` 永久保留观察语义；错误响应策略另命名。
 - **用户裁决**：性能竞争以同语义为准，不用关闭 413 安全预算制造胜利。
 - **用户裁决**：R4.1 必须完整实施、生产可用并通过全部门禁，不留下占位实现。
+- **用户裁决**（R4.3 修订，废止上一条「onError 冻结/另命名」）：项目无存量用户，
+  不保留任何兼容逻辑，纯兼容机制直接删除；onError 单槽化为唯一错误入口
+  （返回 Response 接管）；错误处理方案以真实业务用法（企业信封、集中映射、
+  零泄露默认、协议头不丢）为验收形态。
 
 ## 8. 总体验收
 
