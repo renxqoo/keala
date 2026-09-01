@@ -282,8 +282,11 @@ app.get("/health", (c) => c.text("ok"));
 app.get("/*", markdownHandler); // only what nothing else claimed
 ```
 
-With `env: "development"`, keala warns once per (method, path) when global
-middleware swallowed a matched route:
+In `env: "development"`, keala warns — once per (method, path) — whenever a
+matched route never ran, whichever layer stopped it: global middleware that
+returned before calling `next()`, or any non-terminal middleware
+(route-scoped or `Router.use`) that returned without `next()` and without
+producing a response:
 
 ```text
 keala(dev): GET /health matched a route but its handler never ran — global
@@ -291,11 +294,9 @@ middleware returned before calling next(). Call next() for requests you
 don't handle, or use c.throw() to reject intentionally.
 ```
 
-Intentional rejections (`c.throw`, thrown errors) never warn; production and
-test environments compile the chains without the marker — zero overhead. The
-same dev mode also warns when any NON-terminal middleware (route-scoped or
-`Router.use`) returns without calling `next()` and without producing a
-response — the request is heading for a silent 404.
+Intentional rejections (`c.throw`, thrown errors) and state-style responses
+never warn; production and test chains compile without the dev markers —
+zero overhead.
 
 ## Migrating from koa
 

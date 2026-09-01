@@ -266,8 +266,10 @@ app.get("/health", (c) => c.text("ok"));
 app.get("/*", markdownHandler); // 只接住没被认领的请求
 ```
 
-`env: "development"` 下，全局中间件吞掉已命中路由时，keala 会按
-(method, path) 各警告一次：
+`env: "development"` 下，已命中的路由从未执行时，keala 会按 (method,
+path) 各警告一次 —— 无论停在哪一层：全局中间件不调 `next()` 直接返回，
+或任一**非终端**中间件（路由级或 `Router.use`）既不调 `next()` 也未产出
+响应：
 
 ```text
 keala(dev): GET /health matched a route but its handler never ran — global
@@ -275,10 +277,8 @@ middleware returned before calling next(). Call next() for requests you
 don't handle, or use c.throw() to reject intentionally.
 ```
 
-有意的拒绝（`c.throw`、抛错）不会警告；生产与 test 环境编出的链不含
-标记 —— 零开销。同一 dev 模式还会在**非终端**中间件（路由级或
-`Router.use`）不调 `next()` 也未产出响应时警告 —— 这种请求正走向一个
-静默的 404。
+有意的拒绝（`c.throw`、抛错）与状态式写响应不会警告；生产与 test 环境
+编出的链不含 dev 标记 —— 零开销。
 
 ## 从 koa 迁移
 
