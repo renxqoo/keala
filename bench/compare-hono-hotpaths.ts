@@ -6,6 +6,7 @@
 // order and compare process medians; never treat one best sample as evidence.
 
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 
 import { Keala } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
@@ -15,6 +16,8 @@ type Framework = "keala" | "hono";
 type CaseName =
   | "probe"
   | "body"
+  | "body-limited"
+  | "body-safe"
   | "text"
   | "text-dirty"
   | "text-dirty-correct"
@@ -31,7 +34,16 @@ if (!(["keala", "hono"] as const).includes(framework)) {
 }
 if (
   !(
-    ["probe", "body", "text", "text-dirty", "text-dirty-correct", "text-dirty-fallback"] as const
+    [
+      "probe",
+      "body",
+      "body-limited",
+      "body-safe",
+      "text",
+      "text-dirty",
+      "text-dirty-correct",
+      "text-dirty-fallback",
+    ] as const
   ).includes(caseName)
 ) {
   throw new TypeError("unknown comparison case");
@@ -45,7 +57,7 @@ if (framework === "keala") {
   if (caseName === "probe") {
     for (const prefix of ["/v1", "/oauth", "/admin"]) app.use(`${prefix}/*`, pass);
     app.get("/livez", (c) => c.json({ status: "ok" }));
-  } else if (caseName === "body") {
+  } else if (caseName === "body" || caseName === "body-limited" || caseName === "body-safe") {
     app.use(createBodyParser({ jsonLimit: 1024 }));
     app.post("/v1/echo", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -75,8 +87,37 @@ if (framework === "keala") {
       app.use(`${prefix}/*`, (_c, next) => next());
     }
     app.get("/livez", (c) => c.json({ status: "ok" }));
-  } else if (caseName === "body") {
+  } else if (caseName === "body-limited") {
+    // Fair parity via Hono's OFFICIAL body-limit middleware (R4.2 §4): declared
+    // Content-Length over maxSize -> 413 without reading; streamed byte count
+    // over maxSize -> 413; the downstream reader gets a rebuilt stream. This
+    // is the shape a production Hono user deploys, not a hand-rolled loop.
+    // NOTE the semantics gap: on the happy declared path it TRUSTS the header
+    // and never re-checks actual bytes — a lying Content-Length slips through.
+    app.use("/v1/echo", bodyLimit({ maxSize: 1024 }));
     app.post("/v1/echo", async (c) => c.json(await c.req.json()));
+  } else if (caseName === "body-safe") {
+    // Strictest fair parity: keala re-checks ACTUAL bytes even when
+    // Content-Length is declared (its bytes() fast path). This handler is the
+    // cheapest reasonable Hono equivalent of that lying-length guard — one
+    // native text() read, actual length check, manual parse.
+    const LIMIT = 1024;
+    app.post("/v1/echo", async (c) => {
+      const raw = c.req.raw;
+      const declared = Number(raw.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > LIMIT) {
+        return c.text("request body exceeds the 1024 byte limit", 413);
+      }
+      const text = await raw.text();
+      if (text.length > LIMIT) {
+        return c.text("request body exceeds the 1024 byte limit", 413);
+      }
+      try {
+        return c.json(JSON.parse(text));
+      } catch {
+        return c.text("malformed JSON body", 400);
+      }
+    });
   } else {
     if (
       caseName === "text-dirty" ||
@@ -101,7 +142,7 @@ if (framework === "keala") {
   handle = (request) => app.fetch(request);
 }
 
-if (caseName === "body") {
+if (caseName === "body" || caseName === "body-limited" || caseName === "body-safe") {
   makeRequest = () =>
     new Request("http://localhost/v1/echo", {
       method: "POST",
@@ -114,8 +155,9 @@ if (caseName === "body") {
   makeRequest = () => shared;
 }
 
-const warmup = caseName === "body" ? 20_000 : 60_000;
-const batch = caseName === "body" ? 2_000 : 5_000;
+const isBodyCase = caseName === "body" || caseName === "body-limited" || caseName === "body-safe";
+const warmup = isBodyCase ? 20_000 : 60_000;
+const batch = isBodyCase ? 2_000 : 5_000;
 const samples = 21;
 
 const runOne = async (index: number): Promise<void> => {
@@ -123,7 +165,7 @@ const runOne = async (index: number): Promise<void> => {
   if (response.status !== 200) throw new Error(`unexpected status ${response.status}`);
   const body = await response.text();
   if (caseName === "probe" && body !== '{"status":"ok"}') throw new Error("bad probe body");
-  if (caseName === "body" && body !== '{"message":"hello world"}') {
+  if (isBodyCase && body !== '{"message":"hello world"}') {
     throw new Error("bad echo body");
   }
   if (caseName.startsWith("text") && body !== "hello") throw new Error("bad text body");
@@ -160,3 +202,55 @@ console.log(
     batch,
   }),
 );
+
+// Untimed parity checks for the fair body comparison: the byte budget must
+// hold on both frameworks, not just on the timed happy path. Malformed-JSON
+// handling differs by framework default where parsing is not manual (keala
+// maps it to an exposed 400; Hono's default onError turns the throw into a
+// 500) — recorded, only the 413 budget parity is asserted.
+if (caseName === "body-limited" || caseName === "body-safe") {
+  const oversized = await handle(
+    new Request("http://localhost/v1/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": "2048" },
+      body: "x".repeat(2048),
+    }),
+  );
+  if (oversized.status !== 413) {
+    throw new Error(`declared-oversized must 413, got ${oversized.status}`);
+  }
+  // Lying length: declared 25, actually 2048. keala (body-safe semantics)
+  // fails closed; official body-limit lets it through — the behavior gap
+  // these cases exist to quantify, asserted per framework below.
+  const lying = await handle(
+    new Request("http://localhost/v1/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": "25" },
+      body: '{"message":"' + "x".repeat(2048) + '"}',
+    }),
+  );
+  const malformed = await handle(
+    new Request("http://localhost/v1/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": "9" },
+      body: "not-json{",
+    }),
+  );
+  if (caseName === "body-safe" && lying.status !== 413) {
+    throw new Error(`lying-length must 413 under body-safe, got ${lying.status}`);
+  }
+  if (framework === "keala" && malformed.status !== 400) {
+    throw new Error(`keala malformed must 400, got ${malformed.status}`);
+  }
+  if (framework === "hono" && malformed.status !== 400 && malformed.status !== 500) {
+    throw new Error(`hono malformed must 400|500, got ${malformed.status}`);
+  }
+  console.log(
+    JSON.stringify({
+      framework,
+      case: caseName,
+      lyingStatus: lying.status,
+      malformedStatus: malformed.status,
+    }),
+  );
+}
