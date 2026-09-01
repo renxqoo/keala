@@ -47,6 +47,32 @@ Bun.serve fetch(request, server)
 
 与 koa 的结构差异：路由从"洋葱的一层"提升为顶层先行（省 76~170ns/请求）；`app.use` 全局中间件在**注册期**编译进每条路由链首（含未命中路径的兜底链）；晚于路由注册的 `use()` 触发全部链 O(routes) 重编（文档明示成本）。
 
+### 开发期链警告（仅 `env: "development"`）
+
+全局中间件在注册期编入每条路由链首（koa 语义）——不调 `next()` 而直接返回的
+中间件会吞掉路由。开发模式下 keala 对此给出运行时警告，规则一条：
+
+**已命中的路由从未执行时，按 (app, method, path) 去重各警告一次**，无论停在哪一层：
+
+- 全局中间件不调 `next()` 直接返回（吞掉整条路由，无论是否产出 Response）；
+- 任一**非终端**中间件（路由级或 `Router.use` 前缀位置）既不调 `next()` 也未
+  产出响应（链停滞，请求走向 notFound 404）。
+
+```text
+keala(dev): GET /health matched a route but its handler never ran — global
+middleware returned before calling next(). Call next() for requests you
+don't handle, or use c.throw() to reject intentionally.
+```
+
+不警告的合法形态：有意的拒绝（`c.throw`、抛错走错误路径）、状态式写响应
+（`c.body = …`）不调 `next()`、终端 handler 返回 void（untouched → notFound
+合同）、未命中路径的全局链（notFound 处理器仍会执行）。
+
+实现要点：路由链编译期在全局中间件与路由层之间编入 reached 标记
+（`flags` 位 256），compose 在非终端层 void 返回且未推进时置停滞位（1024；
+位 512 由 context 创建时按 env 置位作为 dev 门控）——生产与 test 环境的链
+不含标记、每层仅一次 AND 判断，零分配零写入。
+
 ## 3. Context：单对象扁平化
 
 每请求 **1 个对象**（koa 为 4 个），字段一次成型（固定隐藏类）：
