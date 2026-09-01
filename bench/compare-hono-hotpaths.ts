@@ -15,6 +15,12 @@ import { createBodyParser, type ContextWithBody } from "../src/plugins/body-pars
 type Framework = "keala" | "hono";
 type CaseName =
   | "probe"
+  | "probe-global-1"
+  | "probe-global-3"
+  | "probe-global-6"
+  | "probe-global-1-async"
+  | "probe-global-3-async"
+  | "probe-global-6-async"
   | "body"
   | "body-limited"
   | "body-safe"
@@ -38,6 +44,12 @@ if (
   !(
     [
       "probe",
+      "probe-global-1",
+      "probe-global-3",
+      "probe-global-6",
+      "probe-global-1-async",
+      "probe-global-3-async",
+      "probe-global-6-async",
       "body",
       "body-limited",
       "body-safe",
@@ -60,6 +72,15 @@ if (framework === "keala") {
   const app = new Keala({ env: "production" });
   if (caseName === "probe") {
     for (const prefix of ["/v1", "/oauth", "/admin"]) app.use(`${prefix}/*`, pass);
+    app.get("/livez", (c) => c.json({ status: "ok" }));
+  } else if (caseName.startsWith("probe-global-")) {
+    const count = Number.parseInt(caseName.slice("probe-global-".length), 10);
+    const asyncPass = async (_c: Context, next: () => Promise<void>): Promise<void> => {
+      await next();
+    };
+    for (let index = 0; index < count; index++) {
+      app.use(caseName.endsWith("-async") ? asyncPass : pass);
+    }
     app.get("/livez", (c) => c.json({ status: "ok" }));
   } else if (caseName === "body" || caseName === "body-limited" || caseName === "body-safe") {
     app.use(createBodyParser({ jsonLimit: 1024 }));
@@ -109,6 +130,18 @@ if (framework === "keala") {
   if (caseName === "probe") {
     for (const prefix of ["/v1", "/oauth", "/admin"]) {
       app.use(`${prefix}/*`, (_c, next) => next());
+    }
+    app.get("/livez", (c) => c.json({ status: "ok" }));
+  } else if (caseName.startsWith("probe-global-")) {
+    const count = Number.parseInt(caseName.slice("probe-global-".length), 10);
+    for (let index = 0; index < count; index++) {
+      if (caseName.endsWith("-async")) {
+        app.use("*", async (_c, next) => {
+          await next();
+        });
+      } else {
+        app.use("*", (_c, next) => next());
+      }
     }
     app.get("/livez", (c) => c.json({ status: "ok" }));
   } else if (caseName === "body-limited") {
@@ -183,7 +216,7 @@ if (caseName === "body" || caseName === "body-limited" || caseName === "body-saf
   const shared = new Request("http://localhost/boom");
   makeRequest = () => shared;
 } else {
-  const path = caseName === "probe" ? "/livez" : "/text";
+  const path = caseName.startsWith("probe") ? "/livez" : "/text";
   const shared = new Request(`http://localhost${path}`);
   makeRequest = () => shared;
 }
@@ -201,7 +234,9 @@ const runOne = async (index: number): Promise<void> => {
     throw new Error(`unexpected status ${response.status}`);
   }
   const body = await response.text();
-  if (caseName === "probe" && body !== '{"status":"ok"}') throw new Error("bad probe body");
+  if (caseName.startsWith("probe") && body !== '{"status":"ok"}') {
+    throw new Error("bad probe body");
+  }
   if (isBodyCase && body !== '{"message":"hello world"}') {
     throw new Error("bad echo body");
   }
