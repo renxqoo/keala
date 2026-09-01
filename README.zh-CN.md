@@ -67,10 +67,10 @@ listen(app, 3000);
   （每请求零 JS 执行）并镜像为普通路由；`serveStatic` 走 `Bun.file`
   sendfile；WebSocket 走原生 socket 升级；`streamSSE` 内置 Bun 官方的
   空闲超时对策。
-- **生产级硬化。** **1800+ 测试在 Node 与真实 Bun 双运行时全绿**
-  （90 个文件），七轮红队审计、每个缺陷测试先行修复，与真实
-  koa/hono/negotiator 包做差分模糊测试，外加路由表等价性模糊验证。
-  每次变更过四道质量门（fmt / lint 0 错误 / tsc / 双运行时测试）。
+- **久经考验。** **1800+ 测试在 Node 与真实 Bun 双运行时全绿**
+  （90 个文件），针对注入、原型污染、请求走私、恶意滥用等真实
+  攻击手法加固，行为与 koa、hono 本尊逐项比对验证。每次变更过
+  四道质量门（格式 / lint / 类型 / 双运行时全量测试）。
 - **安全优先的默认值。** 头写入拒绝 CRLF/NUL 与控制字节、查询与
   Cookie 映射防原型污染、RFC 6265 Cookie 校验、签名 Cookie 恒时比较、
   生产环境绝不外泄堆栈的 `expose` 语义、表单解析字节与部件双重预算。
@@ -330,9 +330,9 @@ bun run bench       # 对比 hono / koa / fastify / raw / Go 的基准装置
     socket（桥接、set-cookie 展开、流式、HEAD、400/500/501 失败面）
   - `test/security*.test.ts` + `agent-security-audit` —— 注入 / 污染 /
     泄露 / 滥用 / 代理信任用例（255+ 断言）
-  - `test/redteam*.test.ts` —— 加固阶段确认的 11 组 bug 的红队回归锁，
-    外加 `matchRoute ≡ pure trie` 等价性模糊测试（每次运行 100 张随机
-    路由表 × 120 条路径）
+  - `test/redteam*.test.ts` —— 开发过程中全部已确认缺陷（85+ 个）的
+    回归锁，外加 `matchRoute ≡ pure trie` 等价性模糊测试（每次运行
+    100 张随机路由表 × 120 条路径）
   - `test/anomalies*.test.ts`、`matrix`、`agent-bugs`、
     `agent-concurrency*` —— 从 koa 语料移植的完整异常输入与状态机矩阵
   - `test/parity-security.test.ts` —— 安全相关的 koa 语义对齐

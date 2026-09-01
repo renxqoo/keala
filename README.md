@@ -70,11 +70,12 @@ listen(app, 3000);
   Bun's native routing table (zero JS per request) mirrored as ordinary
   routes; `serveStatic` uses `Bun.file` sendfile; WebSockets upgrade through
   the native socket; `streamSSE` applies Bun's official idle-timeout remedy.
-- **Production-hardened.** **1800+ tests green under both Node and real Bun
-  runtimes** (90 files), seven red-team rounds with every defect fixed
-  test-first, differential fuzzing against the actual koa/hono/negotiator
-  packages, and a route-table equivalence fuzzer. Four quality gates
-  (fmt / lint 0 errors / tsc / dual-runtime tests) on every change.
+- **Battle-tested.** **1800+ tests green under both Node and real Bun
+  runtimes** (90 files), hardened against real-world attack patterns
+  (injection, prototype pollution, request smuggling, abuse), and behavior
+  verified side-by-side against koa and hono themselves. Every change
+  passes four quality gates: format, lint, types, and the full test suite
+  on both runtimes.
 - **Security-first defaults.** CRLF/NUL and CTL rejection on header writes,
   prototype-pollution-proof query/cookie maps, RFC 6265 cookie validation,
   timing-safe signed-cookie comparison, `expose` semantics that never leak
@@ -340,11 +341,10 @@ bun run bench       # vs hono / koa / fastify / raw / Go benchmark harness
     failure surfaces)
   - `test/security*.test.ts` + `agent-security-audit` — injection / pollution /
     disclosure / abuse / proxy-trust cases (255+ assertions)
-  - `test/redteam*.test.ts` + per-round agent lock files — regression locks
-    for every confirmed bug across seven hardening rounds (85+ defects,
-    all fixed test-first), plus the
-    `matchRoute ≡ pure trie` equivalence fuzz (100 randomized route tables ×
-    120 paths per run)
+  - `test/redteam*.test.ts` + per-round lock files — regression locks for
+    every one of the 85+ defects found and fixed during development, plus
+    the `matchRoute ≡ pure trie` equivalence fuzz (100 randomized route
+    tables × 120 paths per run)
   - `test/anomalies*.test.ts`, `matrix`, `agent-bugs`, `agent-concurrency*` —
     the full abnormal-input and state-machine matrices ported from the koa corpus
   - `test/parity-security.test.ts` — security-relevant koa parity semantics
