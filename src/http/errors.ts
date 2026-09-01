@@ -178,8 +178,17 @@ export const normalizeError = (value: unknown): Error => {
 export const toHttpError = (value: unknown): HttpError => {
   const error = normalizeError(value);
   if (isHttpError(error)) return error;
-  const classified = error as HttpError;
-  classified.status = 500;
-  classified.expose = false;
-  return classified;
+  try {
+    const classified = error as HttpError;
+    classified.status = 500;
+    classified.expose = false;
+    return classified;
+  } catch {
+    // Frozen/sealed error singletons (shared error constants are a real
+    // pattern): classify WITHOUT mutating. Rare path — the wrapper's extra
+    // stack capture is acceptable here; cause keeps the original reachable.
+    const wrapped = createError(500, error.message);
+    wrapped.cause = error;
+    return wrapped;
+  }
 };

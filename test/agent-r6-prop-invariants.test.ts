@@ -53,7 +53,9 @@ describe("INV-1 never-reject", () => {
       try {
         out = app.handle(req);
       } catch (err) {
-        throw new Error(`sync throw out of app.handle: ${String(err).slice(0, 200)}`);
+        throw new Error(`sync throw out of app.handle: ${String(err).slice(0, 200)}`, {
+          cause: err,
+        });
       }
       const res = out instanceof Promise ? await out : out;
       expect(res).toBeInstanceOf(Response);

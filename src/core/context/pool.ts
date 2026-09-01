@@ -150,9 +150,14 @@ export const retireWithBody = (pool: ContextPool, c: Context, value: Response): 
   try {
     reader = body.getReader();
   } catch {
-    // A body-locked Response is a handler bug — but the never-reject contract
-    // on app.handle is absolute: recycle the context and answer a plain 500
-    // instead of throwing out of (or rejecting) the handler pipeline.
+    // A body-locked Response is a handler bug — typically an error mapper
+    // returning a cached/reused Response whose stream was consumed by an
+    // earlier request. The never-reject contract on app.handle is absolute
+    // (recycle the context, answer a plain 500), but the swap must be LOUD:
+    // silent 500s hide exactly the bugs this catches.
+    console.error(
+      "\n  response body was locked or unreadable at retirement — a handler or error mapper returned a reused Response\n",
+    );
     retire();
     return new Response("Internal Server Error", {
       status: 500,

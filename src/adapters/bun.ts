@@ -9,7 +9,7 @@
 import type { Application, WebSocketHandlers } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
 import { buildNativeRoutes } from "../core/sink.ts";
-import { consoleFallback } from "../core/dispatch.ts";
+import { consoleFallback } from "../core/error-response.ts";
 import { toHttpError } from "../http/errors.ts";
 import type { ListenOptions } from "../types.ts";
 
@@ -110,7 +110,13 @@ export const startBunServer = (
         .catch((error: unknown) => {
           // ws runtime errors live outside the request funnel (no context,
           // no mapper contract) — the console fallback keeps them visible.
-          consoleFallback(app, undefined, toHttpError(error));
+          // The containment itself must never become an unhandledRejection
+          // (a process-killer under Bun.serve), so it guards its own body.
+          try {
+            consoleFallback(app, undefined, toHttpError(error));
+          } catch {
+            // Even a throwing fallback dies here, quietly.
+          }
         });
     };
     serveOptions["websocket"] = {

@@ -374,6 +374,23 @@ const fromState = (c: Context, head: boolean): Response => {
  * Terminal conversion — can never throw past `app.handle` (the app wraps this
  * in a try/catch that falls back to a static 500).
  */
+/**
+ * RFC 9110 §8.6: 204/304 MUST NOT carry a body. Bun constructs bodied
+ * empty-status Responses (undici refuses); drop the body and the headers
+ * describing it. Shared by the committed path and the R4.3 takeover path.
+ */
+export const sanitizeEmptyStatus = (res: Response): Response => {
+  const headers = new Headers(res.headers);
+  headers.delete("content-type");
+  headers.delete("content-length");
+  headers.delete("transfer-encoding");
+  return new Response(null, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+};
+
 export const finalize = (app: Application, c: Context): Response | Promise<Response> => {
   const committed = c._res;
   if (committed !== undefined) {
@@ -381,15 +398,7 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
     // bodied Response with an empty status is sanitized exactly like the
     // state-mode path (undici refuses the construction; Bun allows it).
     if (isEmptyStatus(committed.status) && committed.body !== null) {
-      const headers = new Headers(committed.headers);
-      headers.delete("content-type");
-      headers.delete("content-length");
-      headers.delete("transfer-encoding");
-      return new Response(null, {
-        status: committed.status,
-        statusText: committed.statusText,
-        headers,
-      });
+      return sanitizeEmptyStatus(committed);
     }
     const record = c.headersRecord;
     // Rule 4: a committed Response with post-commit mutations (staged

@@ -139,7 +139,7 @@ fail(console.error + static 500)`；`onAppError`/`errorStatusCode`/`isErrorLike`
 | --------------------------- | -----: | ------------------------------------------------------------- |
 | keala onError mapper 信封   |    897 | IQR 842–1014                                                  |
 | koa 式 try/catch 中间件信封 |   1088 | 错误路径本身慢 18%，且每个健康请求另付洋葱层 + Promise 守卫税 |
-| Hono onError 信封           |    833 | keala 与其 IQR 重叠，带内平价                                 |
+| Hono onError 信封           |    833 | IQR 相接；中位数差 8%（机器相关，另台机器测得 8–12%）         |
 
 快乐路径 ABBA（R4.3 vs R4.2 基线，两轮交替）：probe 427/380 vs 497/383、
 裸 text 320/371 vs 364/314、正确 dirty text 766/754 vs 779/755、有界 JSON
@@ -154,7 +154,35 @@ fail(console.error + static 500)`；`onAppError`/`errorStatusCode`/`isErrorLike`
 非 Error 才经 normalizeError 归一），降到 ~890ns。教训已写入 §2 规则 2：
 错误路径的每微秒都要过基准，"看起来等价"的包装成本在深栈下不成比例。
 
-### 10.4 行为增量声明
+### 10.4 多角度 review 轮（4 子代理 + 人工交叉裁决）
+
+四个只写红测的 review 代理（bug/性能/安全/契约高可用）产出 **1 P0 + 7 P1 +
+4 P2**，全部经人工复核实锤并修复；review 红测保留为回归锁
+（`test/agent-review-*.test.ts` 六个文件）：
+
+| 级别 | 问题                                                                                                         | 修复                                                                              |
+| ---- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| P0   | 手写 thenable 返回值穿透 never-reject 边界（`out.then` 直连，非原生 Promise 时泄漏 undefined/同步抛/拒绝）   | `Promise.resolve(out)` 采用                                                       |
+| P1   | `error.headers` 的 content-length/type/transfer-encoding 合并上接管响应——Node 适配器 wire 级错帧（响应走私） | 合并排除 content 描述头（含 content-encoding，两来源一致；reset 同步剥离）        |
+| P1   | 一个非法头中止整个合并——安全头与 WWW-Authenticate 同时丢失                                                   | per-entry try/catch（Bun 的 `Headers.has` 对非法名也抛，须一并入护栏）            |
+| P1   | 冻结 Error 绕过 mapper 且无日志（原地分类写入抛错被吞）                                                      | `toHttpError` 冻结回退为包装（罕见路径，额外栈捕获可接受）                        |
+| P1   | 复用/已消费/锁定的接管 Response 损坏后续请求（wire 或静默降级）                                              | 不可用 Response 响亮失败（console + static 500）；`retireWithBody` 静默交换改响亮 |
+| P1   | ws 容错自身在冻结 Error 上变成 unhandledRejection                                                            | 容错体自带 try/catch                                                              |
+| P2   | `Response.error()`（type error）接管直达 wire                                                                | 同"不可用 Response"守卫                                                           |
+| P2   | 带体 204/304 接管未消毒                                                                                      | 与 committed 路径共享 `sanitizeEmptyStatus`                                       |
+| P2   | Set-Cookie 数组 `", "` 拼接 / staged 多值只留首值                                                            | append 语义（按名 if-absent、按值 append）                                        |
+| P2   | `__proto__` 等禁用头名绕过合并路径                                                                           | 合并遵守同一禁用名单                                                              |
+| P2   | 文档措辞：错误路径对 Hono "带内平价"实为机器相关（另一机器 8–12% 慢）                                        | §10.2 已修订                                                                      |
+
+性能复核（性能代理）：快乐路径注册 mapper 零成本 ✓、零内存泄漏 ✓、无 deopt ✓。
+守卫代价（如实记录）：错误路径 897 → ~1120ns（+~230ns 的可用性检查与合并护栏），
+仍与 koa 式中间件相当（后者继续为每个健康请求付洋葱税）；对 Hono 错误路径
+在本机慢 ~25%。快乐路径零回退保持（probe 402 / dirty 814，带内）。
+
+附带结构清理：错误漏斗抽为 `core/error-response.ts`（dispatch 500 行预算）；
+`finalizeGuarded` 删除运行时不可达的 Promise 分支；`sanitizeEmptyStatus` 去重。
+
+### 10.5 行为增量声明
 
 除返回 Response 接管外，仅一处行为增量：mapper 抛错/拒绝时框架
 console.error 该错误（原先完全静默）。此外 koa 的 `onerror` 方法、事件面、
