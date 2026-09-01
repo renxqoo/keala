@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   compose,
-  Eleu,
+  Keala,
   Router,
   NOOP_TAIL,
   type Middleware,
@@ -118,7 +118,7 @@ describe("anomalies: compose illegal usage", () => {
 describe("anomalies: router illegal inputs", () => {
   const badPaths = ["no-slash", "/a//b", "/:x(unbalanced", "/:?", "/a/*/b", "/:x("];
   it.each(badPaths)("route path %p throws at registration", (path) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.get(path, (c) => void c)).toThrow();
   });
 
@@ -131,33 +131,33 @@ describe("anomalies: router illegal inputs", () => {
       } catch {
         return; // loud at registration — earlier than mount, same guarantee
       }
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       expect(() => app.mount("", router)).toThrow();
     },
   );
 
   it.each(["", "//"])("edge path %p is treated as the root route", (path) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.get(path, (c) => void c)).not.toThrow();
   });
 
   it.each([undefined, null, 42, "GET"])("register middleware %p throws", (mw) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.get("/ok", mw as never)).toThrow(TypeError);
   });
 
   it.each(["", " ", "GET;POST", "GE T"])("method %p throws", (method) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.on(method, "/x", (c) => void c)).toThrow(TypeError);
   });
 
   it("url() for an unknown name throws a helpful error", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.url("ghost")).toThrow(/No route registered/);
   });
 
   it("url() missing required params throws", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("detail", "/items/:id(\\d+)", (c) => void c);
     expect(() => app.url("detail", {})).toThrow(/Missing required parameter/);
   });
@@ -169,14 +169,14 @@ describe("anomalies: router illegal inputs", () => {
   });
 
   it("matching a path with an unmatched custom pattern 404s cleanly", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/n/:num(\\d+)", (c) => void c);
     const res = await app.handle(new Request("http://localhost:3000/n/not-a-number"));
     expect(res.status).toBe(404);
   });
 
   it("deep path (30 segments) matches and captures correctly", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/a/:p1/b/:p2/c/*", (c) => {
       c.body = `${c.params?.p1}-${c.params?.p2}-${c.params?.wildcard}`;
     });
@@ -194,7 +194,7 @@ describe("anomalies: non-Error throwables from middleware", () => {
     ["null-ish", null],
     ["array", [1, 2]],
   ])("%s throwables answer 500 with a clean body", async (_label, value) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.onError(() => {});
     app.get("/", async () => {
       throw value;
@@ -220,7 +220,7 @@ describe("anomalies: exotic requests never crash the app", () => {
     ["bad utf8 percent", "http://localhost:3000/%FF%FE"],
   ];
   it.each(requests)("%s yields a well-formed response", async (_label, url) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       // D1: a string body carries no framework content-type, so the type
       // is set explicitly to keep the "well-formed text response" assertion.
@@ -245,7 +245,7 @@ describe("anomalies: exotic requests never crash the app", () => {
     "PROPFIND",
     "FANCY-CUSTOM",
   ])("method %s dispatches without crashing", async (method) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", (c) => {
       c.body = "ok";
     });

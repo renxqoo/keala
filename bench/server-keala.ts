@@ -1,7 +1,7 @@
-// eleu bench server (Bun runtime) — mirrors the other bench servers.
-import { Eleu } from "../src/index.ts";
+// keala bench server (Bun runtime) — mirrors the other bench servers.
+import { Keala } from "../src/index.ts";
 
-const app = new Eleu();
+const app = new Keala();
 
 app.get("/text", (c) => c.text("hello world"));
 

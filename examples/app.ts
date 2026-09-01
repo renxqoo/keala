@@ -1,5 +1,5 @@
 /**
- * eleu — complete surface in one runnable file.
+ * keala — complete surface in one runnable file.
  *
  *   bun examples/app.ts   → http://localhost:3000
  *
@@ -10,7 +10,7 @@
  */
 
 import {
-  Eleu,
+  Keala,
   createBodyParser,
   Router,
   hashPassword,
@@ -27,7 +27,7 @@ import {
   validator,
 } from "../src/middleware/index.ts";
 
-const app = new Eleu({ keys: ["change-me"], env: "production" });
+const app = new Keala({ keys: ["change-me"], env: "production" });
 
 // --- plugins (context facades — safe alongside native sinks) ----------
 app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
@@ -46,7 +46,7 @@ app.sink("/assets/*", { dir: "./examples/public" });
 // --- routes ---------------------------------------------------------------
 app.get("/", (c) =>
   c.html(
-    html`<h1>eleu</h1>
+    html`<h1>keala</h1>
       <a href="/health">/health</a> (native sink)`,
   ),
 );
@@ -113,7 +113,7 @@ app.notFound((c) => {
 
 const port = Number(process.argv[2] ?? 3100);
 const server = app.listen({ port });
-console.log(`eleu example on ${server.hostname}:${server.port}`);
+console.log(`keala example on ${server.hostname}:${server.port}`);
 console.log("  GET  /            html page");
 console.log("  GET  /health      native-sunk static response");
 console.log("  GET  /assets/*    native-sunk directory");

@@ -9,10 +9,10 @@
  * refused before routing.
  *
  * ```ts
- * import { Eleu } from "eleu";
- * import { listen } from "eleu/node";
+ * import { Keala } from "keala";
+ * import { listen } from "keala/node";
  *
- * const app = new Eleu();
+ * const app = new Keala();
  * app.get("/", (c) => { c.body = "hello"; });
  * listen(app, 3000);
  * ```

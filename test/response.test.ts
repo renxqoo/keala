@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/index.ts";
+import { Keala } from "../src/index.ts";
 
-const makeApp = () => new Eleu({ env: "test" });
+const makeApp = () => new Keala({ env: "test" });
 
 describe("response facade (flat context)", () => {
   it("starts as 404 with no body", async () => {

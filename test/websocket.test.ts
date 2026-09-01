@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu, type Application } from "../src/core/app.ts";
+import { Keala, type Application } from "../src/core/app.ts";
 import { startBunServer, type ServerHandle } from "../src/adapters/bun.ts";
 
 const quiet = { env: "test" } as const;
@@ -25,7 +25,7 @@ const upgradeServer = (
 describe("app.ws routing", () => {
   it("upgrades through the runtime server and passes context in the socket data", async () => {
     const seen: { request?: Request; data?: unknown }[] = [];
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.ws("/chat", { open: () => undefined });
     const res = await app.handle(req("/chat"), { server: upgradeServer(true, seen) });
     expect(seen.length).toBe(1);
@@ -36,7 +36,7 @@ describe("app.ws routing", () => {
   });
 
   it("answers 501 without a runtime server (in-process test usage)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.ws("/chat", {});
     const res = await app.handle(req("/chat"));
     expect(res.status).toBe(501);
@@ -44,14 +44,14 @@ describe("app.ws routing", () => {
   });
 
   it("answers 400 when the runtime rejects the upgrade", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.ws("/chat", {});
     const res = await app.handle(req("/chat"), { server: upgradeServer(false) });
     expect(res.status).toBe(400);
   });
 
   it("ws routes ignore method semantics (no 405 interference)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.ws("/chat", {});
     const res = await app.handle(new Request("http://localhost:3000/chat", { method: "DELETE" }), {
       server: upgradeServer(true),
@@ -63,7 +63,7 @@ describe("app.ws routing", () => {
 describe("adapter websocket dispatcher", () => {
   it("routes socket events by wsKey with the context", async () => {
     const events: string[] = [];
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.ws("/a", {
       open: (ws, c) => {
         events.push(`a-open:${(ws as { id: string }).id}:${c.path}`);
@@ -114,7 +114,7 @@ describe("adapter websocket dispatcher", () => {
   });
 
   it("no websocket config is emitted without ws routes", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", (c) => c.text("x"));
     const made: Record<string, unknown>[] = [];
     startBunServer(app as Application, { port: 0 }, undefined, (options) => {

@@ -12,16 +12,16 @@ server×scenario before any load runs.
 Three machines contribute, and their ABSOLUTE numbers are not comparable:
 
 - **8-core Apple Silicon** (client and servers co-resident, headroom to
-  spare): the original throughput headline — `eleu` ≈ 200–243k req/s.
+  spare): the original throughput headline — `keala` ≈ 200–243k req/s.
 - **4-core Intel** (i5-8257U, colocated client compresses everything ~4x):
   the original RELATIVE table with the Go reference.
 - **10-core Apple M4** (the report above): the post-hardening regression
-  check machine — `eleu` ≈ 226–247k req/s, with the Go reference
+  check machine — `keala` ≈ 226–247k req/s, with the Go reference
   trailing the Bun trio here (179–188k) at this core count.
 
-**eleu vs hono 4: statistical parity — on all three machines.**
+**keala vs hono 4: statistical parity — on all three machines.**
 
-| M4 10-core (report above) |        eleu |      hono 4 | ratio | verdict      |
+| M4 10-core (report above) |        keala |      hono 4 | ratio | verdict      |
 | ------------------------- | ----------: | ----------: | ----: | ------------ |
 | text                      | 226,144 ±7% | 223,280 ±4% | 1.01x | inside noise |
 | JSON                      | 227,792 ±8% | 231,072 ±8% | 0.99x | inside noise |
@@ -29,7 +29,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 | 3 middlewares             | 198,944 ±3% | 186,352 ±3% | 1.07x | leans ours   |
 | 1000-route scale          | 247,232 ±3% | 249,024 ±3% | 0.99x | tie          |
 
-| 8-core Apple Silicon  |          eleu |        hono 4 |     ratio | verdict       |
+| 8-core Apple Silicon  |          keala |        hono 4 |     ratio | verdict       |
 | --------------------- | ------------: | ------------: | --------: | ------------- |
 | text                  |  228,432 ±13% |  194,448 ±23% |     1.17x | inside noise  |
 | JSON                  |  231,280 ±13% |  211,968 ±16% |     1.09x | inside noise  |
@@ -38,7 +38,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 | 1000-route scale      |   229,136 ±6% |   239,856 ±6% |     0.96x | inside noise  |
 | **in-process ns/req** | **379 / 476** | **379 / 476** | **1.00x** | **exact tie** |
 
-| Intel 4-core (colocated) |        eleu |      hono 4 | ratio | verdict      |
+| Intel 4-core (colocated) |        keala |      hono 4 | ratio | verdict      |
 | ------------------------ | ----------: | ----------: | ----: | ------------ |
 | text                     | 56,764 ±13% | 52,884 ±21% | 1.07x | inside noise |
 | JSON                     | 48,648 ±10% | 46,000 ±11% | 1.06x | inside noise |
@@ -52,7 +52,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
   routes** (@koa/router's linear layer walk vs O(path) dispatch).
 - **vs fastify 5 (Node): 2.4–3.3x**, and vs their Bun-compat placements
   (koa-on-bun, fastify-on-bun) still ~1.7x on the M4.
-- **Idle memory**: eleu 24–25MB vs hono 25–26MB on the M4 — the lazy
+- **Idle memory**: keala 24–25MB vs hono 25–26MB on the M4 — the lazy
   native bridges keep this row at parity-or-better (pre-change Intel:
   19.1 vs 20.0MB). koa/fastify idle at 34–64MB and peak ~100MB.
 
@@ -60,7 +60,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 ~140ns/req framework overhead measured in-process is a few percent of the
 wire cost). **The 1000-route raw inversion is real and reproduced on all
 three machines** (raw's native routes table loses to hash-map + trie
-dispatch at 1000 entries; M4 run 2: eleu 247k vs raw 179k, ±3%/±2%). The
+dispatch at 1000 entries; M4 run 2: keala 247k vs raw 179k, ±3%/±2%). The
 explanation is a hypothesis, the measurement is not.
 
 ## Post-hardening regression check (Apple M4, 2026-08-31)
@@ -77,7 +77,7 @@ property disclosure) initially ran in `initContext` — i.e. on EVERY fresh
 context, paying an `Object.keys()` allocation + loop per request on the
 no-pooling hot path.
 
-| in-process ns/req (best of 3)                        |      eleu |    hono 4 | ratio to hono                  |
+| in-process ns/req (best of 3)                        |      keala |    hono 4 | ratio to hono                  |
 | ---------------------------------------------------- | --------: | --------: | ------------------------------ |
 | pre-change baseline                                  | 384 / 490 | 386 / 488 | 0.995x / 1.004x                |
 | hardening, first cut                                 | 421 / 528 | 378 / 496 | **1.11x / 1.06x** ← regression |
@@ -103,7 +103,7 @@ internally a median of 4 rounds):
 | 1000-route scale      |    230,736 |        247,232 |       1.02x |   0.99–1.01x |
 
 Every ratio sits inside its run-to-run noise band — the hardening round
-costs nothing measurable on the wire. Memory idles at parity too (eleu
+costs nothing measurable on the wire. Memory idles at parity too (keala
 24–25MB vs hono 25–26MB; peaks 58–59 vs 56–62MB across runs). This check is
 the methodology paying for itself: the in-process baseline caught a +6–11%
 regression that the first HTTP pass alone would have buried in noise.
@@ -121,7 +121,7 @@ A stdlib `net/http` server with byte-identical responses joins the harness
 (`bench/server-go`, auto-built when a Go toolchain exists). On the Intel box
 it is the fastest participant, ahead of **raw Bun.serve** itself:
 
-| Intel 4-core  |        eleu |          Go | ratio | verdict              |
+| Intel 4-core  |        keala |          Go | ratio | verdict              |
 | ------------- | ----------: | ----------: | ----: | -------------------- |
 | text          | 56,764 ±13% |  57,720 ±2% | 0.98x | inside noise         |
 | JSON          | 48,648 ±10% |  56,228 ±3% | 0.87x | Go ahead, near-noise |
@@ -132,7 +132,7 @@ it is the fastest participant, ahead of **raw Bun.serve** itself:
 Honest reading: Go leads that field by ~10–15% in throughput and wins memory
 outright (idle 5.9MB / peak 19.6MB — every JS runtime idles at 12–28MB and
 peaks at 38–48MB). The gap sits BELOW the framework layer: raw Bun.serve
-trails Go on the same box, and eleu adds nothing to that gap versus hono
+trails Go on the same box, and keala adds nothing to that gap versus hono
 (both tie). The onion/middleware tower widens it to 0.72x — three JS
 closures per request cost what Go pays in a static handler chain. Latency
 flips at the tail: Go's p50 is lowest (2ms vs 3ms) but its p99 is the WORST
@@ -144,7 +144,7 @@ scheduler queuing, not per-request cost. On the M4 the ordering inverts
 
 The batch-interleaved in-process baseline on the same Intel machine:
 
-| scenario          |              eleu |            hono 4 | ratio |
+| scenario          |              keala |            hono 4 | ratio |
 | ----------------- | ----------------: | ----------------: | ----: |
 | text, in-process  | 2,118 ns (472k/s) | 2,089 ns (479k/s) | 0.99x |
 | param, in-process | 2,757 ns (363k/s) | 2,703 ns (370k/s) | 0.98x |

@@ -56,7 +56,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { Router } from "../src/router/group.ts";
 
 const quiet = { env: "test" } as const;
@@ -68,7 +68,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use middleware", () => {
   it("global middleware runs exactly once for a doubly-registered route", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let globals = 0;
     app.use((_c, next) => {
       globals++;
@@ -85,7 +85,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
   });
 
   it("execution order is global > layer1 > layer2 with a single global pass", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const order: string[] = [];
     app.use(async (_c, next) => {
       order.push("global");
@@ -105,7 +105,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
   });
 
   it("still doubles after a rebuild (app.use registered after the duplicates)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let globals = 0;
     app.get("/dup", async (_c, next) => {
       await next();
@@ -122,7 +122,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
   });
 
   it("a route registered via mount() and again directly doubles the global too", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let globals = 0;
     app.use((_c, next) => {
       globals++;
@@ -145,7 +145,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
 
 describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
   it("app.get('/*') answers GET / (express/hono semantics; '/*' is the catch-all)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
     const res = await app.handle(req("/"));
     expect(res.status).toBe(200);
@@ -153,7 +153,7 @@ describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
   });
 
   it("url() output for an empty root wildcard round-trips", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("w", "/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
     const url = app.url("w", { wildcard: "" }); // buildURL emits "/"
     expect(url).toBe("/");
@@ -162,7 +162,7 @@ describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
   });
 
   it("a static '/' route still wins over the root wildcard (priority unchanged)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/*", (c) => c.text("wild"));
     app.get("/", (c) => c.text("root"));
     const res = await app.handle(req("/"));
@@ -176,23 +176,23 @@ describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
 
 describe("R5-3 CONFIRMED-BUG: redirect destination requires a param the source only captures optionally", () => {
   it("registration must throw (eager validation — the param can be absent at runtime)", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     // "/o" (no :x captured) would otherwise 500 inside buildURL per request.
     expect(() => app.redirect("/o/:x?", "/n/:x", 302)).toThrow();
   });
 
   it("mid-pattern optional source params are covered by the same contract", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.redirect("/a/:x?/b", "/c/:x", 302)).toThrow();
   });
 
   it("locks correct: an optional destination param needs no such guarantee", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.redirect("/o/:x?", "/n/:x?", 302)).not.toThrow();
   });
 
   it("locks correct: a required source param satisfies a required destination param", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.redirect("/o/:x", "/n/:x", 302)).not.toThrow();
   });
 });
@@ -213,7 +213,7 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   };
 
   it("the inner middleware runs through the middle app (control)", async () => {
-    const mid = new Eleu(quiet);
+    const mid = new Keala(quiet);
     mid.mount("/r", innerRouter());
     const res = await mid.handle(req("/r/leaf"));
     expect(res.status).toBe(200);
@@ -221,8 +221,8 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   });
 
   it("the inner middleware must survive remounting the middle app", async () => {
-    const app = new Eleu(quiet);
-    const mid = new Eleu(quiet);
+    const app = new Keala(quiet);
+    const mid = new Keala(quiet);
     mid.mount("/r", innerRouter());
     app.mount("/b", mid);
     const res = await app.handle(req("/b/r/leaf"));
@@ -231,16 +231,16 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   });
 
   it("three levels deep: the innermost use() middleware must still run", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const leaf = new Router();
     leaf.use(async (c, next) => {
       c.set("X-Leaf", "1");
       await next();
     });
     leaf.get("/x", (c) => c.text("x"));
-    const mid1 = new Eleu(quiet);
+    const mid1 = new Keala(quiet);
     mid1.mount("/m1", leaf);
-    const mid2 = new Eleu(quiet);
+    const mid2 = new Keala(quiet);
     mid2.mount("/m2", mid1);
     app.mount("/top", mid2);
     const res = await app.handle(req("/top/m2/m1/x"));
@@ -249,14 +249,14 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   });
 
   it("locks correct: the middle app's own global middleware and inner param middleware survive remount", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const inner = new Router();
     inner.param("id", async (c, next) => {
       c.set("X-Param", c.params?.["id"] ?? "");
       await next();
     });
     inner.get("/i/:id", (c) => c.text("i"));
-    const mid = new Eleu(quiet);
+    const mid = new Keala(quiet);
     mid.use(async (c, next) => {
       c.set("X-Mid", "1");
       await next();

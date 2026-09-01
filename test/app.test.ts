@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { Router } from "../src/router/group.ts";
 import { startBunServer, type ServerHandle } from "../src/adapters/bun.ts";
 import type { Application } from "../src/core/app.ts";
@@ -16,7 +16,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("app pipeline", () => {
   it("matches routes top-level and returns their response", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", (c) => c.text("x"));
     const res = await app.handle(req("/x"));
     expect(res.status).toBe(200);
@@ -24,7 +24,7 @@ describe("app pipeline", () => {
   });
 
   it("global middleware runs for UNMATCHED paths (koa contract)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c, next) => {
       c.set("X-Global", "1");
       return next();
@@ -39,7 +39,7 @@ describe("app pipeline", () => {
   });
 
   it("global middleware runs for unmatched METHODS too, and may respond", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(async (_c, next) => {
       await next(); // observability only — never touches the response state
     });
@@ -50,7 +50,7 @@ describe("app pipeline", () => {
   });
 
   it("state mode: c.body/c.status/c.set flow into the response", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.status = 201;
       c.set("X-Made", "yes");
@@ -63,7 +63,7 @@ describe("app pipeline", () => {
   });
 
   it("dual mode: a committed Response wins over concurrent state, and later c.set merges in", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/d", (c) => {
       void c.set("X-Before", "1");
       return c.text("returned");
@@ -74,7 +74,7 @@ describe("app pipeline", () => {
   });
 
   it("bare fast path: 200 + no custom headers carries no explicit content-type", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/bare", (c) => c.text("plain"));
     const res = await app.handle(req("/bare"));
     expect(res.status).toBe(200);
@@ -86,7 +86,7 @@ describe("app pipeline", () => {
   });
 
   it("c.json returns application/json through the native static", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/j", (c) => c.json({ ok: true }));
     const res = await app.handle(req("/j"));
     // Bun's Response.json adds ;charset=utf-8 in-process; undici does not.
@@ -95,7 +95,7 @@ describe("app pipeline", () => {
   });
 
   it("state-mode object bodies serialize via Response.json semantics", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/o", (c) => {
       c.body = { n: 1 };
     });
@@ -105,7 +105,7 @@ describe("app pipeline", () => {
   });
 
   it("notFound customizes the untouched-404 response", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.notFound((c) => c.text("nothing here", 404, { "x-kind": "custom" }));
     const res = await app.handle(req("/nope"));
     expect(res.status).toBe(404);
@@ -114,7 +114,7 @@ describe("app pipeline", () => {
   });
 
   it("matched route with an untouched response still 404s (koa)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/empty", () => undefined);
     const res = await app.handle(req("/empty"));
     expect(res.status).toBe(404);
@@ -122,7 +122,7 @@ describe("app pipeline", () => {
   });
 
   it("errors never escape app.handle and follow the expose gate", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/500", () => {
       throw new Error("secret");
     });
@@ -137,7 +137,7 @@ describe("app pipeline", () => {
 
   it("onError hears errors; silent apps log nothing on 5xx", async () => {
     const error = vi.fn();
-    const app = new Eleu({ env: "test", silent: true });
+    const app = new Keala({ env: "test", silent: true });
     app.onError(error);
     app.get("/e", () => {
       throw new Error("boom");
@@ -148,7 +148,7 @@ describe("app pipeline", () => {
   });
 
   it("HEAD reuses the GET handler, drops the body, backfills Content-Length", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/h", (c) => c.text("hello"));
     const res = await app.handle(new Request("http://localhost:3000/h", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -157,7 +157,7 @@ describe("app pipeline", () => {
   });
 
   it("late app.use() recomposes existing route chains", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/late", (c) => c.text("core"));
     app.use(async (c, next) => {
       c.set("X-Late", "1");
@@ -169,7 +169,7 @@ describe("app pipeline", () => {
   });
 
   it("decorate extends every context", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.decorate("user", () => "u1");
     app.get("/who", (c) => c.text((c as unknown as { user: () => string }).user()));
     const res = await app.handle(req("/who"));
@@ -177,7 +177,7 @@ describe("app pipeline", () => {
   });
 
   it("runtime.remote resolves c.ip exactly once (lazy memo)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let calls = 0;
     const remote = () => {
       calls += 1;
@@ -190,7 +190,7 @@ describe("app pipeline", () => {
   });
 
   it("callback() wraps handle 1:1", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/cb", (c) => c.text("cb"));
     const res = await app.callback()(req("/cb"));
     expect(await res.text()).toBe("cb");
@@ -199,7 +199,7 @@ describe("app pipeline", () => {
 
 describe("app: mounting", () => {
   it("mounts a router under a prefix with 404 fallthrough", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const api = new Router({ prefix: "/v1" });
     api.get("/ping", (c) => c.text("pong"));
     app.mount("/api", api);
@@ -210,13 +210,13 @@ describe("app: mounting", () => {
   });
 
   it("mounts another app's routes with its global middleware prepended", async () => {
-    const sub = new Eleu(quiet);
+    const sub = new Keala(quiet);
     sub.use((c, next) => {
       c.set("X-Sub", "1");
       return next();
     });
     sub.get("/inner", (c) => c.text("inner"));
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.mount("/sub", sub);
     const res = await app.handle(req("/sub/inner"));
     expect(await res.text()).toBe("inner");
@@ -226,14 +226,14 @@ describe("app: mounting", () => {
 
 describe("app: registration validation", () => {
   it("rejects unknown methods, non-function handlers and empty stacks", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.on("NOTAMETHOD", "/x", () => undefined)).toThrow(TypeError);
     expect(() => app.get("/x", "nope" as unknown as () => void)).toThrow(TypeError);
     expect(() => app.get("/x")).toThrow(/at least one handler/);
   });
 
   it("named routes resolve through url()/route()", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("user", "/users/:id(\\d+)", () => undefined);
     expect(app.url("user", { id: "7" })).toBe("/users/7");
     expect(app.route("user")).toBe("/users/:id(\\d+)");
@@ -242,7 +242,7 @@ describe("app: registration validation", () => {
   });
 
   it("app.param middleware runs for routes capturing the param", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.param("pid", async (c, next) => {
       c.set("X-Param", c.params?.["pid"] ?? "");
       await next();
@@ -271,7 +271,7 @@ describe("app: listen", () => {
         reload: () => undefined,
       };
     };
-    const app = new Eleu(quiet) as Application;
+    const app = new Keala(quiet) as Application;
     startBunServer(app, { port: 4123 }, noopListen, serveImpl);
     expect(made[0]?.["port"]).toBe(4123);
     expect(typeof made[0]?.["fetch"]).toBe("function");
@@ -295,7 +295,7 @@ describe("app: listen", () => {
   it.skipIf(typeof Bun !== "undefined")(
     "throws outside Bun when no serve implementation exists",
     () => {
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       expect(() => startBunServer(app, {})).toThrow(/Bun\.serve/);
     },
   );

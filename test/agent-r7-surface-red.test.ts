@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu, createError, normalizeError } from "../src/index.ts";
+import { Keala, createError, normalizeError } from "../src/index.ts";
 import { createEmitter } from "../src/core/emitter.ts";
 import { charsetFromContentType, expandContentType } from "../src/utils/mime.ts";
 
@@ -16,7 +16,7 @@ const request = (path = "/"): Request => new Request(`http://localhost:3000${pat
 
 describe("R7-SURFACE-1 [HIGH] decorate preserves ordinary service objects", () => {
   it("does not reinterpret every object with a get() method as a property descriptor", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const repository = {
       get(key: string) {
         return `record:${key}`;
@@ -64,7 +64,7 @@ describe("R7-SURFACE-2 [MEDIUM] non-Error throwables are always normalizable", (
   });
 
   it("delivers a BigInt throwable to the public app error listener", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let heard: Error | undefined;
     app.onError((error) => {
       heard = error;
@@ -118,7 +118,7 @@ describe("R7-SURFACE-4 [MEDIUM] EventEmitter duplicate removal follows Node orde
 
 describe("R7-SURFACE-5 [MEDIUM] onError validates listeners at subscription time", () => {
   it("rejects a non-function instead of poisoning a later error emission", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
 
     // Every other registration API validates callable inputs eagerly.
     // Expected: setup-time TypeError. Actual: emitter.add stores null and a

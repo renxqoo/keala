@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 // full; the real-runtime equivalents live in scripts/smoke.ts.
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { streamSSE, disableIdleTimeout } from "../src/helpers/streams.ts";
 import type { Context } from "../src/core/context/context.ts";
 
@@ -54,7 +54,7 @@ describe.skipIf(REAL_BUN)("serve-static × Bun.file body", () => {
       },
       async () => {
         const { serveStatic } = await import("../src/middleware/serve-static.ts");
-        const app = new Eleu(quiet);
+        const app = new Keala(quiet);
         app.get("/f/*", serveStatic({ root, prefix: "/f" }));
         const res = await app.handle(new Request("http://localhost:3000/f/a.txt"));
         expect(res.status).toBe(200);
@@ -241,7 +241,7 @@ describe.skipIf(REAL_BUN)("csrfToken × Bun.CSRF wrapping", () => {
 describe("streamSSE × server.timeout bridge", () => {
   it("streamSSE disables the per-request idle timeout when a server rides the runtime", async () => {
     const timeouts: Array<{ request: Request; seconds: number }> = [];
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/events", (c) =>
       streamSSE(c, (sse) => {
         sse.send({ data: "hi" });

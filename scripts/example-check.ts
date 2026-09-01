@@ -33,7 +33,7 @@ try {
   const css = (await asset.text()).replaceAll(/\s+/g, "");
   check("dir sink /assets/app.css", asset.status === 200 && css === "body{}");
   const page = await fetch(`${base}/`);
-  check("html page", page.status === 200 && (await page.text()).includes("eleu"));
+  check("html page", page.status === 200 && (await page.text()).includes("keala"));
   const noauth = await fetch(`${base}/api/login`, { method: "POST" });
   check(
     "basicAuth 401",

@@ -68,7 +68,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Eleu, type Application } from "../src/core/app.ts";
+import { Keala, type Application } from "../src/core/app.ts";
 import { cache } from "../src/middleware/cache.ts";
 import { cors } from "../src/middleware/cors.ts";
 import { csrf } from "../src/middleware/cors.ts";
@@ -91,7 +91,7 @@ describe("R5-1 security: cache() must honor no-cache/no-store/private in ANY cas
     "Cache-Control %q on the response must prevent storage",
     async (control) => {
       let computed = 0;
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       app.get("/p", cache({ ttl: 60_000 }), (c) => {
         computed += 1;
         c.set("Cache-Control", control); // handler opts out of caching
@@ -108,7 +108,7 @@ describe("R5-1 security: cache() must honor no-cache/no-store/private in ANY cas
 
   it("contrast (green): the lowercase spellings are honored — proving only the case handling diverges", async () => {
     let computed = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/p", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
       c.set("Cache-Control", "private");
@@ -127,7 +127,7 @@ describe("R5-1 security: cache() must honor no-cache/no-store/private in ANY cas
 // ---------------------------------------------------------------------------
 describe("R5-2 security: cache() key must not be forgeable via X-Forwarded-Host", () => {
   it("a request to /y with XFH '<site>/x' must not be stored under /x/y's key", async () => {
-    const app = new Eleu({ ...quiet, proxy: true });
+    const app = new Keala({ ...quiet, proxy: true });
     // ONE shared cache() instance (the documented app.use() shape) — a single
     // store keyed by method+host+path.
     app.use(cache({ ttl: 60_000 }));
@@ -160,7 +160,7 @@ describe("R5-2 security: cache() key must not be forgeable via X-Forwarded-Host"
 describe("R5-3 semantic: cache() silently no-ops for state-mode handlers", () => {
   it("a 200 textual state-mode (c.body) response must be cacheable", async () => {
     let computed = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/s", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
       // The framework's canonical koa-style state API — eligible per the
@@ -181,7 +181,7 @@ describe("R5-3 semantic: cache() silently no-ops for state-mode handlers", () =>
 // ---------------------------------------------------------------------------
 describe("R5-4 security: cors() reject responses must carry Vary: Origin", () => {
   it("simple-request 403 reject (whitelist mode)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors({ origin: ["https://good.com"] }));
     app.get("/d", (c) => c.text("data"));
     const rejected = await drive(app, req("/d", { headers: { origin: "https://evil.com" } }));
@@ -192,7 +192,7 @@ describe("R5-4 security: cors() reject responses must carry Vary: Origin", () =>
   });
 
   it("preflight 403 reject (whitelist mode)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors({ origin: ["https://good.com"] }));
     app.get("/d", (c) => c.text("data"));
     const rejected = await drive(
@@ -207,7 +207,7 @@ describe("R5-4 security: cors() reject responses must carry Vary: Origin", () =>
   });
 
   it("custom reject() responses are equally origin-dependent", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(
       cors({
         origin: ["https://good.com"],
@@ -228,7 +228,7 @@ describe("R5-4 security: cors() reject responses must carry Vary: Origin", () =>
 describe("R5-5 security: c.redirect() must not emit a cross-origin-resolvable Location", () => {
   // The reflected-redirect pattern round 3 already used for PIPE-1.
   const appOf = (): Application => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.redirect(String(c.query.next));
     });
@@ -257,7 +257,7 @@ describe("R5-6 semantic: sink guard must catch %-encoded paths inside the sunk s
     const dir = mkdtempSync(join(tmpdir(), "r5sink-"));
     try {
       writeFileSync(join(dir, "f.txt"), "sinked");
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       app.sink("/a/*", { dir });
       // "/a%2Fb" decodes to the in-subtree path "/a/b"; the trie wildcard
       // mirror of the sink matches it, so Bun's native routes table may serve
@@ -281,7 +281,7 @@ describe("locks current safe behavior", () => {
       try {
         writeFileSync(join(root, "ok.txt"), "ok");
         writeFileSync(join(root, "secret.txt"), "secret");
-        const app = new Eleu(quiet);
+        const app = new Keala(quiet);
         app.get("/assets/*", serveStatic({ root, prefix: "/assets" }));
         const attacks = [
           "/assets/..%2f..%2fsecret.txt",
@@ -314,7 +314,7 @@ describe("locks current safe behavior", () => {
 
   describe("streamSSE field sanitization", () => {
     it("CR/LF in event/id/data/retry/comment can never forge a new field line", async () => {
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       app.get("/sse", (c) =>
         streamSSE(c, async (sse) => {
           sse.send({ event: "user\r\nevent: forged", id: "1\ndata: forged", data: "d1" });
@@ -391,7 +391,7 @@ describe("locks current safe behavior", () => {
 
   describe("csrf(): origin confusion corpus", () => {
     const guarded = (): Application => {
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       app.use(csrf());
       app.post("/x", (c) => c.text("ok"));
       return app;
@@ -431,7 +431,7 @@ describe("locks current safe behavior", () => {
 
   describe("requestId: inbound ids are token-validated before echoing", () => {
     it("a token-valid inbound id is echoed verbatim; anything else is replaced", async () => {
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       app.use(requestId());
       app.get("/i", (c) => c.text("x"));
       const echoed = await drive(app, req("/i", { headers: { "x-request-id": "abc-123" } }));

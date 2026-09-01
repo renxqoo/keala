@@ -1,8 +1,8 @@
-// eleu scale server: 1000 static routes only (dedicated process so the
+// keala scale server: 1000 static routes only (dedicated process so the
 // base scenarios stay unpolluted).
-import { Eleu } from "../src/index.ts";
+import { Keala } from "../src/index.ts";
 
-const app = new Eleu();
+const app = new Keala();
 for (let i = 0; i < 1000; i++) {
   app.get(`/route-${i}`, (c) => c.text(`route-${i}`));
 }

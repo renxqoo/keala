@@ -1,7 +1,7 @@
 /**
  * Entry-surface contract: the ROOT entry carries the app surface (core, the
  * body plugin, in-handler helpers) while middleware stays at the
- * `eleu/middleware` aggregate and the Node adapter at `eleu/node`.
+ * `keala/middleware` aggregate and the Node adapter at `keala/node`.
  * These locks keep the split honest — middleware sneaking back into the root
  * barrel would re-add its idle-memory cost for every importer.
  */
@@ -13,7 +13,7 @@ import * as middleware from "../src/middleware/index.ts";
 
 const ROOT_EXPORTS = new Set([
   // core
-  "Eleu",
+  "Keala",
   "Router",
   "compose",
   "direct",

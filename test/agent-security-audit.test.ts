@@ -1,7 +1,7 @@
 /**
  * Agent security audit: attack tests for vulnerabilities found during the
  * threat-model pass and locks for the semantics they were verified against.
- * Migrated to the current API (Eleu from core/app, app.onError, Runtime
+ * Migrated to the current API (Keala from core/app, app.onError, Runtime
  * object for the remote address).
  *
  * Fixed vulnerabilities covered here:
@@ -28,7 +28,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
 import {
   createCookies,
@@ -45,7 +45,7 @@ import { parseQuery } from "../src/utils/query.ts";
 import { validateHeaderName } from "../src/utils/text.ts";
 
 const quiet = { env: "test" } as const;
-const drive = (app: InstanceType<typeof Eleu>, url: string, init?: RequestInit) =>
+const drive = (app: InstanceType<typeof Keala>, url: string, init?: RequestInit) =>
   app.handle(new Request(url, init));
 
 // ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
   });
 
   it("end-to-end: c.is() with an attacker-controlled token never 500s", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const errors: string[] = [];
     app.onError((e) => errors.push(e.message));
     app.use((c) => {
@@ -135,7 +135,7 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
   });
 
   it("end-to-end: attachment() never emits a non-string Content-Type", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       c.attachment(c.query["name"] as string);
       c.body = "data";
@@ -189,7 +189,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
   });
 
   it("end-to-end: an injected option becomes a clean 500 with no Set-Cookie on the wire", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const seen: string[] = [];
     app.onError((e: Error) => seen.push(`${e.constructor.name}:${e.message}`));
     app.use((c) => {
@@ -207,7 +207,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
   });
 
   it("end-to-end: legitimate cookies carry exactly the requested attributes", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       c.cookies.set("ok", "1", { sameSite: "strict", httpOnly: true });
       c.body = "ok";
@@ -304,7 +304,7 @@ describe("audit: x-forwarded-* trust chain", () => {
   } as const;
 
   it("with proxy=false no forwarded header influences ip/protocol/host", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
@@ -321,7 +321,7 @@ describe("audit: x-forwarded-* trust chain", () => {
   });
 
   it("case/spelling variants of forwarded headers are gated identically", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
@@ -341,7 +341,7 @@ describe("audit: x-forwarded-* trust chain", () => {
   });
 
   it("with proxy=true the socket address is still preferred over the header", async () => {
-    const app = new Eleu({ ...quiet, proxy: true });
+    const app = new Keala({ ...quiet, proxy: true });
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
@@ -358,7 +358,7 @@ describe("audit: x-forwarded-* trust chain", () => {
   });
 
   it("maxIpsCount truncates the forwarded list from the right", async () => {
-    const app = new Eleu({ ...quiet, proxy: true, maxIpsCount: 1 });
+    const app = new Keala({ ...quiet, proxy: true, maxIpsCount: 1 });
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
@@ -380,7 +380,7 @@ describe("audit: unicode confusion (no normalization bypass)", () => {
   it("a fullwidth proto key NFKC-folds to __proto__ but stays inert here", async () => {
     // Document the attack intent: NFKC would fold the key to `__proto__`.
     expect(FULLWIDTH_PROTO.normalize("NFKC")).toBe("__proto__");
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let keyCount = -1;
     app.use((c) => {
       keyCount = Object.keys(c.query).length;
@@ -396,7 +396,7 @@ describe("audit: unicode confusion (no normalization bypass)", () => {
   });
 
   it("fullwidth period in a path never folds into a traversal dot", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let path = "";
     app.use((c) => {
       path = c.path;
@@ -470,7 +470,7 @@ describe("audit: parser linearity locks (negotiation, cookies)", () => {
 
 describe("audit: error path contract", () => {
   it("a throwing cookies.set() surfaces as a resolved 500 response", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let emitted = 0;
     app.onError(() => {
       emitted++;
@@ -488,7 +488,7 @@ describe("audit: error path contract", () => {
   });
 
   it("an invalid cookie name is rejected before any header is stored", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.onError(() => {});
     app.use((c) => {
       expect(() => c.cookies.set("bad name", "v")).toThrow(TypeError);

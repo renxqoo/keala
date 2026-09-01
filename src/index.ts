@@ -1,19 +1,19 @@
 /**
- * eleu — hono-fast, onion-ergonomic, Bun-native.
+ * keala — hono-fast, onion-ergonomic, Bun-native.
  *
- * The ROOT entry is the app surface: core (the Eleu class, router,
+ * The ROOT entry is the app surface: core (the Keala class, router,
  * context, errors, cookie signing) plus the plugin and the in-handler
- * helpers. Middleware lives at `eleu/middleware` (aggregate) or
- * `eleu/middleware/<name>` (per file); the Node adapter at
- * `eleu/node` — those two are the only split-out tiers (the
+ * helpers. Middleware lives at `keala/middleware` (aggregate) or
+ * `keala/middleware/<name>` (per file); the Node adapter at
+ * `keala/node` — those two are the only split-out tiers (the
  * middleware tier is the heavy one; adapters are a mutually exclusive
  * runtime choice).
  *
  * ```ts
- * import { Eleu } from "eleu";
- * import { cors } from "eleu/middleware";
+ * import { Keala } from "keala";
+ * import { cors } from "keala/middleware";
  *
- * const app = new Eleu({ keys: ["secret"] })
+ * const app = new Keala({ keys: ["secret"] })
  *
  * app.use(cors())                                   // global onion middleware
  * app.get("/users/:id", (c) => c.json({ id: c.params.id }))   // return style
@@ -23,7 +23,7 @@
  * ```
  */
 
-export { Eleu, type Application } from "./core/app.ts";
+export { Keala, type Application } from "./core/app.ts";
 export { Router } from "./router/group.ts";
 export type { ErrorListener, NotFoundHandler, WebSocketHandlers } from "./core/application.ts";
 export {

@@ -2,13 +2,13 @@
  * The middleware aggregate — every per-request pipeline factory in one import.
  *
  * ```ts
- * import { Eleu } from "eleu";
- * import { cors, bodyLimit, serveStatic } from "eleu/middleware";
+ * import { Keala } from "keala";
+ * import { cors, bodyLimit, serveStatic } from "keala/middleware";
  * ```
  *
  * Apps typically grab several middleware at setup time, so the whole tier is
  * importable at once. Memory-minimal consumers import per file instead
- * (`eleu/middleware/auth`) — only the used factory's module loads.
+ * (`keala/middleware/auth`) — only the used factory's module loads.
  */
 
 export { basicAuth, bearerAuth, type BasicAuthOptions, type BearerAuthOptions } from "./auth.ts";

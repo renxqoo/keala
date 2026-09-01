@@ -1,17 +1,17 @@
 /**
- * The eleu surface under node:http — the official Node adapter twin of
+ * The keala surface under node:http — the official Node adapter twin of
  * examples/app.ts.
  *
  *   node examples/app-node.ts 3188   (also runs: bun examples/app-node.ts)
  *
  * Everything except the listener is the same code: the JS mirrors of the
  * native sinks serve /health and /assets/* on every runtime, `app.listen()`
- * is replaced by `listen()` from "eleu/node", and websocket
+ * is replaced by `listen()` from "keala/node", and websocket
  * routes would answer 501 here (ws is Bun-only) — this twin registers none.
  */
 
 import {
-  Eleu,
+  Keala,
   createBodyParser,
   Router,
   hashPassword,
@@ -22,7 +22,7 @@ import {
 import { basicAuth, secureHeaders, serveStatic, validator } from "../src/middleware/index.ts";
 import { listen } from "../src/adapters/node.ts";
 
-const app = new Eleu({ keys: ["change-me"], env: "production" });
+const app = new Keala({ keys: ["change-me"], env: "production" });
 app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
 
 // Sunk routes degrade to their JS mirrors under Node — same paths, same
@@ -30,7 +30,7 @@ app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
 app.sink("/health", new Response("ok", { headers: { "cache-control": "no-store" } }));
 app.sink("/assets/*", { dir: "./examples/public" });
 
-app.get("/", (c) => c.html(html`<h1>eleu · node adapter</h1>`));
+app.get("/", (c) => c.html(html`<h1>keala · node adapter</h1>`));
 
 const api = new Router({ prefix: "/api" });
 api.use(secureHeaders());
@@ -80,7 +80,7 @@ app.notFound((c) => {
 
 const port = Number(process.argv[2] ?? 3188);
 listen(app, port, "127.0.0.1", () => {
-  console.log(`eleu node-adapter example on 127.0.0.1:${port}`);
+  console.log(`keala node-adapter example on 127.0.0.1:${port}`);
   console.log("  GET  /health, /assets/app.css, /docs/app.css   (JS mirrors)");
   console.log("  POST /api/login  basicAuth (admin:hunter2) → PBKDF2 verify");
   console.log("  POST /api/users  Standard Schema validator; GET /api/events (SSE)");

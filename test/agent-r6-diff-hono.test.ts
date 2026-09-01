@@ -1,7 +1,7 @@
 /**
  * Round-6 DIFFERENTIAL audit vs real hono 4.13.5 (node_modules/hono).
  *
- * Harness: the same requests are driven against eleu (`app.handle(req)`)
+ * Harness: the same requests are driven against keala (`app.handle(req)`)
  * and hono (`app.fetch(req)`) — both fetch-style — and the observable
  * responses compared. CONFIRMED BUG -> `it()` asserts the CORRECT
  * (hono-referenced) behavior and FAILS against the current src/.
@@ -16,15 +16,15 @@
  *   entry; the fetch Headers record-init APPENDS every entry, producing a
  *   comma-joined INVALID singleton header:
  *     c.text("hi", 200, { "Content-Type": "text/plain" })
- *       eleu "text/plain, text/plain; charset=utf-8"  hono "text/plain"
+ *       keala "text/plain, text/plain; charset=utf-8"  hono "text/plain"
  *     c.set("x-foo","staged") + c.text("hi",200,{ "X-Foo":"call" })
- *       eleu "staged, call"  hono "call"
+ *       keala "staged, call"  hono "call"
  *
  * R6-2 MEDIUM src/core/context/sugar.ts:180-181 (sugarHtml)
  *   sugarHtml unconditionally overwrites content-type with TEXT_HTML, so the
  *   caller's own content-type is discarded even in canonical lowercase:
  *     c.html("<i>x</i>", 200, { "content-type": "text/plain" })
- *       eleu "text/html; charset=utf-8"  hono "text/plain"
+ *       keala "text/html; charset=utf-8"  hono "text/plain"
  *   (hono's setDefaultContentType spreads the DEFAULT first, user headers
  *   after — the caller always wins; sugarText honors a lowercase override,
  *   sugarHtml has no override path at all.)
@@ -41,33 +41,33 @@
  *   duplicate param name: last wins  express/@koa/router (hono: first wins)
  *   staged c.set content-type survives c.text()   koa (hono overwrites default)
  *   c.json(undefined) -> "null"      valid JSON (hono ships an EMPTY body)
- *   sugar 204/304 -> clean empty     eleu (hono c.text(x,204) throws -> 500)
+ *   sugar 204/304 -> clean empty     keala (hono c.text(x,204) throws -> 500)
  *   c.body = null -> 204             koa (hono c.body(null) -> 200)
  *   c.redirect -> 302 + koa body     koa (hono: bare 302, no body/type)
  *   405 + Allow, OPTIONS -> 200      @koa/router allowedMethods (hono 404s)
  *   not-found body "Not Found"       koa (hono: "404 Not Found")
  *   query repeats -> arrays, empty names kept    koa querystring.parse
- *   unsafe query keys dropped        eleu security contract
+ *   unsafe query keys dropped        keala security contract
  *   middleware Response after next() rewrites    koa state semantics
  *   HEAD backfills Content-Length; c.path stays percent-encoded   koa
- *   param regex is per-segment       eleu trie contract (hono `{...}` spans "/")
+ *   param regex is per-segment       keala trie contract (hono `{...}` spans "/")
  * Open questions (NOT red-tested): hono matches static/param by REGISTRATION
  * ORDER; hono's getPath uses decodeURI so reserved escapes (`%3B`) stay
- * escaped while eleu decodes into one canonical space; hono's mid-path
+ * escaped while keala decodes into one canonical space; hono's mid-path
  * `:x?` keeps the "?" in the name and never serves the skip variant; the bare
  * `*` captures under params.wildcard (hono: unnamed); `//` answers the root
  * route (hono 404s).
  */
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
 const quiet = { env: "test" } as const;
-const drive = (app: InstanceType<typeof Eleu>, req: Request) => app.handle(req);
+const drive = (app: InstanceType<typeof Keala>, req: Request) => app.handle(req);
 // CONFIRMED BUG R6-1 (HIGH): per-call sugar headers merge in raw-key space.
 describe("R6-1 CONFIRMED-BUG: sugar per-call headers must merge in the canonical (lowercased) keyspace", () => {
   it('c.text(body, status, { "Content-Type": … }) ships ONE content-type, not a comma-joined duplicate', async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.text("hi", 200, { "Content-Type": "text/plain" }));
     const res = await drive(app, new Request("http://x/r"));
     // hono 4.13.5: the user key (any case) replaces the default exactly once.
@@ -75,7 +75,7 @@ describe("R6-1 CONFIRMED-BUG: sugar per-call headers must merge in the canonical
   });
 
   it("staged c.set() plus a case-mismatched per-call key produces one value, not two comma-joined", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.set("x-foo", "staged");
       return c.text("hi", 200, { "X-Foo": "call" });
@@ -90,7 +90,7 @@ describe("R6-1 CONFIRMED-BUG: sugar per-call headers must merge in the canonical
 // CONFIRMED BUG R6-2 (MEDIUM): c.html overrides the caller's content-type.
 describe("R6-2 CONFIRMED-BUG: c.html must honor the caller's per-call content-type", () => {
   it('c.html(body, status, { "content-type": "text/plain" }) ships text/plain, not text/html', async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.html("<i>x</i>", 200, { "content-type": "text/plain" }));
     const res = await drive(app, new Request("http://x/r"));
     // hono 4.13.5 setDefaultContentType: the default is spread FIRST, user
@@ -100,7 +100,7 @@ describe("R6-2 CONFIRMED-BUG: c.html must honor the caller's per-call content-ty
   });
 
   it("c.html with a capitalized user content-type ships it once (no duplicate)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.html("<i>x</i>", 200, { "CONTENT-TYPE": "text/plain" }));
     const res = await drive(app, new Request("http://x/r"));
     expect(res.headers.get("content-type")).toBe("text/plain");
@@ -112,7 +112,7 @@ describe("R6-2 CONFIRMED-BUG: c.html must honor the caller's per-call content-ty
 // ---------------------------------------------------------------------------
 describe("documents intentional divergence: trailing slash is optional (koa-router non-strict; hono 404s)", () => {
   it("static, param and optional-param routes answer their trailing-slash form", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/plain/static", (c) => c.text("static"));
     app.get("/users/:id", (c) => c.json({ ...c.params }));
     app.get("/opt/:x?", (c) => c.json({ ...c.params }));
@@ -130,7 +130,7 @@ describe("documents intentional divergence: trailing slash is optional (koa-rout
 
 describe("documents intentional divergence: '/w/*' requires the '/w/' prefix (hono also answers '/w')", () => {
   it("the bare prefix without a slash is a different resource; '/w/' captures the empty wildcard", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/w/*", (c) => c.json({ ...c.params }));
     const bare = await drive(app, new Request("http://x/w"));
     expect(bare.status).toBe(404);
@@ -141,7 +141,7 @@ describe("documents intentional divergence: '/w/*' requires the '/w/' prefix (ho
 
 describe("documents intentional divergence: static beats param regardless of registration order (hono is order-dependent)", () => {
   it("a static sibling wins even when the param route was registered first", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/users/:id", (c) => c.json({ via: "param" }));
     app.get("/users/me", (c) => c.json({ via: "static" }));
     const res = await drive(app, new Request("http://x/users/me"));
@@ -153,7 +153,7 @@ describe("documents intentional divergence: static beats param regardless of reg
 
 describe("documents intentional divergence: duplicate param name keeps the LAST capture (express/@koa/router; hono keeps the first)", () => {
   it("/:x/:x resolves to the later segment", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/:x/:x", (c) => c.json({ ...c.params }));
     const res = await drive(app, new Request("http://x/1/2"));
     expect(await res.text()).toBe('{"x":"2"}');
@@ -162,7 +162,7 @@ describe("documents intentional divergence: duplicate param name keeps the LAST 
 
 describe("documents intentional divergence: a staged c.set('Content-Type') survives c.text() (hono overwrites it with its default)", () => {
   it("the staged type wins over the helper default", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.set("Content-Type", "application/xml");
       return c.text("hi");
@@ -176,7 +176,7 @@ describe("documents intentional divergence: a staged c.set('Content-Type') survi
 
 describe("documents intentional divergence: c.json(undefined) answers valid JSON 'null' (hono ships an EMPTY body with content-type application/json)", () => {
   it("undefined payloads serialize as null", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.json(undefined));
     const res = await drive(app, new Request("http://x/r"));
     expect(res.status).toBe(200);
@@ -191,7 +191,7 @@ describe("documents intentional divergence: sugar helpers answer 204/304 with a 
     ["json", (c: Context) => c.json({}, 204)],
     ["html", (c: Context) => c.html("x", 304)],
   ] as const)("%s with an empty status stays empty and header-clean", async (_name, handler) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => handler(c));
     const res = await drive(app, new Request("http://x/r"));
     expect([204, 304]).toContain(res.status);
@@ -203,7 +203,7 @@ describe("documents intentional divergence: sugar helpers answer 204/304 with a 
 
 describe("documents intentional divergence: c.body = null answers 204 (koa); hono's c.body(null) answers 200", () => {
   it("null body collapses to an empty 204", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => void (c.body = null));
     const res = await drive(app, new Request("http://x/r"));
     expect(res.status).toBe(204);
@@ -213,7 +213,7 @@ describe("documents intentional divergence: c.body = null answers 204 (koa); hon
 
 describe("documents intentional divergence: c.redirect() is koa's redirect (302 + Redirecting body); hono ships a bare 302", () => {
   it("location, status and the koa body", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.redirect("/elsewhere");
     });
@@ -226,7 +226,7 @@ describe("documents intentional divergence: c.redirect() is koa's redirect (302 
 
 describe("documents intentional divergence: 405 + Allow and OPTIONS 200 come from @koa/router allowedMethods (hono 404s both)", () => {
   it("an unregistered method on a known path yields 405 with the koa-ordered Allow header", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.text("get"));
     app.put("/r", (c) => c.text("put"));
     const res = await drive(app, new Request("http://x/r", { method: "POST" }));
@@ -235,7 +235,7 @@ describe("documents intentional divergence: 405 + Allow and OPTIONS 200 come fro
   });
 
   it("OPTIONS on a path without an OPTIONS handler answers 200 with Allow", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.text("get"));
     const res = await drive(app, new Request("http://x/r", { method: "OPTIONS" }));
     expect(res.status).toBe(200);
@@ -245,7 +245,7 @@ describe("documents intentional divergence: 405 + Allow and OPTIONS 200 come fro
 
 describe("documents intentional divergence: the default not-found body is koa's 'Not Found' (hono: '404 Not Found')", () => {
   it("404 shape", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const res = await drive(app, new Request("http://x/none"));
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
@@ -254,14 +254,14 @@ describe("documents intentional divergence: the default not-found body is koa's 
 
 describe("documents intentional divergence: query parsing follows koa's querystring.parse (hono keeps only the FIRST repeat and drops empty names)", () => {
   it("repeated keys become arrays and empty-name keys survive", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/q", (c) => c.json({ ...c.query }));
     const res = await drive(app, new Request("http://x/q?a=1&a=2&=x"));
     expect(await res.text()).toBe('{"a":["1","2"],"":"x"}');
   });
 
   it("unsafe prototype keys are dropped (security contract; hono echoes them)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/q", (c) => c.json({ keys: Object.keys(c.query) }));
     const res = await drive(app, new Request("http://x/q?__proto__=1&constructor=2&ok=3"));
     expect(await res.text()).toBe('{"keys":["ok"]}');
@@ -270,7 +270,7 @@ describe("documents intentional divergence: query parsing follows koa's querystr
 
 describe("documents intentional divergence: a middleware Response returned after await next() REWRITES the response (koa state semantics; hono keeps the first finalized response)", () => {
   it("last committer wins", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(async (_c, next) => {
       await next();
       return new Response("rewritten", { status: 299 });
@@ -284,7 +284,7 @@ describe("documents intentional divergence: a middleware Response returned after
 
 describe("documents intentional divergence: HEAD backfills Content-Length from the would-be body (koa; hono omits it)", () => {
   it("HEAD on a GET route", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.text("body"));
     const res = await drive(app, new Request("http://x/r", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -295,16 +295,16 @@ describe("documents intentional divergence: HEAD backfills Content-Length from t
 
 describe("documents intentional divergence: c.path stays percent-encoded (koa; hono decodes with decodeURI)", () => {
   it("params decode, the path does not", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r/:p", (c) => c.json({ path: c.path, p: c.params?.p }));
     const res = await drive(app, new Request("http://x/r/a%20b"));
     expect(await res.text()).toBe('{"path":"/r/a%20b","p":"a b"}');
   });
 });
 
-describe("documents intentional divergence: a custom param pattern is tested per SEGMENT (eleu trie contract); hono's {…} patterns can span '/'", () => {
+describe("documents intentional divergence: a custom param pattern is tested per SEGMENT (keala trie contract); hono's {…} patterns can span '/'", () => {
   it("'/file/:f(.+\\.png)' does not match multi-segment values", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/file/:f(.+\\.png)", (c) => c.json({ ...c.params }));
     const nested = await drive(app, new Request("http://x/file/dir/a.png"));
     expect(nested.status).toBe(404);
@@ -314,12 +314,12 @@ describe("documents intentional divergence: a custom param pattern is tested per
 });
 
 // ---------------------------------------------------------------------------
-// Differential locks — behavior where eleu and hono 4.13.5 AGREE; locked
+// Differential locks — behavior where keala and hono 4.13.5 AGREE; locked
 // here so the divergences above cannot regress into equivalence bugs.
 // ---------------------------------------------------------------------------
 describe("differential locks: matching agrees with hono on the encoded-path matrix", () => {
   const CASES: Array<[string, string, string, number, Record<string, string> | null]> = [
-    // [eleu pattern, hono pattern, request path, expected status, expected params]
+    // [keala pattern, hono pattern, request path, expected status, expected params]
     ["/users/:id", "/users/:id", "/users/42", 200, { id: "42" }],
     ["/users/:id", "/users/:id", "/users/%2Fadmin", 200, { id: "/admin" }],
     ["/users/:id", "/users/:id", "/users/%252F", 200, { id: "%2F" }],
@@ -355,7 +355,7 @@ describe("differential locks: matching agrees with hono on the encoded-path matr
 
   for (const [koaPath, honoPath, reqPath, status, params] of CASES) {
     it(`${koaPath} matches ${reqPath} identically on both frameworks`, async () => {
-      const kApp = new Eleu(quiet);
+      const kApp = new Keala(quiet);
       kApp.get(koaPath, (c) => c.json({ ...c.params }));
       const hApp = new Hono();
       hApp.get(honoPath, (c) => c.json(c.req.param()));
@@ -371,7 +371,7 @@ describe("differential locks: matching agrees with hono on the encoded-path matr
 
 describe("differential locks: middleware semantics agree with hono", () => {
   it("onion order, headers written around next(), and the handler body", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(async (c, next) => {
       c.set("X-Mw", "1");
       await next();
@@ -386,7 +386,7 @@ describe("differential locks: middleware semantics agree with hono", () => {
   });
 
   it("an early-returned Response from middleware short-circuits the route; a thrown error 500s; double next() 500s", async () => {
-    const blocked = new Eleu(quiet);
+    const blocked = new Keala(quiet);
     let hit = false;
     blocked.use((c) => c.text("blocked", 401));
     blocked.get("/r", () => {
@@ -398,7 +398,7 @@ describe("differential locks: middleware semantics agree with hono", () => {
     expect(await bres.text()).toBe("blocked");
     expect(hit).toBe(false);
 
-    const throwing = new Eleu(quiet);
+    const throwing = new Keala(quiet);
     throwing.get("/r", () => {
       throw new Error("boom");
     });
@@ -406,7 +406,7 @@ describe("differential locks: middleware semantics agree with hono", () => {
     expect(tres.status).toBe(500);
     expect(await tres.text()).toBe("Internal Server Error");
 
-    const doubled = new Eleu(quiet);
+    const doubled = new Keala(quiet);
     doubled.use(async (_c, next) => {
       await next();
       await next();
@@ -419,7 +419,7 @@ describe("differential locks: middleware semantics agree with hono", () => {
 
 describe("differential locks: sugar responses agree with hono where behavior is shared", () => {
   it("c.text/c.json/c.html defaults (body, status, single content-type)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/t", (c) => c.text("hi"));
     app.get("/j", (c) => c.json({ a: 1 }));
     app.get("/h", (c) => c.html("<b>x</b>"));
@@ -446,14 +446,14 @@ describe("differential locks: sugar responses agree with hono where behavior is 
   });
 
   it("multi-value set-cookie in per-call headers stays two distinct cookies", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.text("hi", 200, { "set-cookie": ["a=1", "b=2"] }));
     const res = await drive(app, new Request("http://x/r"));
     expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]);
   });
 
   it('c.json(body, status, { "CONTENT-TYPE": … }) ships one content-type (json sets no default)', async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.json({ a: 1 }, 200, { "CONTENT-TYPE": "application/vnd.x+json" }));
     const res = await drive(app, new Request("http://x/r"));
     // Same as hono 4.13.5: the user's value replaces Response.json's default.
@@ -461,7 +461,7 @@ describe("differential locks: sugar responses agree with hono where behavior is 
   });
 
   it("a staged ARRAY header plus a per-call case-variant scalar resolves to the per-call value", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.set("x-multi", ["1", "2"]);
       return c.text("hi", 200, { "X-Multi": "call" });
@@ -472,7 +472,7 @@ describe("differential locks: sugar responses agree with hono where behavior is 
   });
 
   it("query values decode percent-escapes and '+' like hono", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/q", (c) => c.json({ a: c.query.a }));
     for (const [qs, want] of [
       ["?a=%C3%A9", "é"],
@@ -488,7 +488,7 @@ describe("differential locks: sugar responses agree with hono where behavior is 
   });
 
   it("HEAD falls back to the GET handler (both frameworks); a fragment never leaks into the path", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => c.text("body"));
     const head = await drive(app, new Request("http://x/r", { method: "HEAD" }));
     expect(head.status).toBe(200);

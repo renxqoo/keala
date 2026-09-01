@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { baseContextProto, createContext, type Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
@@ -14,7 +14,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("coverage: final sugar shapes", () => {
   it("json with only status (no headers) takes the status-only init", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/s", (c) => c.json([1], 203));
     const res = await app.handle(req("/s"));
     expect(res.status).toBe(203);
@@ -22,7 +22,7 @@ describe("coverage: final sugar shapes", () => {
   });
 
   it("json with only state-record headers (no args) merges them", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/h", (c) => {
       c.set("x-rec", "1");
       return c.json({ ok: 1 });
@@ -33,7 +33,7 @@ describe("coverage: final sugar shapes", () => {
   });
 
   it("html without status and html with status both pin text/html", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/a", (c) => c.html("<i>a</i>"));
     app.get("/b", (c) => c.html("<i>b</i>", 201));
     const a = await app.handle(req("/a"));
@@ -42,7 +42,7 @@ describe("coverage: final sugar shapes", () => {
   });
 
   it("text with only headers (no status) keeps 200 and defaults content-type", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/t", (c) => c.text("t", undefined, { "x-t": "1" }));
     const res = await app.handle(req("/t"));
     expect(res.status).toBe(200);
@@ -53,7 +53,7 @@ describe("coverage: final sugar shapes", () => {
 describe("coverage: request host edge branches", () => {
   const ctxFor = (url: string, headers?: Record<string, string>): Context =>
     createContext(
-      new Eleu(quiet),
+      new Keala(quiet),
       baseContextProto,
       new Request(url, headers ? { headers } : undefined),
       undefined,
@@ -85,18 +85,18 @@ describe("coverage: request host edge branches", () => {
 
 describe("coverage: onerror guards and use validation", () => {
   it("onerror(null) is a no-op; non-Error values throw TypeError", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.onerror(null as unknown as Error)).not.toThrow();
     expect(() => app.onerror("boom" as unknown as Error)).toThrow(TypeError);
   });
 
   it("use() rejects non-function middleware", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.use(undefined as unknown as () => void)).toThrow(TypeError);
   });
 
   it("client-level errors never log even without listeners", () => {
-    const app = new Eleu({ env: "development", silent: false });
+    const app = new Keala({ env: "development", silent: false });
     // 4xx with expose:true and plain 404 — both suppressed, no console output
     expect(() => app.onerror(Object.assign(new Error("nope"), { status: 404 }))).not.toThrow();
     expect(() =>
@@ -105,6 +105,6 @@ describe("coverage: onerror guards and use validation", () => {
   });
 
   it("toJSON summarizes the app", () => {
-    expect(new Eleu({ env: "prod", proxy: true }).toJSON()).toEqual({ env: "prod", proxy: true });
+    expect(new Keala({ env: "prod", proxy: true }).toJSON()).toEqual({ env: "prod", proxy: true });
   });
 });

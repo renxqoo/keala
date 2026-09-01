@@ -1,4 +1,4 @@
-# Eleu
+# Keala
 
 English | [简体中文](./README.zh-CN.md)
 
@@ -6,17 +6,17 @@ English | [简体中文](./README.zh-CN.md)
 context, on [Bun 1.4+](https://bun.sh), with zero dependencies.**
 
 ```bash
-bun add eleu
+bun add keala
 ```
 
 ## Quick Start
 
 ```ts
-import { Eleu } from "eleu";
+import { Keala } from "keala";
 
-const app = new Eleu();
+const app = new Keala();
 
-app.get("/", (c) => c.text("hello eleu")); // hono-style return
+app.get("/", (c) => c.text("hello keala")); // hono-style return
 app.get("/users/:id(\\d+)", (c) => c.json({ id: c.params.id }));
 app.get("/page", (c) => {
   // koa-style state
@@ -31,7 +31,7 @@ Routers group and mount by table merge (unmatched paths fall through to the
 parent app — no swallowed 404s):
 
 ```ts
-import { Router } from "eleu";
+import { Router } from "keala";
 
 const api = new Router({ prefix: "/v1" });
 api.param("oid", async (c, next) => {
@@ -45,13 +45,13 @@ app.mount("/api", api);
 Runs under Node too — same app, one import:
 
 ```ts
-import { listen } from "eleu/node";
+import { listen } from "keala/node";
 listen(app, 3000);
 ```
 
-## Why eleu
+## Why keala
 
-- **Hono-class speed.** ABAB-interleaved HTTP benchmarks put eleu at
+- **Hono-class speed.** ABAB-interleaved HTTP benchmarks put keala at
   statistical parity with Hono (every ratio inside run noise) and
   **3.0–3.5x faster than Koa 3** — 15x at 1000 routes — at the lowest peak
   memory of the compared JS frameworks, while carrying lazy content
@@ -83,7 +83,7 @@ listen(app, 3000);
 A Go `net/http` reference ships in the harness: on the comparison box Go
 leads every JS runtime (raw Bun.serve included) by ~10–15% on throughput and
 decisively on memory — the gap is the runtime's HTTP stack, not framework tax
-(eleu adds nothing on top of it versus hono). See `bench/BENCH.md`.
+(keala adds nothing on top of it versus hono). See `bench/BENCH.md`.
 
 ## Middleware, plugins & helpers
 
@@ -94,10 +94,10 @@ subpaths while the root stays the one-import app surface:
 
 | Entry                  | What it gives you                                                           | Loads               |
 | ---------------------- | --------------------------------------------------------------------------- | ------------------- |
-| `eleu`                 | Eleu / Router / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
-| `eleu/middleware`      | every middleware factory in one import                                      | the middleware tier |
-| `eleu/middleware/cors` | one factory                                                                 | that file only      |
-| `eleu/node`   | the Node listener (bun/node are exclusive)                                  | that file only      |
+| `keala`                 | Keala / Router / compose / Context / errors / cookies / bodyParser / helpers | the app surface     |
+| `keala/middleware`      | every middleware factory in one import                                      | the middleware tier |
+| `keala/middleware/cors` | one factory                                                                 | that file only      |
+| `keala/node`   | the Node listener (bun/node are exclusive)                                  | that file only      |
 
 - **middleware** — per-request pipeline functions: `app.use(cors())`
 - **plugins** — setup-time installers (`install(app)`), decorate contexts: `app.use(createBodyParser())`
@@ -121,8 +121,8 @@ import {
   timeout,
   serveStatic,
   validator,
-} from "eleu/middleware"; // the aggregate — or per file: eleu/middleware/cors
-import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "eleu";
+} from "keala/middleware"; // the aggregate — or per file: keala/middleware/cors
+import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "keala";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req.json()/text()/formData()…
 // formData() is double-budgeted: formLimit bytes AND formPartLimit parts
@@ -210,14 +210,14 @@ writes are staged; the last committer wins; untouched requests hit
 
 ## Migrating from koa
 
-| Koa                                                     | eleu                                                    |
+| Koa                                                     | keala                                                    |
 | ------------------------------------------------------- | ------------------------------------------------------- |
 | `ctx.request.get("x")`                                  | `c.get("x")`                                            |
 | `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                         |
 | `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n` (same)                    |
 | `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`                 |
 | `app.use(router.routes()).use(router.allowedMethods())` | `app.get(...)` directly, or `app.mount(prefix, router)` |
-| `new Koa({ proxy: true })`                              | `new Eleu({ proxy: true })`                             |
+| `new Koa({ proxy: true })`                              | `new Keala({ proxy: true })`                             |
 | `ctx.state.user`                                        | `c.state.user` (same)                                   |
 | `ctx.cookies.get/set`                                   | `c.cookies.get/set` (same, signed + keys)               |
 
@@ -228,7 +228,7 @@ their object shape on `c.body` reads.
 
 ## Why it's fast
 
-| Koa (Node)                                        | eleu (Bun)                                                                       |
+| Koa (Node)                                        | keala (Bun)                                                                       |
 | ------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Recompiles dispatch closure **per request**       | Chain compiled **once** at registration time                                     |
 | Every middleware hop wrapped in `Promise.resolve` | Fully-sync chains return with **zero promises**                                  |
@@ -245,14 +245,14 @@ their object shape on `c.body` reads.
 
 | Member                                                                         | Description                                                                                                                                                             |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Eleu(options?)`                                                           | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                           |
+| `new Keala(options?)`                                                           | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                           |
 | `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                              |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                                       |
 | `app.on(method, path, ...handlers)`                                            | Any method, any case                                                                                                                                                    |
 | `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); sub-app global middleware is prepended                                                                                           |
 | `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                         |
 | `app.handle(request, runtime?)`                                                | Fetch-style handler; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                                                                         |
-| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `eleu/node` |
+| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node` |
 | `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                            |
 | `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                                                                      |
 | `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                      |
@@ -300,10 +300,10 @@ its own subpath so importing the framework never loads the node:http bridge
 on Bun:
 
 ```ts
-import { Eleu } from "eleu";
-import { listen } from "eleu/node";
+import { Keala } from "keala";
+import { listen } from "keala/node";
 
-const app = new Eleu();
+const app = new Keala();
 app.get("/", (c) => {
   c.body = "hello";
 });
@@ -315,7 +315,7 @@ with real backpressure, fans out `set-cookie`, answers malformed HTTP with
 400, and exposes `port/hostname/stop/fetch/ready()` mirroring the Bun handle
 shape. Websockets are Bun-only: `app.ws()` routes answer 501 and raw Upgrade
 requests are refused at the wire. Node native modules (crypto/fs) are loaded
-lazily everywhere — an idle `import "eleu"` costs no bridges (~2.8MB less
+lazily everywhere — an idle `import "keala"` costs no bridges (~2.8MB less
 RSS on Bun); the crypto bridge loads with the first signed cookie / CSRF
 fallback / password verify.
 
@@ -381,4 +381,4 @@ src/
 ```
 
 MIT license. Primary runtime Bun ≥ 1.4 (also runs under Node via
-`eleu/node`).
+`keala/node`).

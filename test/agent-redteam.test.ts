@@ -43,7 +43,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu, type Application } from "../src/core/app.ts";
+import { Keala, type Application } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { Router } from "../src/router/group.ts";
 import { compilePattern } from "../src/router/pattern.ts";
@@ -67,13 +67,13 @@ const handle = async (
   url: string,
   init?: RequestInit,
 ): Promise<Response> => {
-  const app = new Eleu({ env: "test" });
+  const app = new Keala({ env: "test" });
   setup(app);
   return app.handle(new Request(`http://localhost:3000${url}`, init));
 };
 
 const runPlain = async (mw: (c: Context) => void, init?: RequestInit): Promise<Response> => {
-  const app = new Eleu({ env: "test" });
+  const app = new Keala({ env: "test" });
   app.use(mw);
   return app.handle(new Request("http://localhost:3000/", init));
 };
@@ -236,7 +236,7 @@ describe("red team: router", () => {
 
 describe("red team: request lazy cache", () => {
   it("[Q1] querystring setter round-trips when the url carries a fragment", async () => {
-    const app = new Eleu({ env: "test" });
+    const app = new Keala({ env: "test" });
     app.use((c) => {
       c.url = "/a#f";
       c.querystring = "x=1";
@@ -325,7 +325,7 @@ describe("red team: respond state machine", () => {
 
 describe("CONFIRMED-BUG: router core (found during this migration)", () => {
   it("CONFIRMED-BUG(now fixed): app.mount('/', router) must mount at root, not throw (TODO-BUG: core/app.ts mount base keeps '/' and produces '//path')", async () => {
-    const app = new Eleu({ env: "test" });
+    const app = new Keala({ env: "test" });
     const router = new Router();
     router.get("/users/:id", (c) => {
       c.body = "u";
@@ -338,7 +338,7 @@ describe("CONFIRMED-BUG: router core (found during this migration)", () => {
 
   it("CONFIRMED-BUG(now fixed): router.use() registered after a route must still apply (TODO-BUG: router/group.ts add() snapshots middleware per def)", async () => {
     let guardRan = false;
-    const app = new Eleu({ env: "test" });
+    const app = new Keala({ env: "test" });
     const router = new Router();
     router.get("/admin/panel", (c) => {
       c.body = "panel";

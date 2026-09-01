@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "eleu",
+      "name": "keala",
       "devDependencies": {
         "@koa/router": "^15.7.0",
         "@types/bun": "1.4.0",

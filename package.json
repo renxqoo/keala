@@ -1,7 +1,7 @@
 {
-  "name": "eleu",
+  "name": "keala",
   "version": "0.5.0",
-  "description": "eleu — Koa's ergonomics at Hono's speed: dual-mode onion framework for Bun 1.4+ (runs under Node too). Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets.",
+  "description": "keala — Koa's ergonomics at Hono's speed: dual-mode onion framework for Bun 1.4+ (runs under Node too). Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets.",
   "keywords": [
     "bun",
     "web",
@@ -19,13 +19,13 @@
     "websockets",
     "sse"
   ],
-  "homepage": "https://github.com/renxqoo/eleu#readme",
+  "homepage": "https://github.com/renxqoo/keala#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/renxqoo/eleu.git"
+    "url": "git+https://github.com/renxqoo/keala.git"
   },
   "bugs": {
-    "url": "https://github.com/renxqoo/eleu/issues"
+    "url": "https://github.com/renxqoo/keala/issues"
   },
   "license": "MIT",
   "files": [

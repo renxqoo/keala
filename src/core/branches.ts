@@ -12,7 +12,7 @@
  * beyond static detection and stays the caller's responsibility.
  */
 
-const BRANCHES = Symbol("eleu.branches");
+const BRANCHES = Symbol("keala.branches");
 
 type BranchHost = { [BRANCHES]?: Promise<unknown>[] };
 

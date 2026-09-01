@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu, startBunServer, type ServeImplementation } from "../src/index.ts";
+import { Keala, startBunServer, type ServeImplementation } from "../src/index.ts";
 import { createBodyParser } from "../src/plugins/body-parser.ts";
 import { cache } from "../src/middleware/cache.ts";
 import { csrfToken } from "../src/middleware/csrf-token.ts";
@@ -29,7 +29,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 // ---------------------------------------------------------------------------
 describe("RT-F1: pooling never leaks parsed bodies or validated values", () => {
   it("a recycled context does not serve the previous request's body", async () => {
-    const app = new Eleu({ ...quiet, pooling: true });
+    const app = new Keala({ ...quiet, pooling: true });
     app.use(createBodyParser());
     const readJson = (body: unknown): { json(): Promise<unknown> } =>
       body as { json(): Promise<unknown> };
@@ -70,7 +70,7 @@ describe("RT-F1: pooling never leaks parsed bodies or validated values", () => {
         },
       },
     } as const;
-    const app = new Eleu({ ...quiet, pooling: true });
+    const app = new Keala({ ...quiet, pooling: true });
     app.use(createBodyParser());
     app.post("/v", validator(schema), (c) =>
       c.json((c as unknown as { valid?: unknown }).valid ?? null),
@@ -124,7 +124,7 @@ describe("RT-F2: rejecting async ws handlers never crash the process", () => {
       onUnhandled,
     );
     try {
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       const seen: Error[] = [];
       app.onError((err) => seen.push(err));
       app.ws("/ws", {
@@ -158,7 +158,7 @@ describe("RT-F2: rejecting async ws handlers never crash the process", () => {
 // ---------------------------------------------------------------------------
 describe("RT-F3: responseCache caches no-content-type bodies (real-Bun shape)", () => {
   it("a bare string Response (no CT header) is cacheable", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let calls = 0;
     app.get("/x", cache({ ttl: 60_000 }), () => {
       calls += 1;
@@ -198,7 +198,7 @@ describe("RT-F5: HEAD on committed responses never reads the body", () => {
   // the headers the Response itself exposes (sugar HEAD returns attach CL at
   // construction; hand-built Responses carry only what their headers say).
   it("hand-built committed bodies carry no derived Content-Length", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/small", () => new Response("hello world"));
     const res = await app.handle(new Request("http://localhost:3000/small", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -208,7 +208,7 @@ describe("RT-F5: HEAD on committed responses never reads the body", () => {
 
   it("an open committed stream answers HEAD promptly without blocking", async () => {
     const gate = new Promise<void>(() => {}); // never settles — no strand: we cancel
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/open", () => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -230,7 +230,7 @@ describe("RT-F5: HEAD on committed responses never reads the body", () => {
 // ---------------------------------------------------------------------------
 describe("RT-F6: pooling and websockets refuse to combine", () => {
   it("app.ws() on a pooled app throws loudly", () => {
-    const app = new Eleu({ ...quiet, pooling: true });
+    const app = new Keala({ ...quiet, pooling: true });
     expect(() => app.ws("/chat", { open: () => undefined })).toThrow(/pooling: true/);
   });
 });
@@ -238,7 +238,7 @@ describe("RT-F6: pooling and websockets refuse to combine", () => {
 // ---------------------------------------------------------------------------
 describe("RT-F7: c.append validates header names; the record is prototype-less", () => {
   it("append rejects forbidden/inherited names", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/a", (c) => {
       c.body = "ok";
       expect(() => c.append("constructor", "x")).toThrow(/Invalid header field name/);
@@ -250,7 +250,7 @@ describe("RT-F7: c.append validates header names; the record is prototype-less",
   });
 
   it("the header record exposes no inherited keys", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/b", (c) => {
       c.set("X-Ok", "1");
       const record = c.headersRecord;
@@ -266,7 +266,7 @@ describe("RT-F7: c.append validates header names; the record is prototype-less",
 // ---------------------------------------------------------------------------
 describe("RT-F8: cache HEAD replay Content-Length is byte-exact", () => {
   it("non-ASCII cached bodies report UTF-8 byte length", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get(
       "/u",
       cache({ ttl: 60_000 }),
@@ -282,7 +282,7 @@ describe("RT-F8: cache HEAD replay Content-Length is byte-exact", () => {
 // ---------------------------------------------------------------------------
 describe("RT-F9: etag honors If-None-Match: *", () => {
   it("* matches any representation with 304", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/e", etag(), (c) => {
       // state mode — return-style commits a Response and bypasses etag
       c.body = "payload";
@@ -295,7 +295,7 @@ describe("RT-F9: etag honors If-None-Match: *", () => {
 // ---------------------------------------------------------------------------
 describe("RT-F10: redirect Location uses UTF-8 percent-encoding", () => {
   it("latin-1 and astral characters encode as their UTF-8 bytes", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.redirect("/café/😀");
     });
@@ -304,7 +304,7 @@ describe("RT-F10: redirect Location uses UTF-8 percent-encoding", () => {
   });
 
   it("existing percent-escapes and safe ASCII pass through untouched", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r2", (c) => {
       c.redirect("/a%20b?q=1&x=/y");
     });

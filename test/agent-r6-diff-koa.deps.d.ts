@@ -1,7 +1,7 @@
 /**
  * Ambient declarations for the differential-audit reference packages. These
  * are devDependencies used ONLY as live oracles (agent-r6-diff-koa.test.ts
- * compares eleu's output against them); no @types/* packages are shipped
+ * compares keala's output against them); no @types/* packages are shipped
  * or required at runtime.
  */
 declare module "koa" {

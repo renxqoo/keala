@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { secureHeaders, requestId, timing, logger } from "../src/middleware/headers.ts";
 import { cors, csrf } from "../src/middleware/cors.ts";
 import { etag, compress } from "../src/middleware/etag.ts";
@@ -17,7 +17,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("secureHeaders", () => {
   it("sets the safe defaults", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(secureHeaders());
     app.get("/x", (c) => c.text("x"));
     const res = await app.handle(req("/x"));
@@ -28,7 +28,7 @@ describe("secureHeaders", () => {
   });
 
   it("HSTS is opt-in with extras", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(secureHeaders({ hsts: 31536000, hstsExtras: ["includeSubDomains"] }));
     app.get("/x", (c) => c.text("x"));
     const res = await app.handle(req("/x"));
@@ -40,7 +40,7 @@ describe("secureHeaders", () => {
 
 describe("requestId", () => {
   it("generates ids and echoes them", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(requestId());
     app.get("/x", (c) => {
       c.set("X-State-Id", String(c.state.requestId ?? ""));
@@ -53,7 +53,7 @@ describe("requestId", () => {
   });
 
   it("honors valid inbound ids and replaces garbage", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(requestId());
     app.get("/x", (c) => c.text("ok"));
     const kept = await app.handle(
@@ -69,7 +69,7 @@ describe("requestId", () => {
 
 describe("timing + logger", () => {
   it("Server-Timing carries total and named marks", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(timing());
     app.get("/x", async (c) => {
       (c.state as { timingMark?: (n: string) => void }).timingMark?.("db");
@@ -83,7 +83,7 @@ describe("timing + logger", () => {
 
   it("logger writes one structured line per request", async () => {
     const lines: string[] = [];
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(logger({ write: (line) => lines.push(line) }));
     app.get("/x", (c) => c.text("ok"));
     await app.handle(req("/x"));
@@ -98,7 +98,7 @@ describe("cors", () => {
   });
 
   it("reflects any origin by default; the constant '*' answer never varies", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors());
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -111,7 +111,7 @@ describe("cors", () => {
   });
 
   it("a reflected whitelist origin always carries Vary (even without an Origin header)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors({ origin: ["https://app.site"] }));
     app.get("/x", (c) => c.text("ok"));
     const reflected = await app.handle(
@@ -126,7 +126,7 @@ describe("cors", () => {
   });
 
   it("preflight answers 204 with methods and never cookies", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors({ allowHeaders: ["content-type"], maxAge: 600 }));
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -143,7 +143,7 @@ describe("cors", () => {
   });
 
   it("whitelisted origins reflect the concrete origin with credentials", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors({ origin: ["https://good.site"], allowCredentials: true }));
     app.get("/x", (c) => c.text("ok"));
     const ok = await app.handle(
@@ -163,14 +163,14 @@ describe("csrf", () => {
     new Request("http://localhost:3000/x", { method: "POST", headers });
 
   it("safe methods pass without origins", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(csrf());
     app.get("/x", (c) => c.text("ok"));
     expect((await app.handle(req("/x"))).status).toBe(200);
   });
 
   it("same-origin Origin or Referer passes; cross-site and missing both reject", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(csrf());
     app.post("/x", (c) => c.text("ok"));
     const host = post({ origin: "http://localhost:3000" });
@@ -186,7 +186,7 @@ describe("csrf", () => {
 
 describe("etag + compress", () => {
   it("tags state bodies weakly and answers 304 on If-None-Match", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(etag());
     app.get("/x", (c) => {
       c.body = "stable-body";
@@ -202,7 +202,7 @@ describe("etag + compress", () => {
   });
 
   it("compress skips tiny bodies but still varies", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/x", (c) => {
       c.body = "tiny";
@@ -217,7 +217,7 @@ describe("etag + compress", () => {
 
 describe("bodyLimit + timeout", () => {
   it("bodyLimit rejects declared oversize with 413 before reading", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(bodyLimit(10));
     app.post("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -235,7 +235,7 @@ describe("bodyLimit + timeout", () => {
   });
 
   it("timeout expires into an exposed 504; fast paths pass", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/slow", timeout(10), async () => {
       await new Promise((r) => setTimeout(r, 60));
       return new Response("late");
@@ -264,7 +264,7 @@ describe("html escape protocol", () => {
 
 describe("cors: rejected preflights", () => {
   it("a disallowed preflight answers 403 by default", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors({ origin: ["https://app.site"] }));
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -277,7 +277,7 @@ describe("cors: rejected preflights", () => {
   });
 
   it("a reject handler replaces the default 403", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(
       cors({
         origin: ["https://app.site"],

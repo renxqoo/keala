@@ -3,7 +3,7 @@
  *
  * The framework keeps a functional core (compose/dispatch/respond/router are
  * plain functions over plain, often prototype-less objects) with exactly two
- * exported classes as its facade — `Eleu` (the app) and `Router` (standalone
+ * exported classes as its facade — `Keala` (the app) and `Router` (standalone
  * route groups). Runtime-facing types live here or next to their owner.
  */
 

@@ -1,7 +1,7 @@
-// One-shot verification of the in-process baseline: raw vs eleu vs hono.
+// One-shot verification of the in-process baseline: raw vs keala vs hono.
 // Not part of the repo's benchmark suite; exists to re-verify claims for the
 // refactor plan. Run: bun bench/verify-baseline.ts
-import { Eleu } from "../src/index.ts";
+import { Keala } from "../src/index.ts";
 import { Hono } from "hono";
 
 // Per-suite measured requests: BATCHES rounds x SUB interleaved sub-batches.
@@ -10,7 +10,7 @@ const BATCHES = 40;
 
 const rawHandler = (_req: Request): Response => new Response("hello world");
 
-const app = new Eleu();
+const app = new Keala();
 app.get("/text", (c) => {
   c.body = "hello world";
 });
@@ -33,7 +33,7 @@ const suites: Suite[] = [
     run: rawHandler,
   },
   {
-    name: "eleu text",
+    name: "keala text",
     run: (req) => app.handle(req) as Response,
   },
   {
@@ -45,7 +45,7 @@ const suites: Suite[] = [
     run: rawHandler,
   },
   {
-    name: "eleu param",
+    name: "keala param",
     run: (req) => app.handle(req) as Response,
   },
   {

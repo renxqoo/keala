@@ -7,7 +7,7 @@
 import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { compress } from "../src/middleware/etag.ts";
 
 const quiet = { env: "test" } as const;
@@ -22,7 +22,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
       JSON.stringify({ rows: Array.from({ length: 64 }, (_, i) => ({ id: i, ok: true })) }),
     ],
   ])("gzip output round-trips byte-exactly (%s)", async (_label, body) => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/b", (c) => {
       c.body = body as string;
@@ -39,7 +39,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
     // chunks, exercising the reassembly copy path.
     const chunk = Array.from({ length: 256 }, (_, i) => `seg-${i % 17}-`).join("");
     const body = chunk.repeat(Math.ceil((1024 * 1024) / chunk.length));
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
       c.body = body;
@@ -52,7 +52,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
   });
 
   it("object bodies compress; original semantics preserved", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     const payload = { hello: "world", rows: Array.from({ length: 32 }, (_, i) => ({ id: i })) };
     app.get("/o", (c) => {
@@ -67,7 +67,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
   });
 
   it("pass-through rules unchanged: tiny bodies, streams, no accept-encoding", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/tiny", (c) => {
       c.body = "x";
@@ -92,7 +92,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
   it("incompressible bodies stay uncompressed (packed >= bytes skips)", async () => {
     // Random bytes do not shrink; the component must not ship a body that
     // grew — and must not claim gzip for it.
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const random = new Uint8Array(2048);
     crypto.getRandomValues(random);
     app.get("/rand", (c) => {
@@ -113,7 +113,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
       onUnhandled,
     );
     try {
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       app.use(compress());
       app.get("/c", (c) => {
         c.body = "concurrent-compressible-body-".repeat(32);

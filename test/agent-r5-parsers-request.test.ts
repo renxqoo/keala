@@ -5,13 +5,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { getPath, getSearch, parseHostHeader, toURL } from "../src/utils/url.ts";
 import { parseQuery, type QueryMap } from "../src/utils/query.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
-const drive = (app: InstanceType<typeof Eleu>, req: Request) => app.handle(req);
+const drive = (app: InstanceType<typeof Keala>, req: Request) => app.handle(req);
 
 const probe = async (
   headers: Record<string, string>,
@@ -19,7 +19,7 @@ const probe = async (
   opts: Record<string, unknown> = {},
   url = "http://x/",
 ): Promise<unknown> => {
-  const app = new Eleu({ ...quiet, ...opts });
+  const app = new Keala({ ...quiet, ...opts });
   let captured: Context | undefined;
   app.use(async (c) => {
     captured = c;
@@ -232,7 +232,7 @@ describe("fresh locks correct behavior (fresh@2 parity)", () => {
     reqHeaders: Record<string, string>,
     fn: (c: Context) => unknown,
   ): Promise<unknown> => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let captured: Context | undefined;
     app.use(async (c) => {
       captured = c;
@@ -327,7 +327,7 @@ describe("fresh locks correct behavior (fresh@2 parity)", () => {
         return c.fresh; // statusValue still the 404 default here
       }),
     ).toBe(false);
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let fresh = true;
     app.post("/", (c) => {
       c.status = 200;

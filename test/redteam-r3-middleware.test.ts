@@ -49,7 +49,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { csrf } from "../src/middleware/cors.ts";
 import { cache } from "../src/middleware/cache.ts";
 import { compress } from "../src/middleware/etag.ts";
@@ -65,7 +65,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("R3-1: csrf() must compare the full origin (scheme+host), not just the host", () => {
   it("a cross-SCHEME Origin against an http endpoint is rejected (currently accepted)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(csrf());
     app.post("/x", (c) => c.text("ok"));
     // Attack request: the endpoint lives on http://localhost:3000; a page on
@@ -80,7 +80,7 @@ describe("R3-1: csrf() must compare the full origin (scheme+host), not just the 
   });
 
   it("a cross-scheme Origin against an https endpoint is rejected (currently accepted)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(csrf());
     app.post("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -93,7 +93,7 @@ describe("R3-1: csrf() must compare the full origin (scheme+host), not just the 
   });
 
   it("the Referer fallback is scheme-checked too (https Referer on http endpoint)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(csrf());
     app.post("/x", (c) => c.text("ok"));
     const res = await app.handle(
@@ -113,7 +113,7 @@ describe("R3-1: csrf() must compare the full origin (scheme+host), not just the 
 describe("R3-2: cache() must not store/replay no-cache responses", () => {
   it("a Cache-Control: no-cache response is recomputed on the next request", async () => {
     let computed = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
       c.set("Cache-Control", "no-cache");
@@ -127,7 +127,7 @@ describe("R3-2: cache() must not store/replay no-cache responses", () => {
 
   it("a Cache-Control: max-age=0 response is recomputed too", async () => {
     let computed = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/m", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
       c.set("Cache-Control", "max-age=0");
@@ -146,7 +146,7 @@ describe("R3-2: cache() must not store/replay no-cache responses", () => {
 
 describe("R3-3: cache entries must not leak across hosts", () => {
   it("a response captured for host A is not replayed to host B", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", cache({ ttl: 60_000 }), (c) => c.text(`host:${c.host}`));
     await app.handle(new Request("http://tenant-a.test/x"));
     const b = await app.handle(new Request("http://tenant-b.test/x"));
@@ -162,7 +162,7 @@ describe("R3-3: cache entries must not leak across hosts", () => {
 describe("R3-4: cache() must honor request Cache-Control: no-store / no-cache", () => {
   it("a no-store request never seeds an entry for later requests", async () => {
     let computed = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
       return c.text(`v${computed}`);
@@ -178,7 +178,7 @@ describe("R3-4: cache() must honor request Cache-Control: no-store / no-cache", 
 
   it("a warmed entry is bypassed for a no-cache request", async () => {
     let computed = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/y", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
       return c.text(`v${computed}`);
@@ -198,7 +198,7 @@ describe("R3-4: cache() must honor request Cache-Control: no-store / no-cache", 
 
 describe("R3-6: compress() must not gzip when gzip is explicitly refused (q=0)", () => {
   it("Accept-Encoding: gzip;q=0, *;q=1 is served identity (currently gzipped)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
       c.body = "x".repeat(2000);
@@ -218,7 +218,7 @@ describe("R3-6: compress() must not gzip when gzip is explicitly refused (q=0)",
 
 describe("R3-5: secureHeaders()/requestId() must cover error responses", () => {
   it("an error response still carries the secureHeaders defaults", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(secureHeaders());
     app.get("/e", () => {
       throw createError(400, "bad input", { expose: true });
@@ -230,7 +230,7 @@ describe("R3-5: secureHeaders()/requestId() must cover error responses", () => {
   });
 
   it("an error response still echoes the request id", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(requestId());
     app.get("/e", () => {
       throw createError(419, "boom", { expose: true });

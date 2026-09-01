@@ -23,13 +23,13 @@ import {
   wellBehavedMiddleware,
 } from "./agent-r6-prop-ops.mts";
 import { commitStyles, committer, lateMutations } from "./agent-r6-prop-inv7.mts";
-import { Eleu } from "../src/index.ts";
+import { Keala } from "../src/index.ts";
 import type { RouteHandler } from "../src/router/router.ts";
 
 describe("INV-1 never-reject", () => {
   it("any middleware/handler behavior x any request => Response, no sync throw, no rejection", async () => {
     await runProp("never-reject", 300, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       const n = rng.range(0, 3);
       for (let i = 0; i < n; i++) app.use(randHandler(rng, { mode: "any" }));
       const nr = rng.range(1, 4);
@@ -63,7 +63,7 @@ describe("INV-1 never-reject", () => {
 
   it("pooling variant: same contract under pooling:true", async () => {
     await runProp("never-reject(pooled)", 150, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet, pooling: true });
+      const app = new Keala({ ...quiet, pooling: true });
       app.use(randHandler(rng, { mode: "any" }));
       app.on("ALL", "/*", randHandler(rng, { mode: "any" }));
       const req = tryRequest(rng, `http://localhost${randPath(rng)}`, rng.bool(0.3));
@@ -84,7 +84,7 @@ describe("INV-1 never-reject", () => {
 
   it("committed responses + random post-commit mutations still never reject and stay wire-safe", async () => {
     await runProp("post-commit-mutations", 300, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet, pooling: rng.bool(0.4), keys: ["r6-secret"] });
+      const app = new Keala({ ...quiet, pooling: rng.bool(0.4), keys: ["r6-secret"] });
       const mutate = lateMutations(rng);
       const style = rng.pick(commitStyles);
       const wait = rng.bool(0.4);
@@ -116,7 +116,7 @@ describe("INV-1 never-reject", () => {
   /** Random request-URL rewrites through the setters. */
   it("random c.url/c.path/c.query/... rewrites never break handle()", async () => {
     await runProp("request-rewrites", 250, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       app.use(async (c, next) => {
         switch (rng.int(5)) {
           case 0:
@@ -155,7 +155,7 @@ describe("INV-1 never-reject", () => {
 describe("INV-2 exactly-once", () => {
   it("counter at a random position among well-behaved middleware runs exactly once", async () => {
     await runProp("exactly-once", 200, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       let count = 0;
       const counter: RouteHandler = (_c, next) => {
         count++;
@@ -209,7 +209,7 @@ describe("INV-2 exactly-once", () => {
 
   it("arbitrary (misbehaving) siblings never push the count past 1", async () => {
     await runProp("at-most-once", 200, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       let count = 0;
       const counter: RouteHandler = (_c, next) => {
         count++;
@@ -234,7 +234,7 @@ describe("INV-2 exactly-once", () => {
   it("mount/sub-router/param layers each run exactly once per matching request", async () => {
     await runProp("mount-exactly-once", 200, async (rng) => {
       const { Router } = await import("../src/router/group.ts");
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       const counts = { global: 0, sub: 0, param: 0, handler: 0 };
       app.use((_c, next) => {
         counts.global++;
@@ -282,7 +282,7 @@ describe("INV-2 exactly-once", () => {
 describe("INV-3 wire-safety", () => {
   it("random header/cookie/redirect/statusText injection never reaches the wire", async () => {
     await runProp("wire-safety", 250, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet, keys: ["r6-secret"] });
+      const app = new Keala({ ...quiet, keys: ["r6-secret"] });
       app.use(randHandler(rng, { mode: "any" }));
       app.on("ALL", "/*", randHandler(rng, { mode: "any" }));
       const headers: Record<string, string> = {

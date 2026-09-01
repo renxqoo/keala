@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { compress } from "../src/middleware/etag.ts";
 import { etag } from "../src/middleware/etag.ts";
 import { cache } from "../src/middleware/cache.ts";
@@ -28,7 +28,7 @@ const gzipAccepted = { headers: { "accept-encoding": "gzip" } } as RequestInit;
 
 describe("upstream hardening: compress gates", () => {
   it("hono#5310: gzip;q=0 is an explicit refusal — never compressed", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
       c.body = gzipBody;
@@ -42,7 +42,7 @@ describe("upstream hardening: compress gates", () => {
   });
 
   it("hono corpus: Cache-Control: no-transform is never compressed", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
       c.set("Cache-Control", "no-transform");
@@ -54,7 +54,7 @@ describe("upstream hardening: compress gates", () => {
   });
 
   it("hono corpus: 206 Partial Content is never compressed", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
       c.status = 206;
@@ -66,7 +66,7 @@ describe("upstream hardening: compress gates", () => {
   });
 
   it("hono corpus: inherently-compressed content types are skipped", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/png", (c) => {
       c.type = "image/png";
@@ -84,7 +84,7 @@ describe("upstream hardening: compress gates", () => {
   });
 
   it("hono corpus: `Accept-Encoding: *` accepts gzip", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
       c.body = gzipBody;
@@ -100,7 +100,7 @@ describe("upstream hardening: compress gates", () => {
 
 describe("upstream hardening: etag method gate", () => {
   it("POST with If-None-Match answers 200, never 304", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(etag());
     app.post("/e", (c) => {
       c.body = "payload";
@@ -123,7 +123,7 @@ describe("upstream hardening: etag method gate", () => {
 
 describe("upstream hardening: responseCache skip rules", () => {
   it('no-cache="Set-Cookie" responses are not cached', async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cache({ ttl: 60_000 }));
     let hits = 0;
     let skipHits = 0;
@@ -159,7 +159,7 @@ describe("upstream hardening: pattern registration guards", () => {
   it("multi-segment custom patterns are a documented divergence: no cross-segment capture", async () => {
     // Lock the CURRENT (segment-scoped) semantics: /files/:name(.*) must not
     // capture across segments — documented deliberate divergence from hono.
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/files/:name(.*)", (c) => {
       c.body = `got ${c.params?.["name"]}`;
     });
@@ -177,13 +177,13 @@ describe("upstream hardening: cross-realm errors", () => {
     const vm = require("node:vm") as typeof import("node:vm");
     const foreign = vm.runInNewContext("new Error('from another realm')");
     expect(foreign instanceof Error).toBe(false); // cross-realm, by construction
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     expect(() => app.onerror(foreign as Error)).not.toThrow();
   });
 
   it("a thrown cross-realm Error answers a clean 500 with the message hidden", async () => {
     const vm = require("node:vm") as typeof import("node:vm");
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/boom", () => {
       throw vm.runInNewContext("new Error('realm secret')");
     });
@@ -200,7 +200,7 @@ describe("upstream hardening: cross-realm errors", () => {
 
 describe("upstream hardening: response invariants", () => {
   it("hono#2343: c.json(undefined) serializes as null, not a 500", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/u/:id", (c) => c.json(undefined));
     const res = await app.handle(req("/u/404"));
     expect(res.status).toBe(200);
@@ -208,7 +208,7 @@ describe("upstream hardening: response invariants", () => {
   });
 
   it("koa#1899: Content-Type cannot be set to an array (singleton header)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/a", (c) => {
       c.set("Content-Type", ["text/html", "text/plain"]);
     });
@@ -223,7 +223,7 @@ describe("upstream hardening: response invariants", () => {
   });
 
   it("koa#1939: replacing a sized body with a stream drops the stale Content-Length", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.body = "hello";
       c.set("Content-Length", "5");
@@ -251,7 +251,7 @@ describe("upstream hardening: response invariants", () => {
   });
 
   it("koa#1939: replacing a sized body with a Response drops the stale Content-Length", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.set("Content-Length", "999");
       c.body = new Response("actual");
@@ -267,7 +267,7 @@ describe("upstream hardening: response invariants", () => {
 
 describe("upstream hardening: forwarded headers", () => {
   it("koa host.test: userinfo in X-Forwarded-Host is stripped", async () => {
-    const app = new Eleu({ ...quiet, proxy: true });
+    const app = new Keala({ ...quiet, proxy: true });
     let host = "";
     app.get("/h", (c) => {
       host = c.host;
@@ -281,7 +281,7 @@ describe("upstream hardening: forwarded headers", () => {
   });
 
   it("koa#827: X-Forwarded-For entries carry stripped ports", async () => {
-    const app = new Eleu({ ...quiet, proxy: true });
+    const app = new Keala({ ...quiet, proxy: true });
     app.get("/ip", (c) => {
       c.body = `${c.ip} | ${c.ips.join(",")}`;
     });
@@ -314,7 +314,7 @@ describe("upstream hardening: cookies", () => {
   });
 
   it("koa corpus: Secure is derived from the request when unset", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.cookies.set("sid", "1");
       c.body = "ok";

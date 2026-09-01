@@ -7,7 +7,7 @@
 
 import { dirname } from "node:path";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { Router } from "../src/router/group.ts";
 
 const root = dirname(new URL(import.meta.url).pathname);
@@ -22,7 +22,7 @@ const check = (name: string, condition: boolean, detail = ""): void => {
   console.error(`  ✗ ${name} ${detail}`);
 };
 
-const app = new Eleu({ keys: ["smoke-secret"], env: "production" });
+const app = new Keala({ keys: ["smoke-secret"], env: "production" });
 const api = new Router({ prefix: "/api" });
 
 api.param("id", async (c, next) => {
@@ -133,7 +133,7 @@ const get = async (path: string, init?: RequestInit): Promise<Response> =>
 
 // --- Bun-native branches (real runtime, not the stubbed bridge tests) -----
 if (typeof Bun !== "undefined") {
-  const nativeApp = new Eleu({ env: "production" });
+  const nativeApp = new Keala({ env: "production" });
   const { hashPassword, verifyPassword } = await import("../src/helpers/password.ts");
   const { csrfToken } = await import("../src/middleware/csrf-token.ts");
   const hash = await hashPassword("smoke-pw");

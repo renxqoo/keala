@@ -24,7 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { startBunServer } from "../src/adapters/bun.ts";
 import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
 import { validator, type StandardSchema } from "../src/middleware/validator.ts";
@@ -79,7 +79,7 @@ afterAll(async () => {
 
 describe("redteam P2: confirmed bugs (locked)", () => {
   it("CONFIRMED-BUG(now fixed) (P2-1): a smaller reader limit must still hold after an earlier larger read", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 100, textLimit: 10 * 1024 * 1024 }));
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -101,7 +101,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
 
   it("CONFIRMED-BUG(now fixed) (P2-2): validator must not override the app's configured body limits", async () => {
     // facet A: validator's hardcoded 1MB read 413s a body the app allows (5MB)
-    const big = new Eleu(quiet);
+    const big = new Keala(quiet);
     big.use(createBodyParser({ jsonLimit: 5 * 1024 * 1024 }));
     big.post("/v", validator(passthrough()), (c) => c.json({ ok: true }));
     const resA = await big.handle(
@@ -115,7 +115,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
 
     // facet B: validator's 1MB read memoizes first, so a configured
     // jsonLimit=100 is silently bypassed by the handler's json() call
-    const small = new Eleu(quiet);
+    const small = new Keala(quiet);
     small.use(createBodyParser({ jsonLimit: 100 }));
     small.post("/v", validator(passthrough()), (c) => c.json({ ok: true }));
     const resB = await small.handle(
@@ -129,7 +129,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   });
 
   it("CONFIRMED-BUG(now fixed) (P2-3): csrf must reject Origin: null (sandboxed-iframe forgery)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(csrf());
     app.post("/x", (c) => c.text("done"));
     const host = "localhost:3000";
@@ -144,7 +144,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   });
 
   it("CONFIRMED-BUG(now fixed) (P2-4): cors must not let a handler's Vary erase Vary: Origin", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(cors({ origin: ["https://a.example"] }));
     app.get("/x", (c) => {
       c.set("Vary", "Accept-Language"); // its own variance axis
@@ -158,7 +158,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   });
 
   it("CONFIRMED-BUG(now fixed) (P2-5): SSE data lines must sanitize lone CR (spec line terminator)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/sse", (c) =>
       streamSSE(c, (sse) => {
         // The WHATWG SSE tokenizer terminates lines on CR, LF and CRLF, so a
@@ -174,7 +174,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   });
 
   it("CONFIRMED-BUG(now fixed) (P2-6): serveStatic symlink guard must cover intermediate components", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(serveStatic({ root }));
     // linkdir is a symlink INSIDE root pointing outside; the requested final
     // component (secret.txt) is a regular file, so lstat(absolute) passes.
@@ -184,7 +184,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   });
 
   it("CONFIRMED-BUG(now fixed) (P2-7): directory-index resolution must re-check root containment", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(serveStatic({ root, index: "../../bk-rt-p2-outside/secret.txt" }));
     // A directory request resolves index relative to the DIRECTORY — escaping
     // and absolute index values walk straight out of root unchecked.
@@ -194,7 +194,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   });
 
   it("CONFIRMED-BUG(now fixed) (P2-8): a non-matching If-None-Match must disable If-Modified-Since", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(serveStatic({ root }));
     const base = await app.handle(req("/stamp.txt"));
     const lastModified = base.headers.get("last-modified") ?? "";
@@ -222,7 +222,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   });
 
   it("CONFIRMED-BUG(now fixed) (P2-10): an undecodable formData body must answer 4xx, not 500", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -245,7 +245,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
 
 describe("redteam P2: serveStatic containment (green)", () => {
   it("double-encoded traversal (%252e%252e) never decodes into ..", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(serveStatic({ root }));
     const res = await app.handle(req("/%252e%252e/bk-rt-p2-outside/secret.txt"));
     const res2 = await app.handle(req("/..%2f..%2fbk-rt-p2-outside/secret.txt"));
@@ -254,7 +254,7 @@ describe("redteam P2: serveStatic containment (green)", () => {
   });
 
   it("direct symlink files stay denied; a matching If-None-Match still 304s", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(serveStatic({ root }));
     const denied = await app.handle(req("/link.txt"));
     expect(denied.status).toBe(403);
@@ -266,7 +266,7 @@ describe("redteam P2: serveStatic containment (green)", () => {
   });
 
   it("absolute-path-shaped requests stay inside root", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(serveStatic({ root }));
     const doubled = await app.handle(req("//etc/passwd"));
     expect(doubled.status).toBe(404);
@@ -288,7 +288,7 @@ describe("redteam P2: websocket (green)", () => {
         return true;
       },
     };
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const opened: string[] = [];
     app.ws("/ws/:id", {
       open: (_ws, c) => {
@@ -314,7 +314,7 @@ describe("redteam P2: websocket (green)", () => {
         reload() {},
       };
     };
-    const app2 = new Eleu(quiet);
+    const app2 = new Keala(quiet);
     const seen2: string[] = [];
     app2.ws("/ws/:id", {
       open: (_ws, c) => {
@@ -335,7 +335,7 @@ describe("redteam P2: websocket (green)", () => {
   });
 
   it("duplicate app.ws on one path is refused at registration (no silent shadowing)", () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.ws("/dup", { open: () => undefined });
     expect(() => app.ws("/dup", { open: () => undefined })).toThrow(/already registered/);
     // The first registration stays intact.
@@ -349,7 +349,7 @@ describe("redteam P2: websocket (green)", () => {
 
 describe("redteam P2: core regression quick-scan (green)", () => {
   it("routing: static wins over params; encoded statics match; 405 carries Allow", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/users/admin", (c) => c.text("admin"));
     app.get("/users/:id", (c) => c.text(`id:${(c.params as Record<string, string>)["id"]}`));
     app.get("/a%20b", (c) => c.text("encoded"));
@@ -364,7 +364,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("HEAD backfills Content-Length from the would-be body", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", (c) => c.text("hello world"));
     const res = await app.handle(req("/x", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -373,7 +373,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("set-cookie survives the error path; error responses reset state cleanly", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c, next) => {
       c.append("Set-Cookie", "a=1"); // staged before the downstream failure
       return next();
@@ -388,8 +388,8 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("decorate stays isolated across apps; self-mount is rejected", async () => {
-    const a = new Eleu(quiet);
-    const b = new Eleu(quiet);
+    const a = new Keala(quiet);
+    const b = new Keala(quiet);
     a.decorate("onlyA", 1);
     expect(() => a.mount("/self", a)).toThrow(TypeError);
     a.get("/x", (c) => c.text(`a:${(c as unknown as { onlyA: number }).onlyA}`));
@@ -399,7 +399,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("floating next() containment: a handler that skips awaiting never crashes", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c, next) => {
       void next(); // deliberately not awaited; late rejection must be contained
       c.body = "early";
@@ -410,7 +410,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("signed cookies round-trip; tampering is rejected", async () => {
-    const app = new Eleu({ ...quiet, keys: ["secret"] });
+    const app = new Keala({ ...quiet, keys: ["secret"] });
     app.get("/read", (c) => c.text(`v=${c.cookies.get("v", { signed: true }) ?? "BAD"}`));
     app.get("/set", (c) => {
       c.cookies.set("v", "data", { signed: true });
@@ -428,7 +428,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("status getter observes committed responses (middleware observability)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const seen: number[] = [];
     app.use(async (c, next) => {
       await next();
@@ -441,7 +441,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("mounted routers keep sub-router middleware ahead of route handlers", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const sub = new Router();
     sub.use(async (c, next) => {
       c.set("X-Sub", "1");
@@ -462,7 +462,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("sugar responses consume staged headers exactly once (rule-4 containment)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/x", (c) => {
       c.set("X-Staged", "1");
       return c.json({ ok: true }, 201, { "X-Call": "2" });

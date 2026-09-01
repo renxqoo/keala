@@ -1,10 +1,10 @@
-// eleu bench server (Node.js runtime via the node adapter) — mirrors
-// bench/server-eleu.ts route for route, so the two runtimes are comparable.
-// Run: node --experimental-strip-types bench/server-eleu-node.ts [port]
-import { Eleu } from "../src/index.ts";
+// keala bench server (Node.js runtime via the node adapter) — mirrors
+// bench/server-keala.ts route for route, so the two runtimes are comparable.
+// Run: node --experimental-strip-types bench/server-keala-node.ts [port]
+import { Keala } from "../src/index.ts";
 import { listen } from "../src/adapters/node.ts";
 
-const app = new Eleu();
+const app = new Keala();
 
 app.get("/text", (c) => c.text("hello world"));
 

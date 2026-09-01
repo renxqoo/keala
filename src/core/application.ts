@@ -1,5 +1,5 @@
 /**
- * The Application contract — the public type of a `new Eleu()` instance.
+ * The Application contract — the public type of a `new Keala()` instance.
  *
  * Kept as a standalone structural interface (not the class itself) so the
  * dispatch/respond/adapter layers can consume `app` without importing the

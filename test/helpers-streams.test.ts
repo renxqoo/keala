@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { stream, streamText, streamSSE } from "../src/helpers/streams.ts";
 
 const quiet = { env: "test" } as const;
@@ -13,7 +13,7 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 
 describe("stream / streamText", () => {
   it("writes chunks, closes, and exposes desiredSize", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let observed: number | null = null;
     app.get("/x", (c) =>
       streamText(c, async (w) => {
@@ -30,7 +30,7 @@ describe("stream / streamText", () => {
   });
 
   it("binary chunks round-trip byte-exact", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/b", (c) =>
       stream(c, async (w) => {
         w.write(new Uint8Array([1, 2, 255, 0]));
@@ -42,7 +42,7 @@ describe("stream / streamText", () => {
   });
 
   it("abort cleanup runs when the consumer cancels", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     let cleaned = false;
     app.get("/s", (c) =>
       streamText(c, async (w) => {
@@ -63,7 +63,7 @@ describe("stream / streamText", () => {
   });
 
   it("callback errors never leak their message to the client", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/e", (c) =>
       streamText(c, async () => {
         throw new Error("secret-producer-failure");
@@ -76,7 +76,7 @@ describe("stream / streamText", () => {
 
 describe("streamSSE", () => {
   it("serializes events per the wire format (multiline data, json objects)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/ev", (c) =>
       streamSSE(
         c,
@@ -98,7 +98,7 @@ describe("streamSSE", () => {
   });
 
   it("sanitizes CR/LF in event and id fields (no header smuggling)", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/sneaky", (c) =>
       streamSSE(
         c,
@@ -117,7 +117,7 @@ describe("streamSSE", () => {
   });
 
   it("heartbeat comments flow while the stream is idle", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.get("/idle", (c) =>
       streamSSE(
         c,
@@ -137,7 +137,7 @@ describe("streamSSE", () => {
 
   it("opt-in stream error observation reaches the app hook (AppOptions.onStreamError)", async () => {
     const seen: string[] = [];
-    const app = new Eleu({
+    const app = new Keala({
       env: "test",
       onStreamError: (err) => {
         seen.push(err.message);
@@ -162,9 +162,9 @@ describe("streamSSE", () => {
 
 describe("onStreamError observation (opt-in wrapper)", () => {
   it("pump is pull-driven: a stalled consumer stops the source reads", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const seen: Error[] = [];
-    const observed = new Eleu({ ...quiet, onStreamError: (e) => seen.push(e) });
+    const observed = new Keala({ ...quiet, onStreamError: (e) => seen.push(e) });
     let sourceReads = 0;
     // A source that counts reads and yields slowly.
     const slowSource = () =>
@@ -195,7 +195,7 @@ describe("onStreamError observation (opt-in wrapper)", () => {
 
   it("producer errors reach the hook and the client sees the stream fail", async () => {
     const seen: Error[] = [];
-    const observed = new Eleu({ ...quiet, onStreamError: (e) => seen.push(e) });
+    const observed = new Keala({ ...quiet, onStreamError: (e) => seen.push(e) });
     observed.get("/x", (c) => {
       c.body = new ReadableStream<Uint8Array>({
         pull(controller) {

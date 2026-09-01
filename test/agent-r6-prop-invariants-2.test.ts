@@ -15,7 +15,7 @@ import {
 import { randErrorInstance, runProp, scanWire } from "./agent-r6-prop-ops.mts";
 import { EMPTY_CFG, committer, lateMutations, makeCfgHandler } from "./agent-r6-prop-inv7.mts";
 import type { RespCfg } from "./agent-r6-prop-inv7.mts";
-import { Eleu } from "../src/index.ts";
+import { Keala } from "../src/index.ts";
 
 describe("INV-7 response consistency", () => {
   it("HEAD => null body + GET-equal status; 204/205/304 => no body, no content-* headers", async () => {
@@ -25,7 +25,7 @@ describe("INV-7 response consistency", () => {
         status: rng.pick([200, 201, 204, 205, 301, 302, 304, 418] as const),
         body: rng.pick(["text", "json", "bytes", "redirect"] as const),
       };
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       app.get("/r", makeCfgHandler(cfg));
       const getRes = await app.handle(new Request("http://localhost/r"));
       const getBody = getRes.body === null ? "" : await getRes.text();
@@ -68,7 +68,7 @@ describe("INV-7 response consistency", () => {
 
   it("HEAD on committed responses with post-commit mutations keeps a null body and sane status", async () => {
     await runProp("head-dirty-committed", 200, async (rng) => {
-      const app = new Eleu({ ...quiet, pooling: rng.bool(0.3) });
+      const app = new Keala({ ...quiet, pooling: rng.bool(0.3) });
       const mutate = lateMutations(rng);
       const style = rng.pick(["text", "json", "response", "stream"] as const);
       const ops: string[] = [];
@@ -107,7 +107,7 @@ describe("INV-7 response consistency", () => {
 describe("INV-8 error-path completeness", () => {
   it("random thrown error => status in [400,599], readable body, wire-safe headers, onerror exactly once", async () => {
     await runProp("error-path", 250, async (rng, _seed, ctx) => {
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       let onerr = 0;
       app.onError(() => {
         onerr++;
@@ -185,7 +185,7 @@ describe("INV-9 stream safety", () => {
   it("random chunk sequences x random consumption leave no unhandledRejection; follow-ups work", async () => {
     await runProp("stream-safety", 60, async (rng) => {
       const streamErrors: unknown[] = [];
-      const app = new Eleu({
+      const app = new Keala({
         ...quiet,
         pooling: rng.bool(0.5),
         onStreamError: (e) => {
@@ -243,7 +243,7 @@ describe("INV-10 compose double next", () => {
   it("double next() at a random position answers 500 (uncaught) / runs downstream once (caught)", async () => {
     await runProp("double-next", 150, async (rng) => {
       let innerRuns = 0;
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       const pos = rng.range(0, 3);
       const caught = rng.bool(0.3);
       for (let i = 0; i < 4; i++) {
@@ -307,7 +307,7 @@ describe("INV-11 URL semantics", () => {
         queryProto: unknown;
       }
       let captured: UrlProbe | null = null;
-      const app = new Eleu({ ...quiet });
+      const app = new Keala({ ...quiet });
       app.on("ALL", "/*", (c) => {
         captured = {
           path: c.path,

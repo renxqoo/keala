@@ -22,7 +22,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/index.ts";
+import { Keala } from "../src/index.ts";
 import { createEmitter } from "../src/core/emitter.ts";
 
 const quiet = { env: "test" } as const;
@@ -106,7 +106,7 @@ describe("emitter races", () => {
 // ---------------------------------------------------------------------------
 describe("lazy singletons", () => {
   it("语义锁定: the cookies facade is created once and shared across await points", async () => {
-    const app = new Eleu({ ...quiet, keys: ["k"] });
+    const app = new Keala({ ...quiet, keys: ["k"] });
     const observed: boolean[] = [];
     app.use(async (c, next) => {
       const first = c.cookies;
@@ -124,7 +124,7 @@ describe("lazy singletons", () => {
   });
 
   it("语义锁定: ctx.state is one object per request and fresh across requests", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     const states: unknown[] = [];
     app.use(async (c) => {
       states.push(c.state);
@@ -145,7 +145,7 @@ describe("lazy singletons", () => {
   // undefined is memoized after the first call.
   it("语义锁定: an ip thunk returning undefined is invoked exactly once", async () => {
     let calls = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       const readings = [c.ip, c.ip, c.ip];
       c.body = readings.join("|");
@@ -164,7 +164,7 @@ describe("lazy singletons", () => {
   // once per read.
   it("语义锁定: a requestIP host returning null is consulted exactly once", async () => {
     let calls = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       c.body = `${c.ip},${c.ip}`;
     });
@@ -181,7 +181,7 @@ describe("lazy singletons", () => {
 
   it("语义锁定: a thunk with a concrete result is called exactly once", async () => {
     let calls = 0;
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       c.body = [c.ip, c.ip, c.ip].join(",");
     });
@@ -201,7 +201,7 @@ describe("lazy singletons", () => {
 // ---------------------------------------------------------------------------
 describe("stream bodies", () => {
   it("语义锁定: HEAD with a stream body drops the body but keeps status and type", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       c.type = "text/plain";
       c.body = new ReadableStream({
@@ -219,7 +219,7 @@ describe("stream bodies", () => {
   });
 
   it("语义锁定: consuming a healthy streamed body yields its chunks", async () => {
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use((c) => {
       c.body = new ReadableStream({
         start(controller) {
@@ -235,7 +235,7 @@ describe("stream bodies", () => {
 
   // Documented divergence (was an inherited koa CONFIRMED-BUG): Koa pipes the body
   // through `Stream.pipeline(stream, res, err => ctx.onerror(err))` so a
-  // mid-flight body failure reaches the app's error channel. eleu hands the raw
+  // mid-flight body failure reaches the app's error channel. keala hands the raw
   // stream to the fetch `Response` and — by design (docs/DESIGN.md §4) —
   // made stream error observation an OPT-IN feature (`observeStream`, off by
   // default to save 567ns/response and restore backpressure). The opt-in
@@ -243,7 +243,7 @@ describe("stream bodies", () => {
   // parked rather than silently dropped.
   it("[P2 delivered] a failing body stream reaches the onStreamError hook (opt-in)", async () => {
     const seen: string[] = [];
-    const app = new Eleu({
+    const app = new Keala({
       env: "test",
       onStreamError: (e) => seen.push(e.message),
     });

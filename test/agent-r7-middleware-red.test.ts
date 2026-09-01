@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { Eleu } from "../src/core/app.ts";
+import { Keala } from "../src/core/app.ts";
 import { logger } from "../src/middleware/headers.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
 import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
@@ -30,7 +30,7 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
      * Root cause: body-parser.ts's facade memoizes only cache.bytes/cache.facade;
      *             json() never stores its parsed result in BodyCacheState.
      */
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(createBodyParser());
     app.post("/json", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -57,7 +57,7 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
      * Root cause: body-parser.ts computes urlencoded parts as ampersands + 1
      *             even when bytes.length is zero.
      */
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 0 }));
     app.post("/form", async (c0) => {
       const c = c0 as ContextWithBody;
@@ -102,7 +102,7 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
     const root = mkdtempSync(join(tmpdir(), "bk-r7-static-"));
     try {
       writeFileSync(join(root, "asset.txt"), "root-prefix-ok");
-      const app = new Eleu(quiet);
+      const app = new Keala(quiet);
       app.use(serveStatic({ root, prefix: "/" }));
 
       const res = await app.handle(req("/asset.txt"));
@@ -122,7 +122,7 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
      *             so rejection skips the only write call.
      */
     const lines: string[] = [];
-    const app = new Eleu(quiet);
+    const app = new Keala(quiet);
     app.use(logger({ write: (line) => lines.push(line) }));
     app.get("/boom", () => {
       throw new Error("boom");

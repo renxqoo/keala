@@ -1,7 +1,7 @@
 /**
  * Sync-lazy access to Node built-in modules.
  *
- * Importing the framework must not load any native bridge: `eleu` at idle
+ * Importing the framework must not load any native bridge: `keala` at idle
  * pulls in no crypto/fs bindings until a feature that needs them first runs
  * (~5MB RSS on Bun). Dynamic `import()` cannot serve the synchronous call
  * sites (cookie signing, CSRF issue), so laziness goes through
