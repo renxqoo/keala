@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
-import { createEmitter } from "../src/core/emitter.ts";
 import {
   acceptsCharset,
   acceptsEncoding,
@@ -138,28 +137,5 @@ describe("branch coverage: mime and url helpers", () => {
   it("toURL handles invalid input", () => {
     expect(toURL("http://localhost:3000/a")?.pathname).toBe("/a");
     expect(toURL("::definitely not a url::")).toBe(null);
-  });
-});
-
-describe("branch coverage: emitter", () => {
-  it("cleans up listener storage when the last listener is removed", () => {
-    const emitter = createEmitter();
-    const calls: number[] = [];
-    const a = emitter.on("tick", () => calls.push(1));
-    const b = emitter.on("tick", () => calls.push(2));
-    emitter.emit("tick");
-    expect(calls).toEqual([1, 2]);
-    a();
-    b();
-    expect(emitter.listenerCount("tick")).toBe(0);
-    expect(emitter.emit("tick")).toBe(false);
-  });
-
-  it("off is a no-op for unknown listeners and events", () => {
-    const emitter = createEmitter();
-    emitter.off("nope", () => {});
-    emitter.on("x", () => {});
-    emitter.off("x", () => {});
-    expect(emitter.listenerCount("x")).toBe(1);
   });
 });

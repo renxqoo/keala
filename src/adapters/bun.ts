@@ -9,6 +9,8 @@
 import type { Application, WebSocketHandlers } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
 import { buildNativeRoutes } from "../core/sink.ts";
+import { consoleFallback } from "../core/dispatch.ts";
+import { toHttpError } from "../http/errors.ts";
 import type { ListenOptions } from "../types.ts";
 
 /** Minimal structural type of the Bun server handle we expose to users. */
@@ -35,12 +37,9 @@ const defaultServeImplementation = (): ServeImplementation | undefined =>
 const defaultServeError =
   (app: Application) =>
   (error: Error): Response => {
-    // A throwing error listener must not break Bun's error callback itself.
-    try {
-      app.onerror(error);
-    } catch {
-      // the listener's failure is its own problem; the 500 still goes out
-    }
+    // A serve error is a server fault, not a request-path error: it has no
+    // context, so the mapper contract does not apply — console fallback only.
+    consoleFallback(app, undefined, toHttpError(error));
     return new Response("Internal Server Error", { status: 500 });
   };
 
@@ -109,11 +108,9 @@ export const startBunServer = (
       void Promise.resolve()
         .then(run)
         .catch((error: unknown) => {
-          try {
-            app.onerror(error instanceof Error ? error : new Error(String(error)));
-          } catch {
-            // the error listener's failure is its own problem
-          }
+          // ws runtime errors live outside the request funnel (no context,
+          // no mapper contract) — the console fallback keeps them visible.
+          consoleFallback(app, undefined, toHttpError(error));
         });
     };
     serveOptions["websocket"] = {

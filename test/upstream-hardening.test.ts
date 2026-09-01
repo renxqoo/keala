@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
+import { toHttpError } from "../src/http/errors.ts";
 import { compress } from "../src/middleware/etag.ts";
 import { etag } from "../src/middleware/etag.ts";
 import { cache } from "../src/middleware/cache.ts";
@@ -173,12 +174,16 @@ describe("upstream hardening: pattern registration guards", () => {
 // ---------------------------------------------------------------------------
 
 describe("upstream hardening: cross-realm errors", () => {
-  it("an Error from another realm is handled, not rejected by app.onerror", () => {
+  it("an Error from another realm classifies in place as an unexposed 500", () => {
     const vm = require("node:vm") as typeof import("node:vm");
     const foreign = vm.runInNewContext("new Error('from another realm')");
     expect(foreign instanceof Error).toBe(false); // cross-realm, by construction
-    const app = new Keala(quiet);
-    expect(() => app.onerror(foreign as Error)).not.toThrow();
+    const error = toHttpError(foreign);
+    // In-place classification: the SAME object comes back, now an HttpError.
+    expect(error).toBe(foreign);
+    expect(error.status).toBe(500);
+    expect(error.expose).toBe(false);
+    expect(error.message).toBe("from another realm");
   });
 
   it("a thrown cross-realm Error answers a clean 500 with the message hidden", async () => {

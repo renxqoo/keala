@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { Keala, isHttpError } from "../src/index.ts";
 import { normalizeError } from "../src/http/errors.ts";
@@ -138,13 +138,5 @@ describe("coverage gaps", () => {
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(400);
     expect(res.headers.get("x-reason")).toBe("coverage");
-  });
-
-  it("emits errors without a context attached", () => {
-    const app = new Keala({ env: "development", silent: true });
-    const spy = vi.fn();
-    app.onError(spy);
-    app.onerror(new Error("bare"));
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ message: "bare" }), undefined);
   });
 });

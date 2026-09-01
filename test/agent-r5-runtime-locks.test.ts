@@ -8,8 +8,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala, type Application } from "../src/core/app.ts";
-import { createEmitter } from "../src/core/emitter.ts";
-import { parseListenArgs } from "../src/core/dispatch.ts";
+import { parseListenArgs } from "../src/core/listen.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, req: Request) => app.handle(req);
@@ -465,22 +464,6 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.headers.get("x-global")).toBe("1");
     expect(res.body).toBeNull();
   });
-  it("emitter: once() is removable by the original listener; emit reports listeners", () => {
-    const em = createEmitter();
-    const seen: string[] = [];
-    const orig = () => seen.push("orig");
-    em.once("error", orig);
-    em.off("error", orig);
-    expect(em.emit("error")).toBe(false);
-    const on = () => seen.push("on");
-    em.on("error", on);
-    expect(em.emit("error")).toBe(true);
-    expect(em.listenerCount("error")).toBe(1);
-    em.off("error", on);
-    expect(em.listenerCount("error")).toBe(0);
-    expect(seen).toEqual(["on"]);
-  });
-
   it("dispatch: parseListenArgs accepts port/hostname/callback, numeric strings and option bags", () => {
     const onListen = () => {};
     const parsed = parseListenArgs([3000, "0.0.0.0", onListen]);

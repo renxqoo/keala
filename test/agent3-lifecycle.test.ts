@@ -12,7 +12,6 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import { createEmitter } from "../src/core/emitter.ts";
 import { streamText, streamSSE, stream } from "../src/helpers/streams.ts";
 
 const quiet = { env: "test" } as const;
@@ -178,21 +177,6 @@ describe("native sink: JS mirror parity", () => {
     // the JS mirror rebuilds and must not diverge from it.
     expect(sunk.statusText).toBe("Custom Reason");
     expect(res.statusText).toBe("Custom Reason");
-  });
-});
-
-describe("emitter: off()/once() contract", () => {
-  it("off() removes a listener registered through once() (Node EventEmitter contract)", () => {
-    const emitter = createEmitter();
-    const calls: string[] = [];
-    const listener = (): void => {
-      calls.push("fired");
-    };
-    emitter.once("error", listener);
-    emitter.off("error", listener);
-    expect(emitter.listenerCount("error")).toBe(0);
-    expect(emitter.emit("error", new Error("x"))).toBe(false);
-    expect(calls).toEqual([]);
   });
 });
 

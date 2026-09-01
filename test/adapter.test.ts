@@ -128,18 +128,21 @@ describe("startBunServer", () => {
     expect(stopped()).toBe(true);
   });
 
-  it("wires a default serve error handler that routes through app.onerror", async () => {
-    const errors: Error[] = [];
-    const app = new Keala();
-    app.onError((err) => errors.push(err));
+  it("wires a default serve error handler: static 500 + console fallback", async () => {
+    const app = new Keala({ env: "development" });
     const { impl, options } = fakeServe();
     startBunServer(app, {}, undefined, impl);
     const onError = options()["error"] as (error: Error) => Response;
     const boom = new Error("stream exploded");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const res = onError(boom);
     expect(res.status).toBe(500);
     expect(await res.text()).toBe("Internal Server Error");
-    expect(errors).toEqual([boom]);
+    // Serve errors are server faults without a request context — they use
+    // the console fallback, not the request-path error mapper.
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError.mock.calls.flat().join(" ")).toContain("stream exploded");
+    consoleError.mockRestore();
   });
 
   it("a throwing error listener never breaks the serve error callback", async () => {

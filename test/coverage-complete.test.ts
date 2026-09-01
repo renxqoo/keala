@@ -13,7 +13,6 @@ const REAL_BUN = typeof Bun !== "undefined";
 
 import { Keala } from "../src/core/app.ts";
 import { Router } from "../src/router/group.ts";
-import { createEmitter } from "../src/core/emitter.ts";
 import { typeIs } from "../src/negotiation/typeis.ts";
 import { startBunServer, type ServerHandle } from "../src/adapters/bun.ts";
 
@@ -103,46 +102,6 @@ describe("coverage: listen argument parsing", () => {
     expect(made[2]?.["idleTimeout"]).toBe(30);
     expect(made[2]?.["maxRequestBodySize"]).toBe(1024);
     expect(made[2]?.["development"]).toBe(false);
-  });
-});
-
-describe("coverage: emitter disposal paths", () => {
-  it("disposal is idempotent and off() tolerates unknown listeners", () => {
-    const emitter = createEmitter();
-    const heard: number[] = [];
-    const dispose = emitter.on("x", () => heard.push(1));
-    emitter.off("x", () => undefined); // unknown listener — no-op
-    emitter.off("ghost", () => undefined); // unknown event — no-op
-    dispose();
-    dispose(); // second call — no-op
-    expect(emitter.emit("x")).toBe(false);
-    expect(emitter.listenerCount("x")).toBe(0);
-  });
-
-  it("once() fires exactly once even when manually disposed after firing", () => {
-    const emitter = createEmitter();
-    let hits = 0;
-    emitter.once("go", () => {
-      hits += 1;
-    });
-    expect(emitter.emit("go")).toBe(true);
-    expect(emitter.emit("go")).toBe(false);
-    expect(hits).toBe(1);
-  });
-
-  it("emit copies the listener list (unsubscribe during emit is safe)", () => {
-    const emitter = createEmitter();
-    const seen: string[] = [];
-    // a runs first and disposes b; the iteration copy still delivers b.
-    let disposeB: () => void = () => undefined;
-    emitter.on("e", () => {
-      seen.push("a");
-      disposeB();
-    });
-    disposeB = emitter.on("e", () => seen.push("b"));
-    emitter.emit("e");
-    expect(seen).toEqual(["a", "b"]);
-    expect(emitter.listenerCount("e")).toBe(1);
   });
 });
 

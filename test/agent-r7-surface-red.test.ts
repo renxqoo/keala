@@ -8,7 +8,6 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala, createError, normalizeError } from "../src/index.ts";
-import { createEmitter } from "../src/core/emitter.ts";
 import { charsetFromContentType, expandContentType } from "../src/utils/mime.ts";
 
 const quiet = { env: "test" } as const;
@@ -74,11 +73,12 @@ describe("R7-SURFACE-2 [MEDIUM] non-Error throwables are always normalizable", (
     });
     const response = await app.handle(request());
 
-    // Actual response still falls back to the static 500, but normalization
-    // fails before app.onerror(), so the documented listener is skipped.
+    // R4.3 contract: the mapper ALWAYS receives an HttpError — the BigInt
+    // normalizes (cause chain preserved) and wraps as an unexposed 500.
     expect(response.status).toBe(500);
     expect(heard).toBeInstanceOf(Error);
-    expect(heard?.cause).toBe(1n);
+    expect((heard as { status?: number }).status).toBe(500);
+    expect((heard as { cause?: unknown }).cause).toBe(1n);
   });
 });
 
@@ -91,28 +91,6 @@ describe("R7-SURFACE-3 [MEDIUM] HttpError status aliases stay coherent", () => {
     // Root cause: src/http/errors.ts:121-132.
     const error = createError(404, { statusCode: 503 });
     expect(error.status).toBe(404);
-    expect(error.statusCode).toBe(error.status);
-  });
-});
-
-describe("R7-SURFACE-4 [MEDIUM] EventEmitter duplicate removal follows Node order", () => {
-  it("off(original) removes the most recently registered matching listener", () => {
-    const emitter = createEmitter();
-    let calls = 0;
-    const listener = () => {
-      calls += 1;
-    };
-    emitter.on("tick", listener);
-    emitter.once("tick", listener);
-    emitter.off("tick", listener);
-    emitter.emit("tick");
-    emitter.emit("tick");
-
-    // Node removeListener semantics remove one instance, choosing the most
-    // recently added. Expected: the persistent `on` remains and runs twice.
-    // Actual: findIndex removes the oldest `on`, leaving `once` (one call).
-    // Root cause: src/core/emitter.ts:42-49.
-    expect(calls).toBe(2);
   });
 });
 

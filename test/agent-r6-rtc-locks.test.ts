@@ -14,7 +14,6 @@ import { Keala, type Application } from "../src/index.ts";
 import { cache } from "../src/middleware/cache.ts";
 import { createBodyParser } from "../src/plugins/body-parser.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
-import { createEmitter } from "../src/core/emitter.ts";
 import {
   acceptsCharset,
   acceptsEncoding,
@@ -174,24 +173,6 @@ describe("R6-K concurrency and mutable shared state [locks]", () => {
     const victim = await drive(app, new Request("http://x/x/y"));
     expect(victim.headers.get("x-cache")).toBeNull();
     expect(await victim.text()).toBe("VICTIM");
-  });
-
-  it("emitter: off() during emit affects the next emit only; a throwing listener propagates", () => {
-    const em = createEmitter();
-    const seen: string[] = [];
-    const second = (): void => {
-      seen.push("second");
-    };
-    em.on("e", () => {
-      seen.push("first");
-      em.off("e", second); // during emit: snapshot semantics — second still runs THIS round
-    });
-    em.on("e", second);
-    em.emit("e");
-    expect(seen).toEqual(["first", "second"]);
-    seen.length = 0;
-    em.emit("e");
-    expect(seen).toEqual(["first"]);
   });
 
   it("sink: concurrent first hits all capture the body correctly", async () => {

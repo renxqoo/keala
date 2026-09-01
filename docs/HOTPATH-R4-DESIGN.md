@@ -173,7 +173,10 @@ R4 按可独立回滚的纵向单元推进：
    [HOTPATH-R4-2-MIGRATION-ROUTER-SCALE.md](./HOTPATH-R4-2-MIGRATION-ROUTER-SCALE.md)：
    N≥1000 参数路由 keala 快 3–72 倍、miss 全规模快 32–47%，唯一小表缺口
    N≤10 param-shared ~130ns 不达立项门槛；regexp dispatcher 不立项）；
-3. **R4.3 错误响应策略**：保留 `onError` 观察面，新策略 API 单独确认；
+3. **R4.3 错误响应策略**：已核销（见
+   [HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md](./HOTPATH-R4-3-MIGRATION-ERROR-POLICY.md)：
+   onError 单槽化返回 Response 接管，emitter/silent/statusCode 兼容面删除；
+   错误路径 897ns——快于 koa 式中间件 18%、与 Hono 带内平价，快乐路径零改动）；
 4. **R4.4 生命周期与过载控制**：drain、in-flight、accept/reject、deadline 分开定约；
 5. **R4.5 可观测性低税接口**：仅在订阅时付费，默认热路径零分配。
 

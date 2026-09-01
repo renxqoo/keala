@@ -170,10 +170,10 @@ describe("app pipeline", () => {
     expect(await four.text()).toBe("visible");
   });
 
-  it("onError hears errors; silent apps log nothing on 5xx", async () => {
+  it("onError hears errors; a registered mapper suppresses the console fallback", async () => {
     const error = vi.fn();
-    const app = new Keala({ env: "test", silent: true });
-    app.onError(error);
+    const app = new Keala({ env: "test" });
+    app.onError((err) => void error(err));
     app.get("/e", () => {
       throw new Error("boom");
     });

@@ -7,7 +7,6 @@ describe("createError", () => {
     const err = createError(404, "user not found");
     expect(err).toBeInstanceOf(Error);
     expect(err.status).toBe(404);
-    expect(err.statusCode).toBe(404);
     expect(err.name).toBe("NotFoundError");
     expect(err.message).toBe("user not found");
     expect(err.expose).toBe(true);

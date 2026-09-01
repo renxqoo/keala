@@ -334,24 +334,40 @@ their object shape on `c.body` reads.
 | `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` — Bun.serve baked in                                                                    |
 | `new Hono({ strict: false })`                      | no strict mode: `/path` and `/path/` are the same route                                                    |
 | `new URL(c.req.url())`                             | `c.url` is path+search (koa form); the absolute URL is `c.raw.url`                                         |
-| `app.onError(fn)` shapes the error response        | `app.onError` only observes — throw `createError(status, { expose })`                                      |
+| `app.onError(fn)` shapes the error response        | the same return-a-Response contract — plus void = built-in (decline)                                       |
 | `app.notFound(fn)` may throw                       | must `return` a Response — a throw answers the generic 500 path                                            |
 
 Divergences worth knowing: `c.body` is the **response** body (hono's request
 
-## Error handling: onError, onerror, notFound
+## Error handling: onError, notFound
 
-- `app.onError(fn)` subscribes an **observer** (typed log/telemetry hook) —
-  it never produces the error response. `app.onerror(err, c)` is koa's log
-  hook (emit to listeners + fallback console) and doesn't either. What the
-  CLIENT sees is always built by keala's error path from the thrown error:
-  `throw createError(404, "gone", { expose: true })` controls status and
-  message; unknown error types render an opaque 500.
-- Need a custom error envelope? Wrap the chain in your own outermost
-  middleware: `app.use(async (c, next) => { try { await next() } catch (e) { return envelope(c, e) } })`.
+`app.onError(mapper)` is the **single** error entry (one slot — a second
+registration throws):
+
+```ts
+app.onError((error, c) => {
+  // side effects ARE the observation story — log/report here
+  if (error.status >= 500) logger.error({ err: error.stack, url: c.url });
+  // return a Response to take over the error response…
+  return c.json({ error: { code: error.code ?? `HTTP_${error.status}` } }, error.status);
+  // …or return nothing to keep keala's built-in response
+});
+```
+
+- The mapper **always** receives an `HttpError` (`status`/`expose`/`code`/
+  `headers`); plain throwables are classified in place as an unexposed 500 —
+  internal messages never leak unless you opt in (`expose: true`).
+- A takeover Response keeps its own headers; `error.headers`
+  (e.g. `WWW-Authenticate`) and staged security headers are merged only into
+  absent slots. HEAD bodies are stripped.
+- The funnel covers **everything**: handler/middleware throws, `c.throw`,
+  finalize failures (unserializable bodies) and ws upgrade rejections.
+- A failing mapper answers the static 500 and the framework console.errors
+  the mapper bug — envelope bugs are never silent.
+- No mapper registered + 5xx + non-test env keeps the framework console
+  fallback; register `app.onError(() => {})` to silence it explicitly.
 - `app.notFound(fn)` must **return** a Response. It runs inside the
-  finalizer; a throw there lands in the generic error path — a keala
-  `createError` renders by status/expose, anything else answers 500.
+  finalizer; a throw there lands in the generic error path.
   body lives on `c.raw` or the parser plugin); middleware runs koa-style — see
   [Global middleware and routing order](#global-middleware-and-routing-order--the-1-trap).
 
@@ -374,7 +390,7 @@ Divergences worth knowing: `c.body` is the **response** body (hono's request
 
 | Member                                                                         | Description                                                                                                                                                     |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Keala(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`, `silent`                                   |
+| `new Keala(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`                                             |
 | `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                      |
 | `app.use(path, ...mw)`                                                         | Exact static or trailing-`/*` scoped middleware; applies to in-scope 404/405 too                                                                                |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                               |
@@ -384,7 +400,7 @@ Divergences worth knowing: `c.body` is the **response** body (hono's request
 | `app.handle(request, runtime?)`                                                | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                            |
 | `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node` |
 | `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                    |
-| `app.onError(fn)` / `app.notFound(fn)`                                         | Error subscription and custom 404; `silent`/`env: "test"` suppress default logging                                                                              |
+| `app.onError(mapper)` / `app.notFound(fn)`                                     | Single-slot error mapper (`Response \| void`) and custom 404; `env: "test"` suppresses the default console fallback                                             |
 | `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                              |
 | `app.ws(path, handlers)`                                                       | WebSocket route (Bun only; a duplicate path throws at setup)                                                                                                    |
 | `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)` | Redirect routes and named-URL building                                                                                                                          |
@@ -496,7 +512,7 @@ bun run bench       # vs hono / koa / fastify / raw / Go benchmark harness
 
 ```
 src/
-  core/         app, compose (precompiled onion), dispatch, respond, sink, emitter
+  core/         app, compose (precompiled onion), dispatch, respond, sink, listen
   context/      cookies + HMAC signing
   http/         status table, error factory, conditional-request primitives
   negotiation/  accepts/* with q-values, type-is

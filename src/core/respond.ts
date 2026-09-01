@@ -30,7 +30,7 @@ import { FLAG_COMMITTED_HEADERS_APPLIED } from "./context/state.ts";
 
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
 
-type HeaderEntries = string[][];
+type HeaderEntries = [string, string][];
 
 const countOf = (record: HeaderMap): number => {
   let n = 0;
@@ -206,7 +206,7 @@ const mergedResponseHeaders = (res: Response): Headers => {
  * exposes only what its own headers say, and an open stream has no knowable
  * finite length.
  */
-const stripBody = (res: Response): Response =>
+export const stripBody = (res: Response): Response =>
   new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
 
 type BodyData = string | Uint8Array | ReadableStream | Blob | null;

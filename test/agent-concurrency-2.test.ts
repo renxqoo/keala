@@ -23,83 +23,10 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/index.ts";
-import { createEmitter } from "../src/core/emitter.ts";
 
 const quiet = { env: "test" } as const;
 const enc = (value: string): Uint8Array => new TextEncoder().encode(value);
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-// ---------------------------------------------------------------------------
-// 4. Emitter races
-// ---------------------------------------------------------------------------
-describe("emitter races", () => {
-  it("语义锁定: once() fires exactly once and self-removal is race-free", async () => {
-    const emitter = createEmitter();
-    const calls: number[] = [];
-    emitter.once("error", () => calls.push(1));
-    emitter.emit("error");
-    emitter.emit("error");
-    expect(calls).toEqual([1]);
-    expect(emitter.listenerCount("error")).toBe(0);
-  });
-
-  it("语义锁定: listeners added during emit are not invoked by the in-flight emit", () => {
-    const emitter = createEmitter();
-    const calls: string[] = [];
-    emitter.on("e", () => {
-      calls.push("first");
-      emitter.on("e", () => calls.push("late"));
-    });
-    emitter.emit("e");
-    expect(calls).toEqual(["first"]);
-    emitter.emit("e");
-    expect(calls).toEqual(["first", "first", "late"]);
-  });
-
-  it("语义锁定: removing a not-yet-invoked listener mid-emit still lets the snapshot call it (Node parity)", () => {
-    const emitter = createEmitter();
-    const calls: string[] = [];
-    const late = (): void => {
-      calls.push("late");
-    };
-    emitter.on("e", () => {
-      calls.push("first");
-      emitter.off("e", late);
-    });
-    emitter.on("e", late);
-    emitter.emit("e"); // Node also snapshots: "late" still runs this once
-    expect(calls).toEqual(["first", "late"]);
-    emitter.emit("e");
-    expect(calls).toEqual(["first", "late", "first"]);
-  });
-
-  it("语义锁定: off() of an unknown listener is a silent no-op", () => {
-    const emitter = createEmitter();
-    expect(() => emitter.off("nope", () => {})).not.toThrow();
-    expect(() => emitter.off("nope", () => {})).not.toThrow();
-    expect(emitter.emit("nope")).toBe(false);
-    expect(emitter.listenerCount("nope")).toBe(0);
-  });
-
-  it("语义锁定: a throwing listener stops later listeners and propagates (Node parity)", () => {
-    const emitter = createEmitter();
-    const calls: string[] = [];
-    emitter.on("e", () => {
-      calls.push("throws");
-      throw new Error("boom");
-    });
-    emitter.on("e", () => calls.push("never"));
-    expect(() => emitter.emit("e")).toThrow("boom");
-    expect(calls).toEqual(["throws"]);
-  });
-
-  it("语义锁定: once() wrapped listener is removable via the returned disposer", () => {
-    const emitter = createEmitter();
-    const dispose = emitter.once("e", () => {});
-    dispose();
-    expect(emitter.emit("e")).toBe(false);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // 5. Lazy singletons on the flat context

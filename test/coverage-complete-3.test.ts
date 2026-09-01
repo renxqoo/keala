@@ -4,9 +4,10 @@
  * onerror guards and use() validation.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
+import { toHttpError } from "../src/http/errors.ts";
 import { baseContextProto, createContext, type Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
@@ -84,10 +85,11 @@ describe("coverage: request host edge branches", () => {
 });
 
 describe("coverage: onerror guards and use validation", () => {
-  it("onerror(null) is a no-op; non-Error values throw TypeError", () => {
-    const app = new Keala(quiet);
-    expect(() => app.onerror(null as unknown as Error)).not.toThrow();
-    expect(() => app.onerror("boom" as unknown as Error)).toThrow(TypeError);
+  it("toHttpError wraps any throwable into an unexposed 500 HttpError", () => {
+    const nulled = toHttpError(null);
+    expect(nulled.status).toBe(500);
+    expect(nulled.expose).toBe(false);
+    expect(toHttpError("boom").message).toBe("boom");
   });
 
   it("use() rejects non-function middleware", () => {
@@ -95,13 +97,14 @@ describe("coverage: onerror guards and use validation", () => {
     expect(() => app.use(undefined as unknown as () => void)).toThrow(TypeError);
   });
 
-  it("client-level errors never log even without listeners", () => {
-    const app = new Keala({ env: "development", silent: false });
-    // 4xx with expose:true and plain 404 — both suppressed, no console output
-    expect(() => app.onerror(Object.assign(new Error("nope"), { status: 404 }))).not.toThrow();
-    expect(() =>
-      app.onerror(Object.assign(new Error("v"), { status: 403, expose: true })),
-    ).not.toThrow();
+  it("client-level 4xx errors never trigger the console fallback", async () => {
+    const app = new Keala({ env: "development" });
+    app.get("/nope", (c) => c.throw(404, "gone", { expose: true }));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const res = await app.handle(req("/nope"));
+    expect(res.status).toBe(404);
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it("toJSON summarizes the app", () => {

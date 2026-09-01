@@ -63,8 +63,6 @@ export interface AppOptions {
   subdomainOffset?: number;
   /** Environment name. Default `process.env.NODE_ENV` or `"development"`. */
   env?: string;
-  /** Silence error logging when no `error` listener is registered. */
-  silent?: boolean;
   /**
    * Opt-in stream error observation: when set, state-mode stream bodies are
    * re-pumped through a guard so consumer/producer failures reach this hook

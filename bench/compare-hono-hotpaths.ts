@@ -21,7 +21,9 @@ type CaseName =
   | "text"
   | "text-dirty"
   | "text-dirty-correct"
-  | "text-dirty-fallback";
+  | "text-dirty-fallback"
+  | "error"
+  | "error-mw";
 const pass = (_c: Context, next: () => Promise<void>) => next();
 // Kept local so the same harness can run against the R3 worktree, where the
 // capability constant does not exist and this unused bit is harmless.
@@ -43,6 +45,8 @@ if (
       "text-dirty",
       "text-dirty-correct",
       "text-dirty-fallback",
+      "error",
+      "error-mw",
     ] as const
   ).includes(caseName)
 ) {
@@ -62,6 +66,26 @@ if (framework === "keala") {
     app.post("/v1/echo", async (c0) => {
       const c = c0 as ContextWithBody;
       return c.json(await c.req.json());
+    });
+  } else if (caseName === "error") {
+    // R4.3: the error mapper builds the enterprise envelope centrally —
+    // no onion layer, no promise guard on healthy requests.
+    app.onError((error, c) => c.json({ error: { code: "internal" } }, error.status));
+    app.get("/boom", () => {
+      throw new Error("boom");
+    });
+  } else if (caseName === "error-mw") {
+    // The koa-era shape this replaces: a global try/catch middleware that
+    // catches before the funnel and hand-builds the same envelope.
+    app.use(async (c, next) => {
+      try {
+        await next();
+      } catch {
+        return c.json({ error: { code: "internal" } }, 500);
+      }
+    });
+    app.get("/boom", () => {
+      throw new Error("boom");
     });
   } else {
     if (
@@ -118,6 +142,11 @@ if (framework === "keala") {
         return c.text("malformed JSON body", 400);
       }
     });
+  } else if (caseName === "error") {
+    app.onError((_err, c) => c.json({ error: { code: "internal" } }, 500));
+    app.get("/boom", () => {
+      throw new Error("boom");
+    });
   } else {
     if (
       caseName === "text-dirty" ||
@@ -149,6 +178,9 @@ if (caseName === "body" || caseName === "body-limited" || caseName === "body-saf
       headers: { "content-type": "application/json", "content-length": "25" },
       body: '{"message":"hello world"}',
     });
+} else if (caseName === "error" || caseName === "error-mw") {
+  const shared = new Request("http://localhost/boom");
+  makeRequest = () => shared;
 } else {
   const path = caseName === "probe" ? "/livez" : "/text";
   const shared = new Request(`http://localhost${path}`);
@@ -156,19 +188,26 @@ if (caseName === "body" || caseName === "body-limited" || caseName === "body-saf
 }
 
 const isBodyCase = caseName === "body" || caseName === "body-limited" || caseName === "body-safe";
-const warmup = isBodyCase ? 20_000 : 60_000;
-const batch = isBodyCase ? 2_000 : 5_000;
+const isErrorCase = caseName === "error" || caseName === "error-mw";
+const warmup = isBodyCase || isErrorCase ? 20_000 : 60_000;
+const batch = isBodyCase || isErrorCase ? 2_000 : 5_000;
 const samples = 21;
 
 const runOne = async (index: number): Promise<void> => {
   const response = await handle(makeRequest(index));
-  if (response.status !== 200) throw new Error(`unexpected status ${response.status}`);
+  const expectedStatus = isErrorCase ? 500 : 200;
+  if (response.status !== expectedStatus) {
+    throw new Error(`unexpected status ${response.status}`);
+  }
   const body = await response.text();
   if (caseName === "probe" && body !== '{"status":"ok"}') throw new Error("bad probe body");
   if (isBodyCase && body !== '{"message":"hello world"}') {
     throw new Error("bad echo body");
   }
   if (caseName.startsWith("text") && body !== "hello") throw new Error("bad text body");
+  if (isErrorCase && body !== '{"error":{"code":"internal"}}') {
+    throw new Error("bad error envelope");
+  }
   if (caseName.includes("dirty") && response.headers.get("x-late") !== "1") {
     throw new Error("late header missing");
   }

@@ -12,7 +12,7 @@
  *  RT-F10 redirect Location percent-encodes UTF-16 code units, not UTF-8
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { Keala, startBunServer, type ServeImplementation } from "../src/index.ts";
 import { createBodyParser } from "../src/plugins/body-parser.ts";
@@ -114,7 +114,7 @@ describe("RT-F2: rejecting async ws handlers never crash the process", () => {
     return { impl, options: () => captured };
   };
 
-  it("open/message rejections route to app.onerror, not unhandledRejection", async () => {
+  it("open/message rejections route to the console fallback, not unhandledRejection", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown): void => {
       unhandled.push(reason);
@@ -123,10 +123,11 @@ describe("RT-F2: rejecting async ws handlers never crash the process", () => {
       "unhandledRejection",
       onUnhandled,
     );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
-      const app = new Keala(quiet);
-      const seen: Error[] = [];
-      app.onError((err) => seen.push(err));
+      // ws runtime errors have no request context — R4.3 routes them to the
+      // console fallback (the mapper contract is request-scoped).
+      const app = new Keala({ env: "development" });
       app.ws("/ws", {
         open: async () => {
           throw new Error("ws-open-boom");
@@ -144,8 +145,11 @@ describe("RT-F2: rejecting async ws handlers never crash the process", () => {
       handlers["open"]?.({ data: { wsKey: "/ws", ctx: { path: "/ws" } } });
       handlers["message"]?.({ data: { wsKey: "/ws", ctx: { path: "/ws" } } }, "hi");
       await new Promise((r) => setTimeout(r, 20));
-      expect(seen.map((e) => e.message)).toEqual(["ws-open-boom", "ws-msg-boom"]);
+      const logged = consoleError.mock.calls.flat().join(" ");
+      expect(logged).toContain("ws-open-boom");
+      expect(logged).toContain("ws-msg-boom");
       expect(unhandled).toEqual([]);
+      consoleError.mockRestore();
     } finally {
       (process.off as (event: string, fn: (reason: unknown) => void) => void)(
         "unhandledRejection",

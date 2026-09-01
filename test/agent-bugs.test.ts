@@ -7,9 +7,8 @@
  * migration notes:
  *  - One flat Context: no `ctx.request` / `ctx.response` facades; response
  *    headers are read via `c.resHeader`.
- *  - The app exposes onError/off/emit/listenerCount; `once` lives on the
- *    emitter the app is built around, so the once-semantics locks target
- *    createEmitter() directly.
+ *  - The app exposes a single-slot onError mapper (R4.3); the old emitter
+ *    multi-cast surface is deleted.
  *  - new Router().use(prefix, mw) koa-mount url-stripping is gone: a
  *    standalone router's middleware prepends to its routes and sees the full
  *    url (route-table merge semantics). The query-visibility intent is kept.
@@ -17,10 +16,9 @@
  *    that case was dropped — see the migration report.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { Keala, Router, isRedirectStatus, type Context } from "../src/index.ts";
-import { createEmitter } from "../src/core/emitter.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -245,50 +243,6 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
   });
 });
 
-describe("agent audit: emitter once/off edges", () => {
-  it("off() with an unknown listener is a no-op and keeps other listeners", () => {
-    const app = new Keala(quiet);
-    const keep = vi.fn();
-    app.onError(keep);
-    app.off("error", vi.fn());
-    expect(app.listenerCount("error")).toBe(1);
-    app.emit("error", new Error("x"));
-    expect(keep).toHaveBeenCalledTimes(1);
-  });
-
-  it("the disposer returned by once() unsubscribes the wrapper", () => {
-    const emitter = createEmitter();
-    const spy = vi.fn();
-    const dispose = emitter.once("error", spy);
-    dispose();
-    expect(emitter.emit("error", new Error("x"))).toBe(false);
-    expect(spy).not.toHaveBeenCalled();
-    expect(emitter.listenerCount("error")).toBe(0);
-  });
-
-  it("once() fires exactly once across repeated emits", () => {
-    const emitter = createEmitter();
-    const spy = vi.fn();
-    emitter.once("error", spy);
-    emitter.emit("error", new Error("a"));
-    emitter.emit("error", new Error("b"));
-    expect(spy).toHaveBeenCalledTimes(1);
-  });
-
-  it("re-subscribing after the last off() works on a fresh list", () => {
-    const app = new Keala(quiet);
-    const first = vi.fn();
-    app.onError(first);
-    app.off("error", first);
-    expect(app.listenerCount("error")).toBe(0);
-    const second = vi.fn();
-    app.onError(second);
-    app.emit("error", new Error("c"));
-    expect(first).not.toHaveBeenCalled();
-    expect(second).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe("agent audit: router mount and trie encoding", () => {
   it("router.use() middleware keeps the query string visible downstream", async () => {
     const router = new Router();
@@ -379,21 +333,6 @@ describe("agent audit: is() array form (type-is compatibility)", () => {
       headers: { "Content-Type": "text/html" },
     });
     expect(c.is("html", "json")).toBe("html");
-  });
-});
-
-describe("agent audit: app.onerror contract", () => {
-  it("tolerates a null error outside the test env", () => {
-    const app = new Keala({ env: "development" });
-    expect(() => app.onerror(null as unknown as Error)).not.toThrow();
-  });
-
-  it("still forwards real errors to listeners", () => {
-    const app = new Keala({ env: "development" });
-    const spy = vi.fn();
-    app.onError(spy);
-    app.onerror(new Error("real"));
-    expect(spy).toHaveBeenCalledTimes(1);
   });
 });
 

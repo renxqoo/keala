@@ -24,15 +24,12 @@ import {
   dispatchChain,
   finalizeGuarded,
   mergeMountedWs,
-  onAppError,
-  parseListenArgs,
   pluginInstallerOf,
   registerRedirect,
   routeShortcut,
   settleHandle,
   wsUpgradeHandler,
 } from "./dispatch.ts";
-import { createEmitter, type Listener } from "./emitter.ts";
 import {
   type Chain,
   createRouterState,
@@ -49,19 +46,20 @@ import {
 } from "../router/router.ts";
 import { isRouter } from "../router/group.ts";
 import type { Router } from "../router/group.ts";
+import { parseListenArgs } from "./listen.ts";
 import { compilePattern } from "../router/pattern.ts";
 import { startBunServer, type ServerHandle } from "../adapters/bun.ts";
 import { buildNativeRoutes, registerSink, type NativeSinkEntry } from "./sink.ts";
 import {
   type Application,
-  type ErrorListener,
+  type ErrorMapper,
   type NotFoundHandler,
   type WebSocketHandlers,
 } from "./application.ts";
 
 export type {
   Application,
-  ErrorListener,
+  ErrorMapper,
   NotFoundHandler,
   WebSocketHandlers,
 } from "./application.ts";
@@ -76,7 +74,6 @@ export { isRouter };
 export class Keala implements Application {
   readonly env: string;
   readonly proxy: boolean;
-  readonly silent: boolean;
   readonly keys: SigningKeys | undefined;
   readonly onStreamError: AppOptions["onStreamError"];
   readonly settings: RequestSettings;
@@ -87,7 +84,8 @@ export class Keala implements Application {
   // Per-app prototype: decorators never leak into another application.
   #contextProto: object = Object.create(baseContextProto);
   #decorators: Decorators = createDecorators(this.#contextProto);
-  #emitter = createEmitter();
+  // R4.3: single error-mapper slot — a second onError registration throws.
+  #errorMapper: ErrorMapper | undefined;
   #middleware: MiddlewareStack = createMiddlewareStack();
   #notFoundHandler: NotFoundHandler = defaultNotFound;
   #serverHandle: ServerHandle | null = null;
@@ -102,7 +100,6 @@ export class Keala implements Application {
   constructor(options: AppOptions = {}) {
     this.env = options.env ?? process.env["NODE_ENV"] ?? "development";
     this.proxy = options.proxy ?? false;
-    this.silent = options.silent ?? false;
     this.keys = options.keys;
     this.onStreamError = options.onStreamError;
     this.settings = Object.freeze({
@@ -112,6 +109,7 @@ export class Keala implements Application {
       subdomainOffset: options.subdomainOffset ?? 2,
     });
     this.router = createRouterState();
+    this.#errorMapper = undefined;
     this.#poolingEnabled = options.pooling === true;
     // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
     // so dispatch can warn when global middleware swallows a matched route.
@@ -474,26 +472,24 @@ export class Keala implements Application {
     return this.#serverHandle;
   }
 
-  onerror(error: Error, c?: Context): void {
-    // Koa-contract hook — implementation in dispatch.ts (onAppError).
-    onAppError(this, this.#emitter, error, c);
-  }
-
   toJSON(): { env: string; proxy: boolean } {
     return { env: this.env, proxy: this.proxy };
   }
 
-  onError(handler: ErrorListener): Application {
-    this.#emitter.on("error", handler as Listener);
+  get errorMapper(): ErrorMapper | undefined {
+    return this.#errorMapper;
+  }
+
+  onError(mapper: ErrorMapper): Application {
+    if (typeof mapper !== "function") {
+      throw new TypeError("app.onError() requires a function");
+    }
+    if (this.#errorMapper !== undefined) {
+      throw new TypeError(
+        "app.onError() is already registered — compose inside one handler instead",
+      );
+    }
+    this.#errorMapper = mapper;
     return this;
-  }
-  off(event: string, listener: (...args: unknown[]) => void): void {
-    this.#emitter.off(event, listener as Listener);
-  }
-  emit(event: string, ...args: unknown[]): boolean {
-    return this.#emitter.emit(event, ...args);
-  }
-  listenerCount(event: string): number {
-    return this.#emitter.listenerCount(event);
   }
 }

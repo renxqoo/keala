@@ -120,7 +120,7 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
   it("end-to-end: c.is() with an attacker-controlled token never 500s", async () => {
     const app = new Keala(quiet);
     const errors: string[] = [];
-    app.onError((e) => errors.push(e.message));
+    app.onError((e) => void errors.push(e.message));
     app.use((c) => {
       c.body = `is:${String(c.is((c.query["f"] as string) ?? "json"))}`;
     });
@@ -191,7 +191,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
   it("end-to-end: an injected option becomes a clean 500 with no Set-Cookie on the wire", async () => {
     const app = new Keala(quiet);
     const seen: string[] = [];
-    app.onError((e: Error) => seen.push(`${e.constructor.name}:${e.message}`));
+    app.onError((e: Error) => void seen.push(`${e.constructor.name}:${e.message}`));
     app.use((c) => {
       c.cookies.set("sid", "v", { sameSite: "Strict; Path=/pwned" } as never);
       c.body = "unreachable";

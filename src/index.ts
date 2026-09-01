@@ -25,7 +25,7 @@
 
 export { Keala, type Application } from "./core/app.ts";
 export { Router } from "./router/group.ts";
-export type { ErrorListener, NotFoundHandler, WebSocketHandlers } from "./core/application.ts";
+export type { ErrorMapper, NotFoundHandler, WebSocketHandlers } from "./core/application.ts";
 export {
   compose,
   direct,

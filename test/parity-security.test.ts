@@ -201,14 +201,16 @@ describe("koa corpus locks", () => {
     expect((await app.handle(req("/badtype"))).status).toBe(500);
   });
 
-  it("errors carrying statusCode (not status) are honored; invalid statuses coerce to 500", async () => {
+  it("R4.3: the statusCode alias is gone — only .status counts; junk statuses coerce to 500", async () => {
     const app = new Keala(quiet);
     app.get("/teapot", () => {
       const err = new Error("short and stout") as Error & { statusCode: number };
       err.statusCode = 418;
       throw err;
     });
-    expect((await app.handle(req("/teapot"))).status).toBe(418);
+    // No valid `.status` → wrapped as an unexposed 500 (the alias fallback
+    // chain was http-errors ecosystem compat, deleted by R4.3).
+    expect((await app.handle(req("/teapot"))).status).toBe(500);
     app.get("/junk", () => {
       const err = new Error("junk") as Error & { status: unknown };
       err.status = "notnumber";

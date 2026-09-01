@@ -17,10 +17,10 @@ import type { Context } from "./context/context.ts";
 import type { MiddlewareStack } from "./middleware-stack.ts";
 import { FLAG_CHAIN_STALLED, FLAG_ROUTE_REACHED } from "./context/state.ts";
 import { retireWithBody, type ContextPool } from "./context/pool.ts";
-import { finalize } from "./respond.ts";
-import { isHttpError, normalizeError } from "../http/errors.ts";
-import { isValidErrorStatus, statusMessage } from "../http/status.ts";
-import type { ListenOptions } from "../types.ts";
+import { finalize, flattenHeaders, stripBody } from "./respond.ts";
+import { normalizeError, toHttpError, type HttpError } from "../http/errors.ts";
+import { statusMessage } from "../http/status.ts";
+import type { HeaderMap } from "../types.ts";
 
 /** A plugin is any object exposing `install(app)`; middleware is not one. */
 export const pluginInstallerOf = (value: unknown): ((app: Application) => void) | null => {
@@ -150,45 +150,21 @@ export const mergeMountedWs = (
   rekeyed.wsKey = newKey;
 };
 
-/** Errors from OTHER realms (vm contexts, structured clones) fail instanceof
- * but are still Errors by koa's toString-based contract — treat them as such. */
-const isErrorLike = (value: unknown): boolean =>
-  Object.prototype.toString.call(value) === "[object Error]";
-
 /**
- * The app error hook (koa contract): null is a no-op, a non-Error is a loud
- * TypeError; listeners hear every error, and only SERVER faults fall back to
- * console logging (client-level 4xx / exposed errors are not faults).
+ * Console fallback for UNOBSERVED server faults (R4.3 rule 6): request-path
+ * errors fire it only when no error mapper is registered (a registered
+ * mapper owns observation — silence is then an explicit `app.onError(() => {})`,
+ * not a boolean switch). Non-request framework errors (serve/ws runtime)
+ * have no mapper context and always use this fallback.
  */
-export const onAppError = (
+export const consoleFallback = (
   app: Application,
-  emitter: { emit(event: string, ...args: unknown[]): boolean },
-  error: Error,
-  c?: Context,
+  url: string | undefined,
+  error: HttpError,
 ): void => {
-  if (error == null) return;
-  if (!(error instanceof Error) && !isErrorLike(error)) {
-    throw new TypeError(`non-error thrown: ${JSON.stringify(error)}`);
+  if (app.env !== "test" && error.status >= 500) {
+    console.error(`\n  ${error.stack ?? error.message}\n  at ${url ?? "unknown"}\n`);
   }
-  const heard = emitter.emit("error", error, c);
-  const status = (error as Partial<{ status: number }>).status;
-  const expose = (error as Partial<{ expose: boolean }>).expose;
-  const clientError =
-    status === 404 || expose === true || (typeof status === "number" && status < 500);
-  if (!heard && !app.silent && app.env !== "test" && !clientError) {
-    console.error(`\n  ${error.stack ?? error.message}\n  at ${c?.url ?? "unknown"}\n`);
-  }
-};
-
-/** Node-style plain errors may carry `.status` or `.statusCode`. */
-const errorStatusCode = (error: Error): number => {
-  const candidate = (error as Partial<Error & { status: number; statusCode: number }>).status;
-  const code = (error as Partial<{ statusCode: number }>).statusCode;
-  return isValidErrorStatus(candidate as number)
-    ? (candidate as number)
-    : isValidErrorStatus(code as number)
-      ? (code as number)
-      : 500;
 };
 
 /**
@@ -364,21 +340,23 @@ const staticServerError = (method: string | undefined): Response =>
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
 
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+  typeof (value as Partial<PromiseLike<unknown>>)?.then === "function";
+
 const buildErrorResponse = (
   app: Application,
   c: Context,
   err: unknown,
 ): Response | Promise<Response> => {
-  const error = normalizeError(err);
-  app.onerror(error, c);
-
-  // A stale committed response must not shadow the error.
+  // Funnel entry contract (R4.3): everything downstream sees an HttpError —
+  // non-HttpError throwables wrap as an unexposed 500 (stack/cause kept).
+  const error = toHttpError(err);
+  // A stale committed response must not shadow the error. The reset is
+  // shared by the built-in and mapper paths; headers the chain already
+  // staged ride along (koa parity — security headers must still cover error
+  // pages); only content-DESCRIBING headers drop, they describe the body
+  // that failed to ship.
   c._res = undefined;
-  // Koa parity on the error path: headers the chain already staged ride
-  // along (koa's res keeps them; middleware security headers must still
-  // cover error pages) — only content-DESCRIBING headers drop, because they
-  // describe the body that failed to ship. The body/message below replace
-  // the failed response state entirely.
   const record = c.headersRecord;
   if (record !== null) {
     delete record["content-type"];
@@ -388,67 +366,107 @@ const buildErrorResponse = (
   c.bodyValue = null;
   c.messageValue = "";
   c.flags = 0;
-  if (isHttpError(error)) {
-    for (const [field, value] of Object.entries(error.headers ?? {})) {
-      // The error path must never throw; skip headers that fail validation.
-      try {
-        c.set(field, Array.isArray(value) ? value : String(value));
-      } catch {
-        // Invalid header from an error object — drop it silently.
+
+  const mapper = app.errorMapper;
+  if (mapper === undefined) {
+    consoleFallback(app, c.url, error);
+    return builtinErrorResponse(app, c, error);
+  }
+  // The mapper failure path must stay LOUD: its own bug answers the static
+  // 500 AND is console.error'd — an envelope bug must never fail silently.
+  const fail = (mapperErr: unknown): Response => {
+    const normalized = normalizeError(mapperErr);
+    console.error(
+      `\n  error mapper failed: ${normalized.stack ?? normalized.message}\n  at ${c.url ?? "unknown"}\n`,
+    );
+    return staticServerError(c.method);
+  };
+  try {
+    const out = mapper(error, c);
+    if (isThenable(out)) {
+      return out.then(
+        (res) => finalizeMapperResponse(app, c, res, error),
+        (mapperErr: unknown) => fail(mapperErr),
+      );
+    }
+    return finalizeMapperResponse(app, c, out, error);
+  } catch (mapperErr) {
+    return fail(mapperErr);
+  }
+};
+
+/** Apply the takeover rules to a mapper's return value (R4.3 rules 3-4). */
+const finalizeMapperResponse = (
+  app: Application,
+  c: Context,
+  res: unknown,
+  error: HttpError,
+): Response => {
+  // void — or any non-Response garbage — declines to the built-in response.
+  if (!(res instanceof Response)) return builtinErrorResponse(app, c, error) as Response;
+  const out = c.method === "HEAD" && res.body !== null ? stripBody(res) : res;
+  mergeAbsentHeaders(out, error, c.headersRecord);
+  return out;
+};
+
+/**
+ * if-absent merge (R4.3 rule 3): `error.headers` (the throw's own protocol
+ * headers, e.g. WWW-Authenticate / Retry-After) and the staged security
+ * headers fill only slots the takeover Response left empty — a header the
+ * mapper set itself always wins. Content-describing headers are never
+ * merged. An immutable Headers object ships the Response untouched rather
+ * than failing the error path.
+ */
+const mergeAbsentHeaders = (res: Response, error: HttpError, staged: HeaderMap | null): void => {
+  try {
+    const headers = res.headers;
+    const errorHeaders = error.headers;
+    if (errorHeaders !== undefined) {
+      for (const [field, value] of Object.entries(errorHeaders)) {
+        if (!headers.has(field)) {
+          headers.set(field, Array.isArray(value) ? (value as string[]).join(", ") : String(value));
+        }
       }
     }
+    if (staged !== null) {
+      for (const [name, value] of flattenHeaders(staged)) {
+        if (value !== undefined && !headers.has(name)) headers.set(name, value);
+      }
+    }
+  } catch {
+    // Immutable Headers — ship exactly what the mapper built.
   }
-  const status = isHttpError(error) ? error.status : errorStatusCode(error);
-  c.status = status;
-  const exposed = isHttpError(error) ? error.expose === true : false;
-  const message = exposed ? error.message : statusMessage(status) || "Internal Server Error";
+};
+
+/** The built-in text/plain error response — the decline default. */
+const builtinErrorResponse = (
+  app: Application,
+  c: Context,
+  error: HttpError,
+): Response | Promise<Response> => {
+  for (const [field, value] of Object.entries(error.headers ?? {})) {
+    // The error path must never throw; skip headers that fail validation.
+    try {
+      c.set(field, Array.isArray(value) ? value : String(value));
+    } catch {
+      // Invalid header from an error object — drop it silently.
+    }
+  }
+  c.status = error.status;
+  const message =
+    error.expose === true ? error.message : statusMessage(error.status) || "Internal Server Error";
   c.set("Content-Type", "text/plain; charset=utf-8");
   c.body = message;
   // TERMINAL conversion — the error path must never re-enter the full error
   // pipeline: a finalize failure here (say, a staged header no Response can
-  // carry) answers the static 500 directly. Routing this through
-  // finalizeGuarded's catch → errorResponse → buildErrorResponse recursed
-  // mutually until stack overflow, firing app.onerror ~1.3k times for ONE
-  // request and, on promise-shaped finalize failures, escaping as an
-  // unhandled RangeError.
+  // carry) answers the static 500 directly. This built-in path never calls
+  // the mapper, so a mapper failure can never recurse (the historical
+  // mutual-recursion bug fired app.onerror ~1.3k times for ONE request).
+  // finalize is synchronous here by construction: _res is cleared and the
+  // body is the plain message string, so no stream/HEAD async branch exists.
   try {
-    const out = finalize(app, c);
-    if (out instanceof Promise) return out.catch(() => staticServerError(c.method));
-    return out;
+    return finalize(app, c) as Response;
   } catch {
     return staticServerError(c.method);
   }
-};
-
-interface ParsedListen {
-  listen: ListenOptions;
-  hostname?: string;
-  onListen?: () => void;
-}
-
-export const parseListenArgs = (args: readonly unknown[]): ParsedListen => {
-  const parsed: ParsedListen = { listen: {} };
-  for (const arg of args) {
-    if (typeof arg === "function") parsed.onListen = arg as () => void;
-    else if (typeof arg === "number") parsed.listen.port = arg;
-    else if (typeof arg === "string") {
-      // "3000" is a port; anything else is a hostname.
-      if (/^\d+$/.test(arg.trim())) parsed.listen.port = Number(arg);
-      else parsed.hostname = arg;
-    } else if (typeof arg === "object" && arg !== null) {
-      const opts = arg as ListenOptions & { hostname?: string };
-      if (opts.hostname !== undefined) parsed.hostname = opts.hostname;
-      if (opts.port !== undefined) parsed.listen.port = opts.port;
-      if (opts.reusePort !== undefined) parsed.listen.reusePort = opts.reusePort;
-      if (opts.idleTimeout !== undefined) parsed.listen.idleTimeout = opts.idleTimeout;
-      if (opts.maxRequestBodySize !== undefined) {
-        parsed.listen.maxRequestBodySize = opts.maxRequestBodySize;
-      }
-      if (opts.development !== undefined) parsed.listen.development = opts.development;
-      if (opts.nativeRoutes !== undefined) parsed.listen.nativeRoutes = opts.nativeRoutes;
-      if (opts.websocket !== undefined) parsed.listen.websocket = opts.websocket;
-      if (opts.onServeError !== undefined) parsed.listen.onServeError = opts.onServeError;
-    }
-  }
-  return parsed;
 };

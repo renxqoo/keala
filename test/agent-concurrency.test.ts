@@ -315,7 +315,7 @@ describe("error path lifecycle", () => {
     // pages); the failed BODY is discarded and the 5xx message stays hidden.
     const errors: unknown[] = [];
     const app = new Keala(quiet);
-    app.onError((e) => errors.push(e));
+    app.onError((e) => void errors.push(e));
     app.use(async (c) => {
       c.set("X-Custom", "leak");
       c.append("Set-Cookie", "sid=dead; Path=/");
@@ -354,7 +354,7 @@ describe("error path lifecycle", () => {
   it("语义锁定: when a request throws twice, the surviving error wins exactly once", async () => {
     const messages: string[] = [];
     const app = new Keala(quiet);
-    app.onError((e: Error) => messages.push(e.message));
+    app.onError((e: Error) => void messages.push(e.message));
     app.use(async (_c, next) => {
       try {
         await next();

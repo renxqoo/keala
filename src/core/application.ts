@@ -12,12 +12,21 @@ import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import type { Context } from "./context/context.ts";
 import type { RouteDef, RouteHandler, RouterState } from "../router/router.ts";
+import type { HttpError } from "../http/errors.ts";
 import type { Router } from "../router/group.ts";
 import type { ListenOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
 import type { ServerHandle } from "../adapters/bun.ts";
 import type { NativeSinkEntry } from "./sink.ts";
 
-export type ErrorListener = (error: Error, c: Context) => void;
+/**
+ * The single error entry (R4.3): the mapper ALWAYS receives an HttpError
+ * (non-HttpError throwables are wrapped as an unexposed 500 upstream).
+ * Returning a Response takes over the error response (HEAD body stripped,
+ * error.headers and staged security headers merged if-absent); returning
+ * void keeps the built-in response — side effects in the same function are
+ * the observation story. Single slot: a second registration throws.
+ */
+export type ErrorMapper = (error: HttpError, c: Context) => Response | Promise<Response> | void;
 export type NotFoundHandler = (c: Context) => Response | void;
 
 /** Bun-native websocket event handlers (the `ws` argument IS Bun's socket). */
@@ -30,11 +39,13 @@ export interface WebSocketHandlers {
 }
 
 export interface Application {
-  /** Subscribe to framework errors (typed hook). */
-  onError(handler: ErrorListener): Application;
-  emit(event: string, ...args: unknown[]): boolean;
-  off(event: string, listener: (...args: unknown[]) => void): void;
-  listenerCount(event: string): number;
+  /**
+   * Register THE error mapper (single slot — a second registration throws).
+   * Unregistered + 5xx + non-test env keeps the framework console fallback.
+   */
+  onError(mapper: ErrorMapper): Application;
+  /** The registered error mapper, or undefined when the built-in owns errors. */
+  readonly errorMapper: ErrorMapper | undefined;
   /** Register global middleware or a plugin (compiled into every route chain). */
   use(...middleware: (RouteHandler | AppOptionsPlugin)[]): Application;
   /** Register static exact-path or trailing-wildcard scoped middleware. */
@@ -106,8 +117,6 @@ export interface Application {
     hostname?: string | (() => void),
     onListen?: () => void,
   ): ServerHandle;
-  /** Central error hook (emit + fallback logging). */
-  onerror(error: Error, c?: Context): void;
   /** Serialized app summary. */
   toJSON(): { env: string; proxy: boolean };
   /** Effective not-found handler used by the finalizer. */
@@ -122,7 +131,6 @@ export interface Application {
   readonly settings: RequestSettings;
   readonly env: string;
   readonly proxy: boolean;
-  readonly silent: boolean;
   readonly keys: SigningKeys | undefined;
   readonly onStreamError: AppOptions["onStreamError"];
 }
