@@ -37,7 +37,9 @@ export interface ContextState {
    * Response must be rebuilt: status override, removal, or staged headers),
    * 32 = status written AFTER the commit (statusValue wins the rebuild),
    * 64 = message written AFTER the commit (messageValue wins the reason
-   * phrase), 128 = body written AFTER the commit (bodyValue wins the body).
+   * phrase), 128 = body written AFTER the commit (bodyValue wins the body),
+   * 256 = dev tracing: a matched route's own layers were reached
+   * (DOGFOOD-R1 C4 — set by the chain marker, never on the prod hot path).
    * The post-commit flags are the ONLY rebuild inputs — anything staged
    * before the commit was already superseded by the committed Response.
    */
@@ -56,3 +58,7 @@ export interface ContextState {
   bodyCache?: unknown;
   validValue?: unknown;
 }
+
+/** Flag 256 — dev route tracing (see `flags`). Shared by the router's chain
+ *  marker (writer) and dispatch's swallowed-route warning (reader). */
+export const FLAG_ROUTE_REACHED = 256;

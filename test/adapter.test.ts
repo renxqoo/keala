@@ -23,7 +23,7 @@ const fakeServe = (): {
       stop: () => {
         isStopped = true;
       },
-      fetch: () => new Response("fake"),
+      fetch: async () => new Response("fake"),
       reload: () => {},
     };
   };

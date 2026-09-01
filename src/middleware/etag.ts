@@ -9,6 +9,7 @@
 
 import type { RouteHandler } from "../router/router.ts";
 import { parsePreferenceEntries } from "../negotiation/accepts.ts";
+import { etagMatches } from "../http/conditional.ts";
 
 const wyhashOf = (bytes: Uint8Array): string | null => {
   const hash = (
@@ -41,18 +42,6 @@ const tagOf = (body: unknown): string | null => {
   return `W/"${wyhashOf(bytes) ?? `${bytes.byteLength.toString(16)}${fnv1a(bytes)}`}"`;
 };
 
-const matches = (etag: string, header: string): boolean => {
-  for (const candidate of header.split(",")) {
-    let value = candidate.trim();
-    if (value === "*") return true; // RFC 9110 §13.1.2 — matches any representation
-    if (value.startsWith("W/")) value = value.slice(2);
-    let expected = etag;
-    if (expected.startsWith("W/")) expected = expected.slice(2);
-    if (value === expected) return true;
-  }
-  return false;
-};
-
 export const etag = (): RouteHandler => {
   return async (c, next) => {
     await next();
@@ -66,7 +55,7 @@ export const etag = (): RouteHandler => {
     const tag = tagOf(c.bodyValue);
     if (tag === null) return;
     const noneMatch = c.get("if-none-match");
-    if (noneMatch.length > 0 && matches(tag, noneMatch)) {
+    if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {
       // 304 must not carry body or content headers (koan contract).
       c.status = 304;
       c.body = null;

@@ -9,11 +9,8 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import {
-  isWithinRoot,
-  resolveRelativeSegments,
-  serveStatic,
-} from "../src/middleware/serve-static.ts";
+import { serveStatic } from "../src/middleware/serve-static.ts";
+import { isWithinRoot, resolveRelativeSegments } from "../src/utils/path-safety.ts";
 
 const quiet = { env: "test" } as const;
 let root = "";

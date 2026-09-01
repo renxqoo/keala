@@ -34,6 +34,13 @@ const ROOT_EXPORTS = new Set([
   "statusMessage",
   "startBunServer",
   "compilePattern",
+  // HTTP/fs safety primitives (DOGFOOD-R1 C2 — consumers build file-backed
+  // tiers without re-implementing serveStatic's inline semantics)
+  "weakEtag",
+  "isNotModified",
+  "resolveRelativeSegments",
+  "isWithinRoot",
+  "findSymlink",
   // plugin (the body reader)
   "createBodyParser",
   "readBodyLimited",

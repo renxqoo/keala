@@ -207,7 +207,7 @@ describe("sink: native routes table (adapter)", () => {
         port: 0,
         hostname: "localhost",
         stop: () => undefined,
-        fetch: () => new Response("fake"),
+        fetch: async () => new Response("fake"),
         reload: () => undefined,
       };
     };
@@ -262,7 +262,7 @@ describe("sink: native routes table (adapter)", () => {
           port: 0,
           hostname: "localhost",
           stop: () => undefined,
-          fetch: () => new Response("fake"),
+          fetch: async () => new Response("fake"),
           reload: (next) => reloads.push(next),
         };
       };

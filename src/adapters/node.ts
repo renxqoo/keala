@@ -34,7 +34,7 @@ export interface NodeServerHandle {
   readonly hostname: string;
   stop(closeActiveConnections?: boolean): void;
   /** In-process request handler — same shape as the Bun server handle. */
-  fetch(request: Request): Response | Promise<Response>;
+  fetch(request: Request): Promise<Response>;
   /** Resolves once the socket is bound (Node binds asynchronously). */
   ready(): Promise<NodeServerHandle>;
 }

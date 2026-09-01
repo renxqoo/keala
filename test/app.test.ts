@@ -267,7 +267,7 @@ describe("app: listen", () => {
         port: options["port"] as number,
         hostname: "127.0.0.1",
         stop: () => undefined,
-        fetch: () => new Response("x"),
+        fetch: async () => new Response("x"),
         reload: () => undefined,
       };
     };

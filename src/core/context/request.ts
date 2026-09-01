@@ -171,6 +171,13 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     const qs = this.querystring;
     return qs.length === 0 ? "" : `?${qs}`;
   },
+  /**
+   * The parsed query string — a LAZY plain object (`QueryMap`, null
+   * prototype): single values are strings, repeated keys become `string[]`
+   * (`?a=1&a=2&b=3` → `{ a: ["1","2"], b: "3" }`); the pollution keys
+   * `__proto__`/`constructor`/`prototype` are dropped. Materializes on
+   * first touch (DOGFOOD-R1 C3 — the shape is contract, not trivia).
+   */
   get query(): QueryMap {
     return (this.queryValue ??= parseQuery(this.querystring));
   },

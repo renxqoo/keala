@@ -40,7 +40,7 @@ describe("branch coverage: final round", () => {
           port: options["port"],
           hostname: "x",
           stop() {},
-          fetch: () => new Response(),
+          fetch: async () => new Response(),
           reload() {},
         };
       },

@@ -59,6 +59,12 @@ export {
   isValidErrorStatus,
   statusMessage,
 } from "./http/status.ts";
+// Conditional-request + path-safety primitives (DOGFOOD-R1 C2): the audited
+// semantics behind serveStatic, exported so file-backed products consume one
+// implementation instead of re-deriving ~50 lines that drift.
+export { weakEtag, isNotModified, type FreshnessInput } from "./http/conditional.ts";
+export { resolveRelativeSegments, isWithinRoot, findSymlink } from "./utils/path-safety.ts";
+export type { QueryMap, QueryValue } from "./utils/query.ts";
 export { startBunServer, type ServerHandle, type ServeImplementation } from "./adapters/bun.ts";
 export { compilePattern, type CompiledSegment, type PatternIR } from "./router/pattern.ts";
 export type { AppOptions, HeaderValue, ListenOptions, ResponseBody, Runtime } from "./types.ts";

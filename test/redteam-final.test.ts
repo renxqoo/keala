@@ -107,7 +107,7 @@ describe("RT-F2: rejecting async ws handlers never crash the process", () => {
         port: 0,
         hostname: "localhost",
         stop: () => undefined,
-        fetch: () => new Response("fake"),
+        fetch: async () => new Response("fake"),
         reload: () => undefined,
       };
     };

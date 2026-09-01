@@ -18,6 +18,7 @@
 
 import { compose, direct, type Composed, type Handler } from "../core/compose.ts";
 import type { Context } from "../core/context/context.ts";
+import { FLAG_ROUTE_REACHED } from "../core/context/state.ts";
 import type { CompiledSegment, PatternIR } from "./pattern.ts";
 import { compilePattern, decodeSegment, paramNamesOf } from "./pattern.ts";
 import {
@@ -92,8 +93,15 @@ export interface RouterState {
   hasDynamic: boolean;
   prefix: string;
   /** Paths sunk into the native routing table — later JS registrations
-   *  overlapping them throw (the native table would silently shadow them). */
+   * overlapping them throw (the native table would silently shadow them). */
   sunkPaths: Set<string>;
+  /**
+   * Dev-only route tracing (DOGFOOD-R1 C4): embed the reached-marker into
+   * composed chains so dispatch can warn when global middleware swallows a
+   * matched route. Set by the owning app from its env; false everywhere
+   * else — production chains compile bit-for-bit as before.
+   */
+  devTrace: boolean;
 }
 
 export const createRouterState = (prefix = ""): RouterState => ({
@@ -106,6 +114,7 @@ export const createRouterState = (prefix = ""): RouterState => ({
   hasDynamic: false,
   prefix: normalizePrefix(prefix),
   sunkPaths: new Set(),
+  devTrace: false,
 });
 
 export const normalizePrefix = (prefix: string): string => {
@@ -189,9 +198,32 @@ const paramChainFor = (
   return chain;
 };
 
-const chainOf = (handlers: readonly RouteHandler[], globalMw: readonly RouteHandler[]): Chain => {
-  if (globalMw.length === 0 && handlers.length === 1) return direct(handlers[0] as RouteHandler);
-  return compose(globalMw.length === 0 ? handlers : [...globalMw, ...handlers]) as Chain;
+/**
+ * Dev tracing marker (DOGFOOD-R1 C4): compiled between the global middleware
+ * and the route's own layers, it flags "the route was reached" — a settled
+ * chain WITHOUT this flag means a global middleware returned before next()
+ * and the route handlers never ran.
+ */
+const markRouteReached: RouteHandler = (c, next) => {
+  c.flags |= FLAG_ROUTE_REACHED;
+  return next();
+};
+
+const chainOf = (
+  handlers: readonly RouteHandler[],
+  globalMw: readonly RouteHandler[],
+  devTrace: boolean,
+): Chain => {
+  if (globalMw.length === 0) {
+    // No middleware ahead of the route: nothing can swallow it — the marker
+    // (and, for one handler, composition itself) is unnecessary.
+    return handlers.length === 1
+      ? direct(handlers[0] as RouteHandler)
+      : (compose(handlers) as Chain);
+  }
+  return compose(
+    devTrace ? [...globalMw, markRouteReached, ...handlers] : [...globalMw, ...handlers],
+  ) as Chain;
 };
 
 /** Index + compose the chain for ONE definition (incremental registration). */
@@ -213,7 +245,7 @@ const bindDef = (state: RouterState, def: RouteDef, globalMw: readonly RouteHand
     const previous = target.layers.get(def.method) as RouteHandler[] | undefined;
     const layers = previous === undefined ? handlers : [...previous, ...handlers];
     target.layers.set(def.method, layers);
-    target.methods.set(def.method, chainOf(layers, globalMw));
+    target.methods.set(def.method, chainOf(layers, globalMw, state.devTrace));
     target.allowed.add(def.method);
     if (def.method === ALL) target.allowed.add("*");
     if (def.method === "GET") target.allowed.add("HEAD");

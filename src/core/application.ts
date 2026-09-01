@@ -89,10 +89,15 @@ export interface Application {
    * form never sniffs shapes — accessors must opt in explicitly.
    */
   decorateLazy(key: string, getter: (this: Context) => unknown): Application;
-  /** Fetch-style request handler — the heart of the framework. */
-  handle(request: Request, runtime?: Runtime): Response | Promise<Response>;
+  /**
+   * Fetch-style request handler — the heart of the framework. Always settles
+   * through a Promise (sync internals aside, consumers never see a bare
+   * Response — DOGFOOD-R1 C1) and never rejects: failures answer error
+   * Responses.
+   */
+  handle(request: Request, runtime?: Runtime): Promise<Response>;
   /** Alias for `handle`, useful for adapters. */
-  callback(): (request: Request, runtime?: Runtime) => Response | Promise<Response>;
+  callback(): (request: Request, runtime?: Runtime) => Promise<Response>;
   /** Start a `Bun.serve` server. Returns the Bun server handle. */
   listen(
     port?: number | string | ListenOptions | (() => void),

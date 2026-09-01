@@ -66,7 +66,7 @@ describe("branch coverage: round 3", () => {
           port: options["port"],
           hostname: "localhost",
           stop() {},
-          fetch: () => new Response(),
+          fetch: async () => new Response(),
           reload() {},
         };
       },

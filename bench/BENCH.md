@@ -15,7 +15,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | Framework     | Runtime |   req/s | noise |
 | ------------- | ------- | ------: | ----: |
 | raw Bun.serve | bun 1.4 | 225,920 |   ±5% |
-| keala          | bun 1.4 | 226,144 |   ±7% |
+| keala         | bun 1.4 | 226,144 |   ±7% |
 | hono 4        | bun 1.4 | 223,280 |   ±4% |
 | koa 3         | node 22 |  59,336 |   ±2% |
 | fastify 5     | node 22 |  71,592 |   ±2% |
@@ -34,7 +34,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | Framework     | Runtime |   req/s | noise |
 | ------------- | ------- | ------: | ----: |
 | raw Bun.serve | bun 1.4 | 234,480 |   ±9% |
-| keala          | bun 1.4 | 227,792 |   ±8% |
+| keala         | bun 1.4 | 227,792 |   ±8% |
 | hono 4        | bun 1.4 | 231,072 |   ±8% |
 | koa 3         | node 22 |  57,708 |   ±2% |
 | fastify 5     | node 22 |  71,528 |   ±3% |
@@ -53,7 +53,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | Framework     | Runtime |   req/s | noise |
 | ------------- | ------- | ------: | ----: |
 | raw Bun.serve | bun 1.4 | 229,568 |   ±5% |
-| keala          | bun 1.4 | 225,472 |   ±6% |
+| keala         | bun 1.4 | 225,472 |   ±6% |
 | hono 4        | bun 1.4 | 224,816 |   ±6% |
 | koa 3         | node 22 |  57,912 |   ±1% |
 | fastify 5     | node 22 |  70,944 |   ±1% |
@@ -72,7 +72,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | Framework     | Runtime |   req/s | noise |
 | ------------- | ------- | ------: | ----: |
 | raw Bun.serve | bun 1.4 | 232,512 |   ±1% |
-| keala          | bun 1.4 | 198,944 |   ±3% |
+| keala         | bun 1.4 | 198,944 |   ±3% |
 | hono 4        | bun 1.4 | 186,352 |   ±3% |
 | koa 3         | node 22 |  56,312 |   ±0% |
 | fastify 5     | node 22 |  73,112 |  ±14% |
@@ -91,7 +91,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | Framework             | Runtime |   req/s | noise |
 | --------------------- | ------- | ------: | ----: |
 | raw Bun.serve (scale) | bun 1.4 | 179,168 |   ±2% |
-| keala (scale)          | bun 1.4 | 247,232 |   ±3% |
+| keala (scale)         | bun 1.4 | 247,232 |   ±3% |
 | hono 4 (scale)        | bun 1.4 | 249,024 |   ±3% |
 | koa 3 (scale)         | node 22 |  15,622 |   ±2% |
 | fastify 5 (scale)     | node 22 |  83,096 |   ±1% |
@@ -111,10 +111,10 @@ Generated: 2026-08-31T05:24:49.284Z
 | raw Bun.serve         | JSON response           |      0.0 |      2.0 |
 | raw Bun.serve         | Param route             |      0.0 |      2.0 |
 | raw Bun.serve         | 3 middlewares           |      0.0 |      1.0 |
-| keala                  | Text response           |      0.0 |      2.0 |
-| keala                  | JSON response           |      0.0 |      2.0 |
-| keala                  | Param route             |      0.0 |      2.0 |
-| keala                  | 3 middlewares           |      0.0 |      2.0 |
+| keala                 | Text response           |      0.0 |      2.0 |
+| keala                 | JSON response           |      0.0 |      2.0 |
+| keala                 | Param route             |      0.0 |      2.0 |
+| keala                 | 3 middlewares           |      0.0 |      2.0 |
 | hono 4                | Text response           |      0.0 |      2.0 |
 | hono 4                | JSON response           |      0.0 |      2.0 |
 | hono 4                | Param route             |      0.0 |      2.0 |
@@ -140,7 +140,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | go net/http           | Param route             |      1.0 |      3.0 |
 | go net/http           | 3 middlewares           |      1.0 |      3.0 |
 | raw Bun.serve (scale) | 1000-route scale (late) |      1.0 |      2.0 |
-| keala (scale)          | 1000-route scale (late) |      0.0 |      1.0 |
+| keala (scale)         | 1000-route scale (late) |      0.0 |      1.0 |
 | hono 4 (scale)        | 1000-route scale (late) |      0.0 |      1.0 |
 | koa 3 (scale)         | 1000-route scale (late) |     12.0 |     20.0 |
 | fastify 5 (scale)     | 1000-route scale (late) |      2.0 |      4.0 |
@@ -151,7 +151,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | Framework             | idle RSS | steady RSS | peak RSS | idle heap | steady heap |
 | --------------------- | -------: | ---------: | -------: | --------: | ----------: |
 | raw Bun.serve         |   14.1MB |     43.4MB |   45.1MB |     0.1MB |       0.2MB |
-| keala                  |   25.2MB |     51.3MB |   59.1MB |     0.6MB |       0.8MB |
+| keala                 |   25.2MB |     51.3MB |   59.1MB |     0.6MB |       0.8MB |
 | hono 4                |   26.4MB |     55.4MB |   62.4MB |     0.5MB |       0.6MB |
 | koa 3                 |   69.0MB |    110.6MB |  110.8MB |     9.7MB |      22.6MB |
 | fastify 5             |   64.3MB |    104.3MB |  104.5MB |    11.3MB |      19.6MB |
@@ -159,7 +159,7 @@ Generated: 2026-08-31T05:24:49.284Z
 | fastify 5             |   43.4MB |    166.1MB |  166.4MB |     5.5MB |       4.8MB |
 | go net/http           |   11.7MB |     28.6MB |   29.4MB |     0.3MB |       0.7MB |
 | raw Bun.serve (scale) |   19.2MB |     46.1MB |   46.2MB |     0.2MB |       0.2MB |
-| keala (scale)          |   31.9MB |     51.5MB |   51.5MB |     1.4MB |       1.4MB |
+| keala (scale)         |   31.9MB |     51.5MB |   51.5MB |     1.4MB |       1.4MB |
 | hono 4 (scale)        |   34.1MB |     49.7MB |   49.8MB |     0.7MB |       0.9MB |
 | koa 3 (scale)         |   74.8MB |    108.6MB |  109.1MB |    12.5MB |      19.8MB |
 | fastify 5 (scale)     |   97.9MB |     73.5MB |  174.1MB |    27.8MB |      16.3MB |
@@ -188,7 +188,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 
 **keala vs hono 4: statistical parity — on all three machines.**
 
-| M4 10-core (report above) |        keala |      hono 4 | ratio | verdict      |
+| M4 10-core (report above) |       keala |      hono 4 | ratio | verdict      |
 | ------------------------- | ----------: | ----------: | ----: | ------------ |
 | text                      | 226,144 ±7% | 223,280 ±4% | 1.01x | inside noise |
 | JSON                      | 227,792 ±8% | 231,072 ±8% | 0.99x | inside noise |
@@ -196,7 +196,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 | 3 middlewares             | 198,944 ±3% | 186,352 ±3% | 1.07x | leans ours   |
 | 1000-route scale          | 247,232 ±3% | 249,024 ±3% | 0.99x | tie          |
 
-| 8-core Apple Silicon  |          keala |        hono 4 |     ratio | verdict       |
+| 8-core Apple Silicon  |         keala |        hono 4 |     ratio | verdict       |
 | --------------------- | ------------: | ------------: | --------: | ------------- |
 | text                  |  228,432 ±13% |  194,448 ±23% |     1.17x | inside noise  |
 | JSON                  |  231,280 ±13% |  211,968 ±16% |     1.09x | inside noise  |
@@ -205,7 +205,7 @@ Three machines contribute, and their ABSOLUTE numbers are not comparable:
 | 1000-route scale      |   229,136 ±6% |   239,856 ±6% |     0.96x | inside noise  |
 | **in-process ns/req** | **379 / 476** | **379 / 476** | **1.00x** | **exact tie** |
 
-| Intel 4-core (colocated) |        keala |      hono 4 | ratio | verdict      |
+| Intel 4-core (colocated) |       keala |      hono 4 | ratio | verdict      |
 | ------------------------ | ----------: | ----------: | ----: | ------------ |
 | text                     | 56,764 ±13% | 52,884 ±21% | 1.07x | inside noise |
 | JSON                     | 48,648 ±10% | 46,000 ±11% | 1.06x | inside noise |
@@ -244,7 +244,7 @@ property disclosure) initially ran in `initContext` — i.e. on EVERY fresh
 context, paying an `Object.keys()` allocation + loop per request on the
 no-pooling hot path.
 
-| in-process ns/req (best of 3)                        |      keala |    hono 4 | ratio to hono                  |
+| in-process ns/req (best of 3)                        |     keala |    hono 4 | ratio to hono                  |
 | ---------------------------------------------------- | --------: | --------: | ------------------------------ |
 | pre-change baseline                                  | 384 / 490 | 386 / 488 | 0.995x / 1.004x                |
 | hardening, first cut                                 | 421 / 528 | 378 / 496 | **1.11x / 1.06x** ← regression |
@@ -288,7 +288,7 @@ A stdlib `net/http` server with byte-identical responses joins the harness
 (`bench/server-go`, auto-built when a Go toolchain exists). On the Intel box
 it is the fastest participant, ahead of **raw Bun.serve** itself:
 
-| Intel 4-core  |        keala |          Go | ratio | verdict              |
+| Intel 4-core  |       keala |          Go | ratio | verdict              |
 | ------------- | ----------: | ----------: | ----: | -------------------- |
 | text          | 56,764 ±13% |  57,720 ±2% | 0.98x | inside noise         |
 | JSON          | 48,648 ±10% |  56,228 ±3% | 0.87x | Go ahead, near-noise |
@@ -311,7 +311,7 @@ scheduler queuing, not per-request cost. On the M4 the ordering inverts
 
 The batch-interleaved in-process baseline on the same Intel machine:
 
-| scenario          |              keala |            hono 4 | ratio |
+| scenario          |             keala |            hono 4 | ratio |
 | ----------------- | ----------------: | ----------------: | ----: |
 | text, in-process  | 2,118 ns (472k/s) | 2,089 ns (479k/s) | 0.99x |
 | param, in-process | 2,757 ns (363k/s) | 2,703 ns (370k/s) | 0.98x |

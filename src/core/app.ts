@@ -20,7 +20,7 @@ import { getPath } from "../utils/url.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
-import { createPool, retireWithBody, type ContextPool } from "./context/pool.ts";
+import { createPool, type ContextPool } from "./context/pool.ts";
 import { createDecorators, type Decorators } from "./context/decorate.ts";
 import { compose } from "./compose.ts";
 import {
@@ -32,6 +32,7 @@ import {
   pluginInstallerOf,
   registerRedirect,
   routeShortcut,
+  settleHandle,
   wsUpgradeHandler,
 } from "./dispatch.ts";
 import { createEmitter, type Listener } from "./emitter.ts";
@@ -118,6 +119,9 @@ export class Keala implements Application {
     });
     this.router = createRouterState();
     this.#poolingEnabled = options.pooling === true;
+    // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
+    // so dispatch can warn when global middleware swallows a matched route.
+    this.router.devTrace = this.env === "development";
   }
 
   get stack(): readonly RouteDef[] {
@@ -408,7 +412,7 @@ export class Keala implements Application {
     return this;
   }
 
-  handle(request: Request, runtime?: Runtime): Response | Promise<Response> {
+  handle(request: Request, runtime?: Runtime): Promise<Response> {
     const recycled = this.#pool?.acquire();
     const c =
       recycled === undefined
@@ -429,7 +433,13 @@ export class Keala implements Application {
             ? (match.target.methods.get("GET") as Chain | undefined)
             : undefined) ??
           (match.target.methods.get("ALL") as Chain | undefined);
-        if (chain !== undefined) return dispatchChain(this, c, chain);
+        if (chain !== undefined) {
+          // Dev tracing only (DOGFOOD-R1 C4): the marker is compiled in
+          // exactly when global middleware exists — only then can one swallow
+          // the route — so the trace object follows the same condition.
+          const traced = this.router.devTrace && this.#globalMw.length > 0;
+          return dispatchChain(this, c, chain, traced ? { method, path } : undefined);
+        }
         for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
       }
       // No handler: global middleware still runs (koa contract), then the
@@ -439,17 +449,10 @@ export class Keala implements Application {
     };
 
     this.#pool ??= createPool(this, this.#contextProto);
-    if (!this.#poolingEnabled) return dispatchOf();
-    // Guarded lifecycle: settle (sync or async), then retire to the pool —
-    // a late write on the retired context throws instead of corrupting it.
-    // Bodies retire through retireWithBody (consumed after handle returns).
-    const pool = this.#pool;
-    const release = (value: Response): Response => retireWithBody(pool, c, value);
-    const settled = dispatchOf();
-    return settled instanceof Promise ? settled.then(release) : release(settled);
+    return settleHandle(this.#pool, this.#poolingEnabled, c, dispatchOf);
   }
 
-  callback(): (request: Request, runtime?: Runtime) => Response | Promise<Response> {
+  callback(): (request: Request, runtime?: Runtime) => Promise<Response> {
     return (request, runtime) => this.handle(request, runtime);
   }
 

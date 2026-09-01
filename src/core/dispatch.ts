@@ -14,6 +14,8 @@ import {
 } from "../router/router.ts";
 import { NOOP_TAIL } from "./compose.ts";
 import type { Context } from "./context/context.ts";
+import { FLAG_ROUTE_REACHED } from "./context/state.ts";
+import { retireWithBody, type ContextPool } from "./context/pool.ts";
 import { finalize } from "./respond.ts";
 import { isHttpError, normalizeError } from "../http/errors.ts";
 import { isValidErrorStatus, statusMessage } from "../http/status.ts";
@@ -197,11 +199,73 @@ export const finalizeGuarded = (app: Application, c: Context): Response | Promis
   }
 };
 
+/**
+ * The `app.handle` boundary (DOGFOOD-R1 C1): run the dispatcher, retire a
+ * pooling context through its body-safe wrapper, and ALWAYS hand back a
+ * Promise — the sync fast paths stay internal, the public contract settles
+ * uniformly (a bare sync `Response` cost every consumer the
+ * `Response | Promise<Response>` union). Never throws, never rejects: the
+ * dispatcher's own guards already answer error Responses.
+ */
+export const settleHandle = (
+  pool: ContextPool,
+  pooling: boolean,
+  c: Context,
+  dispatch: () => Response | Promise<Response>,
+): Promise<Response> => {
+  let settled: Response | Promise<Response>;
+  if (!pooling) {
+    settled = dispatch();
+  } else {
+    // Guarded lifecycle: settle (sync or async), then retire to the pool —
+    // a late write on the retired context throws instead of corrupting it.
+    // Bodies retire through retireWithBody (consumed after handle returns).
+    const release = (value: Response): Response => retireWithBody(pool, c, value);
+    const out = dispatch();
+    settled = out instanceof Promise ? out.then(release) : release(out);
+  }
+  return settled instanceof Promise ? settled : Promise.resolve(settled);
+};
+
+/** Dev-only trace of which matched route a chain was dispatched for. */
+export interface RouteTrace {
+  method: string;
+  path: string;
+}
+
+/** One swallowed-route warning per (app, method, path) — never per request. */
+const swallowWarned = new WeakMap<Application, Set<string>>();
+
+/**
+ * Dev-only (DOGFOOD-R1 C4): the koa contract compiles global middleware INTO
+ * every route chain, so a middleware that returns without calling next()
+ * keeps the route's handlers from ever running — which reads as "my route
+ * 404s" to anyone arriving with a routing-first mental model. Fires on the
+ * success path only: a thrown rejection (c.throw / throw) is an intentional
+ * koa pattern and stays silent. Production/test chains never compile the
+ * marker, so the flags check alone is the whole prod cost (one AND).
+ */
+const warnIfSwallowed = (app: Application, c: Context, trace: RouteTrace | undefined): void => {
+  if (trace === undefined || (c.flags & FLAG_ROUTE_REACHED) !== 0) return;
+  let seen = swallowWarned.get(app);
+  if (seen === undefined) {
+    seen = new Set<string>();
+    swallowWarned.set(app, seen);
+  }
+  const key = `${trace.method} ${trace.path}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  console.warn(
+    `keala(dev): ${key} matched a route but its handler never ran — global middleware returned before calling next(). Call next() for requests you don't handle, or use c.throw() to reject intentionally.`,
+  );
+};
+
 /** Run the compiled chain and finalize; never rethrows to the caller. */
 export const dispatchChain = (
   app: Application,
   c: Context,
   chain: Chain,
+  trace?: RouteTrace,
 ): Response | Promise<Response> => {
   let settled: Promise<void> | void;
   try {
@@ -213,7 +277,12 @@ export const dispatchChain = (
   // must answer 500, never reject past app.handle. It stays synchronous on
   // every hot path (only committed-Response-under-HEAD goes async), so fully
   // synchronous middleware chains settle without a single extra promise.
-  const finish = (): Response | Promise<Response> => finalizeGuarded(app, c);
+  // The swallow warning runs BEFORE finalize (finalize reads flags, never
+  // resets them — but check-first keeps the order irrelevant).
+  const finish = (): Response | Promise<Response> => {
+    warnIfSwallowed(app, c, trace);
+    return finalizeGuarded(app, c);
+  };
   // Fully synchronous middleware chains settle without a single promise.
   if (settled !== undefined && typeof (settled as PromiseLike<void>).then === "function") {
     return (settled as Promise<void>).then(finish, (err: unknown) => errorResponse(app, c, err));

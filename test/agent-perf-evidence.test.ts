@@ -83,7 +83,7 @@ describe("perf evidence: budgets (ratio fences)", () => {
 });
 
 describe("perf evidence: structural fences", () => {
-  it("a fully synchronous chain settles without a promise", async () => {
+  it("app.handle always settles through a Promise (DOGFOOD-R1 C1 boundary)", async () => {
     const syncApp = new Keala({ env: "test" });
     syncApp.use((c, next) => {
       void c.set("X-Sync", "1");
@@ -91,11 +91,14 @@ describe("perf evidence: structural fences", () => {
     });
     syncApp.get("/sync", (c) => c.text("ok"));
     for (let i = 0; i < 2_000; i++) await syncApp.handle(requestFor("/sync"));
-    // The zero-promise fast path: a fully synchronous chain returns the
-    // Response synchronously — not a Promise.
-    const result = syncApp.handle(requestFor("/sync"));
-    expect(result).toBeInstanceOf(Response);
-    expect((result as Response).status).toBe(200);
+    // The PUBLIC boundary is always-Promise; the zero-promise property lives
+    // in the internal chain (compose hops), invisible by design from outside.
+    const pending = syncApp.handle(requestFor("/sync"));
+    expect(pending).toBeInstanceOf(Promise);
+    // The settled promise carries the response without an extra tick of
+    // observable work — await lands on the same microtask queue a direct
+    // return would.
+    await expect(pending).resolves.toHaveProperty("status", 200);
   });
 
   it("every context carries the exact same hidden-class key order", () => {

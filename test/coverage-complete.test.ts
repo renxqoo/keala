@@ -69,7 +69,7 @@ describe("coverage: listen argument parsing", () => {
     port: options["port"] as number,
     hostname: "127.0.0.1",
     stop: () => undefined,
-    fetch: () => new Response("x"),
+    fetch: async () => new Response("x"),
     reload: () => undefined,
   });
 
@@ -174,7 +174,7 @@ describe("coverage: startBunServer error listener", () => {
       port: 0,
       hostname: "x",
       stop: () => undefined,
-      fetch: () => new Response("x"),
+      fetch: async () => new Response("x"),
       reload: () => undefined,
     }));
     await Promise.resolve();

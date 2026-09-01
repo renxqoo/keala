@@ -34,11 +34,11 @@ const suites: Suite[] = [
   },
   {
     name: "keala text",
-    run: (req) => app.handle(req) as Response,
+    run: (req) => app.handle(req),
   },
   {
     name: "hono text",
-    run: (req) => hono.fetch(req) as Response,
+    run: (req) => hono.fetch(req),
   },
   {
     name: "raw param",
@@ -46,11 +46,11 @@ const suites: Suite[] = [
   },
   {
     name: "keala param",
-    run: (req) => app.handle(req) as Response,
+    run: (req) => app.handle(req),
   },
   {
     name: "hono param",
-    run: (req) => hono.fetch(req) as Response,
+    run: (req) => hono.fetch(req),
   },
 ];
 

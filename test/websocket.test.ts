@@ -88,7 +88,7 @@ describe("adapter websocket dispatcher", () => {
         port: options["port"] as number,
         hostname: "127.0.0.1",
         stop: () => undefined,
-        fetch: () => new Response("x"),
+        fetch: async () => new Response("x"),
         reload: () => undefined,
       };
     };
@@ -123,7 +123,7 @@ describe("adapter websocket dispatcher", () => {
         port: 0,
         hostname: "x",
         stop: () => undefined,
-        fetch: () => new Response("x"),
+        fetch: async () => new Response("x"),
         reload: () => undefined,
       };
     });

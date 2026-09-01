@@ -310,7 +310,7 @@ describe("redteam P2: websocket (green)", () => {
         port: 0,
         hostname: "x",
         stop() {},
-        fetch: () => new Response("1"),
+        fetch: async () => new Response("1"),
         reload() {},
       };
     };

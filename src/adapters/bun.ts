@@ -16,7 +16,7 @@ export interface ServerHandle {
   readonly port: number;
   readonly hostname: string;
   stop(closeActiveConnections?: boolean): void;
-  fetch(request: Request): Response | Promise<Response>;
+  fetch(request: Request): Promise<Response>;
   /** Hot-reload server options (Bun's actual API — `update` does not exist). */
   reload(options: Record<string, unknown>): void;
 }
@@ -67,7 +67,7 @@ export const startBunServer = (
 
   // The server handle rides the runtime channel: `c.ip` resolves through
   // `requestIP` without any Bun-specific code in the core.
-  const fetch = (request: Request, server: RequestIPHost): Response | Promise<Response> =>
+  const fetch = (request: Request, server: RequestIPHost): Promise<Response> =>
     app.handle(request, { server });
 
   const serveOptions: Record<string, unknown> = {

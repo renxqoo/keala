@@ -138,7 +138,7 @@ describe("coverage: adapter drain + router mount through dispatch", () => {
         port: 0,
         hostname: "x",
         stop: () => undefined,
-        fetch: () => new Response("x"),
+        fetch: async () => new Response("x"),
         reload: () => undefined,
       };
     });

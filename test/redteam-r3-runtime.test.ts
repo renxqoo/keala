@@ -187,7 +187,7 @@ describe("RT3-03: ws dispatch containment must survive a throwing error listener
           port: 0,
           hostname: "localhost",
           stop: () => undefined,
-          fetch: () => new Response("fake"),
+          fetch: async () => new Response("fake"),
           reload: () => undefined,
         };
       };
@@ -221,7 +221,7 @@ describe("RT3-04: registering a ws route after listen() must be loud or wired", 
       port: 0,
       hostname: "localhost",
       stop: () => undefined,
-      fetch: () => new Response("fake"),
+      fetch: async () => new Response("fake"),
       reload: (options) => reloads.push(options),
     });
     startBunServer(app as Application, { port: 0 }, undefined, (options) => {
