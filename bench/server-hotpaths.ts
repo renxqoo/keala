@@ -45,8 +45,14 @@ if (caseName === "body") {
     }
   }
   app.get("/livez", (c) => c.json({ status: "ok" }));
+} else if (caseName === "dirty") {
+  app.use(async (c, next) => {
+    await next();
+    c.set("x-late", "1");
+  });
+  app.get("/text", (c) => c.text("hello"));
 } else {
-  throw new TypeError("usage: server-hotpaths.ts <body|scope> [legacy|scoped]");
+  throw new TypeError("usage: server-hotpaths.ts <body|scope|dirty> [legacy|scoped]");
 }
 
 const server = Bun.serve({ port, fetch: (request) => app.handle(request) });

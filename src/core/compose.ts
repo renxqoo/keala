@@ -18,9 +18,9 @@ import { registerBranch } from "./branches.ts";
 import {
   FLAG_CHAIN_STALLED,
   FLAG_COMMITTED_HEADERS_APPLIED,
+  FLAG_COMMITTED_HEADERS_CAPABILITY,
   FLAG_DEV_CHAIN,
 } from "./context/state.ts";
-import { COMMITTED_HEADERS_UNKNOWN } from "./committed-headers.ts";
 
 /** Anything a handler may return: a committed Response, or nothing. */
 export type HandlerResult = Response | void;
@@ -30,8 +30,6 @@ export interface MiddlewareContext {
   state: Record<string, unknown>;
   /** Committed response slot — managed by compose, read by the finalizer. */
   _res: Response | undefined;
-  /** Present on the real Context; optional keeps compose reusable in tests. */
-  committedHeadersState?: number;
   flags?: number;
 }
 
@@ -77,11 +75,16 @@ const markStalled = (
 const commit = (c: MiddlewareContext, ret: HandlerResult): void => {
   if (ret === undefined || ret === null) return;
   if (ret instanceof Response) {
-    if (c._res !== ret) {
-      if (c.committedHeadersState !== undefined) {
-        c.committedHeadersState = COMMITTED_HEADERS_UNKNOWN;
-      }
-      if (c.flags !== undefined) c.flags &= ~FLAG_COMMITTED_HEADERS_APPLIED;
+    const flags = c.flags;
+    // Ordinary initial commits have no capability bits and pay only this
+    // false AND. Once a committed Response was actually probed, a newer
+    // Response must replay its mirror/removals and start with unknown guard.
+    if (
+      flags !== undefined &&
+      (flags & FLAG_COMMITTED_HEADERS_CAPABILITY) !== 0 &&
+      c._res !== ret
+    ) {
+      c.flags = flags & ~(FLAG_COMMITTED_HEADERS_APPLIED | FLAG_COMMITTED_HEADERS_CAPABILITY);
     }
     c._res = ret;
     return;

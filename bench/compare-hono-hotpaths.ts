@@ -1,6 +1,6 @@
 // Fresh-process comparison against the installed Hono version.
 //
-//   bun bench/compare-hono-hotpaths.ts <keala|hono> <probe|body|text|text-dirty|text-dirty-correct>
+//   bun bench/compare-hono-hotpaths.ts <keala|hono> <case>
 
 // Each invocation owns one framework/JIT instance. Run variants in A-B-B-A
 // order and compare process medians; never treat one best sample as evidence.
@@ -12,15 +12,28 @@ import type { Context } from "../src/core/context/context.ts";
 import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
 
 type Framework = "keala" | "hono";
-type CaseName = "probe" | "body" | "text" | "text-dirty" | "text-dirty-correct";
+type CaseName =
+  | "probe"
+  | "body"
+  | "text"
+  | "text-dirty"
+  | "text-dirty-correct"
+  | "text-dirty-fallback";
 const pass = (_c: Context, next: () => Promise<void>) => next();
+// Kept local so the same harness can run against the R3 worktree, where the
+// capability constant does not exist and this unused bit is harmless.
+const FORCE_IMMUTABLE_HEADERS = 1 << 13;
 
 const framework = process.argv[2] as Framework;
 const caseName = process.argv[3] as CaseName;
 if (!(["keala", "hono"] as const).includes(framework)) {
   throw new TypeError("framework must be keala or hono");
 }
-if (!(["probe", "body", "text", "text-dirty", "text-dirty-correct"] as const).includes(caseName)) {
+if (
+  !(
+    ["probe", "body", "text", "text-dirty", "text-dirty-correct", "text-dirty-fallback"] as const
+  ).includes(caseName)
+) {
   throw new TypeError("unknown comparison case");
 }
 
@@ -39,9 +52,16 @@ if (framework === "keala") {
       return c.json(await c.req.json());
     });
   } else {
-    if (caseName === "text-dirty" || caseName === "text-dirty-correct") {
+    if (
+      caseName === "text-dirty" ||
+      caseName === "text-dirty-correct" ||
+      caseName === "text-dirty-fallback"
+    ) {
       app.use(async (c, next) => {
         await next();
+        // R4's immutable-capability flag. R3 ignores this unused bit and
+        // naturally rebuilds, giving the fallback path an equal harness.
+        if (caseName === "text-dirty-fallback") c.flags |= FORCE_IMMUTABLE_HEADERS;
         c.set("x-late", "1");
       });
     }
@@ -58,7 +78,11 @@ if (framework === "keala") {
   } else if (caseName === "body") {
     app.post("/v1/echo", async (c) => c.json(await c.req.json()));
   } else {
-    if (caseName === "text-dirty" || caseName === "text-dirty-correct") {
+    if (
+      caseName === "text-dirty" ||
+      caseName === "text-dirty-correct" ||
+      caseName === "text-dirty-fallback"
+    ) {
       app.use("*", async (c, next) => {
         await next();
         c.header("x-late", "1");
@@ -68,7 +92,9 @@ if (framework === "keala") {
       // Hono's bare dirty response is incorrect on Bun 1.4. This variant
       // pays Hono's public-API cost to produce the same text/plain contract
       // keala now restores internally.
-      if (caseName === "text-dirty-correct") c.header("content-type", "text/plain; charset=utf-8");
+      if (caseName === "text-dirty-correct" || caseName === "text-dirty-fallback") {
+        c.header("content-type", "text/plain; charset=utf-8");
+      }
       return c.text("hello");
     });
   }
@@ -95,7 +121,21 @@ const samples = 21;
 const runOne = async (index: number): Promise<void> => {
   const response = await handle(makeRequest(index));
   if (response.status !== 200) throw new Error(`unexpected status ${response.status}`);
-  await response.text();
+  const body = await response.text();
+  if (caseName === "probe" && body !== '{"status":"ok"}') throw new Error("bad probe body");
+  if (caseName === "body" && body !== '{"message":"hello world"}') {
+    throw new Error("bad echo body");
+  }
+  if (caseName.startsWith("text") && body !== "hello") throw new Error("bad text body");
+  if (caseName.includes("dirty") && response.headers.get("x-late") !== "1") {
+    throw new Error("late header missing");
+  }
+  if (
+    (caseName === "text-dirty-correct" || caseName === "text-dirty-fallback") &&
+    !/^text\/plain(?:;|$)/i.test(response.headers.get("content-type") ?? "")
+  ) {
+    throw new Error("incorrect text content-type");
+  }
 };
 
 for (let index = 0; index < warmup; index++) await runOne(index);

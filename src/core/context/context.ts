@@ -11,7 +11,7 @@ import type { Application } from "../app.ts";
 import { createError, type HttpErrorProps } from "../../http/errors.ts";
 import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
 import { clearBranches } from "../branches.ts";
-import { COMMITTED_HEADERS_UNKNOWN, markCommittedHeadersStaged } from "../committed-headers.ts";
+import { markCommittedHeadersStaged } from "../committed-headers.ts";
 import { FLAG_DEV_CHAIN } from "./state.ts";
 import type { HeaderMap } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
@@ -126,7 +126,6 @@ const assignSlots = (c: Context): Context => {
   c.statusValue = 404;
   c.messageValue = "";
   c.headersRecord = null;
-  c.committedHeadersState = COMMITTED_HEADERS_UNKNOWN;
   c.bodyValue = null;
   c.flags = 0;
   c.removedValue = null;

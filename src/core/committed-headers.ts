@@ -9,22 +9,16 @@
  */
 
 import type { HeaderMap } from "../types.ts";
-import { FLAG_COMMITTED_HEADERS_APPLIED } from "./context/state.ts";
-
-export const COMMITTED_HEADERS_UNKNOWN = 0;
-export const COMMITTED_HEADERS_MUTABLE = 1;
-export const COMMITTED_HEADERS_IMMUTABLE = 2;
-
-export type CommittedHeadersState =
-  | typeof COMMITTED_HEADERS_UNKNOWN
-  | typeof COMMITTED_HEADERS_MUTABLE
-  | typeof COMMITTED_HEADERS_IMMUTABLE;
+import {
+  FLAG_COMMITTED_HEADERS_APPLIED,
+  FLAG_COMMITTED_HEADERS_IMMUTABLE,
+  FLAG_COMMITTED_HEADERS_MUTABLE,
+} from "./context/state.ts";
 
 interface CommittedHeaderContext {
   _res: Response | undefined;
   flags: number;
   headersRecord: HeaderMap | null;
-  committedHeadersState: CommittedHeadersState;
   /** A memoized cookies facade can mutate headersRecord without re-entering
    * the context getter, so direct writes must stop once it exists. */
   cookiesValue?: unknown;
@@ -50,7 +44,7 @@ const headersOf = (c: CommittedHeaderContext): Headers | null => {
     // framework's static 500 instead of leaking a successful empty response.
     committed.bodyUsed ||
     committed.body?.locked === true ||
-    c.committedHeadersState === COMMITTED_HEADERS_IMMUTABLE ||
+    (c.flags & FLAG_COMMITTED_HEADERS_IMMUTABLE) !== 0 ||
     (c.cookiesValue !== undefined && c.cookiesValue !== null) ||
     // A pending semantic removal/status/message/body rewrite means this
     // Response will be rebuilt anyway. More importantly, marking a later
@@ -85,11 +79,13 @@ const apply = (
     // before this helper, so other failures are real faults and must remain
     // visible instead of being misclassified as an immutable Response.
     if (!(error instanceof TypeError)) throw error;
-    c.committedHeadersState = COMMITTED_HEADERS_IMMUTABLE;
+    c.flags = (c.flags & ~FLAG_COMMITTED_HEADERS_MUTABLE) | FLAG_COMMITTED_HEADERS_IMMUTABLE;
     return false;
   }
-  c.committedHeadersState = COMMITTED_HEADERS_MUTABLE;
-  c.flags |= FLAG_COMMITTED_HEADERS_APPLIED;
+  c.flags =
+    (c.flags & ~FLAG_COMMITTED_HEADERS_IMMUTABLE) |
+    FLAG_COMMITTED_HEADERS_MUTABLE |
+    FLAG_COMMITTED_HEADERS_APPLIED;
   return true;
 };
 

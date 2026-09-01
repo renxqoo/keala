@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Keala } from "../src/core/app.ts";
-import {
-  COMMITTED_HEADERS_IMMUTABLE,
-  COMMITTED_HEADERS_UNKNOWN,
-  trySetCommittedHeader,
-} from "../src/core/committed-headers.ts";
+import { trySetCommittedHeader } from "../src/core/committed-headers.ts";
 import { createContext, resetContext } from "../src/core/context/context.ts";
-import { FLAG_COMMITTED_HEADERS_APPLIED } from "../src/core/context/state.ts";
+import {
+  FLAG_COMMITTED_HEADERS_APPLIED,
+  FLAG_COMMITTED_HEADERS_IMMUTABLE,
+  FLAG_COMMITTED_HEADERS_MUTABLE,
+} from "../src/core/context/state.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const request = (path = "/"): Request => new Request(`http://localhost${path}`);
@@ -20,7 +20,7 @@ const responseSnapshot = async (
   const app = new Keala({ env: "production" });
   app.use(async (c, next) => {
     await next();
-    if (forceFallback) c.committedHeadersState = COMMITTED_HEADERS_IMMUTABLE;
+    if (forceFallback) c.flags |= FLAG_COMMITTED_HEADERS_IMMUTABLE;
     for (const operation of operations) operation(c);
   });
   app.get(
@@ -176,13 +176,12 @@ describe("R4.1 committed header fast lane", () => {
       },
       flags: 0,
       headersRecord: null,
-      committedHeadersState: COMMITTED_HEADERS_UNKNOWN,
     } as unknown as Parameters<typeof trySetCommittedHeader>[0];
 
     expect(trySetCommittedHeader(context, "x-one", "1")).toBe(false);
     expect(trySetCommittedHeader(context, "x-two", "2")).toBe(false);
     expect(attempts).toBe(1);
-    expect(context.committedHeadersState).toBe(COMMITTED_HEADERS_IMMUTABLE);
+    expect(context.flags & FLAG_COMMITTED_HEADERS_IMMUTABLE).toBe(FLAG_COMMITTED_HEADERS_IMMUTABLE);
     expect(context.flags & FLAG_COMMITTED_HEADERS_APPLIED).toBe(0);
   });
 
@@ -272,12 +271,11 @@ describe("R4.1 committed header fast lane", () => {
   it("resets committed-header capability when a context is recycled", () => {
     const app = new Keala({ env: "production" });
     const first = createContext(app, {}, request("/first"), undefined);
-    first.committedHeadersState = COMMITTED_HEADERS_IMMUTABLE;
-    first.flags |= FLAG_COMMITTED_HEADERS_APPLIED;
+    first.flags |= FLAG_COMMITTED_HEADERS_APPLIED | FLAG_COMMITTED_HEADERS_MUTABLE;
 
     resetContext(first, request("/second"), undefined);
-    expect(first.committedHeadersState).toBe(COMMITTED_HEADERS_UNKNOWN);
     expect(first.flags & FLAG_COMMITTED_HEADERS_APPLIED).toBe(0);
+    expect(first.flags & FLAG_COMMITTED_HEADERS_MUTABLE).toBe(0);
   });
 
   it.each([

@@ -1,6 +1,6 @@
 # HOTPATH-R4 — 企业级多通道执行架构设计基线
 
-> 状态：定稿
+> 状态：R4.1 已核销
 > 级别：大
 > 基线提交：`fa532f9`（R3 已核销）
 > 工作分支：`codex/hotpath-r4-execution-plan`
@@ -140,7 +140,8 @@ committed Response headers 为源。这样较早的直接写不会丢失，较�
   删除公开行为。
 - Semantic fallback：维持 O(header count) 时间与空间；绝不读取、clone 或等待
   committed body，尤其是 open/locked/disturbed stream。
-- capability 只占固定 context slot 或 flags；pool recycle 后为 unknown；无全局无界表。
+- capability 只占既有 `flags` 的两个命名位，不新增 context slot；pool recycle 后为
+  unknown；无全局无界表。
 - probe、body、裸 text 的进程内中位数相对 R3 不得回退超过 3%；超出即停止合并。
 - 正确 dirty text 目标：相对 R3 的约 1030ns/req 至少降低 15%，并保持
   `text/plain; charset=utf-8` 与 late header 正确。
@@ -178,9 +179,9 @@ R4 按可独立回滚的纵向单元推进：
 
 ## 8. 总体验收
 
-- [ ] R4.1 的契约矩阵、双运行时与属性测试全部通过
-- [ ] R4.1 达成性能预算，且 immutable fallback 无显著回退
-- [ ] fmt / lint / typecheck / build / Node / Bun / coverage / smoke 全绿
-- [ ] 覆盖率四项不低于 `fa532f9` 基线
-- [ ] Tillgate 只读验证前后工作树 clean
-- [ ] 后续单元各有数据、设计和否决窗口，不以路线图代替授权
+- [x] R4.1 的契约矩阵、双运行时与属性测试全部通过
+- [x] R4.1 达成性能预算，且 immutable fallback 无显著回退
+- [x] fmt / lint / typecheck / build / Node / Bun / coverage / smoke 全绿
+- [x] 覆盖率四项不低于 `fa532f9` 基线
+- [x] Tillgate 只读验证前后工作树 clean
+- [x] 后续单元各有数据、设计和否决窗口，不以路线图代替授权

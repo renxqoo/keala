@@ -10,7 +10,6 @@ import type { QueryMap } from "../../utils/query.ts";
 import type { HeaderMap, ResponseBody, Runtime } from "../../types.ts";
 import type { RequestSettings } from "./settings.ts";
 import type { Application } from "../app.ts";
-import type { CommittedHeadersState } from "../committed-headers.ts";
 
 export interface ContextState {
   appValue: Application;
@@ -30,8 +29,6 @@ export interface ContextState {
   statusValue: number;
   messageValue: string;
   headersRecord: HeaderMap | null;
-  /** Mutability guard of the currently committed Response's Headers. */
-  committedHeadersState: CommittedHeadersState;
   bodyValue: ResponseBody;
   /**
    * Bit-packed response flags — one field write instead of four.
@@ -53,6 +50,9 @@ export interface ContextState {
    * already applied to the committed Response in place. The finalizer may
    * return that Response verbatim unless a status/message/body rewrite also
    * exists. A later staged operation or a newer Response commit clears it.
+   * 4096 = committed Response Headers were mutated successfully (mutable),
+   * 8192 = their guard rejected mutation (immutable). Neither bit means the
+   * concrete Response has not been probed. A newer commit clears both.
    * The post-commit flags are the ONLY rebuild inputs — anything staged
    * before the commit was already superseded by the committed Response.
    */
@@ -86,3 +86,9 @@ export const FLAG_CHAIN_STALLED = 1024;
 
 /** Flag 2048 — mirrored header changes already applied to committed Response. */
 export const FLAG_COMMITTED_HEADERS_APPLIED = 2048;
+
+/** Flags 4096/8192 — three-state committed Headers guard capability. */
+export const FLAG_COMMITTED_HEADERS_MUTABLE = 4096;
+export const FLAG_COMMITTED_HEADERS_IMMUTABLE = 8192;
+export const FLAG_COMMITTED_HEADERS_CAPABILITY =
+  FLAG_COMMITTED_HEADERS_MUTABLE | FLAG_COMMITTED_HEADERS_IMMUTABLE;

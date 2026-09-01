@@ -1,6 +1,6 @@
 # R4.1 — committed header Fast 通道迁移文档
 
-> 状态：实施中
+> 状态：已核销
 > 迁移单元：外层 middleware 在 `await next()` 后修改已提交 Response header
 > 旧实现：6 个核心文件约 1,813 行；相关 rule-4/committed 回归分布于 15 个测试文件
 > 目标位置：`src/core/committed-headers.ts` 与现有 response/finalizer 接线
@@ -53,28 +53,29 @@ app.get("/", (c) => c.text("hello"));
 
 ## 3. 逐模块裁决表
 
-| 文件                            | 裁决                 | 动作                                                       |
-| ------------------------------- | -------------------- | ---------------------------------------------------------- |
-| `src/core/context/response.ts`  | 重构                 | 普通单值 set/remove 在校验后尝试 fast；fallback 原逻辑不变 |
-| `src/core/respond.ts`           | 保留主算法、小改接线 | dirty 判定仍只处理未应用变更；Semantic rebuild 保持唯一    |
-| `src/core/context/state.ts`     | 小改                 | capability 命名常量/slot，禁止散落 magic number            |
-| `src/core/context/context.ts`   | 小改                 | create/reset/pool 回收归零                                 |
-| `src/core/committed-headers.ts` | 新写                 | 封闭 header mutation 与 guard 探测，无业务依赖             |
-| `src/core/compose.ts`           | 复制行为、不改代码   | commit 时序不动                                            |
-| `src/context/cookies.ts`        | 复制行为、不改代码   | 首版继续 staged/rebuild                                    |
-| `src/core/dispatch.ts`          | 复制行为、不改代码   | error/never-reject 不动                                    |
-| `src/adapters/*`                | 复制行为、不改代码   | 通过集成测试验证，不写 runtime 特判                        |
+| 文件                            | 裁决                 | 动作                                                           |
+| ------------------------------- | -------------------- | -------------------------------------------------------------- |
+| `src/core/context/response.ts`  | 重构                 | 普通单值 set/remove 在校验后尝试 fast；fallback 原逻辑不变     |
+| `src/core/respond.ts`           | 保留主算法、小改接线 | dirty 判定仍只处理未应用变更；Semantic rebuild 保持唯一        |
+| `src/core/context/state.ts`     | 小改                 | capability 使用两个命名 flags，禁止新增 slot/散落 magic number |
+| `src/core/context/context.ts`   | 小改                 | cookies writer 触发 staging；pool 经 flags reset 归零          |
+| `src/core/committed-headers.ts` | 新写                 | 封闭 header mutation 与 guard 探测，无业务依赖                 |
+| `src/core/context/headers.ts`   | 新写                 | 统一校验、Fast、镜像与 staging                                 |
+| `src/core/compose.ts`           | 复制+微修            | commit 时序不动；新 Response 清理 capability/applied 位        |
+| `src/context/cookies.ts`        | 复制行为、不改代码   | 首版继续 staged/rebuild                                        |
+| `src/core/dispatch.ts`          | 复制行为、不改代码   | error/never-reject 不动                                        |
+| `src/adapters/*`                | 复制行为、不改代码   | 通过集成测试验证，不写 runtime 特判                            |
 
 ## 4. API 对照表
 
-| 旧签名                               | 新签名                                         | 变化理由                     |
-| ------------------------------------ | ---------------------------------------------- | ---------------------------- |
-| `c.set(field, value): void`          | 不变                                           | 内部状态表示优化，零迁移成本 |
-| `c.remove(field): void`              | 不变                                           | 同上                         |
-| `c.append(field, value): void`       | 不变                                           | Phase 3 前仍走旧算法         |
-| `c.vary(field): void`                | 不变                                           | Phase 3 前仍走旧算法         |
-| `app.onError(listener): Application` | 不变                                           | 观察面冻结，不属于本单元     |
-| 内部无端口                           | `trySet/tryDeleteCommittedHeader(...): applied | fallback`                    | 把 guard 与 mutation 封闭，禁止 accessor 复制 try/catch |
+| 旧签名                               | 新签名                                                          | 变化理由                                                |
+| ------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------- |
+| `c.set(field, value): void`          | 不变                                                            | 内部状态表示优化，零迁移成本                            |
+| `c.remove(field): void`              | 不变                                                            | 同上                                                    |
+| `c.append(field, value): void`       | 不变                                                            | 单值普通 header Fast，其余 fallback                     |
+| `c.vary(field): void`                | 不变                                                            | 普通 Vary Fast，校验/去重不变                           |
+| `app.onError(listener): Application` | 不变                                                            | 观察面冻结，不属于本单元                                |
+| 内部无端口                           | `trySet/tryDeleteCommittedHeader(...): "applied" \| "fallback"` | 把 guard 与 mutation 封闭，禁止 accessor 复制 try/catch |
 
 内部函数名在实现时可调整，但必须保持判别返回，不得用异常作为 accessor 的正常控制
 流暴露给调用方。
@@ -85,7 +86,7 @@ app.get("/", (c) => c.text("hello"));
 | --------------------------------- | --------------------- | -------------------------------------------- |
 | late `c.set` on sugar Response    | dedicated R4.1 test   | 改写为 mutable fast + 输出等价               |
 | late `c.remove`                   | dedicated R4.1 test   | mutable fast；不存在 header 仍为幂等         |
-| late append/vary                  | pipeline tests        | Phase 2 fallback 锁；Phase 3 再放行          |
+| late append/vary                  | pipeline + R4.1 tests | 单值普通 header Fast；复杂形状保持 fallback  |
 | late cookies/Set-Cookie           | pipeline/redteam      | 明确 fallback，验证多 cookie 不折叠          |
 | fetch/redirect immutable Response | runtime locks         | 新增 Node 真实 guard fixture                 |
 | fast header → late status/body    | runtime locks         | 新增组合顺序用例                             |
@@ -104,22 +105,22 @@ app.get("/", (c) => c.text("hello"));
 
 ## 7. 验收
 
-- [ ] mutable 普通 set/remove 不新建 Response/Headers；只保留一份与旧 staging 等量的观察镜像
-- [ ] immutable/复杂 header 自动 fallback，输出与 R3 逐字节等价
-- [ ] 后续 status/body rewrite 保留较早 fast header，rule-4 顺序正确
-- [ ] HEAD/204/304/stream/Set-Cookie/error/notFound/405 全回归
-- [ ] pooled capability 不跨请求泄漏
-- [ ] target ≥15%；probe/body/bare text 回退 ≤3%；immutable fallback 回退 ≤5%
-- [ ] fmt、lint、typecheck、build、Node、Bun、coverage、smoke、example 全绿
-- [ ] 覆盖率 statements/branches/functions/lines 不低于 R3 基线
-- [ ] Tillgate 只读测试通过且工作树前后 clean
-- [ ] 文档追加真实数字、发现的 bug 与未完成挂账后才改为已核销
+- [x] mutable 普通 set/remove 不新建 Response/Headers；只保留一份与旧 staging 等量的观察镜像
+- [x] immutable/复杂 header 自动 fallback，输出与 R3 逐字节等价
+- [x] 后续 status/body rewrite 保留较早 fast header，rule-4 顺序正确
+- [x] HEAD/204/304/stream/Set-Cookie/error/notFound/405 全回归
+- [x] pooled capability 不跨请求泄漏
+- [x] target ≥15%；probe/body/bare text 回退 ≤3%；immutable fallback 回退 ≤5%
+- [x] fmt、lint、typecheck、build、Node、Bun、coverage、smoke、example 全绿
+- [x] 覆盖率 statements/branches/functions/lines 不低于 R3 基线
+- [x] Tillgate 只读测试通过且工作树前后 clean
+- [x] 文档追加真实数字、发现的 bug 与实施期裁决后才改为已核销
 
 ## 8. 实施记录
 
 ### 8.1 第一波：行为锁与核心 Fast 通道
 
-- 新增 per-context Headers guard 三态；普通 set/remove/单值 append/vary 原地应用，
+- 新增 flags 内的 Headers guard 三态；普通 set/remove/单值 append/vary 原地应用，
   Set-Cookie、singleton、多值、status/body 保持 Semantic fallback。
 - 保留观察镜像与 removal tombstone；外层提交新 Response 时 compose 清除 applied 状态，
   finalizer 在新响应上重放，避免优化改变 last-write-wins。
@@ -130,3 +131,15 @@ app.get("/", (c) => c.text("hello"));
 - 新增 22 个集中用例，其中 10 组把 Fast 与强制 Semantic fallback 做逐字节差分。
   Node 1909 passed / 2 skipped；Bun 1886 passed / 25 skipped。首轮 fmt、typecheck、build、
   smoke 通过；lint 无新增 warning/error（仓库既有 warning 保持）。
+
+### 8.2 第二波：回退消除与核销
+
+- 首次 ABBA 发现 capability slot 令非目标 probe/text 超预算；改为既有 flags 的
+  mutable/immutable 两位，普通初始 commit 不再写 capability 状态。最终 probe +2.1%、
+  body −2.0%、裸 text −0.6%，目标 dirty text −30.7%，immutable fallback +3.1%。
+- Hono 同语义对照：probe 快 17.1%，dirty text 快 35.1%，裸 text 慢 1.4%（IQR
+  噪声带内）；不以 Hono 无强制 body limit 的 JSON 裸读作为同安全语义胜负。
+- 真 Bun HTTP RPS +1.1%，p99 52→53ms，12 个样本全部 0 error/timeout。soak 最终
+  in-process retained drift −1.3 B/req，HTTP −0.0 B/req，无持续增长。
+- 最终 Node/Bun/coverage 数字及 Tillgate 强制无缓存消费者结果见施工图 §6.2。
+- 无未完成实现、兼容双轨或运行时开关；R4.1 所有验收项核销。

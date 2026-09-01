@@ -1,6 +1,6 @@
 # HOTPATH-R4 — 企业级执行架构施工图
 
-> 状态：实施中
+> 状态：R4.1 已核销
 > 设计基线：[HOTPATH-R4-DESIGN.md](./HOTPATH-R4-DESIGN.md)
 > 首个迁移单元：[HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md](./HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md)
 
@@ -46,22 +46,23 @@
 
 ## 2. 逐模块裁决表
 
-| 旧文件                           | 裁决       | 审计状态 | R4.1 动作                                                          |
-| -------------------------------- | ---------- | -------- | ------------------------------------------------------------------ |
-| `src/core/context/response.ts`   | 重构       | 已审     | 校验后调用 committed-header 端口；不能快化则沿用 staging           |
-| `src/core/respond.ts`            | 重构       | 已审     | 保留唯一 Semantic rebuild；识别 fast 已完成状态，不复制 merge 规则 |
-| `src/core/context/state.ts`      | 小改       | 已审     | 定义 capability 状态；注释完整位语义                               |
-| `src/core/context/context.ts`    | 小改       | 已审     | 固定顺序初始化/回收 capability；pool 防跨请求泄漏                  |
-| `src/core/committed-headers.ts`  | 新建       | 待实现   | 单一职责：安全尝试普通 header 原地 set/delete/append               |
-| `src/core/compose.ts`            | 保留       | 已审     | 不改提交时序                                                       |
-| `src/core/dispatch.ts`           | 保留       | 已审     | 错误与 never-reject 契约不改                                       |
-| `src/context/cookies.ts`         | 保留       | 已审     | R4.1 不快化 Set-Cookie                                             |
-| `src/router/*`                   | 保留/测量  | 已审     | 只补 scale 研究基准，不在 R4.1 改算法                              |
-| `src/adapters/bun.ts`            | 保留       | 已审     | 不引入运行时专用 header 分支                                       |
-| `src/adapters/node.ts`           | 保留       | 已审     | 用真实 immutable Response 集成测试 fallback                        |
-| `bench/compare-hono-hotpaths.ts` | 扩展       | 已审     | 增加 mutable/immutable、set/remove/vary 与正确性断言               |
-| `test/*pipeline/runtime/prop*`   | 扩展       | 已审     | 表驱动与属性回归，复用现有装置                                     |
-| `scripts/smoke.ts`               | 扩展或复用 | 已审     | live Bun HTTP 锁 late header + text Content-Type                   |
+| 旧文件                           | 裁决      | 审计状态 | R4.1 动作                                                          |
+| -------------------------------- | --------- | -------- | ------------------------------------------------------------------ |
+| `src/core/context/response.ts`   | 重构      | 已审     | 校验后调用 committed-header 端口；不能快化则沿用 staging           |
+| `src/core/respond.ts`            | 重构      | 已审     | 保留唯一 Semantic rebuild；识别 fast 已完成状态，不复制 merge 规则 |
+| `src/core/context/state.ts`      | 小改      | 已审     | 用两个命名 flags 表示三态 capability；不增加 context slot          |
+| `src/core/context/context.ts`    | 小改      | 已审     | cookies facade 进入 staging；既有 flags reset 保证 pool 隔离       |
+| `src/core/committed-headers.ts`  | 新建      | 已实施   | 单一职责：安全尝试普通 header 原地 set/delete/append               |
+| `src/core/context/headers.ts`    | 新建      | 已实施   | 统一校验、Fast、观察镜像与 Semantic staging                        |
+| `src/core/compose.ts`            | 微修      | 已实施   | 提交时序不变；新 Response 清理 capability/applied 位               |
+| `src/core/dispatch.ts`           | 保留      | 已审     | 错误与 never-reject 契约不改                                       |
+| `src/context/cookies.ts`         | 保留      | 已审     | R4.1 不快化 Set-Cookie                                             |
+| `src/router/*`                   | 保留/测量 | 已审     | 只补 scale 研究基准，不在 R4.1 改算法                              |
+| `src/adapters/bun.ts`            | 保留      | 已审     | 不引入运行时专用 header 分支                                       |
+| `src/adapters/node.ts`           | 保留      | 已审     | 用真实 immutable Response 集成测试 fallback                        |
+| `bench/compare-hono-hotpaths.ts` | 扩展      | 已审     | 增加 mutable/immutable、set/remove/vary 与正确性断言               |
+| `test/*pipeline/runtime/prop*`   | 扩展      | 已审     | 表驱动与属性回归，复用现有装置                                     |
+| `scripts/smoke.ts`               | 复用      | 已验证   | live Bun HTTP 锁 late header + text Content-Type                   |
 
 ## 3. 目标结构与依赖方向
 
@@ -145,7 +146,45 @@ Response；异常 guard 只在内部转成 fallback，header 校验异常仍由�
 - router scale 研究、错误响应策略、高可用生命周期各自新建迁移单元；R4.1 完成不代表
   自动开始。
 
-## 6. 停止条件
+## 6. 核销结果（2026-09-02）
+
+R4.1 按 Phase 1–4 完整实施。初版曾给 context 增加 capability slot，并在初始 commit
+重置；第一次 ABBA 显示 probe、裸 text 分别回退 3.5%/5.1%，超过预算。最终改为既有
+`flags` 内两个命名位，普通初始 commit 不写 capability 状态；没有保留双轨字段或
+runtime feature flag。
+
+### 6.1 fresh-process 性能
+
+R3 与 R4 各 8 个样本，四轮交替顺序；每个样本独立 Bun 进程，并在计时前验证 status、
+body、Content-Type 和 late header：
+
+| 场景                    | R3 中位数 | R4 中位数 |      R4 相对 R3 |
+| ----------------------- | --------: | --------: | --------------: |
+| probe                   |    419 ns |    428 ns | +2.1%（预算内） |
+| 有界 JSON body          |   1471 ns |   1442 ns |           −2.0% |
+| 裸 text                 |    353 ns |    351 ns |           −0.6% |
+| 正确 dirty text         |   1119 ns |    775 ns |      **−30.7%** |
+| 强制 immutable fallback |   1204 ns |   1241 ns | +3.1%（预算内） |
+
+同一 harness 下 Hono 4.13.5（8 样本）中位数：probe 516ns、裸 text 346ns、正确
+dirty text 1194ns、裸 JSON 1163ns。R4 分别为快 17.1%、慢 1.4%（噪声带内平价）、
+快 35.1%、慢 24.0%；JSON 行不是同安全语义，Hono 没有强制字节预算。
+
+真实 Bun HTTP（100 connections、10 pipelining、2 秒、3 轮 A-B-B-A，共 12 样本）：
+R3 36,768 RPS → R4 37,168 RPS（+1.1%），p99 52ms → 53ms；所有样本 0 error / 0
+timeout。网络/客户端饱和摊薄了进程内收益，但没有 wire 回退。
+
+### 6.2 门禁
+
+- Node：95 files，1909 passed / 2 skipped；Bun：95 files，1886 passed / 25 skipped。
+- 覆盖率 statements/branches/functions/lines：`97.15/91.89/96.03/98.53%`，四项均高于
+  R3 的 `97.06/91.79/95.93/98.47%`。
+- fmt、typecheck、build、smoke、example、soak 全过；lint 0 error、无新增 warning，
+  输出仍只有仓库既有 warning。
+- Tillgate 临时加载当前构建并用 `--force` 禁用 Turbo 缓存：HTTP 133/133、Gateway
+  205/205，两个包 typecheck 全过；依赖恢复后工作树 clean。
+
+## 7. 停止条件
 
 出现任一条件立即回退本阶段并停止扩大实现：
 
@@ -156,7 +195,7 @@ Response；异常 guard 只在内部转成 fallback，header 校验异常仍由�
 - 需要公开 API 或改变 listen 后注册语义才能继续；
 - Tillgate 验证要求修改其源码。
 
-## 7. 用户确认裁决
+## 8. 用户确认裁决
 
 - [x] R4.1 先做 header-only commit fast lane，而不是 router/compose 重写
 - [x] `onError` 保持观察 API；错误 response mapper 不混入本迁移单元
