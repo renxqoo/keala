@@ -1,6 +1,6 @@
 # R4.2 — 路由规模自适应研究迁移文档
 
-> 状态：已核销（研究单元完成，裁决为出口 A：不重写 router）
+> 状态：已核销（出口 A 不变；R4.2-B1 严格 JSON comparator 已修正）
 > 设计基线：[HOTPATH-R4-DESIGN.md](./HOTPATH-R4-DESIGN.md) §4/§6
 > 基线提交：`31aa3ee`（R4.1 已核销）
 > 工作分支：`codex/hotpath-r4-2-router-scale`
@@ -160,22 +160,35 @@ C 的 5 倍门槛，登记为观察项。
 
 ### 7.3 JSON 公平对拍（4 轮旋转，ns/req 中位数）
 
-| 行                                            | keala |              Hono | 结论                                                     |
-| --------------------------------------------- | ----: | ----------------: | -------------------------------------------------------- |
-| 裸 `c.req.json()`（非等价参考）               |   n/a | 1163（R4.1 基线） | Hono 无预算，仅参考                                      |
-| Hono 官方 `bodyLimit` 中间件（生产典型）      |  1393 |              1540 | **keala 快 9.5%**，且谎报 CL 下 keala 413、Hono 放行 200 |
-| 谎报安全等语义（Hono 侧最小手写 text()+复核） |  1393 |              1117 | keala 慢 24.7%，归因见下                                 |
+| 行                                                         | keala |              Hono | 结论                                                     |
+| ---------------------------------------------------------- | ----: | ----------------: | -------------------------------------------------------- |
+| 裸 `c.req.json()`（非等价参考）                            |   n/a | 1163（R4.1 基线） | Hono 无预算，仅参考                                      |
+| Hono 官方 `bodyLimit` 中间件（生产典型）                   |  1393 |              1540 | **keala 快 9.5%**，且谎报 CL 下 keala 413、Hono 放行 200 |
+| 严格字节安全等语义（Hono `bytes()` + byteLength + decode） |  1452 |              1131 | keala 慢 28.4%，归因见下                                 |
 
 计时外行为核验：声明超限 → 双方 413；谎报 Content-Length（声明 25 实发 2048）
-→ keala 413、Hono 官方中间件 **200**（放行）、Hono 手写等语义 413；畸形 JSON
-→ keala 400、Hono 默认 500 / 手写 400。
+→ keala 413、Hono 官方中间件 **200**（放行）、Hono 严格等语义 413；畸形 JSON
+→ keala 400、Hono 默认 500 / 严格等语义 400。另用「JS 字符数 <1024、UTF-8
+字节数 >1024」的中文 JSON 锁定字节预算：keala 与严格 Hono 均为 413。
 
-keala 的 `body-limited` 与 `body-safe` 接线相同（1393 vs 1385–1390，噪声内），
-因为 keala 的预算路径本身就是谎报安全的：声明 CL ≤ 限时一次原生 `bytes()` 读
-取后仍复核实际字节数。对最小手写 handler 的 ~25% 差距归因于 plugin 装饰、
-facade 构建、memoization 与结构化错误信封（`createBodyParser` +
+keala 的 `body-limited` 与 `body-safe` 接线相同，因为预算路径本身就是谎报安全的：
+声明 CL ≤ 限时一次原生 `bytes()` 读取后仍复核实际字节数。严格对照的 28.4% 差距
+归因于 plugin 装饰、facade 构建、memoization 与结构化错误信封（`createBodyParser` +
 `readBodyLimited` + `createError`），**不是**字节预算执行本身——两侧预算执行
-同价（各一次原生读取 + 一次长度比较）。
+同形（各一次原生字节读取 + 一次 byteLength 比较 + decode/parse）。
+
+### 7.4 审计修正 R4.2-B1
+
+首次核销的 Hono 严格 comparator 错用 `text.length` 作为预算；ASCII 样本掩盖了 UTF-8
+多字节低估。复核时先加入中文超限断言，再改为 `raw.bytes()` + `byteLength` +
+`TextDecoder`（两侧均复用 decoder），按四轮 K-H/H-K/H-K/K-H fresh process 重测得到
+1452/1131ns。Router
+矩阵与生产代码不受影响；旧 1117ns/24.7% 数字作废。
+
+修正后门禁：fmt、typecheck、build、Node/Bun 全量、coverage、真实 Bun HTTP smoke、
+example、24 轮 soak 全过；lint 0 error 且只有仓库既有 warning。覆盖率保持
+statements/branches/functions/lines `97.15/91.89/96.03/98.53%`；Tillgate 未加载、未
+修改，工作树保持 clean。
 
 ## 8. 裁决记录
 
@@ -190,8 +203,8 @@ facade 构建、memoization 与结构化错误信封（`createBodyParser` +
    门槛（仅 N ≥ 1000 裁决）；如未来真实负载画像显示小共享桶表是主流，再按新
    证据立独立小单元。
 3. **JSON：body 加速（重写类）不立项。** 生产典型配置（官方 bodyLimit）下
-   keala 快 ~10% 且语义严格更强（谎报防护）；对最小手写等语义 handler 慢
-   ~25%，但归因是 facade/plugin 成本而非流式预算（预注册的归因条件不满足）。
+   keala 快 ~10% 且语义严格更强（谎报防护）；对最小严格等语义 handler 慢
+   28.4%，但归因是 facade/plugin 成本而非流式预算（预注册的归因条件不满足）。
    登记可选小单元候选「JSON facade 瘦身」（目标：strict 行差距 <8%），优先级
    排在 R4.3 / R4.4 之后，由届时 profile 决定是否开工。
 4. **默认下一步：R4.3 错误响应策略**（新迁移文档先行）。

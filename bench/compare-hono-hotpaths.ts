@@ -124,20 +124,21 @@ if (framework === "keala") {
     // Strictest fair parity: keala re-checks ACTUAL bytes even when
     // Content-Length is declared (its bytes() fast path). This handler is the
     // cheapest reasonable Hono equivalent of that lying-length guard — one
-    // native text() read, actual length check, manual parse.
+    // native bytes() read, actual BYTE-length check, decode and manual parse.
     const LIMIT = 1024;
+    const decoder = new TextDecoder();
     app.post("/v1/echo", async (c) => {
       const raw = c.req.raw;
       const declared = Number(raw.headers.get("content-length"));
       if (Number.isFinite(declared) && declared > LIMIT) {
         return c.text("request body exceeds the 1024 byte limit", 413);
       }
-      const text = await raw.text();
-      if (text.length > LIMIT) {
+      const bytes = await (raw as Request & { bytes(): Promise<Uint8Array> }).bytes();
+      if (bytes.byteLength > LIMIT) {
         return c.text("request body exceeds the 1024 byte limit", 413);
       }
       try {
-        return c.json(JSON.parse(text));
+        return c.json(JSON.parse(decoder.decode(bytes)));
       } catch {
         return c.text("malformed JSON body", 400);
       }
@@ -275,8 +276,22 @@ if (caseName === "body-limited" || caseName === "body-safe") {
       body: "not-json{",
     }),
   );
+  // Character count is not a byte budget: this payload stays below 1024 JS
+  // code units while exceeding 1024 UTF-8 bytes. The strict comparator must
+  // reject it exactly like keala; otherwise the benchmark is not semantic
+  // parity for non-ASCII production traffic.
+  const utf8Oversized = await handle(
+    new Request("http://localhost/v1/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": "25" },
+      body: JSON.stringify({ message: "界".repeat(400) }),
+    }),
+  );
   if (caseName === "body-safe" && lying.status !== 413) {
     throw new Error(`lying-length must 413 under body-safe, got ${lying.status}`);
+  }
+  if (caseName === "body-safe" && utf8Oversized.status !== 413) {
+    throw new Error(`UTF-8 oversized body must 413 under body-safe, got ${utf8Oversized.status}`);
   }
   if (framework === "keala" && malformed.status !== 400) {
     throw new Error(`keala malformed must 400, got ${malformed.status}`);
@@ -289,6 +304,7 @@ if (caseName === "body-limited" || caseName === "body-safe") {
       framework,
       case: caseName,
       lyingStatus: lying.status,
+      utf8OversizedStatus: utf8Oversized.status,
       malformedStatus: malformed.status,
     }),
   );
