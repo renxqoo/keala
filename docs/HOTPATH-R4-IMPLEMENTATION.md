@@ -1,6 +1,6 @@
 # HOTPATH-R4 — 企业级执行架构施工图
 
-> 状态：审计中
+> 状态：定稿
 > 设计基线：[HOTPATH-R4-DESIGN.md](./HOTPATH-R4-DESIGN.md)
 > 首个迁移单元：[HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md](./HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md)
 
@@ -156,10 +156,10 @@ Response；异常 guard 只在内部转成 fallback，header 校验异常仍由�
 - 需要公开 API 或改变 listen 后注册语义才能继续；
 - Tillgate 验证要求修改其源码。
 
-## 7. 当前待确认裁决
+## 7. 用户确认裁决
 
-- [ ] R4.1 先做 header-only commit fast lane，而不是 router/compose 重写
-- [ ] `onError` 保持观察 API；错误 response mapper 延后且另命名
-- [ ] body 预算始终默认强制，不用不安全模式参加同语义排名
-- [ ] 首版不快化 Set-Cookie/cookies、多值数组与 status/body
-- [ ] R4.1 核销后再决定 router、高可用子系统的下一迁移单元
+- [x] R4.1 先做 header-only commit fast lane，而不是 router/compose 重写
+- [x] `onError` 保持观察 API；错误 response mapper 不混入本迁移单元
+- [x] body 预算始终默认强制，不用不安全模式参加同语义排名
+- [x] Set-Cookie/cookies、多值数组与 status/body 保持完整 Semantic fallback
+- [x] R4.1 完整实施并核销，不留下占位代码

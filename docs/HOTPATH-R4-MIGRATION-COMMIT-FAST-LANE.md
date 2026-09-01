@@ -1,6 +1,6 @@
 # R4.1 — committed header Fast 通道迁移文档
 
-> 状态：审计中
+> 状态：定稿
 > 迁移单元：外层 middleware 在 `await next()` 后修改已提交 Response header
 > 旧实现：6 个核心文件约 1,813 行；相关 rule-4/committed 回归分布于 15 个测试文件
 > 目标位置：`src/core/committed-headers.ts` 与现有 response/finalizer 接线
@@ -117,5 +117,5 @@ app.get("/", (c) => c.text("hello"));
 
 ## 8. 实施记录
 
-尚未开始实现。当前只完成代码审计、跨 runtime guard 探针与执行方案；等待默认裁决
-确认后进入 Phase 1。
+用户已确认完整实施。实现从行为锁与基准锁开始，所有 fast/fallback、双运行时、性能与
+只读消费者门禁通过后一次核销。
