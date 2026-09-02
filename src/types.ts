@@ -75,6 +75,57 @@ export interface AppOptions {
    * next request that reuses it.
    */
   pooling?: boolean;
+  /**
+   * R4.6 overload admission (opt-in): requests beyond `maxConcurrency` are
+   * queued (up to `maxQueue`, fail-fast by default) or refused with 503.
+   */
+  overload?: OverloadOptions;
+  /**
+   * R4.6 request deadline in milliseconds (opt-in, 0 disables): requests
+   * whose response has not settled get a 504 through the error funnel and
+   * `c.signal` aborts with a TimeoutError. One unref timer per request
+   * when set.
+   */
+  requestTimeout?: number;
+}
+
+/** Why the admission gate refused a request (see `OverloadOptions.handler`). */
+export type OverloadReason = "concurrency" | "queue" | "draining";
+
+export interface OverloadOptions {
+  /** Max simultaneously in-processing requests. Default unlimited. */
+  maxConcurrency?: number;
+  /**
+   * How many overflowing requests may wait for a slot (FIFO). Default 0 —
+   * fail fast; queueing is an explicit burst-smoothing opt-in.
+   */
+  maxQueue?: number;
+  /** Max wait in the queue before a 503. Default 10_000. */
+  queueTimeoutMs?: number;
+  /**
+   * `Retry-After` seconds on overload 503s (never sent while draining).
+   * Default 1; 0 omits the header.
+   */
+  retryAfterSeconds?: number;
+  /** Custom rejection response (pre-context — no Context exists yet). */
+  handler?: (request: Request, reason: OverloadReason) => Response;
+}
+
+/** Options for `app.close()`. */
+export interface CloseOptions {
+  /**
+   * Milliseconds to wait for in-flight requests before force-closing.
+   * Default 30_000; 0 = immediate force; Infinity waits indefinitely.
+   */
+  drain?: number;
+}
+
+/** Result of `app.close()`. */
+export interface CloseStatus {
+  /** True when the drain window expired and connections were force-closed. */
+  timedOut: boolean;
+  /** Requests still unsettled at resolve time (0 unless timedOut). */
+  inFlight: number;
 }
 
 export interface ListenOptions {
@@ -93,4 +144,11 @@ export interface ListenOptions {
    * streaming-body crashes. Default: app error hook + plain 500.
    */
   onServeError?: (error: Error) => Response;
+  /**
+   * R4.6 signal bridge (opt-in): SIGTERM/SIGINT drain the server via
+   * `app.close()`; a second signal force-closes. The bridge never exits
+   * the process itself — the drain timer holds the event loop and the
+   * process exits naturally once everything settles.
+   */
+  signals?: boolean;
 }

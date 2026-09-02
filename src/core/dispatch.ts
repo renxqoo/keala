@@ -3,17 +3,9 @@
  * and listen-argument parsing. Extracted from app.ts for the 500-line budget.
  */
 
-import type { Application, WebSocketHandlers } from "./app.ts";
-import type { Chain, RouteDef, RouteHandler, RouterState } from "../router/router.ts";
-import {
-  assertRedirectCaptures,
-  buildURL,
-  EMPTY_PARAMS,
-  matchRoute,
-  normalizePrefix,
-  redirectTargetSegments,
-  registerDef,
-} from "../router/router.ts";
+import type { Application } from "./app.ts";
+import type { Chain, RouteHandler, RouterState } from "../router/router.ts";
+import { EMPTY_PARAMS, matchRoute } from "../router/router.ts";
 import { getPath } from "../utils/url.ts";
 import { isEmptyStatus } from "../http/status.ts";
 import { DIRECT_HANDLER, NOOP_TAIL, type HandlerResult } from "./compose.ts";
@@ -30,133 +22,6 @@ import { finalize } from "./respond.ts";
 import type { RequestSource } from "./request-source.ts";
 import { sourceMethod, sourceUrl } from "./request-source.ts";
 
-/** A plugin is any object exposing `install(app)`; middleware is not one. */
-export const pluginInstallerOf = (value: unknown): ((app: Application) => void) | null => {
-  if (typeof value !== "object" || value === null) return null;
-  const install = (value as { install?: unknown }).install;
-  return typeof install === "function"
-    ? (value as { install: (a: Application) => void }).install
-    : null;
-};
-
-/** Shared body of the app.get/post/… shortcuts (named and unnamed forms). */
-export const routeShortcut = (
-  app: Application,
-  router: RouterState,
-  middleware: MiddlewareStack,
-  method: string,
-  args: unknown[],
-): Application => {
-  const [first, second, ...rest] = args as [string, string | RouteHandler, ...RouteHandler[]];
-  if (typeof first !== "string") {
-    throw new TypeError("Route registration requires a path string");
-  }
-  if (typeof second === "string") {
-    registerDef(router, method, second, rest as RouteHandler[], first, middleware);
-  } else if (typeof second === "function") {
-    registerDef(router, method, first, [second, ...rest], undefined, middleware);
-  } else {
-    throw new TypeError("Route registration requires at least one handler");
-  }
-  return app;
-};
-
-/**
- * Register a redirect route (GET): a destination PATH carrying `:params` is
- * rebuilt from the matched route's captured params; anything the source does
- * not capture is a registration error, never a per-request 500.
- */
-export const registerRedirect = (
-  router: RouterState,
-  source: string,
-  destination: string,
-  code: number,
-  middleware: MiddlewareStack,
-): void => {
-  const destSegments = redirectTargetSegments(destination);
-  if (destSegments !== null) assertRedirectCaptures(source, destSegments);
-  registerDef(
-    router,
-    "GET",
-    source,
-    [
-      (c) => {
-        const target = destSegments === null ? destination : buildURL(destSegments, c.params ?? {});
-        c.status = code;
-        c.redirect(target);
-      },
-    ],
-    undefined,
-    middleware,
-  );
-};
-
-/**
- * The handler behind every `app.ws()` route: upgrades through the runtime
- * server handle. The context rides the socket data so ws event handlers
- * receive `c`; Bun ignores the fetch return value and the spec forbids a
- * 101 Response, so a null Response stands in.
- */
-export const wsUpgradeHandler =
-  (wsKey: string): RouteHandler =>
-  (c) => {
-    const server = c.runtime?.server as
-      | { upgrade?(req: Request, opts?: { data?: unknown }): boolean }
-      | undefined;
-    if (server === undefined || typeof server?.upgrade !== "function") {
-      c.throw(501, "websocket upgrades require a Bun server runtime", { expose: true });
-    }
-    const ok = (server as { upgrade(r: Request, o: { data: unknown }): boolean }).upgrade(c.raw, {
-      data: { wsKey, ctx: c },
-    });
-    if (!ok) {
-      c.throw(400, "websocket upgrade rejected");
-    }
-    return new Response(null);
-  };
-
-/**
- * Merge one mounted ws registration under the mount prefix: the copied def's
- * upgrade handler closes over the OLD route key, so a fresh handler bound to
- * the prefixed key is registered and the socket handlers travel with it.
- * Duplicate keys are refused exactly like app.ws() does.
- */
-export const mergeMountedWs = (
-  wsRoutes: Map<string, WebSocketHandlers>,
-  router: RouterState,
-  path: string,
-  mountedMiddleware: readonly RouteHandler[],
-  def: RouteDef,
-  middleware: MiddlewareStack,
-  handlers: ReadonlyMap<string, WebSocketHandlers>,
-): void => {
-  const socketHandlers = def.wsKey === undefined ? undefined : handlers.get(def.wsKey);
-  if (socketHandlers === undefined) {
-    throw new TypeError(`mount(): no ws handlers found for ${JSON.stringify(def.wsKey)}`);
-  }
-  const newKey = normalizePrefix(path) || "/";
-  if (wsRoutes.has(newKey)) {
-    throw new TypeError(
-      `app.ws(${JSON.stringify(newKey)}) is already registered — a duplicate would shadow it`,
-    );
-  }
-  // Registration FIRST, key claim SECOND (same transactionality rule as
-  // app.ws(): a throwing registerDef must not strand the wsRoutes key).
-  const rekeyed = registerDef(
-    router,
-    def.method,
-    path,
-    [wsUpgradeHandler(newKey)],
-    def.name,
-    middleware,
-    mountedMiddleware,
-  );
-  wsRoutes.set(newKey, socketHandlers);
-  // Same merge contract as the non-ws mount path: the def's own prefix
-  // middleware (baked by a nested mount of the sub-app) survives the
-  // re-key, running inside the mounted app's applicable middleware.
-  rekeyed.wsKey = newKey;
-};
 
 /**
  * Finalize behind the never-reject guard: a failing finalizer (unserializable
@@ -181,25 +46,47 @@ export const finalizeGuarded = (app: Application, c: Context): Response | Promis
  * `Response | Promise<Response>` union). Never throws, never rejects: the
  * dispatcher's own guards already answer error Responses.
  */
-/** Native adapters keep synchronous chains synchronous; public handle wraps once. */
+/**
+ * Native adapters keep synchronous chains synchronous; public handle wraps once.
+ * The optional `release` slot (R4.6) rides the SAME settle tail — during
+ * drain a bodied response holds its in-flight slot until consumed, and a
+ * deadline zombie (504 already answered, `c.deadlineAnswered`) releases
+ * capacity without retiring into the pool: the live handler still holds
+ * the context, so it goes to GC instead of the next request.
+ */
 export const settleNativeHandle = (
   pool: ContextPool | null,
   pooling: boolean,
   c: Context,
   settled: Response | Promise<Response>,
+  release?: (value: Response) => Response,
 ): Response | Promise<Response> => {
   if (!pooling) {
-    return settled;
+    if (release === undefined) return settled;
+    // Deadline zombie: the race already released capacity — never twice.
+    if (c.deadlineAnswered === true) return settled;
+    return settled instanceof Promise ? settled.then(release) : release(settled);
   }
   if (pool === null) throw new TypeError("pooling dispatch requires a context pool");
   // Guarded lifecycle: settle (sync or async), then retire to the pool — a
   // late write on the retired context throws instead of corrupting it. The
-  // async branch alone needs a per-request continuation; synchronous chains
-  // retire inline and cross the public Promise boundary once.
-  if (settled instanceof Promise) {
-    return settled.then((value) => retireWithBody(pool, c, value));
+  // drain-hold wraps INSIDE the retirement wrapper so a draining close
+  // observes stream completion at the consumer's pace, not the producer's.
+  if (release === undefined) {
+    if (settled instanceof Promise) {
+      return settled.then((value) => retireWithBody(pool, c, value));
+    }
+    return retireWithBody(pool, c, settled);
   }
-  return retireWithBody(pool, c, settled);
+  if (c.deadlineAnswered === true) {
+    // Zombie late settle: capacity is freed by the deadline race already —
+    // release nothing, retire nothing.
+    return settled;
+  }
+  if (settled instanceof Promise) {
+    return settled.then((value) => retireWithBody(pool, c, release(value)));
+  }
+  return retireWithBody(pool, c, release(settled));
 };
 
 /** Dev-only trace of which matched route a chain was dispatched for.
