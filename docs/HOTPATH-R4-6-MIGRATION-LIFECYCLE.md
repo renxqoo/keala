@@ -8,17 +8,17 @@
 
 ## 1. 行为规格基线（旧测试清单 = 行为等价判定标准）
 
-| 旧文件 | 用例数 | 测什么 |
-| --- | ---: | --- |
-| r4-lifecycle-drain.test.ts | 16 | drain 全语义：嵌入式/handle 模式清空、drain:0 强停、超时上报、幂等、listen 后置拒绝、body-hold（正常/锁体/错误/取消）、Node 线上真值（真实 HTTP） |
-| r4-lifecycle-overload.test.ts | 14 | fail fast 503 形状、Retry-After 开关、pre-context、handler 定制与抛错回退、FIFO、满队、排队超时、排队断开出队、drain 清队、槽位移交不过量准入、预中止/畸形排队项 |
-| r4-lifecycle-timeout.test.ts | 12 | 504 经漏斗、mapper 改形状、快请求胜出无泄漏、流式被截断答 504、pooling 僵尸不回收、无 unhandledRejection、参数校验、c.signal 组合（期限/断开/迟到物化/lazy/Node 桥接） |
-| r4-lifecycle-adapters.test.ts | 13 | Bun stopGraceful（1001 送客/强停/已结算）、信号桥（双信号语义、options 形态注册、未开不注册）、closeApp 容错（stopGraceful 拒绝/stop 抛错/Infinity 等计数/raceDeadline 收容） |
-| agent-r44-bugs(+-2).test.ts | 14 | **8 缺陷回归锁**：FINDING-1 真实线上双释放、定时器武装顺序、Infinity 钳位、二次信号死代码、pooling×期限、waiter 边界、期限×drain、abort 状态回收（VERIFIED-OK 锁锁定既有正确行为） |
-| agent-r44-contract(+-2).test.ts | 13 | CT-1..12：契约逐条 vs 规则表（升级语义、结算/流送不对称口径、504 释放与僵尸不双释、null 体僵尸不回收、回退定时器持循环、Bun/Node 已结算定时器泄漏、K8s 与网关示例可运行、handle 永不 reject） |
-| agent-r44-ha(+-2).test.ts | 11 | HA-1..12：取消 mid-pull 计数恰 0、线上断开快停、敌意线上有界、完成 close 后惰性、过载洪峰零槽泄漏、期限风暴恰一次 504、abort 桥 finish 后不误触、双 SIGTERM、信号桥与用户 handler 共存、ws 全送 1001 |
-| agent-r44-perf(+-2).test.ts | 8 | PERF-1..9：未配置 ~460ns 地板、过载增量噪声级、期限增量 timer 级、定时器纪律（未配置 0/req）、c.signal 零分配 lazy、waiter 一定时器一听讲器且准入即释放、shift 摊平、内存平台 |
-| agent-r44-security(+-2).test.ts | 16 | SEC-1..9：拒绝完整性（固定头集/无请求数据/handler 回退）、pre-context 旁路、排队 abort 自限、洪水后队列卫生、恶意慢读者不能楔死停机、Connection: close 注入 vs handler 头、流水线、信号不可被请求合成、504 无泄漏 |
+| 旧文件                          | 用例数 | 测什么                                                                                                                                                                                                            |
+| ------------------------------- | -----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| r4-lifecycle-drain.test.ts      |     16 | drain 全语义：嵌入式/handle 模式清空、drain:0 强停、超时上报、幂等、listen 后置拒绝、body-hold（正常/锁体/错误/取消）、Node 线上真值（真实 HTTP）                                                                 |
+| r4-lifecycle-overload.test.ts   |     14 | fail fast 503 形状、Retry-After 开关、pre-context、handler 定制与抛错回退、FIFO、满队、排队超时、排队断开出队、drain 清队、槽位移交不过量准入、预中止/畸形排队项                                                  |
+| r4-lifecycle-timeout.test.ts    |     12 | 504 经漏斗、mapper 改形状、快请求胜出无泄漏、流式被截断答 504、pooling 僵尸不回收、无 unhandledRejection、参数校验、c.signal 组合（期限/断开/迟到物化/lazy/Node 桥接）                                            |
+| r4-lifecycle-adapters.test.ts   |     13 | Bun stopGraceful（1001 送客/强停/已结算）、信号桥（双信号语义、options 形态注册、未开不注册）、closeApp 容错（stopGraceful 拒绝/stop 抛错/Infinity 等计数/raceDeadline 收容）                                     |
+| agent-r44-bugs(+-2).test.ts     |     14 | **8 缺陷回归锁**：FINDING-1 真实线上双释放、定时器武装顺序、Infinity 钳位、二次信号死代码、pooling×期限、waiter 边界、期限×drain、abort 状态回收（VERIFIED-OK 锁锁定既有正确行为）                                |
+| agent-r44-contract(+-2).test.ts |     13 | CT-1..12：契约逐条 vs 规则表（升级语义、结算/流送不对称口径、504 释放与僵尸不双释、null 体僵尸不回收、回退定时器持循环、Bun/Node 已结算定时器泄漏、K8s 与网关示例可运行、handle 永不 reject）                     |
+| agent-r44-ha(+-2).test.ts       |     11 | HA-1..12：取消 mid-pull 计数恰 0、线上断开快停、敌意线上有界、完成 close 后惰性、过载洪峰零槽泄漏、期限风暴恰一次 504、abort 桥 finish 后不误触、双 SIGTERM、信号桥与用户 handler 共存、ws 全送 1001              |
+| agent-r44-perf(+-2).test.ts     |      8 | PERF-1..9：未配置 ~460ns 地板、过载增量噪声级、期限增量 timer 级、定时器纪律（未配置 0/req）、c.signal 零分配 lazy、waiter 一定时器一听讲器且准入即释放、shift 摊平、内存平台                                     |
+| agent-r44-security(+-2).test.ts |     16 | SEC-1..9：拒绝完整性（固定头集/无请求数据/handler 回退）、pre-context 旁路、排队 abort 自限、洪水后队列卫生、恶意慢读者不能楔死停机、Connection: close 注入 vs handler 头、流水线、信号不可被请求合成、504 无泄漏 |
 
 **删除的用例：无。**（r4-4 的全部行为入迁；`it.skipIf(Bun)` 的 Node-only 用例保留原条件跳过。）
 
@@ -32,31 +32,31 @@
 
 ## 4. API 对照表
 
-| 旧签名（r4-4） | 新签名（R4.6） | 变化理由 |
-| --- | --- | --- |
-| `app.close(options?) / isDraining() / inFlight` | 不变 | 行为等价 |
-| `new Keala({ overload: {...}, requestTimeout })` | 不变，`overload` 增加可选 `strategy?: AdmissionStrategy` | 升级点 U1（用户裁决 D2）；未注入行为逐字节等于旧实现 |
-| `listen({ signals: true })`（Bun 与 Node options 形态） | 不变 | 行为等价 |
-| `c.signal`（lazy AbortSignal，组合断开 ∨ 期限） | 不变 | 行为等价；native source 侧经 S4 新增 abort 通道实现（内部） |
-| `overload.handler(request, reason)` | 不变 | 拒绝样式定制点保留 |
-| 内部 `settleHandle(pool, pooling, c, dispatch, release)` | `settleNativeHandle` 增可选 `release` 槽 | S1；非公开 API，零兼容层（r4-4 名不复活） |
-| 内部 `NativeRequestSource` | 增 lazy `abort()` 通道 | S4（DESIGN §6 裁决）；公开 `RequestSource` 语义不变 |
+| 旧签名（r4-4）                                           | 新签名（R4.6）                                           | 变化理由                                                    |
+| -------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| `app.close(options?) / isDraining() / inFlight`          | 不变                                                     | 行为等价                                                    |
+| `new Keala({ overload: {...}, requestTimeout })`         | 不变，`overload` 增加可选 `strategy?: AdmissionStrategy` | 升级点 U1（用户裁决 D2）；未注入行为逐字节等于旧实现        |
+| `listen({ signals: true })`（Bun 与 Node options 形态）  | 不变                                                     | 行为等价                                                    |
+| `c.signal`（lazy AbortSignal，组合断开 ∨ 期限）          | 不变                                                     | 行为等价；native source 侧经 S4 新增 abort 通道实现（内部） |
+| `overload.handler(request, reason)`                      | 不变                                                     | 拒绝样式定制点保留                                          |
+| 内部 `settleHandle(pool, pooling, c, dispatch, release)` | `settleNativeHandle` 增可选 `release` 槽                 | S1；非公开 API，零兼容层（r4-4 名不复活）                   |
+| 内部 `NativeRequestSource`                               | 增 lazy `abort()` 通道                                   | S4（DESIGN §6 裁决）；公开 `RequestSource` 语义不变         |
 
 ## 5. 测试迁移矩阵
 
-| 旧测试 | 新去处 | 动作 |
-| --- | --- | --- |
-| r4-lifecycle-drain（handle 模式 11 例） | `test/r4-lifecycle-drain.test.ts` | **移植**（零改写预期） |
-| r4-lifecycle-drain（Node wire truth 4 例 + c.signal 1 例） | 同上 | **改写**：Node 启动/断开桥适配 R4.5 node.ts 新 API；断言语义零漂移 |
-| r4-lifecycle-overload（14 例） | `test/r4-lifecycle-overload.test.ts` | **移植**；排队断开组新增 native-source 变体（S4 红测，矩阵外新增） |
-| r4-lifecycle-timeout（12 例） | `test/r4-lifecycle-timeout.test.ts` | **移植**；Node 桥接 1 例改写同上 |
-| r4-lifecycle-adapters（13 例） | `test/r4-lifecycle-adapters.test.ts` | **移植**；Node listen options 注册 1 例改写适配 |
-| agent-r44-bugs / bugs-2（14 例） | `test/agent-r46-bugs*.test.ts` | **移植**；FINDING-1 真实线上组改写适配新 Node 装置；编号与症状名保留 |
-| agent-r44-contract / -2（13 例） | `test/agent-r46-contract*.test.ts` | **移植**；用例名中 §节号引用改为本文 §1 对应行（装置适配，非断言变更） |
-| agent-r44-ha / -2（11 例） | `test/agent-r46-ha*.test.ts` | **移植**；wire 相关（HA-2/6/10）改写适配 |
-| agent-r44-perf / -2（8 例） | `test/agent-r46-perf*.test.ts` | **改写**：PERF-1 绝对地板在 R4.6 分支**重新定标**（R4.5 引擎已改变 floor，登记装置适配，非放水）；PERF-2/3 增量阈值维持；PERF-7/8 按 U3 池化语义更新断言（池化后 waiter 复用，语义收紧）；新增 waiter 池稳态零分配锁 |
-| agent-r44-security / -2（16 例） | `test/agent-r46-security*.test.ts` | **移植**；SEC-6/7 Node wire 组改写适配 |
-| **新增（矩阵外）** | S1 release 恰一次；S2 drain×bytes 中止、drain×cleanupUnread、stopGraceful 后 wire 清零；S3 holdBody×committed-headers；S4 native 排队断开；U1 策略注入行为组 | IMPLEMENTATION §4 第 3/4 条 |
+| 旧测试                                                     | 新去处                                                                                                                                                       | 动作                                                                                                                                                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| r4-lifecycle-drain（handle 模式 11 例）                    | `test/r4-lifecycle-drain.test.ts`                                                                                                                            | **移植**（零改写预期）                                                                                                                                                                                               |
+| r4-lifecycle-drain（Node wire truth 4 例 + c.signal 1 例） | 同上                                                                                                                                                         | **改写**：Node 启动/断开桥适配 R4.5 node.ts 新 API；断言语义零漂移                                                                                                                                                   |
+| r4-lifecycle-overload（14 例）                             | `test/r4-lifecycle-overload.test.ts`                                                                                                                         | **移植**；排队断开组新增 native-source 变体（S4 红测，矩阵外新增）                                                                                                                                                   |
+| r4-lifecycle-timeout（12 例）                              | `test/r4-lifecycle-timeout.test.ts`                                                                                                                          | **移植**；Node 桥接 1 例改写同上                                                                                                                                                                                     |
+| r4-lifecycle-adapters（13 例）                             | `test/r4-lifecycle-adapters.test.ts`                                                                                                                         | **移植**；Node listen options 注册 1 例改写适配                                                                                                                                                                      |
+| agent-r44-bugs / bugs-2（14 例）                           | `test/agent-r46-bugs*.test.ts`                                                                                                                               | **移植**；FINDING-1 真实线上组改写适配新 Node 装置；编号与症状名保留                                                                                                                                                 |
+| agent-r44-contract / -2（13 例）                           | `test/agent-r46-contract*.test.ts`                                                                                                                           | **移植**；用例名中 §节号引用改为本文 §1 对应行（装置适配，非断言变更）                                                                                                                                               |
+| agent-r44-ha / -2（11 例）                                 | `test/agent-r46-ha*.test.ts`                                                                                                                                 | **移植**；wire 相关（HA-2/6/10）改写适配                                                                                                                                                                             |
+| agent-r44-perf / -2（8 例）                                | `test/agent-r46-perf*.test.ts`                                                                                                                               | **改写**：PERF-1 绝对地板在 R4.6 分支**重新定标**（R4.5 引擎已改变 floor，登记装置适配，非放水）；PERF-2/3 增量阈值维持；PERF-7/8 按 U3 池化语义更新断言（池化后 waiter 复用，语义收紧）；新增 waiter 池稳态零分配锁 |
+| agent-r44-security / -2（16 例）                           | `test/agent-r46-security*.test.ts`                                                                                                                           | **移植**；SEC-6/7 Node wire 组改写适配                                                                                                                                                                               |
+| **新增（矩阵外）**                                         | S1 release 恰一次；S2 drain×bytes 中止、drain×cleanupUnread、stopGraceful 后 wire 清零；S3 holdBody×committed-headers；S4 native 排队断开；U1 策略注入行为组 | IMPLEMENTATION §4 第 3/4 条                                                                                                                                                                                          |
 
 ## 6. 回滚方案
 
@@ -73,6 +73,7 @@
 - [x] `drain-verify` 真实 SIGTERM 验收：Node 与 Bun 双运行时过（已入默认 verify 门）
 - [x] 双形态进程冒烟：drain-verify 的 Bun 子进程跑源码形态、Node 子进程跑 dist 构建产物形态，探针 + 全链请求 + 优雅停机退出码 0
 - [x] `lifecycle-overhead` 基准：未配置增量 +1ns（A/B 实测，预算 <5ns）；§7.2 三条预算（稳态噪声级 / waiter 池零构造 / 期限 timer 级）全过
+- [x] HTTP 级 R4.5↔R4.6 head-to-head（`bench/run-r45-r46.mjs`，8s×4 轮轮转）：Bun 四场景全 TIE（0.991–1.001x）；Node 首测 3–5% 回退 → wire 监听合并修复后收窄至 ~1.5–2%（wire 真相 + S4 断开桥的固有成本，详见 §8 第二波）
 - [x] 挂账项显式：per-route 差异化预算、熔断/重试、压力式准入、AIMD（DESIGN §3.2）
 
 ## 8. 实施记录
@@ -86,11 +87,13 @@
 **基准（A/B vs R4.5 @ 3c4347f，同 bench 双跑）**：未配置 plain p50 **416→417ns（+1ns，预算 <5ns 达标）**；快速路径探针 1.96ns/op；overload 稳态 417ns（噪声级）；timeout 配置 583ns（+167ns = 1 unref timer + 竞速，opt-in）；排队全周期 1542ns（waiter 池化，稳态零构造——U3 结构锁独立锁定）。
 
 **实施期裁决补录**：
+
 - U1 协议实施形态演进（DESIGN §4 已同步）：策略收物化 Request + `admit()` 回调（同步占槽）；核心对未占槽 null 在同步点/决议微任务点补占；drain 翻转后未占槽 null 拒绝、已占槽照常服务；策略 rejection 容器化为内建 503。
 - C2 僵尸守卫从构造期改为 settle 期判定（P4 红测发现构造期检查是死逻辑——flag 只能在 dispatch 挂起后翻转）。
 - node.ts 超 500 行预算 → `node-source.ts` 拆分；app.ts 同因 → `registration.ts`。
 
 **实施期发现并修复的真实缺陷**（全部先红测后修）：
+
 1. 异步策略 null 未占槽即服务，settle 反释放他人槽位（计数器塌方）——admit() 协议修复（P3）。
 2. 僵尸 settle 双重释放（inFlight → -1）——守卫移入释放链（P4）。
 
@@ -99,6 +102,7 @@
 **显式挂账**：per-route 差异化预算、熔断/重试、压力式准入（Envoy 型）、AIMD 自适应（tower 型）——见 DESIGN §3.2（U1 策略生态为承载缝）。
 
 **多 agent 红测 review**（5 个独立 agent，只写红测不改业务代码；产出 91 个新测试）：
+
 - perf 6/6 预算达标（结构性围栏：未配置零 AbortController/零定时器/Response 恒等、waiter 五离队路径定时器 1:1:1、期限 1 timer 恰一次 504、holdBody 恰一次包装、全局定时器收支平衡、拒绝路径零池交互）。
 - HA 8/8 场景守住（含 wire 断开风暴×drain×pooling 组合、双信号强停、升级风暴）。
 - **确认缺陷 7 项（终审全部按最优方案修复，红测转绿）**：
@@ -110,3 +114,21 @@
   6. REVIEW-BUG-9：drain 期迟到 keep-alive 请求的零交叉不再唤醒 waiter（bogus timedOut:true）——waiter 常驻至 close 完成，每次零交叉重跑 trySettle（done 守卫幂等）。
   7. REVIEW-BUG-11：close 完成后 escalate 仍可重触发第三方 force——finish 清空 escalate + running 判空。
 - 附带收紧：预中止排队者免创建定时器（arm 先查 aborted 再武装）；测试装置适配（信号桥 spy once→on、CloseStatus 形状断言）。
+
+### 第二波（R4.5↔R4.6 head-to-head A/B，2026-09-03）
+
+**新增编排 `bench/run-r45-r46.mjs`**：自动 worktree 固定 R4.5 基线（`KEALA_R45_REF`，默认 3c4347f），同 bench 双树四进程（bun/node × R4.5/R4.6）ABAB 轮转打点（与 `run.mjs` 同方法论：200 连接、4 worker、预热 2s×8s×4 轮、响应契约先验）。`run.mjs` 同时开放 ROUNDS 为第三参数。
+
+**基准结果（进程内，bun）**：plain **416→417ns（+1ns）**；overload 稳态 417ns（噪声级）；timeout 542ns（+126ns，opt-in）；排队全周期 1333ns（waiter 池零构造）；快速路径探针 1.81ns/op。
+
+**HTTP 级 head-to-head（8s×4 轮轮转，比值在双侧噪声带内判 TIE）**：
+
+| 运行时                 | Text       |       JSON |      Param |       3 mw |
+| ---------------------- | ---------- | ---------: | ---------: | ---------: |
+| bun 1.4.0              | 0.995x TIE | 1.001x TIE | 0.991x TIE | 0.992x TIE |
+| node 22（首测）        | 0.970x     |     0.948x |     0.963x |     0.968x |
+| node 22（wire 合并后） | 0.985x     |     0.987x |     0.983x |     0.979x |
+
+**首测发现并修复**：Node 吞吐回退 3–5%（p50/p99 持平 → 纯每请求 CPU）。根因是 wire 记账每请求 2 闭包 + 3 注册 + 1 移除（`finish`/`close` 双听 + socket 级）。最优修复：**合并为单一 handler 注册两处**——`res` `close` 对已启动响应完成/夭折必发，`finish` 监听严格冗余，且 `close` 结算语义更诚实（末字节落刷而非交给内核）；每请求降为 1 闭包 + 2 注册 + 1 移除。修复后回退收窄至 ~1.5–2%（≈0.44µs/req）。
+
+**残余 ~1.5–2% 的定性**：为 wire 真相 + S4 断开桥的固有成本——socket 级监听是未启写流水线响应结算（SEC-17）与排队者断连驱逐的唯一信号源，砍除即语义回退；1 闭包 + 2 注册 + 1 移除已是不牺牲正确性的下限。Bun 路径零代价（四场景全 TIE）。

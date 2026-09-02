@@ -14,11 +14,11 @@ R4.6 在 R4.5 运行时引擎上重建 R4.4-lifecycle 定义的服务器生命�
 
 ### 用户裁决（2026-09-03）
 
-| # | 裁决 | 内容 |
-| --- | --- | --- |
-| D1 | 规格基准 | **行为等价 + 显式升级点**：r4-4 契约为基线，测试矩阵逐条对照；少数演进点在本文 §4 显式登记，逐条落档理由与行为差异 |
-| D2 | 可插拔架构 | **机制烤进核心、策略可插拔**：计数器/准入槽/结算槽/适配器契约为不可拔基座（零配置零成本）；准入策略、拒绝样式、期限值为可替换对象。API 兼容 r4-4 形态，多一层策略注入点 |
-| D3 | 性能预算 | **对齐 r4-4 并对配置路径加严**：未配置 <5ns 维持；配置 overload/deadline 的路径提出新预算（§7） |
+| #   | 裁决       | 内容                                                                                                                                                                    |
+| --- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | 规格基准   | **行为等价 + 显式升级点**：r4-4 契约为基线，测试矩阵逐条对照；少数演进点在本文 §4 显式登记，逐条落档理由与行为差异                                                      |
+| D2  | 可插拔架构 | **机制烤进核心、策略可插拔**：计数器/准入槽/结算槽/适配器契约为不可拔基座（零配置零成本）；准入策略、拒绝样式、期限值为可替换对象。API 兼容 r4-4 形态，多一层策略注入点 |
+| D3  | 性能预算   | **对齐 r4-4 并对配置路径加严**：未配置 <5ns 维持；配置 overload/deadline 的路径提出新预算（§7）                                                                         |
 
 ## 2. 外部契约（API 形态）
 
@@ -62,12 +62,12 @@ r4-4 迁移文档 §2 的规则表整体继承为本轮规格：
 
 ### 2.3 事件时序契约（封闭词表）
 
-| 事件 | 恰好一次 | 终态最后 |
-| --- | --- | --- |
-| `close()` 的 `CloseStatus` resolve | ✅（幂等重复调用返回同一 promise） | drain 完成或强停之后 |
-| 准入拒绝 Response | ✅（排队者由 移交/超时/断开/draining 四选一离队） | 任何 Context 创建之前 |
-| 期限 504 Response | ✅ | 僵尸迟到结算不得再写响应 |
-| `c.signal` abort | ✅（断开 ∨ 期限，先到者胜，reason 区分） | — |
+| 事件                               | 恰好一次                                          | 终态最后                 |
+| ---------------------------------- | ------------------------------------------------- | ------------------------ |
+| `close()` 的 `CloseStatus` resolve | ✅（幂等重复调用返回同一 promise）                | drain 完成或强停之后     |
+| 准入拒绝 Response                  | ✅（排队者由 移交/超时/断开/draining 四选一离队） | 任何 Context 创建之前    |
+| 期限 504 Response                  | ✅                                                | 僵尸迟到结算不得再写响应 |
+| `c.signal` abort                   | ✅（断开 ∨ 期限，先到者胜，reason 区分）          | —                        |
 
 ## 3. 内部问题域
 
@@ -77,25 +77,25 @@ r4-4 迁移文档 §2 的规则表整体继承为本轮规格：
 
 ### 3.2 明确不处理什么（每项写清归属）
 
-| 不处理 | 归属 |
-| --- | --- |
-| 健康检查路由（/healthz、readiness 探针实现） | 应用自己（`isDraining()` 是给它的原料） |
-| 熔断、重试、下游负载保护 | 独立单元（总纲 §6 未排期，登记挂账） |
-| 指标聚合 / Prometheus 导出 | R4.7 可观测性（`app.inFlight` 是原料） |
-| WebSocket 消息级 drain 语义（等消息发完） | 只做 close(1001) 送客，长连接不阻塞停机 |
-| `process.exit()` 决策 | 桥不退出进程；drain 定时器持有事件循环，清空后自然退出 |
-| 多进程/cluster 级编排 | 进程 supervisors（k8s/systemd） |
-| per-route 差异化 deadline/并发预算 | 挂账 R4.7+（本轮仅应用级；`overload.strategy` 是未来 per-route 的注入缝） |
-| 压力式准入（Envoy overload manager 型：按堆内存/事件循环延迟拒流） | U1 策略生态（R4.7 可观测性提供压力原料后可实现，不动核心） |
-| AIMD 自适应并发（tower concurrency-limit / linkerd 型） | U1 策略生态（`AdmissionStrategy` 插件即可承载，不动核心） |
+| 不处理                                                             | 归属                                                                      |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| 健康检查路由（/healthz、readiness 探针实现）                       | 应用自己（`isDraining()` 是给它的原料）                                   |
+| 熔断、重试、下游负载保护                                           | 独立单元（总纲 §6 未排期，登记挂账）                                      |
+| 指标聚合 / Prometheus 导出                                         | R4.7 可观测性（`app.inFlight` 是原料）                                    |
+| WebSocket 消息级 drain 语义（等消息发完）                          | 只做 close(1001) 送客，长连接不阻塞停机                                   |
+| `process.exit()` 决策                                              | 桥不退出进程；drain 定时器持有事件循环，清空后自然退出                    |
+| 多进程/cluster 级编排                                              | 进程 supervisors（k8s/systemd）                                           |
+| per-route 差异化 deadline/并发预算                                 | 挂账 R4.7+（本轮仅应用级；`overload.strategy` 是未来 per-route 的注入缝） |
+| 压力式准入（Envoy overload manager 型：按堆内存/事件循环延迟拒流） | U1 策略生态（R4.7 可观测性提供压力原料后可实现，不动核心）                |
+| AIMD 自适应并发（tower concurrency-limit / linkerd 型）            | U1 策略生态（`AdmissionStrategy` 插件即可承载，不动核心）                 |
 
 ## 4. 契约升级点（显式登记——唯一的规格漂移）
 
-| # | r4-4 行为 | R4.6 行为 | 理由 | 测试影响 |
-| --- | --- | --- | --- | --- |
-| U1 | 准入策略固定（fail fast 或内置 FIFO 队列，由 `maxQueue` 隐式选择） | `overload.strategy?: AdmissionStrategy` 显式注入；未注入时行为逐字节等于 r4-4（`maxQueue` 隐式选择保留） | 用户裁决 D2；未来 per-route/优先级准入的注入缝 | 新增策略注入用例；既有用例零改动 |
-| U2 | deadline 每请求 2 个闭包（settleOnce + releaseOnce）+ race promise + timer | 单一 once 状态对象 + timer（≤1 闭包） | 用户裁决 D3 配置路径加严；行为不变 | perf 断言更新，行为用例零改动 |
-| U3 | 排队 waiter 每请求新建（waiter 对象 + Promise + settle 三件套） | waiter 槽池化，稳态突发零分配 | 用户裁决 D3；行为不变（FIFO/移交/超时/断开语义不变） | perf 断言更新，行为用例零改动 |
+| #   | r4-4 行为                                                                  | R4.6 行为                                                                                                | 理由                                                 | 测试影响                         |
+| --- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------- |
+| U1  | 准入策略固定（fail fast 或内置 FIFO 队列，由 `maxQueue` 隐式选择）         | `overload.strategy?: AdmissionStrategy` 显式注入；未注入时行为逐字节等于 r4-4（`maxQueue` 隐式选择保留） | 用户裁决 D2；未来 per-route/优先级准入的注入缝       | 新增策略注入用例；既有用例零改动 |
+| U2  | deadline 每请求 2 个闭包（settleOnce + releaseOnce）+ race promise + timer | 单一 once 状态对象 + timer（≤1 闭包）                                                                    | 用户裁决 D3 配置路径加严；行为不变                   | perf 断言更新，行为用例零改动    |
+| U3  | 排队 waiter 每请求新建（waiter 对象 + Promise + settle 三件套）            | waiter 槽池化，稳态突发零分配                                                                            | 用户裁决 D3；行为不变（FIFO/移交/超时/断开语义不变） | perf 断言更新，行为用例零改动    |
 
 **AdmissionStrategy 协议（U1 的形态，review 轮后定稿 v3）**：
 
@@ -135,14 +135,14 @@ interface AdmissionStrategy {
 
 ## 6. R4.5 接线契约（核心新增槽位，全部 shape-lazy）
 
-| # | 槽位 | 位置 | 未配置成本 |
-| --- | --- | --- | --- |
-| C1 | 准入槽 | `app.ts [HANDLE_REQUEST_SOURCE]` 头部：`!lc.draining && lc.overload === null` 快速路径内联（2 字段加载 + 1 分支 + 自增） | <5ns |
-| C2 | settle 槽 | `settleNativeHandle` 增加可选 `release` 参数（r4-4 settleHandle 的 5 参形状）；未配置时稳定直通回调，零每请求闭包 | 1 次稳定调用 |
-| C3 | context 三槽 | `state.ts`：`abortValue`（lazy AbortController）、`deadlineAnswered`（布尔槽，非 flag——漏斗重置 flags 不得抹除）、`FLAG_DEADLINE_FIRED = 16384`（已核实空闲：现有 flag 用到 8192） | declare shape-lazy，不占冷路径字段 |
-| C4 | server 注册表 | `server-slot.ts` WeakMap（15 行，原样复制） | 零 |
-| C5 | 适配器契约 | `GracefulStopOptions { drain, onSettled, registerForce }` + `StoppableHandle`；Node 侧新增 wire 计数（`res` finish/close 事件）与断开 abort 桥；Bun 侧 `openSockets` 追踪 + 1001 送客 | 零 |
-| C6 | listen 选项 | `parseListenArgs` 增加 `signals`；`ListenOptions.signals?: boolean` | 零 |
+| #   | 槽位          | 位置                                                                                                                                                                                                                                                                                           | 未配置成本                         |
+| --- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| C1  | 准入槽        | `app.ts [HANDLE_REQUEST_SOURCE]` 头部：`!lc.draining && lc.overload === null` 快速路径内联（2 字段加载 + 1 分支 + 自增）                                                                                                                                                                       | <5ns                               |
+| C2  | settle 槽     | `settleNativeHandle` 增加可选 `release` 参数（r4-4 settleHandle 的 5 参形状）；未配置时稳定直通回调，零每请求闭包                                                                                                                                                                              | 1 次稳定调用                       |
+| C3  | context 三槽  | `state.ts`：`abortValue`（lazy AbortController）、`deadlineAnswered`（布尔槽，非 flag——漏斗重置 flags 不得抹除）、`FLAG_DEADLINE_FIRED = 16384`（已核实空闲：现有 flag 用到 8192）                                                                                                             | declare shape-lazy，不占冷路径字段 |
+| C4  | server 注册表 | `server-slot.ts` WeakMap（15 行，原样复制）                                                                                                                                                                                                                                                    | 零                                 |
+| C5  | 适配器契约    | `GracefulStopOptions { drain, onSettled, registerForce }` + `StoppableHandle`；Node 侧新增 wire 计数与断开 abort 桥——单一 handler 注册两处（`res` `close`：已启动响应完成/夭折必发，`finish` 严格冗余；socket `close`：兜住未启写的流水线响应，SEC-17）；Bun 侧 `openSockets` 追踪 + 1001 送客 | 零                                 |
+| C6  | listen 选项   | `parseListenArgs` 增加 `signals`；`ListenOptions.signals?: boolean`                                                                                                                                                                                                                            | 零                                 |
 
 **C1 槽位位置的承重理由（已核实）**：R4.5 的 Node 适配器直接进入 `[HANDLE_REQUEST_SOURCE](source)`（node.ts:455），完全绕过公开的 `handle()`；Bun 适配器走 `app.handle(request, { server })`（bun.ts:70），而 `handle()` 本身委托 `[HANDLE_REQUEST_SOURCE]`（app.ts:421-422）。r4-4 把准入闸放在 `handle()` 里——照搬会让**每个 Node 原生请求漏过准入**。单一槽位放 `[HANDLE_REQUEST_SOURCE]` 同时覆盖两个运行时与嵌入式调用。
 
@@ -158,12 +158,12 @@ interface AdmissionStrategy {
 
 ### 7.2 配置路径（加严，用户裁决 D3）
 
-| 配置 | 预算 | 验证方式 |
-| --- | --- | --- |
-| overload 稳态（无排队） | 准入 1 比较 + 自增；结算 1 减法 + 2 次空检查 | bench 对照 |
-| overload 排队突发 | waiter 池化：稳态 1000 次 admit/release 循环 **0 次新分配**（GC 稳态）；每 waiter 恰 1 个 unref timer | perf 测试锁（allocation 计数） |
-| requestTimeout | 每请求 ≤1 闭包 + 1 个 unref timer（U2）；未到点路径 0 promise 新增 | perf 测试锁 |
-| drain | 计数不抖动（槽位移交）；close 后全局定时器 ≤1（Infinity 时 0） | 单元断言 + drain-verify |
+| 配置                    | 预算                                                                                                  | 验证方式                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------ |
+| overload 稳态（无排队） | 准入 1 比较 + 自增；结算 1 减法 + 2 次空检查                                                          | bench 对照                     |
+| overload 排队突发       | waiter 池化：稳态 1000 次 admit/release 循环 **0 次新分配**（GC 稳态）；每 waiter 恰 1 个 unref timer | perf 测试锁（allocation 计数） |
+| requestTimeout          | 每请求 ≤1 闭包 + 1 个 unref timer（U2）；未到点路径 0 promise 新增                                    | perf 测试锁                    |
+| drain                   | 计数不抖动（槽位移交）；close 后全局定时器 ≤1（Infinity 时 0）                                        | 单元断言 + drain-verify        |
 
 ### 7.3 热路径禁止动作清单
 
@@ -171,13 +171,13 @@ interface AdmissionStrategy {
 
 ## 8. 与 R4.5 引擎的接缝风险（实施必须逐条红测）
 
-| # | 接缝 | 风险 | 红测要求 |
-| --- | --- | --- | --- |
-| S1 | `settleNativeHandle` 4 参形状 vs r4-4 `settleHandle` 5 参 | release 槽缺位；pooling 非 pooling 分叉语义 | 既有 pooling 全量回归 + release 恰一次断言 |
-| S2 | R4.5 node.ts 全重写（native source、`cleanupUnread`、`bytes(limit)`） | wire 计数/abort 桥/stopGraceful 需重做；**drain 中途的 `bytes(limit)` 读取、`cleanupUnread` 与 stopGraceful 的交互是全新行为** | 新增：drain 期 body 读取中止、cleanupUnread 后停机 |
-| S3 | R4.5 新增 response-plan（committed headers 能力位） | body-hold 在 settle 点重包装 Response；若 plan 已提交头，重包装可能双写 | 新增：holdBody × committed-headers 顺序用例 |
-| S4 | NativeRequestSource 无 signal（§6 裁决） | 队列 abort 对 native 请求失效 | 新增：native 路径排队断开出队 |
-| S5 | shape-lazy 字段纪律 | 三槽以普通字段初始化会破坏 R4.5 的冷路径形状优化 | 覆盖率 + 既有 perf fence 回归 |
+| #   | 接缝                                                                  | 风险                                                                                                                           | 红测要求                                           |
+| --- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| S1  | `settleNativeHandle` 4 参形状 vs r4-4 `settleHandle` 5 参             | release 槽缺位；pooling 非 pooling 分叉语义                                                                                    | 既有 pooling 全量回归 + release 恰一次断言         |
+| S2  | R4.5 node.ts 全重写（native source、`cleanupUnread`、`bytes(limit)`） | wire 计数/abort 桥/stopGraceful 需重做；**drain 中途的 `bytes(limit)` 读取、`cleanupUnread` 与 stopGraceful 的交互是全新行为** | 新增：drain 期 body 读取中止、cleanupUnread 后停机 |
+| S3  | R4.5 新增 response-plan（committed headers 能力位）                   | body-hold 在 settle 点重包装 Response；若 plan 已提交头，重包装可能双写                                                        | 新增：holdBody × committed-headers 顺序用例        |
+| S4  | NativeRequestSource 无 signal（§6 裁决）                              | 队列 abort 对 native 请求失效                                                                                                  | 新增：native 路径排队断开出队                      |
+| S5  | shape-lazy 字段纪律                                                   | 三槽以普通字段初始化会破坏 R4.5 的冷路径形状优化                                                                               | 覆盖率 + 既有 perf fence 回归                      |
 
 ## 9. 文档演进纪律
 
