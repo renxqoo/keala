@@ -33,9 +33,11 @@ import {
   closeApp,
   createLifecycle,
   installSignalBridge,
+  normalizeRequestTimeout,
   settleRequest,
   type LifecycleState,
 } from "./lifecycle.ts";
+import { raceDeadline } from "./lifecycle-deadline.ts";
 import { admitRequest } from "./lifecycle-admission.ts";
 import { serverOf } from "./server-slot.ts";
 import type { CloseOptions, CloseStatus } from "../types.ts";
@@ -106,6 +108,8 @@ export class Keala implements NativeApplication {
   // per-app settle callback releases it with zero per-request allocation.
   #lifecycle: LifecycleState;
   #settle: (value: Response) => Response;
+  // R4.6 request deadline in ms (0 = off; see lifecycle-deadline.ts).
+  #requestTimeout: number;
 
   constructor(options: AppOptions = {}) {
     this.env = options.env ?? process.env["NODE_ENV"] ?? "development";
@@ -129,6 +133,7 @@ export class Keala implements NativeApplication {
     this.#poolingEnabled = options.pooling === true;
     this.#lifecycle = createLifecycle(options.overload);
     this.#settle = (value: Response): Response => settleRequest(this.#lifecycle, value);
+    this.#requestTimeout = normalizeRequestTimeout(options.requestTimeout);
     // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
     // so dispatch can warn when global middleware swallows a matched route.
     this.router.devTrace = this.env === "development";
@@ -373,6 +378,20 @@ export class Keala implements NativeApplication {
 
     const settled = dispatchRequest(this, c, this.router, this.#middleware, request);
     if (this.#poolingEnabled) this.#pool ??= createPool(this, this.#contextProto);
+    // Deadline-configured apps pay ONE guarded settle per request (the U2
+    // once guard — where r4-4 allocated a settleOnce/releaseOnce pair) plus
+    // the race; unconfigured apps (the default) pass the stable callback.
+    if (this.#requestTimeout > 0) {
+      const settle = (value: Response): Response =>
+        c.deadlineAnswered === true ? value : this.#settle(value);
+      return raceDeadline(
+        this,
+        this.#lifecycle,
+        c,
+        settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled, settle),
+        this.#requestTimeout,
+      );
+    }
     return settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled, this.#settle);
   }
 

@@ -63,8 +63,8 @@ export const settleNativeHandle = (
 ): Response | Promise<Response> => {
   if (!pooling) {
     if (release === undefined) return settled;
-    // Deadline zombie: the race already released capacity — never twice.
-    if (c.deadlineAnswered === true) return settled;
+    // Capacity release rides the callback (deadline-configured apps pass a
+    // guarded settle — the zombie's late release dies THERE, at settle time).
     return settled instanceof Promise ? settled.then(release) : release(settled);
   }
   if (pool === null) throw new TypeError("pooling dispatch requires a context pool");
@@ -72,19 +72,21 @@ export const settleNativeHandle = (
   // late write on the retired context throws instead of corrupting it. The
   // drain-hold wraps INSIDE the retirement wrapper so a draining close
   // observes stream completion at the consumer's pace, not the producer's.
+  // A deadline zombie's late settle (checked at SETTLE time — the flag can
+  // only flip after dispatch parked) skips retirement: the live handler
+  // still holds the context, so it goes to GC instead of the next request.
   if (release === undefined) {
     if (settled instanceof Promise) {
-      return settled.then((value) => retireWithBody(pool, c, value));
+      return settled.then((value) =>
+        c.deadlineAnswered === true ? value : retireWithBody(pool, c, value),
+      );
     }
     return retireWithBody(pool, c, settled);
   }
-  if (c.deadlineAnswered === true) {
-    // Zombie late settle: capacity is freed by the deadline race already —
-    // release nothing, retire nothing.
-    return settled;
-  }
   if (settled instanceof Promise) {
-    return settled.then((value) => retireWithBody(pool, c, release(value)));
+    return settled.then((value) =>
+      c.deadlineAnswered === true ? value : retireWithBody(pool, c, release(value)),
+    );
   }
   return retireWithBody(pool, c, release(settled));
 };
