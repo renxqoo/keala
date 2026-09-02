@@ -122,114 +122,6 @@ const assertFormPartBudget = (bytes: Uint8Array, contentType: string, limit: num
   }
 };
 
-interface BodyCacheState {
-  bytes: Promise<Uint8Array> | null;
-  /** Limit already enforced by `bytes`; equal/larger readers can reuse the
-   * exact in-flight promise, while a smaller reader adds one post-read check. */
-  bytesLimit: number;
-  facade: RequestBodyFacade | null;
-  /** Memoize the IN-FLIGHT work, not only its settled value. Concurrent
-   * onion consumers therefore share one decode/parse and one terminal
-   * failure, and callers receive the exact same Promise. */
-  json: Promise<unknown> | null;
-  text: Promise<string> | null;
-  arrayBuffer: Promise<Uint8Array> | null;
-  formData: Promise<FormData> | null;
-  blob: Promise<Blob> | null;
-}
-
-const cacheOf = (c: Context): BodyCacheState =>
-  ((c as { bodyCache?: BodyCacheState }).bodyCache ??= {
-    bytes: null,
-    bytesLimit: 0,
-    facade: null,
-    json: null,
-    text: null,
-    arrayBuffer: null,
-    formData: null,
-    blob: null,
-  } as BodyCacheState);
-
-/**
- * Read the request body once, bounded. Content-Length above the limit fails
- * fast; streamed reads count bytes and abort at the boundary.
- */
-export const readBodyLimited = (c: Context, limit: number): Promise<Uint8Array> => {
-  const cache = cacheOf(c);
-  if (cache.bytes !== null) {
-    // The body is already consumed — but THIS reader's limit still applies.
-    if (limit >= cache.bytesLimit) return cache.bytes;
-    return cache.bytes.then((bytes) => {
-      if (bytes.byteLength > limit) {
-        throw createError(413, `request body exceeds the ${limit} byte limit`, {
-          expose: true,
-          code: "payload_too_large",
-        });
-      }
-      return bytes;
-    });
-  }
-  const declared = c.reqLength;
-  if (declared !== undefined && declared > limit) {
-    return Promise.reject(
-      createError(413, `request body of ${declared} bytes exceeds the ${limit} byte limit`, {
-        expose: true,
-        code: "payload_too_large",
-      }),
-    );
-  }
-  const read = (() => {
-    const body = c.raw.body;
-    if (body === null) return Promise.resolve(new Uint8Array(0));
-    if (declared !== undefined) {
-      // Declared-length fast path (the common case — every real client
-      // declares): ONE native bytes() read, which already returns the desired
-      // Uint8Array on Bun 1.4 and Node 22. The post-read guard fails closed on
-      // a lying-length stream without an ArrayBuffer wrapper/view allocation.
-      const requestWithBytes = c.raw as Request & { bytes(): Promise<Uint8Array> };
-      return requestWithBytes.bytes().then((bytes: Uint8Array) => {
-        if (bytes.byteLength > limit) {
-          throw createError(413, `request body exceeds the ${limit} byte limit`, {
-            expose: true,
-            code: "payload_too_large",
-          });
-        }
-        return bytes;
-      });
-    }
-    return (async () => {
-      const reader = body.getReader();
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > limit) {
-          await reader.cancel().catch(() => undefined);
-          throw createError(413, `request body exceeds the ${limit} byte limit`, {
-            expose: true,
-            code: "payload_too_large",
-          });
-        }
-        chunks.push(value);
-      }
-      // A single-chunk body needs no reassembly copy.
-      if (chunks.length === 1) return chunks[0] as Uint8Array;
-      const out = new Uint8Array(total);
-      let offset = 0;
-      for (const chunk of chunks) {
-        out.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return out;
-    })();
-  })();
-  cache.bytes = read;
-  cache.bytesLimit = limit;
-  return read;
-};
-
 /** Context extended with the installed `c.req` body facade. */
 export type ContextWithBody = Context & { req: RequestBodyFacade };
 
@@ -248,6 +140,199 @@ export interface RequestBodyFacade {
 
 const decoder = new TextDecoder();
 
+interface BodyReaderConfig {
+  readonly jsonLimit: number;
+  readonly textLimit: number;
+  readonly formLimit: number;
+  readonly formPartLimit: number;
+}
+
+interface RareReaderState {
+  text: Promise<string> | null;
+  arrayBuffer: Promise<Uint8Array> | null;
+  formData: Promise<FormData> | null;
+  blob: Promise<Blob> | null;
+}
+
+const bodyTooLarge = (limit: number, declared?: number): Error =>
+  createError(
+    413,
+    declared === undefined
+      ? `request body exceeds the ${limit} byte limit`
+      : `request body of ${declared} bytes exceeds the ${limit} byte limit`,
+    { expose: true, code: "payload_too_large" },
+  );
+
+/**
+ * One allocation owns both the public facade and every request-body memo.
+ * Methods live on the prototype: the common JSON-only request avoids the old
+ * cache object, facade object, local read closure and five method closures.
+ *
+ * `rawBytes` is deliberately private-by-module and never returned without a
+ * limit check. Keeping the native read promise one level below reader memos
+ * lets JSON perform actual-byte validation + decode + parse in ONE
+ * continuation while every reader still shares one body consumption.
+ */
+class BodyReaderState implements RequestBodyFacade {
+  readonly context: Context;
+  config: BodyReaderConfig | null;
+  rawBytes: Promise<Uint8Array> | null = null;
+  bytes: Promise<Uint8Array> | null = null;
+  bytesLimit = 0;
+  jsonValue: Promise<unknown> | null = null;
+  rare: RareReaderState | null = null;
+
+  constructor(context: Context, config: BodyReaderConfig | null) {
+    this.context = context;
+    this.config = config;
+  }
+
+  /** Start exactly one native/streamed read and remember the first budget. */
+  raw(limit: number): Promise<Uint8Array> {
+    if (this.rawBytes !== null) return this.rawBytes;
+    this.bytesLimit = limit;
+    const c = this.context;
+    const declared = c.reqLength;
+    if (declared !== undefined && declared > limit) {
+      return (this.rawBytes = Promise.reject(bodyTooLarge(limit, declared)));
+    }
+    const body = c.raw.body;
+    if (body === null) return (this.rawBytes = Promise.resolve(new Uint8Array(0)));
+    if (declared !== undefined) {
+      // The common path: the native promise stays internal. Every public
+      // reader validates its actual byteLength before exposing/decoding it.
+      return (this.rawBytes = (c.raw as Request & { bytes(): Promise<Uint8Array> }).bytes());
+    }
+    return (this.rawBytes = this.readStream(body, limit));
+  }
+
+  /** Enforce both the first consumer's budget and this reader's budget. */
+  checked(bytes: Uint8Array, limit: number): Uint8Array {
+    const firstLimit = this.bytesLimit;
+    const effective = limit < firstLimit ? limit : firstLimit;
+    if (bytes.byteLength > effective) throw bodyTooLarge(effective);
+    return bytes;
+  }
+
+  /** Memoized guarded bytes used by validator()/arrayBuffer(). */
+  read(limit: number): Promise<Uint8Array> {
+    if (this.bytes !== null) {
+      if (limit >= this.bytesLimit) return this.bytes;
+      return this.bytes.then((bytes) => this.checked(bytes, limit));
+    }
+    const raw = this.raw(limit);
+    return (this.bytes = raw.then((bytes) => this.checked(bytes, limit)));
+  }
+
+  json(): Promise<unknown> {
+    if (this.jsonValue !== null) return this.jsonValue;
+    const limit = (this.config as BodyReaderConfig).jsonLimit;
+    return (this.jsonValue = this.raw(limit).then((raw) => {
+      // JSON is the dominant reader. Inline its actual-byte guard so the
+      // native-read continuation proceeds directly into decode/parse.
+      const firstLimit = this.bytesLimit;
+      const effective = limit < firstLimit ? limit : firstLimit;
+      if (raw.byteLength > effective) throw bodyTooLarge(effective);
+      const bytes = raw;
+      if (bytes.byteLength === 0) return null;
+      try {
+        return JSON.parse(decoder.decode(bytes)) as unknown;
+      } catch {
+        throw createError(400, "request body is not valid JSON", {
+          expose: true,
+          code: "invalid_json",
+        });
+      }
+    }));
+  }
+
+  text(): Promise<string> {
+    const state = this.rareState();
+    if (state.text !== null) return state.text;
+    const limit = (this.config as BodyReaderConfig).textLimit;
+    return (state.text = this.raw(limit).then((bytes) =>
+      decoder.decode(this.checked(bytes, limit)),
+    ));
+  }
+
+  arrayBuffer(): Promise<Uint8Array> {
+    const state = this.rareState();
+    if (state.arrayBuffer !== null) return state.arrayBuffer;
+    return (state.arrayBuffer = this.read((this.config as BodyReaderConfig).jsonLimit));
+  }
+
+  blob(): Promise<Blob> {
+    const state = this.rareState();
+    if (state.blob !== null) return state.blob;
+    const limit = (this.config as BodyReaderConfig).jsonLimit;
+    return (state.blob = this.raw(limit).then((bytes) => new Blob([this.checked(bytes, limit)])));
+  }
+
+  formData(): Promise<FormData> {
+    const state = this.rareState();
+    if (state.formData !== null) return state.formData;
+    const config = this.config as BodyReaderConfig;
+    const limit = config.formLimit;
+    const contentType = this.context.header("content-type") || "application/octet-stream";
+    return (state.formData = this.raw(limit).then((raw) => {
+      const bytes = this.checked(raw, limit);
+      assertFormPartBudget(bytes, contentType, config.formPartLimit);
+      return new Response(bytes, { headers: { "content-type": contentType } })
+        .formData()
+        .catch(() => {
+          throw createError(400, "request body is not decodable form data", { expose: true });
+        }) as unknown as Promise<FormData>;
+    }));
+  }
+
+  private rareState(): RareReaderState {
+    return (this.rare ??= {
+      text: null,
+      arrayBuffer: null,
+      formData: null,
+      blob: null,
+    });
+  }
+
+  private async readStream(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        throw bodyTooLarge(limit);
+      }
+      chunks.push(value);
+    }
+    if (chunks.length === 1) return chunks[0] as Uint8Array;
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return out;
+  }
+}
+
+const stateOf = (c: Context, config: BodyReaderConfig | null = null): BodyReaderState => {
+  const holder = c as { bodyCache?: BodyReaderState };
+  const state = (holder.bodyCache ??= new BodyReaderState(c, config));
+  if (state.config === null && config !== null) state.config = config;
+  return state;
+};
+
+/**
+ * Read the request body once, bounded. Content-Length above the limit fails
+ * fast; streamed reads count bytes and abort at the boundary.
+ */
+export const readBodyLimited = (c: Context, limit: number): Promise<Uint8Array> =>
+  stateOf(c).read(limit);
+
 const assertLimit = (name: string, value: number | undefined): void => {
   if (value === undefined) return;
   // NaN compares false against every bound and would silently disarm the
@@ -263,6 +348,7 @@ export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
   const textLimit = options.textLimit ?? options.jsonLimit ?? DEFAULT_JSON_LIMIT;
   const formLimit = options.formLimit ?? DEFAULT_FORM_LIMIT;
   const formPartLimit = options.formPartLimit ?? DEFAULT_PART_LIMIT;
+  const config: BodyReaderConfig = { jsonLimit, textLimit, formLimit, formPartLimit };
 
   assertLimit("jsonLimit", options.jsonLimit);
   assertLimit("textLimit", options.textLimit);
@@ -275,58 +361,7 @@ export const createBodyParser = (options: BodyParserOptions = {}): Plugin => {
       // validator) enforce exactly what the app configured.
       app.decorate("bodyJsonLimit", jsonLimit);
       app.decorateLazy("req", function (this: Context): RequestBodyFacade {
-        const cache = cacheOf(this);
-        if (cache.facade !== null) return cache.facade;
-        const read = (limit: number): Promise<Uint8Array> => readBodyLimited(this, limit);
-        const facade: RequestBodyFacade = {
-          json: () => {
-            if (cache.json !== null) return cache.json;
-            cache.json = read(jsonLimit).then((bytes) => {
-              if (bytes.byteLength === 0) return null;
-              try {
-                return JSON.parse(decoder.decode(bytes)) as unknown;
-              } catch {
-                throw createError(400, "request body is not valid JSON", {
-                  expose: true,
-                  code: "invalid_json",
-                });
-              }
-            });
-            return cache.json;
-          },
-          text: () => {
-            if (cache.text !== null) return cache.text;
-            return (cache.text = read(textLimit).then((bytes) => decoder.decode(bytes)));
-          },
-          arrayBuffer: () => {
-            if (cache.arrayBuffer !== null) return cache.arrayBuffer;
-            return (cache.arrayBuffer = read(jsonLimit));
-          },
-          blob: () => {
-            if (cache.blob !== null) return cache.blob;
-            return (cache.blob = read(jsonLimit).then((bytes) => new Blob([bytes])));
-          },
-          formData: () => {
-            if (cache.formData !== null) return cache.formData;
-            const contentType = this.header("content-type") || "application/octet-stream";
-            const parsed = read(formLimit).then((bytes) => {
-              assertFormPartBudget(bytes, contentType, formPartLimit);
-              return new Response(bytes, {
-                headers: { "content-type": contentType },
-              })
-                .formData()
-                .catch(() => {
-                  throw createError(400, "request body is not decodable form data", {
-                    expose: true,
-                  });
-                }) as unknown as Promise<FormData>;
-            });
-            cache.formData = parsed;
-            return parsed;
-          },
-        };
-        cache.facade = facade;
-        return facade;
+        return stateOf(this, config);
       });
     },
   };

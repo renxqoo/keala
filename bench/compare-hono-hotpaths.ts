@@ -24,6 +24,7 @@ type CaseName =
   | "body"
   | "body-limited"
   | "body-safe"
+  | "body-raw-safe"
   | "text"
   | "text-dirty"
   | "text-dirty-correct"
@@ -56,6 +57,7 @@ if (
       "body",
       "body-limited",
       "body-safe",
+      "body-raw-safe",
       "text",
       "text-dirty",
       "text-dirty-correct",
@@ -82,6 +84,21 @@ if (framework === "keala") {
       app.use(caseName.endsWith("-async") ? asyncPass : pass);
     }
     app.get("/livez", (c) => c.json({ status: "ok" }));
+  } else if (caseName === "body-raw-safe") {
+    const limit = 1024;
+    const decoder = new TextDecoder();
+    app.post("/v1/echo", async (c) => {
+      const raw = c.raw;
+      const declared = Number(raw.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > limit) return c.text("too large", 413);
+      const bytes = await (raw as Request & { bytes(): Promise<Uint8Array> }).bytes();
+      if (bytes.byteLength > limit) return c.text("too large", 413);
+      try {
+        return c.json(JSON.parse(decoder.decode(bytes)));
+      } catch {
+        return c.text("malformed JSON body", 400);
+      }
+    });
   } else if (caseName === "body" || caseName === "body-limited" || caseName === "body-safe") {
     app.use(createBodyParser({ jsonLimit: 1024 }));
     app.post("/v1/echo", async (c0) => {
@@ -153,7 +170,7 @@ if (framework === "keala") {
     // and never re-checks actual bytes — a lying Content-Length slips through.
     app.use("/v1/echo", bodyLimit({ maxSize: 1024 }));
     app.post("/v1/echo", async (c) => c.json(await c.req.json()));
-  } else if (caseName === "body-safe") {
+  } else if (caseName === "body-safe" || caseName === "body-raw-safe") {
     // Strictest fair parity: keala re-checks ACTUAL bytes even when
     // Content-Length is declared (its bytes() fast path). This handler is the
     // cheapest reasonable Hono equivalent of that lying-length guard — one
@@ -205,7 +222,12 @@ if (framework === "keala") {
   handle = (request) => app.fetch(request);
 }
 
-if (caseName === "body" || caseName === "body-limited" || caseName === "body-safe") {
+if (
+  caseName === "body" ||
+  caseName === "body-limited" ||
+  caseName === "body-safe" ||
+  caseName === "body-raw-safe"
+) {
   makeRequest = () =>
     new Request("http://localhost/v1/echo", {
       method: "POST",
@@ -221,7 +243,11 @@ if (caseName === "body" || caseName === "body-limited" || caseName === "body-saf
   makeRequest = () => shared;
 }
 
-const isBodyCase = caseName === "body" || caseName === "body-limited" || caseName === "body-safe";
+const isBodyCase =
+  caseName === "body" ||
+  caseName === "body-limited" ||
+  caseName === "body-safe" ||
+  caseName === "body-raw-safe";
 const isErrorCase = caseName === "error" || caseName === "error-mw";
 const warmup = isBodyCase || isErrorCase ? 20_000 : 60_000;
 const batch = isBodyCase || isErrorCase ? 2_000 : 5_000;
@@ -283,7 +309,7 @@ console.log(
 // handling differs by framework default where parsing is not manual (keala
 // maps it to an exposed 400; Hono's default onError turns the throw into a
 // 500) — recorded, only the 413 budget parity is asserted.
-if (caseName === "body-limited" || caseName === "body-safe") {
+if (caseName === "body-limited" || caseName === "body-safe" || caseName === "body-raw-safe") {
   const oversized = await handle(
     new Request("http://localhost/v1/echo", {
       method: "POST",
@@ -322,10 +348,10 @@ if (caseName === "body-limited" || caseName === "body-safe") {
       body: JSON.stringify({ message: "界".repeat(400) }),
     }),
   );
-  if (caseName === "body-safe" && lying.status !== 413) {
+  if ((caseName === "body-safe" || caseName === "body-raw-safe") && lying.status !== 413) {
     throw new Error(`lying-length must 413 under body-safe, got ${lying.status}`);
   }
-  if (caseName === "body-safe" && utf8Oversized.status !== 413) {
+  if ((caseName === "body-safe" || caseName === "body-raw-safe") && utf8Oversized.status !== 413) {
     throw new Error(`UTF-8 oversized body must 413 under body-safe, got ${utf8Oversized.status}`);
   }
   if (framework === "keala" && malformed.status !== 400) {

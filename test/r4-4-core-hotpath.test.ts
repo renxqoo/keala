@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import {
+  createBodyParser,
+  readBodyLimited,
+  type ContextWithBody,
+} from "../src/plugins/body-parser.ts";
 
 const request = (path = "/livez", init?: RequestInit): Request =>
   new Request(`http://localhost${path}`, init);
@@ -156,5 +160,63 @@ describe("R4.4 body-state semantic locks", () => {
       text: body,
       bytes: body.length,
     });
+  });
+
+  it("concurrent reader types trigger exactly one native body consumption", async () => {
+    const app = new Keala({ env: "production" });
+    app.use(createBodyParser({ jsonLimit: 128 }));
+    app.post("/echo", async (c0) => {
+      const c = c0 as ContextWithBody;
+      const [json, text, bytes] = await Promise.all([
+        c.req.json(),
+        c.req.text(),
+        c.req.arrayBuffer(),
+      ]);
+      return c.json({ json, text, bytes: bytes.byteLength });
+    });
+
+    const body = '{"id":1}';
+    const raw = request("/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(body.length) },
+      body,
+    }) as Request & { bytes(): Promise<Uint8Array> };
+    const nativeBytes = raw.bytes.bind(raw);
+    let reads = 0;
+    Object.defineProperty(raw, "bytes", {
+      value: (): Promise<Uint8Array> => {
+        reads += 1;
+        return nativeBytes();
+      },
+    });
+
+    const response = await app.handle(raw);
+    expect(await response.json()).toEqual({ json: { id: 1 }, text: body, bytes: body.length });
+    expect(reads).toBe(1);
+  });
+
+  it("direct bounded readers reuse equal/larger budgets and recheck smaller budgets", async () => {
+    const app = new Keala({ env: "production" });
+    app.post("/read", async (c) => {
+      const first = readBodyLimited(c, 16);
+      const larger = readBodyLimited(c, 32);
+      const bytes = await first;
+      let smallerStatus = 0;
+      try {
+        await readBodyLimited(c, 2);
+      } catch (error) {
+        smallerStatus = (error as { status?: number }).status ?? 0;
+      }
+      return c.json({ samePromise: first === larger, bytes: bytes.byteLength, smallerStatus });
+    });
+    const body = "abc";
+    const response = await app.handle(
+      request("/read", {
+        method: "POST",
+        headers: { "content-length": String(body.length) },
+        body,
+      }),
+    );
+    expect(await response.json()).toEqual({ samePromise: true, bytes: 3, smallerStatus: 413 });
   });
 });
