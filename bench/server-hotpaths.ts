@@ -45,6 +45,14 @@ if (caseName === "body") {
     }
   }
   app.get("/livez", (c) => c.json({ status: "ok" }));
+} else if (caseName === "global") {
+  const layers = Number(scopeMode ?? "3");
+  for (let index = 0; index < layers; index++) {
+    app.use(async (_c, next) => {
+      await next();
+    });
+  }
+  app.get("/livez", (c) => c.json({ status: "ok" }));
 } else if (caseName === "dirty") {
   app.use(async (c, next) => {
     await next();
@@ -52,7 +60,7 @@ if (caseName === "body") {
   });
   app.get("/text", (c) => c.text("hello"));
 } else {
-  throw new TypeError("usage: server-hotpaths.ts <body|scope|dirty> [legacy|scoped]");
+  throw new TypeError("usage: server-hotpaths.ts <body|scope|global|dirty> [mode|layers]");
 }
 
 const server = Bun.serve({ port, fetch: (request) => app.handle(request) });
