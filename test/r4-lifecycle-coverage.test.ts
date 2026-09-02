@@ -171,11 +171,7 @@ describe("R4.6 coverage: native transport teardown", () => {
   it("a native bounded read over the limit answers 413 through the funnel", async () => {
     const app = new Keala({ env: "test" });
     app.post("/tiny", async (c) => {
-      try {
-        await readBodyLimited(c, 8);
-      } catch (error) {
-        throw error;
-      }
+      await readBodyLimited(c, 8);
     });
     const response = await app.handle(
       new Request("http://x/tiny", { method: "POST", body: "way-more-than-eight-bytes" }),
@@ -223,11 +219,7 @@ describe("R4.6 coverage: native transport teardown", () => {
   it("a NATIVE bounded read over the limit answers 413 (early, connection reusable)", async () => {
     const app = new Keala({ env: "test" });
     app.post("/tiny", async (c) => {
-      try {
-        await readBodyLimited(c, 8);
-      } catch (error) {
-        throw error;
-      }
+      await readBodyLimited(c, 8);
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);
