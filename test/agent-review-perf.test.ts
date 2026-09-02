@@ -30,7 +30,7 @@ const medianOf = (xs: number[]): number => {
   return sorted[Math.floor(sorted.length / 2)] as number;
 };
 
-/** Alternate A/B; CPU time excludes parallel-worker scheduler wait. */
+/** Alternate A/B; current-thread CPU excludes parallel worker activity. */
 const measurePair = async (
   opA: () => Promise<unknown>,
   opB: () => Promise<unknown>,
@@ -45,9 +45,10 @@ const measurePair = async (
   const timesA: number[] = [];
   const timesB: number[] = [];
   const timed = async (op: () => Promise<unknown>): Promise<number> => {
-    const start = process.cpuUsage();
+    if (isBun) Bun.gc(true);
+    const start = process.threadCpuUsage();
     for (let i = 0; i < batch; i++) await op();
-    const elapsed = process.cpuUsage(start);
+    const elapsed = process.threadCpuUsage(start);
     return ((elapsed.user + elapsed.system) * 1e3) / batch;
   };
   for (let sample = 0; sample < samples; sample++) {
@@ -62,14 +63,16 @@ const measurePair = async (
   return { aNs: medianOf(timesA), bNs: medianOf(timesB) };
 };
 
-/** Sync micro median (ns/op) for allocation-free-ish component loops. */
+/** Sync micro median (ns/op), isolated from other Vitest worker threads. */
 const microMedian = (op: () => void, warmup: number, batch: number, samples: number): number => {
   for (let i = 0; i < warmup; i++) op();
   const times: number[] = [];
   for (let sample = 0; sample < samples; sample++) {
-    const start = performance.now();
+    if (isBun) Bun.gc(true);
+    const start = process.threadCpuUsage();
     for (let i = 0; i < batch; i++) op();
-    times.push(((performance.now() - start) * 1e6) / batch);
+    const elapsed = process.threadCpuUsage(start);
+    times.push(((elapsed.user + elapsed.system) * 1e3) / batch);
   }
   return medianOf(times);
 };
@@ -311,9 +314,11 @@ describe("R4.3 perf review: error-path costs and shapes", () => {
         const run = runOn(stringThrow, 500, '{"error":{"code":"internal"}}');
         for (let i = 0; i < 5_000; i++) await run();
         for (let sample = 0; sample < 11; sample++) {
-          const start = performance.now();
+          if (isBun) Bun.gc(true);
+          const start = process.threadCpuUsage();
           for (let i = 0; i < 1_500; i++) await run();
-          single.push(((performance.now() - start) * 1e6) / 1_500);
+          const elapsed = process.threadCpuUsage(start);
+          single.push(((elapsed.user + elapsed.system) * 1e3) / 1_500);
         }
         return { aNs: medianOf(single) };
       })();
