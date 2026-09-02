@@ -5,11 +5,8 @@
  * medians, assert GENEROUS fences so a test is only RED for a real, large
  * regression or leak — never for machine noise.
  *
- * Fences here probe the R4.3 claims:
- *  1. registering app.onError must cost NOTHING on healthy requests (the
- *     mapper check lives only inside the error funnel);
- *  2. the error funnel must not retain per-error memory (no app-level
- *     structures holding error objects);
+ * Fences here probe the R4.3 claims: registering app.onError costs NOTHING
+ * on healthy requests; the error funnel must not retain per-error memory;
  *  3. error-path component costs (toHttpError classification, non-Error
  *     normalization, error.headers merge) stay micro, and the mapper shape
  *     stays faster than the koa-style try/catch middleware shape.
