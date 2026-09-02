@@ -56,7 +56,7 @@ c.signal: AbortSignal;           // 客户端断开 ∨ 期限到点；首次访
 r4-4 迁移文档 §2 的规则表整体继承为本轮规格：
 
 - **停机规则 r1–r9**：拒绝先于 Context；drain 默认 30_000 / 0 = 立即强停（listener 必死）/ Infinity 永不武装定时器；停机序列 draining → 停接 → 等清空或超时 → 强停；drain 期间带 body 响应 body 读完才算完；幂等 + `{drain:0}` 升级语义；Node 线上真相双计数；WebSocket 1001 送客；信号桥不 `process.exit()`。
-- **过载规则 r1–r6**：闸在 `handle()` 入口、建 Context 之前；默认 fail fast；队列 FIFO 槽位移交不抖动；排队断开/超时出队 503；draining 整队拒绝；并发口径 = 已准入未结算（body 流送不占并发槽——与 drain 口径的差异是文档化决策）。
+- **过载规则 r1–r6**：闸在 `handle()` 入口、建 Context 之前；默认 fail fast；队列 FIFO 槽位移交不抖动；排队断开/超时出队 503；draining 整队拒绝；并发口径 = 已准入未结算（body 流送不占并发槽——与 drain 口径的差异是文档化决策）。**WS 升级请求过闸后在 101 处立即结算（`wsUpgradeHandler` 返回即 release），升级后的 socket 不占并发槽**——由适配器 `openSockets` 单独追踪、drain 时 1001 送客；即 overload 保护的是 HTTP 请求容量，不是 WS 连接数（r4-4 已核实语义，显式入档防"顺手修复"）。
 - **期限规则 r1–r5**：到点 `c.signal` 以 `TimeoutError` abort；504 经错误漏斗（mapper 可接管）；僵尸迟到结算静默收容、Context 不回收进池；未配置零成本；`c.signal` lazy 物化。
 - **不变式**：`app.handle` 永不 reject；拒绝路径无 Context/无池交互/无错误漏斗；期限 504 路径的 Context 宁可 GC 不复用。
 
@@ -86,6 +86,8 @@ r4-4 迁移文档 §2 的规则表整体继承为本轮规格：
 | `process.exit()` 决策 | 桥不退出进程；drain 定时器持有事件循环，清空后自然退出 |
 | 多进程/cluster 级编排 | 进程 supervisors（k8s/systemd） |
 | per-route 差异化 deadline/并发预算 | 挂账 R4.7+（本轮仅应用级；`overload.strategy` 是未来 per-route 的注入缝） |
+| 压力式准入（Envoy overload manager 型：按堆内存/事件循环延迟拒流） | U1 策略生态（R4.7 可观测性提供压力原料后可实现，不动核心） |
+| AIMD 自适应并发（tower concurrency-limit / linkerd 型） | U1 策略生态（`AdmissionStrategy` 插件即可承载，不动核心） |
 
 ## 4. 契约升级点（显式登记——唯一的规格漂移）
 
