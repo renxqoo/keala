@@ -1,13 +1,13 @@
 # HOTPATH-R4 — 企业级多通道执行架构设计基线
 
-> 状态：R4.1–R4.4 已核销
+> 状态：R4.1–R4.4 已核销；R4.5 实施中
 > 级别：大
 > 基线提交：`fa532f9`（R3 已核销）
-> 工作分支：`codex/hotpath-r4-4-core-rewrite`
+> 工作分支：`codex/r4-5-runtime-engine-rewrite`
 > 范围：仅 keala；Tillgate 只允许只读测试，不修改源码或生成物。
 > 施工图：[HOTPATH-R4-IMPLEMENTATION.md](./HOTPATH-R4-IMPLEMENTATION.md)
 > 首个迁移单元：[HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md](./HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md)
-> 当前迁移单元：[HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md](./HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md)
+> 当前迁移单元：[HOTPATH-R4-5-MIGRATION-RUNTIME-ENGINE.md](./HOTPATH-R4-5-MIGRATION-RUNTIME-ENGINE.md)
 
 ## 1. 目标与成功定义
 
@@ -187,8 +187,11 @@ R4 按可独立回滚的纵向单元推进：
    错误路径 897ns——快于 koa 式中间件 18%、与 Hono 带内平价，快乐路径零改动）；
 4. **R4.4 核心热路径重写**：全局洋葱链固定税与安全 JSON reader 状态机，详见
    [HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md](./HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md)；
-5. **R4.5 生命周期与过载控制**：drain、in-flight、accept/reject、deadline 分开定约；
-6. **R4.6 可观测性低税接口**：仅在订阅时付费，默认热路径零分配。
+5. **R4.5 Bun/Node 运行时执行引擎**：删除通用 Node bridge，以 RequestSource、
+   ResponsePlan 和运行时专用终端实现双运行时真实 HTTP 超越 Hono；详见
+   [HOTPATH-R4-5-RUNTIME-DESIGN.md](./HOTPATH-R4-5-RUNTIME-DESIGN.md)；
+6. **R4.6 生命周期与过载控制**：drain、in-flight、accept/reject、deadline 分开定约；
+7. **R4.7 可观测性低税接口**：仅在订阅时付费，默认热路径零分配。
 
 每一项都必须先形成自己的 MIGRATION 文档，上一项核销不自动授权下一项编码。
 
@@ -208,6 +211,8 @@ R4 按可独立回滚的纵向单元推进：
   零泄露默认、协议头不丢）为验收形态。
 - **用户裁决**（R4.4）：下一阶段回到探针固定税和安全 JSON 读取热路径，不继续削减
   错误路径安全守卫；允许内部重写，目标是在同安全/正确性语义下整体超过 Hono。
+- **用户裁决**（R4.5）：采用最新 Bun/Node 运行时执行引擎；旧适配器路径直接删除，
+  不留兼容老逻辑；Bun 与 Node 都必须以真实 HTTP 和同语义基准超越 Hono，不能只打平。
 
 ## 8. 总体验收
 
