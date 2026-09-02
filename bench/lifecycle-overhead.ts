@@ -21,8 +21,16 @@ const variant = (process.argv[2] ?? "plain") as
   | "queue"
   | "probe";
 
+/** Settle-tail release, hoisted: the probe's isolated replica of the
+ * releaseInFlight guards (captures nothing). */
+const release = (state: { inFlight: number; queue: unknown[]; closeWaiters: (() => void)[] }): void => {
+  state.inFlight--;
+  if (state.queue.length > 0) return;
+  if (state.inFlight === 0 && state.closeWaiters.length > 0) return;
+};
+
 const percentile = (samples: number[], q: number): string =>
-  (samples[Math.floor(q * (samples.length - 1))]! * 1e6).toFixed(0);
+  (samples.toSorted((a, b) => a - b)[Math.floor(q * (samples.length - 1))]! * 1e6).toFixed(0);
 
 if (variant === "probe") {
   // The C1 fast path in isolation: the exact field loads, branch and
@@ -34,11 +42,6 @@ if (variant === "probe") {
     inFlight: 0,
     queue: [] as unknown[],
     closeWaiters: [] as (() => void)[],
-  };
-  const release = (state: typeof lc): void => {
-    state.inFlight--;
-    if (state.queue.length > 0) return;
-    if (state.inFlight === 0 && state.closeWaiters.length > 0) return;
   };
   const iterations = 5_000_000;
   const t0 = performance.now();
@@ -95,7 +98,6 @@ if (variant === "queue") {
     await res.text();
     samples.push(performance.now() - t0);
   }
-  samples.sort((a, b) => a - b);
   process.stdout.write(
     `lifecycle-overhead queue: p50 ${percentile(samples, 0.5)}ns  IQR [${percentile(samples, 0.25)}, ${percentile(samples, 0.75)}]  (n=${N})\n`,
   );
@@ -109,7 +111,6 @@ for (let i = 0; i < N; i++) {
   await run();
   samples.push(performance.now() - t0);
 }
-samples.sort((a, b) => a - b);
 process.stdout.write(
   `lifecycle-overhead ${variant}: p50 ${percentile(samples, 0.5)}ns  IQR [${percentile(samples, 0.25)}, ${percentile(samples, 0.75)}]  (n=${N})\n`,
 );
