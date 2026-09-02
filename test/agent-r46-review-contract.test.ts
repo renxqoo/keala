@@ -46,7 +46,10 @@ afterAll(() => {
 const refusedPort = (port: number): Promise<boolean> =>
   new Promise((resolve) => {
     const sock = net.connect(port, "127.0.0.1");
-    sock.once("error", (e: NodeJS.ErrnoException) => (sock.destroy(), resolve(e.code === "ECONNREFUSED")));
+    sock.once(
+      "error",
+      (e: NodeJS.ErrnoException) => (sock.destroy(), resolve(e.code === "ECONNREFUSED")),
+    );
     sock.once("connect", () => (sock.destroy(), resolve(false)));
   });
 
@@ -71,7 +74,10 @@ const unhandledWatch = (): { hits: unknown[]; stop: () => void } => {
 };
 
 /** Bun-shaped serve mock with a real-shaped stopGraceful (registerForce wired). */
-const fakeGracefulServe = (): { impl: ServeImplementation; stopCalls: () => Array<boolean | undefined> } => {
+const fakeGracefulServe = (): {
+  impl: ServeImplementation;
+  stopCalls: () => Array<boolean | undefined>;
+} => {
   const stops: Array<boolean | undefined> = [];
   const impl: ServeImplementation = (options) => ({
     port: (options["port"] as number) ?? 0,
@@ -92,7 +98,8 @@ const fakeGracefulServe = (): { impl: ServeImplementation; stopCalls: () => Arra
           resolve({ timedOut });
         };
         grace.registerForce?.(() => finish(true));
-        if (grace.drain !== Number.POSITIVE_INFINITY) timer = setTimeout(() => finish(true), grace.drain);
+        if (grace.drain !== Number.POSITIVE_INFINITY)
+          timer = setTimeout(() => finish(true), grace.drain);
         if (grace.onSettled(() => finish(false))) finish(false);
       }),
   });
@@ -129,9 +136,13 @@ const poll = setInterval(() => {
   );
 }, 10);
 `;
-  const child = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", source], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    ["--experimental-strip-types", "--input-type=module", "-e", source],
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   let out = "";
   const exitBox: { current: { code: number | null; signal: string | null } | null } = {
     current: null,
@@ -161,7 +172,9 @@ const poll = setInterval(() => {
 
 it("REVIEW-CT-1: §2.1 CloseStatus shape; isDraining one-way (true forever after close)", async () => {
   const app = new Keala({ env: "test" });
-  app.get("/x", (c) => { c.body = "x"; });
+  app.get("/x", (c) => {
+    c.body = "x";
+  });
   expect(app.isDraining()).toBe(false);
   const status = await app.close({ drain: 100 });
   expect(Object.keys(status).toSorted()).toEqual(["inFlight", "timedOut"]);
@@ -185,7 +198,9 @@ it("REVIEW-CT-3: §2.1 drain validation — negative / NaN / -Infinity throw Typ
     expect(() => app.close({ drain: bad })).toThrow(TypeError);
   }
   const app = new Keala({ env: "test" });
-  app.get("/x", (c) => { c.body = "x"; });
+  app.get("/x", (c) => {
+    c.body = "x";
+  });
   expect(() => app.close({ drain: -5 })).toThrow(TypeError);
   expect(app.isDraining()).toBe(false);
   expect((await app.handle(new Request("http://x/x"))).status).toBe(200);
@@ -429,9 +444,9 @@ it("REVIEW-CT-16: §2.1/§4 U1 — documented defaults; implicit selection is fa
   expect(normalizeOverload({ maxConcurrency: Number.POSITIVE_INFINITY }).maxConcurrency).toBe(
     Number.POSITIVE_INFINITY,
   );
-  expect(() => normalizeOverload({ maxConcurrency: Number.POSITIVE_INFINITY, maxQueue: 1 })).toThrow(
-    /finite/,
-  );
+  expect(() =>
+    normalizeOverload({ maxConcurrency: Number.POSITIVE_INFINITY, maxQueue: 1 }),
+  ).toThrow(/finite/);
 });
 
 it("REVIEW-CT-17: §2.1 — every overload validation error case throws TypeError", () => {
@@ -443,20 +458,25 @@ it("REVIEW-CT-17: §2.1 — every overload validation error case throws TypeErro
     expect(() => new Keala({ overload: { maxConcurrency: 1, maxQueue: bad } })).toThrow(TypeError);
   expect(() => new Keala({ overload: { maxQueue: 1 } })).toThrow(/finite/);
   for (const bad of [0, -5, 1.5])
-    expect(() =>
-      new Keala({ overload: { maxConcurrency: 1, maxQueue: 1, queueTimeoutMs: bad } }),
+    expect(
+      () => new Keala({ overload: { maxConcurrency: 1, maxQueue: 1, queueTimeoutMs: bad } }),
     ).toThrow(TypeError);
   for (const bad of [-1, 0.5])
-    expect(() =>
-      new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: bad } }),
-    ).toThrow(TypeError);
-  expect(() => new Keala({ overload: { maxConcurrency: 1, handler: "x" as never } })).toThrow(TypeError);
-  expect(() => new Keala({ overload: { maxConcurrency: 1, strategy: {} as never } })).toThrow(/onSaturated/);
-  expect(() =>
-    new Keala({ overload: { maxConcurrency: 1, strategy: { onSaturated: null } as never } }),
+    expect(() => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: bad } })).toThrow(
+      TypeError,
+    );
+  expect(() => new Keala({ overload: { maxConcurrency: 1, handler: "x" as never } })).toThrow(
+    TypeError,
+  );
+  expect(() => new Keala({ overload: { maxConcurrency: 1, strategy: {} as never } })).toThrow(
+    /onSaturated/,
+  );
+  expect(
+    () => new Keala({ overload: { maxConcurrency: 1, strategy: { onSaturated: null } as never } }),
   ).toThrow(/onSaturated/);
   expect(
-    () => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: 0, queueTimeoutMs: 5_000 } }),
+    () =>
+      new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: 0, queueTimeoutMs: 5_000 } }),
   ).not.toThrow();
 });
 
@@ -517,9 +537,14 @@ it("REVIEW-CT-20: §2.2 — Retry-After ONLY when not draining AND retryAfterSec
   for (const retryAfterSeconds of [undefined, 5]) {
     const app = new Keala({
       env: "test",
-      overload: { maxConcurrency: 1, ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }) },
+      overload: {
+        maxConcurrency: 1,
+        ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+      },
     });
-    app.get("/w", (c) => { c.body = "ok"; });
+    app.get("/w", (c) => {
+      c.body = "ok";
+    });
     await app.close({ drain: 100 });
     const r = await app.handle(new Request("http://x/w"));
     expect(r.status).toBe(503);
@@ -678,7 +703,9 @@ it("REVIEW-CT-26: §2.2 r1 — draining refusals also precede Context (unconfigu
   const mapper = vi.fn();
   app.use(middleware as never);
   app.onError(mapper);
-  app.get("/x", (c) => { c.body = "x"; });
+  app.get("/x", (c) => {
+    c.body = "x";
+  });
   await app.close({ drain: 100 });
   const r = await app.handle(new Request("http://x/x"));
   expect(r.status).toBe(503);
@@ -1087,18 +1114,17 @@ it("REVIEW-CT-40: §2.1/r9 — first signal drains (default window), second forc
   // fix): once-listeners consumed themselves and let a repeated same-name
   // signal fall to the OS default disposition.
   const realOn = process.on.bind(process);
-  const onSpy = vi.spyOn(process, "on").mockImplementation(
-    ((event: string | symbol, handler: (...args: unknown[]) => void) => {
-      if (typeof event === "string" && typeof handler === "function")
-        registered.push([event, handler as () => void]);
-      return realOn(event, handler as never) as typeof process;
-    }) as unknown as typeof process.on,
-  );
-  const exit = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {
-      throw new Error("the bridge must never process.exit()");
-    }) as never);
+  const onSpy = vi.spyOn(process, "on").mockImplementation(((
+    event: string | symbol,
+    handler: (...args: unknown[]) => void,
+  ) => {
+    if (typeof event === "string" && typeof handler === "function")
+      registered.push([event, handler as () => void]);
+    return realOn(event, handler as never) as typeof process;
+  }) as unknown as typeof process.on);
+  const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("the bridge must never process.exit()");
+  }) as never);
   const gate = deferred();
   try {
     const app = new Keala({ env: "test" });

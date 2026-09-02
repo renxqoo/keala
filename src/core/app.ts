@@ -281,7 +281,14 @@ export class Keala implements NativeApplication {
   }
 
   ws(path: string, handlers: WebSocketHandlers): Application {
-    registerWsRoute(this.wsRoutes, this.router, this.#middleware, this.#poolingEnabled, path, handlers);
+    registerWsRoute(
+      this.wsRoutes,
+      this.router,
+      this.#middleware,
+      this.#poolingEnabled,
+      path,
+      handlers,
+    );
     return this;
   }
 

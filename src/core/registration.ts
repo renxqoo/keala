@@ -16,10 +16,7 @@ import {
 } from "../router/router.ts";
 import { isRouter, type Router } from "../router/group.ts";
 import { compilePattern } from "../router/pattern.ts";
-import {
-  rebaseMountedMiddleware,
-  type MiddlewareStack,
-} from "./middleware-stack.ts";
+import { rebaseMountedMiddleware, type MiddlewareStack } from "./middleware-stack.ts";
 
 /** A plugin is any object exposing `install(app)`; middleware is not one. */
 export const pluginInstallerOf = (value: unknown): ((app: Application) => void) | null => {

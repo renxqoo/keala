@@ -142,7 +142,9 @@ describe("R4.6 deadline: 504 through the funnel", () => {
     const app = new Keala({ env: "test", requestTimeout: 40 });
     const gate = deferred();
     app.get("/stuck", () =>
-      gate.promise.then(() => new Response("late-body", { headers: { "content-type": "text/plain" } })),
+      gate.promise.then(
+        () => new Response("late-body", { headers: { "content-type": "text/plain" } }),
+      ),
     );
     const inflight = app.handle(new Request("http://x/stuck"));
     const closed = app.close({ drain: 3000 });
@@ -248,13 +250,12 @@ describe("R4.6 raceDeadline containment (unit)", () => {
     const { Keala: KealaApp } = await import("../src/core/app.ts");
     const { createLifecycle } = await import("../src/core/lifecycle.ts");
     const { raceDeadline } = await import("../src/core/lifecycle-deadline.ts");
-    const { baseContextProto, createBoundContext } = await import(
-      "../src/core/context/context.ts"
-    );
+    const { baseContextProto, createBoundContext } = await import("../src/core/context/context.ts");
     const app = new KealaApp({ env: "test" });
     const lc = createLifecycle(undefined);
     lc.inFlight = 1;
-    const freshContext = () => createBoundContext(baseContextProto, new Request("http://x/"), undefined);
+    const freshContext = () =>
+      createBoundContext(baseContextProto, new Request("http://x/"), undefined);
     const rejecting = Promise.reject(new Error("impossible by contract"));
     const settled = await raceDeadline(app, lc, freshContext(), rejecting, 30);
     expect(settled.status).toBe(504); // the deadline wins; the rejection is contained

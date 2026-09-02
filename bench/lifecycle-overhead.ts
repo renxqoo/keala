@@ -23,7 +23,11 @@ const variant = (process.argv[2] ?? "plain") as
 
 /** Settle-tail release, hoisted: the probe's isolated replica of the
  * releaseInFlight guards (captures nothing). */
-const release = (state: { inFlight: number; queue: unknown[]; closeWaiters: (() => void)[] }): void => {
+const release = (state: {
+  inFlight: number;
+  queue: unknown[];
+  closeWaiters: (() => void)[];
+}): void => {
   state.inFlight--;
   if (state.queue.length > 0) return;
   if (state.inFlight === 0 && state.closeWaiters.length > 0) return;

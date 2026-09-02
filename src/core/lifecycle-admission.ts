@@ -99,7 +99,9 @@ export const admitRequest = (
   if (typeof (decision as { then?: unknown }).then !== "function") {
     // Garbage returns (strings, numbers, objects) are strategy bugs, not
     // responses (REVIEW-SEC-3).
-    return fallback(new TypeError("onSaturated returned a non-Response, non-null, non-thenable value"));
+    return fallback(
+      new TypeError("onSaturated returned a non-Response, non-null, non-thenable value"),
+    );
   }
   return decision.then(
     (wake) => {

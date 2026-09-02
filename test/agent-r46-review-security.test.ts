@@ -468,30 +468,34 @@ describe("REVIEW-SEC-10: requestTimeout 1ms storm", () => {
   // into a flood of process-level noise and a corrupted counter.
   // EXPECTATION: exactly one 504 per request, no unhandledRejection, no
   // uncaughtException, counter exactly 0 at the end (docs §2.3 table).
-  it("REVIEW-SEC-10: 1000 requests under a 1ms deadline yield one 504 each and a clean counter", { timeout: 30_000 }, async () => {
-    const app = new Keala({ env: "test", pooling: true, requestTimeout: 1 });
-    const gate = deferred();
-    app.get("/hang", async (c) => {
-      await gate.promise;
-      c.body = "late";
-    });
-    const tracker = noiseTracker();
-    try {
-      const all = Array.from({ length: 1000 }, (_, i) =>
-        app.handle(new Request(`http://x/hang?i=${i}`)),
-      );
-      const results = await Promise.all(all);
-      expect(results).toHaveLength(1000);
-      expect(results.every((r) => r instanceof Response && r.status === 504)).toBe(true);
-      expect(app.inFlight).toBe(0);
-      gate.resolve(); // wake 1000 zombies at once
-      await wait(150);
-      expect(tracker.count()).toBe(0);
-      expect(app.inFlight).toBe(0);
-    } finally {
-      tracker.stop();
-    }
-  });
+  it(
+    "REVIEW-SEC-10: 1000 requests under a 1ms deadline yield one 504 each and a clean counter",
+    { timeout: 30_000 },
+    async () => {
+      const app = new Keala({ env: "test", pooling: true, requestTimeout: 1 });
+      const gate = deferred();
+      app.get("/hang", async (c) => {
+        await gate.promise;
+        c.body = "late";
+      });
+      const tracker = noiseTracker();
+      try {
+        const all = Array.from({ length: 1000 }, (_, i) =>
+          app.handle(new Request(`http://x/hang?i=${i}`)),
+        );
+        const results = await Promise.all(all);
+        expect(results).toHaveLength(1000);
+        expect(results.every((r) => r instanceof Response && r.status === 504)).toBe(true);
+        expect(app.inFlight).toBe(0);
+        gate.resolve(); // wake 1000 zombies at once
+        await wait(150);
+        expect(tracker.count()).toBe(0);
+        expect(app.inFlight).toBe(0);
+      } finally {
+        tracker.stop();
+      }
+    },
+  );
 });
 
 describe("REVIEW-SEC-11: deadline zombie must not write a second response on the wire", () => {
@@ -666,9 +670,13 @@ describe("REVIEW-SEC-13: a strategy promise that never resolves", () => {
       const holder = app.handle(new Request("http://x/hold"));
       const tracker = noiseTracker();
       try {
-        await wireExchange(server.port, (write) => {
-          write("GET /work HTTP/1.1\r\nHost: x\r\n\r\n"); // parks in the strategy
-        }, 80);
+        await wireExchange(
+          server.port,
+          (write) => {
+            write("GET /work HTTP/1.1\r\nHost: x\r\n\r\n"); // parks in the strategy
+          },
+          80,
+        );
         expect(app.inFlight).toBe(1); // only the holder — the parked request took nothing
         const started = Date.now();
         const closed = app.close({ drain: 300 });
@@ -722,9 +730,13 @@ describe("REVIEW-SEC-14: cached custom rejection Response reused across refusals
         expect(first.startsWith("HTTP/1.1 503")).toBe(true);
         expect(first).toContain("CACHED-BUSY-BYTES");
         expect(statusLines(first)).toHaveLength(1);
-        const second = await wireExchange(server.port, (write) => {
-          write("GET /two HTTP/1.1\r\nHost: x\r\n\r\n");
-        }, 400);
+        const second = await wireExchange(
+          server.port,
+          (write) => {
+            write("GET /two HTTP/1.1\r\nHost: x\r\n\r\n");
+          },
+          400,
+        );
         expect(second.startsWith("HTTP/1.1 503")).toBe(true); // never a 500
         expect(second.toLowerCase()).toContain("content-type: text/plain"); // headers intact
         expect(statusLines(second)).toHaveLength(1); // single, complete response

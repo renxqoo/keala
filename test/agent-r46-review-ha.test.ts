@@ -169,7 +169,10 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
         Array.from({ length: 500 }, (_, i) =>
           app
             .handle(new Request(`http://x/f/${i}`))
-            .then(async (r) => ({ status: r.status, body: r.status === 200 ? await r.text() : "" })),
+            .then(async (r) => ({
+              status: r.status,
+              body: r.status === 200 ? await r.text() : "",
+            })),
         ),
       );
       expect(results.filter((r) => r.status === 200)).toHaveLength(24); // 8 slots + 16 queue

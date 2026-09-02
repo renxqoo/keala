@@ -12,45 +12,45 @@
 
 旧实现遗留问题（本轮修复项）：
 
-| # | 问题 | 级别 | 本轮处置 |
-| --- | --- | --- | --- |
-| A1 | deadline 每请求 2 闭包（settleOnce + releaseOnce） | 性能 | U2：单一 once 状态对象 |
-| A2 | 排队 waiter 每请求新建三件套（waiter+Promise+closure） | 性能 | U3：waiter 槽池化 |
-| A3 | lifecycle.ts 475 行 + 本轮策略层 → 超行数预算 | 结构 | §3 拆分 |
-| A4 | 准入策略硬编码在 admitRequest 内（fail fast/队列由 maxQueue 隐式分叉） | 契约 | U1：AdmissionStrategy 抽取 |
+| #   | 问题                                                                   | 级别 | 本轮处置                   |
+| --- | ---------------------------------------------------------------------- | ---- | -------------------------- |
+| A1  | deadline 每请求 2 闭包（settleOnce + releaseOnce）                     | 性能 | U2：单一 once 状态对象     |
+| A2  | 排队 waiter 每请求新建三件套（waiter+Promise+closure）                 | 性能 | U3：waiter 槽池化          |
+| A3  | lifecycle.ts 475 行 + 本轮策略层 → 超行数预算                          | 结构 | §3 拆分                    |
+| A4  | 准入策略硬编码在 admitRequest 内（fail fast/队列由 maxQueue 隐式分叉） | 契约 | U1：AdmissionStrategy 抽取 |
 
 ### 1.2 R4.5 引擎差异审计（本轮核心新证据）
 
 R4.5 相对 r4-4 的 fork 基点（`68ab4b6`）重写了 lifecycle 的全部接线面：
 
-| # | 差异 | 证据 | 影响 |
-| --- | --- | --- | --- |
-| S1 | settle 形状：R4.5 `settleNativeHandle(pool, pooling, c, settled)` 4 参（dispatch.ts:185）vs r4-4 `settleHandle` 5 参（含 release 回调） | 已核实 | C2 槽位要重开 |
-| S2 | node.ts 重写 431 行：native request source、`bytes(limit)` 限界读取、`cleanupUnread`；无 wire 计数、无 abort 桥、无 stopGraceful | 已核实 | 适配器侧整体重做；drain×bytes、drain×cleanupUnread 是全新接缝 |
-| S3 | 新增 response-plan.ts（committed headers 能力位打包进 flags） | 已核实 | holdBody 重包装 Response 的顺序需要显式契约（DESIGN §8 S3） |
-| S4 | `NativeRequestSource` 无 signal 通道（request-source.ts:11-23） | 已核实 | 队列 abort 需要 source 级 abort 通道（DESIGN §6 裁决） |
-| S5 | R4.5 shape-lazy `declare` 字段纪律（body-parser 为范例） | 已核实 | C3 三槽必须同纪律 |
-| S6 | bun.ts 结构基本未动（stop/reload 仍在原位），sink.ts 有小幅重构 | 已核实 | openSockets + stopGraceful 可低成本复制 |
+| #   | 差异                                                                                                                                    | 证据   | 影响                                                          |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------- |
+| S1  | settle 形状：R4.5 `settleNativeHandle(pool, pooling, c, settled)` 4 参（dispatch.ts:185）vs r4-4 `settleHandle` 5 参（含 release 回调） | 已核实 | C2 槽位要重开                                                 |
+| S2  | node.ts 重写 431 行：native request source、`bytes(limit)` 限界读取、`cleanupUnread`；无 wire 计数、无 abort 桥、无 stopGraceful        | 已核实 | 适配器侧整体重做；drain×bytes、drain×cleanupUnread 是全新接缝 |
+| S3  | 新增 response-plan.ts（committed headers 能力位打包进 flags）                                                                           | 已核实 | holdBody 重包装 Response 的顺序需要显式契约（DESIGN §8 S3）   |
+| S4  | `NativeRequestSource` 无 signal 通道（request-source.ts:11-23）                                                                         | 已核实 | 队列 abort 需要 source 级 abort 通道（DESIGN §6 裁决）        |
+| S5  | R4.5 shape-lazy `declare` 字段纪律（body-parser 为范例）                                                                                | 已核实 | C3 三槽必须同纪律                                             |
+| S6  | bun.ts 结构基本未动（stop/reload 仍在原位），sink.ts 有小幅重构                                                                         | 已核实 | openSockets + stopGraceful 可低成本复制                       |
 
 已核实兼容项（review 轮补录，无需动作）：`FLAG_DEADLINE_FIRED = 16384` 全仓空闲（现有 flag 最高 8192）；`errorResponse(app, c, err)` 签名与 r4-4 raceDeadline 的调用形状一致（error-response.ts:351）。
 
 ## 2. 逐模块裁决表
 
-| 旧文件（r4-4 分支） | 规模 | 裁决 | 审计状态 | 动作 |
-| --- | --- | --- | --- | --- |
-| `src/core/lifecycle.ts` | 475 行 | **重构** | 已审计（A1–A4） | 按拆分决策 §3 重组 + U1/U2/U3 升级；状态机/闸/close/桥/race 的逻辑主体保留 |
-| `src/core/server-slot.ts` | 15 行 | **复制** | 已审计无可挑剔 | 原样 |
-| `src/core/context/state.ts` 三槽 | +20 行 | **复制** | 已审计 | FLAG_DEADLINE_FIRED=16384 已核实空闲；shape-lazy 化（S5） |
-| `src/core/app.ts` 接线（准入/#serve/settle/close/isDraining/inFlight/listen signals） | +90 行 | **重写** | — | 打在 R4.5 新入口 `[HANDLE_REQUEST_SOURCE]` 与 `settleNativeHandle` 上（S1） |
-| `src/core/dispatch.ts` settleHandle 5 参 | +30 行 | **重写** | — | 改造 `settleNativeHandle`：加可选 release 槽，非 lifecycle 应用零成本 |
-| `src/adapters/node.ts` stopGraceful + wire 计数 + abort 桥 | +129 行 | **重写** | — | 在 R4.5 重写后的 node.ts 上重做（S2）；新增 drain×bytes、drain×cleanupUnread 红测；重加 `listen()` options 形态与 signals 解析（R4.5 仅位置参数形态，node.ts:490；r4-4 测试断言 options 形态注册信号桥） |
-| `src/adapters/bun.ts` openSockets + stopGraceful | +61 行 | **复制+微修** | 已审计（S6） | R4.5 bun.ts 变化小 |
-| `src/core/request-source.ts` | — | **复制+微修** | — | NativeRequestSource 增 lazy abort 通道（S4，DESIGN §6 裁决） |
-| `src/types.ts`（OverloadOptions/CloseOptions/CloseStatus/signals） | +54 行 | **复制+微修** | — | + `AdmissionStrategy` 类型（U1） |
-| `src/core/listen.ts` signals 解析 | +2 行 | **复制** | — | parseListenArgs 加一行 |
-| `scripts/drain-server-{node,bun}.*`、`scripts/drain-verify.ts` | ~280 行 | **复制** | 已审计 | 验收装置原样复用 |
-| `bench/lifecycle-overhead.ts` | — | **复制+微修** | — | 基准口径不变，加配置路径三条预算断言（DESIGN §7.2） |
-| 14 个测试文件（117 用例） | ~3800 行 | 矩阵见 MIGRATION §5 | — | 移植/改写/删除逐条登记 |
+| 旧文件（r4-4 分支）                                                                   | 规模     | 裁决                | 审计状态        | 动作                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------- | -------- | ------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/core/lifecycle.ts`                                                               | 475 行   | **重构**            | 已审计（A1–A4） | 按拆分决策 §3 重组 + U1/U2/U3 升级；状态机/闸/close/桥/race 的逻辑主体保留                                                                                                                               |
+| `src/core/server-slot.ts`                                                             | 15 行    | **复制**            | 已审计无可挑剔  | 原样                                                                                                                                                                                                     |
+| `src/core/context/state.ts` 三槽                                                      | +20 行   | **复制**            | 已审计          | FLAG_DEADLINE_FIRED=16384 已核实空闲；shape-lazy 化（S5）                                                                                                                                                |
+| `src/core/app.ts` 接线（准入/#serve/settle/close/isDraining/inFlight/listen signals） | +90 行   | **重写**            | —               | 打在 R4.5 新入口 `[HANDLE_REQUEST_SOURCE]` 与 `settleNativeHandle` 上（S1）                                                                                                                              |
+| `src/core/dispatch.ts` settleHandle 5 参                                              | +30 行   | **重写**            | —               | 改造 `settleNativeHandle`：加可选 release 槽，非 lifecycle 应用零成本                                                                                                                                    |
+| `src/adapters/node.ts` stopGraceful + wire 计数 + abort 桥                            | +129 行  | **重写**            | —               | 在 R4.5 重写后的 node.ts 上重做（S2）；新增 drain×bytes、drain×cleanupUnread 红测；重加 `listen()` options 形态与 signals 解析（R4.5 仅位置参数形态，node.ts:490；r4-4 测试断言 options 形态注册信号桥） |
+| `src/adapters/bun.ts` openSockets + stopGraceful                                      | +61 行   | **复制+微修**       | 已审计（S6）    | R4.5 bun.ts 变化小                                                                                                                                                                                       |
+| `src/core/request-source.ts`                                                          | —        | **复制+微修**       | —               | NativeRequestSource 增 lazy abort 通道（S4，DESIGN §6 裁决）                                                                                                                                             |
+| `src/types.ts`（OverloadOptions/CloseOptions/CloseStatus/signals）                    | +54 行   | **复制+微修**       | —               | + `AdmissionStrategy` 类型（U1）                                                                                                                                                                         |
+| `src/core/listen.ts` signals 解析                                                     | +2 行    | **复制**            | —               | parseListenArgs 加一行                                                                                                                                                                                   |
+| `scripts/drain-server-{node,bun}.*`、`scripts/drain-verify.ts`                        | ~280 行  | **复制**            | 已审计          | 验收装置原样复用                                                                                                                                                                                         |
+| `bench/lifecycle-overhead.ts`                                                         | —        | **复制+微修**       | —               | 基准口径不变，加配置路径三条预算断言（DESIGN §7.2）                                                                                                                                                      |
+| 14 个测试文件（117 用例）                                                             | ~3800 行 | 矩阵见 MIGRATION §5 | —               | 移植/改写/删除逐条登记                                                                                                                                                                                   |
 
 **不移植清单**：无（r4-4 全部能力入迁）。r4-4 附带的 app.ts 行数预算重构（mount/ws/param 外提）**不迁移**——R4.5 已用自己的方式重构过 app.ts，属重复工作，后果为零。
 
@@ -79,14 +79,14 @@ src/core/server-slot.ts         # 15 行原样
 
 ## 5. 实施顺序（每阶段独立提交、四门全绿才算完成）
 
-| 阶段 | 交付 | 验收点 |
-| --- | --- | --- |
-| 0 | 三件套文档定稿 | 本文 + DESIGN + MIGRATION 定稿 |
-| 1 | 核心基座：C1–C6 槽位（context 三槽、准入槽、settle 槽、server-slot、types、listen signals） | 未配置 <5ns 基准绿；**既有全量测试零回归**（槽位对未配置应用零行为变化） |
-| 2 | close/drain：closeApp + Node stopGraceful（wire 计数 + abort 桥）+ Bun stopGraceful（openSockets/1001） + holdBody | r4-lifecycle-drain/adapters 矩阵绿 + S2/S3 红测绿 + drain-verify 单运行时过 |
-| 3 | overload：admission 拆分文件 + U1 策略协议 + U3 waiter 池 | r4-lifecycle-overload 矩阵绿 + agent-r44 contract/security 矩阵绿 + U1/U3 新用例绿 |
-| 4 | deadline：C3 生效 + U2 once 对象 + raceDeadline + c.signal 物化（含 S4 native abort 通道） | r4-lifecycle-timeout 矩阵绿 + agent-r44 bugs 矩阵绿（8 缺陷锁全过）+ S4 红测绿 |
-| 5 | 信号桥 + 验收装置 + 基准收口 | drain-verify 双运行时 + 双形态冒烟 + lifecycle-overhead 全预算断言 + 覆盖率数字如实报告 |
+| 阶段 | 交付                                                                                                               | 验收点                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| 0    | 三件套文档定稿                                                                                                     | 本文 + DESIGN + MIGRATION 定稿                                                          |
+| 1    | 核心基座：C1–C6 槽位（context 三槽、准入槽、settle 槽、server-slot、types、listen signals）                        | 未配置 <5ns 基准绿；**既有全量测试零回归**（槽位对未配置应用零行为变化）                |
+| 2    | close/drain：closeApp + Node stopGraceful（wire 计数 + abort 桥）+ Bun stopGraceful（openSockets/1001） + holdBody | r4-lifecycle-drain/adapters 矩阵绿 + S2/S3 红测绿 + drain-verify 单运行时过             |
+| 3    | overload：admission 拆分文件 + U1 策略协议 + U3 waiter 池                                                          | r4-lifecycle-overload 矩阵绿 + agent-r44 contract/security 矩阵绿 + U1/U3 新用例绿      |
+| 4    | deadline：C3 生效 + U2 once 对象 + raceDeadline + c.signal 物化（含 S4 native abort 通道）                         | r4-lifecycle-timeout 矩阵绿 + agent-r44 bugs 矩阵绿（8 缺陷锁全过）+ S4 红测绿          |
+| 5    | 信号桥 + 验收装置 + 基准收口                                                                                       | drain-verify 双运行时 + 双形态冒烟 + lifecycle-overhead 全预算断言 + 覆盖率数字如实报告 |
 
 阶段 1 是风险隔离设计：**只开槽、不装机制**，若全量回归在此失败说明槽位设计破坏了 R4.5 不变式，立即回滚成本最低。
 

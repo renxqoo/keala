@@ -9,7 +9,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { Keala, startBunServer, type ServeImplementation } from "../src/index.ts";
-import { closeApp, createLifecycle, installSignalBridge, releaseInFlight } from "../src/core/lifecycle.ts";
+import {
+  closeApp,
+  createLifecycle,
+  installSignalBridge,
+  releaseInFlight,
+} from "../src/core/lifecycle.ts";
 import { listen as listenNode, startNodeServer } from "../src/adapters/node.ts";
 
 interface FakeWs {
@@ -156,12 +161,13 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
   it("SIGTERM/SIGINT handlers drain via app.close(); a second signal force-closes", async () => {
     const registered: Array<[string, () => void]> = [];
     // The bridge registers PERMANENT listeners (REVIEW-BUG-1 fix).
-    const onSpy = vi.spyOn(process, "on").mockImplementation(
-      ((event: string | symbol, handler: () => void) => {
-        if (typeof event === "string") registered.push([event, handler]);
-        return process;
-      }) as unknown as typeof process.on,
-    );
+    const onSpy = vi.spyOn(process, "on").mockImplementation(((
+      event: string | symbol,
+      handler: () => void,
+    ) => {
+      if (typeof event === "string") registered.push([event, handler]);
+      return process;
+    }) as unknown as typeof process.on);
     try {
       const app = new Keala({ env: "test" });
       installSignalBridge(app);

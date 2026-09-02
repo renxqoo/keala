@@ -40,15 +40,12 @@ export const raceDeadline = (
   };
   const settledPromise: Promise<Response> =
     settled instanceof Promise ? settled : Promise.resolve(settled);
-  settledPromise.then(
-    (value: Response) => {
-      if (once.done) return;
-      once.done = true;
-      if (once.timer !== undefined) clearTimeout(once.timer);
-      resolve(value);
-    },
-    ignore,
-  );
+  settledPromise.then((value: Response) => {
+    if (once.done) return;
+    once.done = true;
+    if (once.timer !== undefined) clearTimeout(once.timer);
+    resolve(value);
+  }, ignore);
   once.timer = setTimeout(() => {
     if (once.done) return;
     once.done = true;

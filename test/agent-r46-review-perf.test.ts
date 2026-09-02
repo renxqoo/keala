@@ -53,9 +53,10 @@ const armAndQueue = (
   url: string,
   signal?: AbortSignal,
 ): Promise<Response | null> =>
-  admitRequest(lc, new Request(url, signal === undefined ? {} : { signal })) as Promise<
-    Response | null
-  >;
+  admitRequest(
+    lc,
+    new Request(url, signal === undefined ? {} : { signal }),
+  ) as Promise<Response | null>;
 
 /** Count "Timeout" entries in the thread's live event-loop resources. */
 const liveTimeouts = (): number => {
@@ -549,7 +550,9 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         const K = 4;
         const PAYLOAD = `review-drain-payload-${"y".repeat(48)}`;
         type Mode = "committed" | "null" | "state";
-        const buildApp = (mode: Mode): { app: Keala; gate: { promise: Promise<void>; resolve: () => void } } => {
+        const buildApp = (
+          mode: Mode,
+        ): { app: Keala; gate: { promise: Promise<void>; resolve: () => void } } => {
           const app = new Keala({ env: "test" });
           const gate = deferred();
           if (mode === "state") {
@@ -558,9 +561,8 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
               c.body = PAYLOAD;
             });
           } else {
-            const prebuilt = Array.from(
-              { length: K },
-              () => (mode === "committed" ? new Response(PAYLOAD) : new Response(null, { status: 204 })),
+            const prebuilt = Array.from({ length: K }, () =>
+              mode === "committed" ? new Response(PAYLOAD) : new Response(null, { status: 204 }),
             );
             let issued = 0;
             app.get("/d", () => gate.promise.then(() => prebuilt[issued++]!));
@@ -585,7 +587,11 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
             streams: rsPatch.count() - rs0,
             responses: respPatch.count() - resp0,
             status: closing === null ? null : await closing,
-            ok: responses.every((res, i) => res.status === (mode === "null" ? 204 : 200) && (mode === "null" ? texts[i] === "" : texts[i] === PAYLOAD)),
+            ok: responses.every(
+              (res, i) =>
+                res.status === (mode === "null" ? 204 : 200) &&
+                (mode === "null" ? texts[i] === "" : texts[i] === PAYLOAD),
+            ),
           };
         };
         // Control rounds (not draining) — also repeated so the state-mode

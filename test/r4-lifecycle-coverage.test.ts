@@ -121,9 +121,7 @@ describe("R4.6 coverage: native transport teardown", () => {
     await new Promise<void>((resolve) => socket.once("connect", resolve));
     socket.on("error", () => undefined);
     // Partial body, never finished — the server's read parks, then dies.
-    socket.write(
-      "POST /read HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\npartial",
-    );
+    socket.write("POST /read HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\npartial");
     await wait(40);
     socket.destroy();
     await wait(40);
@@ -227,9 +225,7 @@ describe("R4.6 coverage: native transport teardown", () => {
     await new Promise<void>((resolve) => socket.once("connect", resolve));
     socket.on("error", () => undefined);
     const big = "x".repeat(64);
-    socket.write(
-      `POST /tiny HTTP/1.1\r\nHost: x\r\nContent-Length: ${big.length}\r\n\r\n${big}`,
-    );
+    socket.write(`POST /tiny HTTP/1.1\r\nHost: x\r\nContent-Length: ${big.length}\r\n\r\n${big}`);
     let buf = "";
     socket.setEncoding("latin1");
     const got = new Promise<string>((resolve) => {

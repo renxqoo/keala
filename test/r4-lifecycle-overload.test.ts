@@ -311,7 +311,9 @@ describe("R4.6 overload: pre-aborted and malformed queue entries", () => {
     expect(() => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: -1 } })).toThrow(
       TypeError,
     );
-    expect(() => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: 2 } })).not.toThrow();
+    expect(
+      () => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: 2 } }),
+    ).not.toThrow();
   });
 
   it("rejects non-positive concurrency, bad queue shapes, non-function handlers/strategies", () => {
@@ -324,9 +326,9 @@ describe("R4.6 overload: pre-aborted and malformed queue entries", () => {
     expect(() => new Keala({ overload: { maxConcurrency: 1, handler: "nope" as never } })).toThrow(
       TypeError,
     );
-    expect(
-      () => new Keala({ overload: { maxConcurrency: 1, strategy: {} as never } }),
-    ).toThrow(/onSaturated/);
+    expect(() => new Keala({ overload: { maxConcurrency: 1, strategy: {} as never } })).toThrow(
+      /onSaturated/,
+    );
   });
 });
 
@@ -375,7 +377,9 @@ describe("R4.6 upgrade U1: AdmissionStrategy injection", () => {
         maxConcurrency: 1,
         strategy: {
           onSaturated: (_state, request) =>
-            wait(10).then(() => (request.url.includes("wait") ? null : new Response("no", { status: 503 }))),
+            wait(10).then(() =>
+              request.url.includes("wait") ? null : new Response("no", { status: 503 }),
+            ),
         },
       },
     });

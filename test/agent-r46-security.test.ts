@@ -52,7 +52,6 @@ const streamRoute = (app: Keala, gate: Promise<void>): void => {
   });
 };
 
-
 const liveServers: NodeServerHandle[] = [];
 afterAll(() => {
   for (const server of liveServers) server.stop(true);

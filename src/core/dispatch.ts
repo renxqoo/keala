@@ -22,7 +22,6 @@ import { finalize } from "./respond.ts";
 import type { RequestSource } from "./request-source.ts";
 import { sourceMethod, sourceUrl } from "./request-source.ts";
 
-
 /**
  * Finalize behind the never-reject guard: a failing finalizer (unserializable
  * bodies, throwing not-found handlers, bad headers) answers 500 instead of
