@@ -9,7 +9,8 @@
  * bench/lifecycle-overhead.ts.
  */
 
-import type { CloseStatus, OverloadOptions } from "../types.ts";
+import type { Application } from "./app.ts";
+import type { CloseOptions, CloseStatus, OverloadOptions } from "../types.ts";
 
 /** Why a request was refused at the admission gate (pre-context, pre-funnel). */
 export type OverloadReason = "concurrency" | "queue" | "draining";
@@ -215,4 +216,118 @@ const holdBody = (lc: LifecycleState, value: Response): Response => {
     }),
     { status: value.status, statusText: value.statusText, headers: value.headers },
   );
+};
+
+/** Register a drain-completion callback; true when already settled. */
+export const subscribeSettled = (lc: LifecycleState, callback: () => void): boolean => {
+  if (lc.inFlight === 0) return true;
+  lc.closeWaiters.push(callback);
+  return false;
+};
+
+const DEFAULT_DRAIN_MS = 30_000;
+
+/**
+ * Graceful close, application side: flip draining (the gate starts
+ * refusing), reject queued waiters, then let the adapter own socket truth
+ * (stopGraceful) or wait on the counter directly in embedded (server-less)
+ * mode.
+ */
+export const closeApp = (
+  lc: LifecycleState,
+  handle: StoppableHandle | undefined,
+  options: CloseOptions | undefined,
+): Promise<CloseStatus> => {
+  if (lc.closePromise !== null) {
+    // Escalation (CT-1/FINDING-2/SEC-8b/HA-3): a repeat close with drain 0
+    // while a close is running means FORCE — the signal bridge's second
+    // SIGTERM must not be swallowed by idempotency.
+    if (options?.drain === 0) lc.escalate?.();
+    return lc.closePromise;
+  }
+  const drain = options?.drain ?? DEFAULT_DRAIN_MS;
+  if (drain !== Number.POSITIVE_INFINITY && (!Number.isFinite(drain) || drain < 0)) {
+    throw new TypeError(
+      "close() drain requires a non-negative number of milliseconds (or Infinity)",
+    );
+  }
+  lc.draining = true;
+  const queued = lc.queue.splice(0);
+  for (const waiter of queued) waiter.drop("draining");
+
+  const promise = new Promise<CloseStatus>((resolve) => {
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (timedOut: boolean): void => {
+      if (done) return;
+      done = true;
+      if (timer !== undefined) clearTimeout(timer);
+      if (timedOut) handle?.stop(true);
+      resolve({ timedOut, inFlight: lc.inFlight });
+    };
+    if (drain === 0) {
+      // Immediate force (CT-9): the listener ALWAYS dies here — an idle
+      // server must not keep answering 503s with the port still bound.
+      handle?.stop(true);
+      done = true;
+      resolve({ timedOut: lc.inFlight > 0, inFlight: lc.inFlight });
+      return;
+    }
+    if (handle?.stopGraceful !== undefined) {
+      handle
+        .stopGraceful({
+          drain,
+          onSettled: (callback) => subscribeSettled(lc, callback),
+          registerForce: (force) => {
+            lc.escalate = () => {
+              force();
+              finish(true);
+            };
+          },
+        })
+        .then(
+          (status) => finish(status.timedOut),
+          (error: unknown) => {
+            // An adapter bug must not hang close() — loud, then force.
+            console.error("\n  keala: stopGraceful rejected — forcing close\n", error);
+            finish(true);
+          },
+        );
+      return;
+    }
+    // Embedded mode (or an adapter without graceful support): best-effort
+    // stop, then wait on the counter ourselves.
+    try {
+      handle?.stop();
+    } catch {
+      // stop() on an already-dead server is not worth failing close() over.
+    }
+    // A forced escalation here is just the drain timeout, immediately.
+    lc.escalate = () => finish(true);
+    if (subscribeSettled(lc, () => finish(false))) {
+      finish(false);
+      return;
+    }
+    // Ref'd on purpose (rule r9): the drain window must hold the event
+    // loop so an empty process exits when the drain completes, not before.
+    if (drain !== Number.POSITIVE_INFINITY) timer = setTimeout(() => finish(true), drain);
+  });
+  lc.closePromise = promise;
+  return promise;
+};
+
+/**
+ * SIGTERM/SIGINT bridge (`listen({ signals: true })`): first signal drains
+ * with the default timeout, a second force-closes. The bridge never exits
+ * the process itself — the drain timer holds the event loop, and once
+ * everything settles the loop empties naturally.
+ */
+export const installSignalBridge = (app: Application): void => {
+  let fired = false;
+  const onSignal = (): void => {
+    void (fired ? app.close({ drain: 0 }) : app.close());
+    fired = true;
+  };
+  process.once("SIGTERM", onSignal);
+  process.once("SIGINT", onSignal);
 };

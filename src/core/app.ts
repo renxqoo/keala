@@ -29,7 +29,16 @@ import {
   registerWsRoute,
   routeShortcut,
 } from "./registration.ts";
-import { createLifecycle, settleRequest, type LifecycleState } from "./lifecycle.ts";
+import {
+  closeApp,
+  createLifecycle,
+  installSignalBridge,
+  settleRequest,
+  type LifecycleState,
+} from "./lifecycle.ts";
+import { admitRequest } from "./lifecycle-admission.ts";
+import { serverOf } from "./server-slot.ts";
+import type { CloseOptions, CloseStatus } from "../types.ts";
 import {
   createRouterState,
   rebuildChains,
@@ -338,14 +347,14 @@ export class Keala implements NativeApplication {
   [HANDLE_REQUEST_SOURCE](request: RequestSource, runtime?: Runtime): Response | Promise<Response> {
     // R4.6 admission slot, fast path inlined: an unconfigured, non-draining
     // app pays two field loads, one branch and the increment. Anything else
-    // (overload arithmetic, queueing, drain refusals) takes the full gate —
-    // the gate body arrives with drain/overload; the branch shape is final.
+    // (overload arithmetic, queueing, drain refusals) takes the full gate.
     const lc = this.#lifecycle;
     if (!lc.draining && lc.overload === null) {
       lc.inFlight++;
       return this.#serve(request, runtime);
     }
-    lc.inFlight++;
+    const admission = admitRequest(lc, request);
+    if (admission !== null) return admission;
     return this.#serve(request, runtime);
   }
 
@@ -367,6 +376,9 @@ export class Keala implements NativeApplication {
   }
 
   listen(...args: Parameters<Application["listen"]>): ServerHandle {
+    if (this.#lifecycle.draining) {
+      throw new TypeError("app.listen() after app.close() — the app is shutting down");
+    }
     const { listen, hostname, onListen } = parseListenArgs(args);
     this.#nativeRoutesEnabled = listen.nativeRoutes !== false;
     this.#serverHandle = startBunServer(
@@ -374,7 +386,29 @@ export class Keala implements NativeApplication {
       { ...listen, ...(hostname !== undefined ? { hostname } : {}) },
       onListen,
     );
+    if (listen.signals === true) installSignalBridge(this);
     return this.#serverHandle;
+  }
+
+  /**
+   * Graceful stop (R4.6): refuse new requests (503 + `connection: close`),
+   * stop accepting connections, wait up to `drain` ms for in-flight
+   * requests — including draining streams — then force-close. Idempotent;
+   * the same promise is returned on repeat calls; a repeat call with
+   * `drain: 0` escalates a running close to force.
+   */
+  close(options?: CloseOptions): Promise<CloseStatus> {
+    return closeApp(this.#lifecycle, serverOf(this), options);
+  }
+
+  /** Readiness for LB health endpoints: true once close() has begun. */
+  isDraining(): boolean {
+    return this.#lifecycle.draining;
+  }
+
+  /** Admitted-and-unsettled requests (overload capacity view). */
+  get inFlight(): number {
+    return this.#lifecycle.inFlight;
   }
 
   toJSON(): { env: string; proxy: boolean } {
