@@ -164,7 +164,7 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
     try {
       const app = new Keala({ env: "test" });
       installSignalBridge(app);
-      expect(registered.map(([event]) => event).sort()).toEqual(["SIGINT", "SIGTERM"]);
+      expect(registered.map(([event]) => event).toSorted()).toEqual(["SIGINT", "SIGTERM"]);
 
       const [term] = registered.find(([event]) => event === "SIGTERM") ?? [];
       expect(term).toBeDefined();
