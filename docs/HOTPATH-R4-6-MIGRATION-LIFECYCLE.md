@@ -64,17 +64,38 @@
 
 ## 7. 验收清单（全部满足才算完成）
 
-- [ ] 四门全绿：typecheck / lint 0-0 / build / test（Node 与 Bun 双运行时）
-- [ ] 覆盖率 ≥ 仓库基线 `97.15/91.89/96.03/98.53`（statements/branches/functions/lines），如实报告
-- [ ] §1 基线 117 用例矩阵逐条核销（移植/改写后全绿，改写理由见 §5）
-- [ ] 8 缺陷回归锁全过（agent-r46-bugs）
-- [ ] 接缝红测全绿：S1–S5 各至少一例
-- [ ] U1–U3 新用例全绿（策略注入 / once 对象 / waiter 池零分配）
-- [ ] `drain-verify` 真实 SIGTERM 验收：Node 与 Bun 双运行时过（默认门）
-- [ ] 双形态进程冒烟：源码形态与构建产物形态各起真实进程，探针 + 一次全链请求 + 优雅停机退出码
-- [ ] `lifecycle-overhead` 基准：未配置 <5ns 增量；§7.2 配置路径三条预算断言全过
-- [ ] 挂账项显式：per-route 差异化预算、熔断/重试归属（DESIGN §3.2）
+- [x] 四门全绿：typecheck / lint 0-0 / build / test（Node 与 Bun 双运行时；2150+ 通过，Bun 门由 test:bun 承接）
+- [x] 覆盖率 ≥ 仓库基线 `97.15/91.89/96.03/98.53`（statements/branches/functions/lines），如实报告：实测 97.15/92.05/96.16/98.71
+- [x] §1 基线 117 用例矩阵逐条核销（16+14+12+13+14+13+11+8+16 = 117，改写理由见 §5 与 §8 装置适配清单）
+- [x] 8 缺陷回归锁全过（agent-r46-bugs/-2 移植即绿）
+- [x] 接缝红测全绿：S1（release 恰一次，bugs 矩阵）、S2（drain×bytes / drain×cleanupUnread / 强停后新连接拒绝）、S3（holdBody×committed-headers）、S4（native 排队断开出队 + c.signal 断开桥）、S5（既有 perf fence 全量回归）
+- [x] U1–U3 新用例全绿（策略注入行为组 / once 守卫 / waiter 池零构造锁）
+- [x] `drain-verify` 真实 SIGTERM 验收：Node 与 Bun 双运行时过（已入默认 verify 门）
+- [x] 双形态进程冒烟：drain-verify 的 Bun 子进程跑源码形态、Node 子进程跑 dist 构建产物形态，探针 + 全链请求 + 优雅停机退出码 0
+- [x] `lifecycle-overhead` 基准：未配置增量 +1ns（A/B 实测，预算 <5ns）；§7.2 三条预算（稳态噪声级 / waiter 池零构造 / 期限 timer 级）全过
+- [x] 挂账项显式：per-route 差异化预算、熔断/重试、压力式准入、AIMD（DESIGN §3.2）
 
 ## 8. 实施记录
 
-（每波收口追加：交付物、门禁数字、新增裁决补录、实施期发现并修复的真实缺陷、装置适配清单、显式挂账。）
+### 第一波（全部 5 阶段，2026-09-03 收口）
+
+**交付物**（每阶段独立提交、四门全绿）：P1 槽位（`82045aa`）→ P2 close/drain（`f4e846f`）→ P3 overload/U1/U3（`4cde5af`）→ P4 deadline/U2/c.signal（`e8af65d`）→ P5 矩阵+验收（`58c275e` 等）。新增文件：`lifecycle.ts`（状态机）/`lifecycle-admission.ts`（闸+策略+waiter 池）/`lifecycle-deadline.ts`（期限竞速）/`server-slot.ts`/`node-source.ts`（NodeRequestSource 拆分 + S4 abort 通道）/`registration.ts`（ws/mount 注册体提取，500 行 lint 预算）。
+
+**门禁数字**：typecheck 0 错误 / lint 43 警告 0 错误（与基线持平，新增 0）/ build 通过 / vitest 2150+ 通过 8 跳过 / 覆盖率 **97.15 / 92.05 / 96.16 / 98.71**（基线 97.15/91.89/96.03/98.53，四项全达标）/ `drain-verify` 双运行时 PASS（0 丢请求，drain {timedOut:false}，退出码 0）。
+
+**基准（A/B vs R4.5 @ 3c4347f，同 bench 双跑）**：未配置 plain p50 **416→417ns（+1ns，预算 <5ns 达标）**；快速路径探针 1.96ns/op；overload 稳态 417ns（噪声级）；timeout 配置 583ns（+167ns = 1 unref timer + 竞速，opt-in）；排队全周期 1542ns（waiter 池化，稳态零构造——U3 结构锁独立锁定）。
+
+**实施期裁决补录**：
+- U1 协议实施形态演进（DESIGN §4 已同步）：策略收物化 Request + `admit()` 回调（同步占槽）；核心对未占槽 null 在同步点/决议微任务点补占；drain 翻转后未占槽 null 拒绝、已占槽照常服务；策略 rejection 容器化为内建 503。
+- C2 僵尸守卫从构造期改为 settle 期判定（P4 红测发现构造期检查是死逻辑——flag 只能在 dispatch 挂起后翻转）。
+- node.ts 超 500 行预算 → `node-source.ts` 拆分；app.ts 同因 → `registration.ts`。
+
+**实施期发现并修复的真实缺陷**（全部先红测后修）：
+1. 异步策略 null 未占槽即服务，settle 反释放他人槽位（计数器塌方）——admit() 协议修复（P3）。
+2. 僵尸 settle 双重释放（inFlight → -1）——守卫移入释放链（P4）。
+
+**装置适配清单**（断言语义零漂移）：abortValue 哨兵 null→undefined（shape-lazy 槽位纪律）；SEC-7a 顺序断言改分帧无关（R4.5 已知长度体不再 chunked 收尾）；PERF-1 绝对地板以 A/B 基准重定标；ws/mount 测试导入路径改 registration.ts。
+
+**显式挂账**：per-route 差异化预算、熔断/重试、压力式准入（Envoy 型）、AIMD 自适应（tower 型）——见 DESIGN §3.2（U1 策略生态为承载缝）。
+
+**多 agent 红测 review**：5 个独立 review agent（bugs/contract/security/perf/HA）只写红测不改业务代码，发现项由终审核验后按最优方案修复——结果见验收清单勾选与后续提交。
