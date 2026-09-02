@@ -115,6 +115,42 @@ and Bun's HTTP stack pulls ahead. The Intel conclusion ("Go leads by
 ~10–15%") is a small-box property, not a universal one; both measurements
 stand.
 
+## R4.6 lifecycle round (Apple M4, 2026-09-03)
+
+R4.6 added graceful drain, overload admission, request deadlines and
+cooperative cancellation — every request now passes an admission gate and a
+guarded settle, and the Node adapter gained per-request WIRE accounting
+(client-disconnect bridge + honest drain completion). A dedicated
+head-to-head harness (`bench/run-r45-r46.mjs`) pins the R4.5 tip
+(`3c4347f`) in an auto-created worktree and interleaves both trees' servers
+in rotating order; the bench scripts themselves are byte-identical across
+the two refs, so the only variable is the framework. Report artifact:
+`bench/R45-R46.md` (200 conns, 8s fires, 6 interleaved rounds).
+
+**Found:** the first pass measured a 3–5% Node-only throughput regression
+(p50/p99 flat → pure per-request CPU). Root cause: 2 closures + 3 listener
+registrations + 1 removal per request for wire truth (`res` finish/close
+double-listening plus socket-level close). **Fix:** a single handler
+registered on `res` `close` + socket `close` — `res` `close` fires for
+every STARTED response (completed or terminated), so the `finish` listener
+was strictly redundant, and `close` is also the more honest settle point
+(last byte flushed, not handed to the kernel). Per request: 1 closure +
+2 registrations + 1 removal.
+
+| head-to-head (6 rounds) |   text |   JSON |  param |                 3 mw |
+| ----------------------- | -----: | -----: | -----: | -------------------: |
+| bun — R4.6/R4.5         | 0.990x | 0.993x | 0.994x | 0.955x (TIE, ±3/±7%) |
+| node — R4.6/R4.5        | 0.987x | 0.984x | 0.991x |               0.984x |
+
+Bun ties on every scenario. The Node residual (~1–1.6%) is the intrinsic
+price of wire truth + the S4 disconnect bridge: socket-level `close` is the
+ONLY observable for never-started pipelined responses (which emit no res
+`close` at all on socket death) and for evicting queued requests whose
+client walked away — removing it would be a semantic regression, not an
+optimization. In-process, the unconfigured increment is +1ns
+(416→417ns/req) with a 1.8ns/op fast-path probe — see
+`docs/HOTPATH-R4-6-MIGRATION-LIFECYCLE.md` §8.
+
 ## The Go reference (net/http, Go 1.27 — Intel box, added 2026-08-31)
 
 A stdlib `net/http` server with byte-identical responses joins the harness
@@ -181,6 +217,9 @@ fresh processes) — its ties are cross-validated by the HTTP parity above.
 ```sh
 bun install
 node bench/run.mjs 200 8       # HTTP benchmark (ABAB-interleaved, 4 workers)
+                               # optional 3rd arg: rounds (default 4)
+node bench/run-r45-r46.mjs 8 6 # R4.5-vs-R4.6 head-to-head (auto worktree;
+                               # KEALA_R45_REF pins the baseline, default 3c4347f)
 bun bench/verify-baseline.ts   # in-process framework-overhead baseline
 # Go reference: install any Go >= 1.22 toolchain — run.mjs builds it
 # automatically and adds it to every scenario; without one it is skipped.

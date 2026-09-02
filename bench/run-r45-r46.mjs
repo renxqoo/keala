@@ -11,6 +11,7 @@
 // because the adapters diverge (Node gained per-request wire listeners).
 import { execSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import autocannon from "autocannon";
 
@@ -223,6 +224,8 @@ const main = async () => {
     lines.push("");
 
     process.stdout.write(`\n${lines.join("\n")}\n`);
+    await writeFile(new URL("./R45-R46.md", import.meta.url), lines.join("\n") + "\n", "utf8");
+    console.log("\nWrote bench/R45-R46.md");
   } finally {
     for (const child of children) child.kill("SIGKILL");
   }
