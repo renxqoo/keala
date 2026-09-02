@@ -32,6 +32,8 @@ R4.5 相对 r4-4 的 fork 基点（`68ab4b6`）重写了 lifecycle 的全部接�
 | S5 | R4.5 shape-lazy `declare` 字段纪律（body-parser 为范例） | 已核实 | C3 三槽必须同纪律 |
 | S6 | bun.ts 结构基本未动（stop/reload 仍在原位），sink.ts 有小幅重构 | 已核实 | openSockets + stopGraceful 可低成本复制 |
 
+已核实兼容项（review 轮补录，无需动作）：`FLAG_DEADLINE_FIRED = 16384` 全仓空闲（现有 flag 最高 8192）；`errorResponse(app, c, err)` 签名与 r4-4 raceDeadline 的调用形状一致（error-response.ts:351）。
+
 ## 2. 逐模块裁决表
 
 | 旧文件（r4-4 分支） | 规模 | 裁决 | 审计状态 | 动作 |
@@ -41,7 +43,7 @@ R4.5 相对 r4-4 的 fork 基点（`68ab4b6`）重写了 lifecycle 的全部接�
 | `src/core/context/state.ts` 三槽 | +20 行 | **复制** | 已审计 | FLAG_DEADLINE_FIRED=16384 已核实空闲；shape-lazy 化（S5） |
 | `src/core/app.ts` 接线（准入/#serve/settle/close/isDraining/inFlight/listen signals） | +90 行 | **重写** | — | 打在 R4.5 新入口 `[HANDLE_REQUEST_SOURCE]` 与 `settleNativeHandle` 上（S1） |
 | `src/core/dispatch.ts` settleHandle 5 参 | +30 行 | **重写** | — | 改造 `settleNativeHandle`：加可选 release 槽，非 lifecycle 应用零成本 |
-| `src/adapters/node.ts` stopGraceful + wire 计数 + abort 桥 | +129 行 | **重写** | — | 在 R4.5 重写后的 node.ts 上重做（S2）；新增 drain×bytes、drain×cleanupUnread 红测 |
+| `src/adapters/node.ts` stopGraceful + wire 计数 + abort 桥 | +129 行 | **重写** | — | 在 R4.5 重写后的 node.ts 上重做（S2）；新增 drain×bytes、drain×cleanupUnread 红测；重加 `listen()` options 形态与 signals 解析（R4.5 仅位置参数形态，node.ts:490；r4-4 测试断言 options 形态注册信号桥） |
 | `src/adapters/bun.ts` openSockets + stopGraceful | +61 行 | **复制+微修** | 已审计（S6） | R4.5 bun.ts 变化小 |
 | `src/core/request-source.ts` | — | **复制+微修** | — | NativeRequestSource 增 lazy abort 通道（S4，DESIGN §6 裁决） |
 | `src/types.ts`（OverloadOptions/CloseOptions/CloseStatus/signals） | +54 行 | **复制+微修** | — | + `AdmissionStrategy` 类型（U1） |

@@ -132,6 +132,8 @@ interface AdmissionStrategy {
 | C5 | 适配器契约 | `GracefulStopOptions { drain, onSettled, registerForce }` + `StoppableHandle`；Node 侧新增 wire 计数（`res` finish/close 事件）与断开 abort 桥；Bun 侧 `openSockets` 追踪 + 1001 送客 | 零 |
 | C6 | listen 选项 | `parseListenArgs` 增加 `signals`；`ListenOptions.signals?: boolean` | 零 |
 
+**C1 槽位位置的承重理由（已核实）**：R4.5 的 Node 适配器直接进入 `[HANDLE_REQUEST_SOURCE](source)`（node.ts:455），完全绕过公开的 `handle()`；Bun 适配器走 `app.handle(request, { server })`（bun.ts:70），而 `handle()` 本身委托 `[HANDLE_REQUEST_SOURCE]`（app.ts:421-422）。r4-4 把准入闸放在 `handle()` 里——照搬会让**每个 Node 原生请求漏过准入**。单一槽位放 `[HANDLE_REQUEST_SOURCE]` 同时覆盖两个运行时与嵌入式调用。
+
 **S4 设计裁决（本轮新增，r4-4 未面对）**：R4.5 的 `NativeRequestSource` 无 `signal` 通道，而队列 abort（排队期间客户端断开 → 出队 503）需要它。裁决：给 `NativeRequestSource` 增加 lazy `abort()` 通道（由适配器的断开检测驱动），Fetch Request 路径沿用 `request.signal`。**不**通过 `source.request()` 物化 Request 来取 signal——那会为每个排队请求付出完整 Request 分配，违背零包装目标。
 
 ## 7. 并发与性能预算（违反 = 缺陷，不是优化建议）
@@ -139,7 +141,7 @@ interface AdmissionStrategy {
 ### 7.1 未配置路径（无 overload、无 requestTimeout、非 draining）
 
 - 热路径：C1 快速路径 = 2 次字段加载 + 1 分支 + 1 自增，**<5ns**（`bench/lifecycle-overhead.ts`，与 r4-4 同口径对照 bench 噪声）；
-- 结算：零闭包零分配零定时器（C2 稳定直通回调）；
+- 结算：sync 响应路径零分配（稳定回调内联调用）；async 路径一次链上续延（`.then` 链式 promise，无闭包）+ flag 判断 + 自减——r4-4 同口径（其实现头注："a flag guard + decrement in the settle tail"）；零定时器；
 - drain/队列/期限相关全局定时器：**0 个**。
 
 ### 7.2 配置路径（加严，用户裁决 D3）
