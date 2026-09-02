@@ -92,6 +92,22 @@ export interface AppOptions {
 /** Why the admission gate refused a request (see `OverloadOptions.handler`). */
 export type OverloadReason = "concurrency" | "queue" | "draining";
 
+/**
+ * R4.6 pluggable admission (U1): decides what happens once the app is at
+ * capacity. Return a Response to refuse; return null — synchronously or
+ * from a promise — to admit. Call `admit()` to take the slot at the exact
+ * moment capacity is acquired (the built-in queue does — its slot transfer
+ * must land synchronously); a null that never called admit() is admitted
+ * by the core instead, unless the app began draining while you waited.
+ */
+export interface AdmissionStrategy {
+  onSaturated(
+    state: import("./core/lifecycle.ts").LifecycleState,
+    request: Request,
+    admit: () => void,
+  ): Response | Promise<Response | null> | null;
+}
+
 export interface OverloadOptions {
   /** Max simultaneously in-processing requests. Default unlimited. */
   maxConcurrency?: number;
@@ -109,6 +125,12 @@ export interface OverloadOptions {
   retryAfterSeconds?: number;
   /** Custom rejection response (pre-context — no Context exists yet). */
   handler?: (request: Request, reason: OverloadReason) => Response;
+  /**
+   * Pluggable admission (U1): replaces the implicit fail-fast/queue
+   * selection. The mechanism (counter, draining refusal, slot transfer)
+   * stays in the core; the strategy only decides the saturated path.
+   */
+  strategy?: AdmissionStrategy;
 }
 
 /** Options for `app.close()`. */

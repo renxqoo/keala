@@ -11,18 +11,11 @@
 
 import type { Application } from "./app.ts";
 import type { CloseOptions, CloseStatus, OverloadOptions } from "../types.ts";
+import { normalizeOverload } from "./lifecycle-admission.ts";
+import type { LifecycleOverload, WaiterSlot } from "./lifecycle-admission.ts";
 
 /** Why a request was refused at the admission gate (pre-context, pre-funnel). */
 export type OverloadReason = "concurrency" | "queue" | "draining";
-
-/** Normalized, validated overload configuration (see normalizeOverload). */
-export interface NormalizedOverload {
-  maxConcurrency: number;
-  maxQueue: number;
-  queueTimeoutMs: number;
-  retryAfterSeconds: number;
-  handler: ((request: Request, reason: OverloadReason) => Response) | undefined;
-}
 
 /**
  * One queued waiter: `admit` transfers a freed slot (the releasing request
@@ -34,11 +27,13 @@ export interface QueueWaiter {
 }
 
 export interface LifecycleState {
-  overload: NormalizedOverload | null;
+  overload: LifecycleOverload | null;
   draining: boolean;
   /** Admitted-and-unsettled requests, plus body-holds accrued during drain. */
   inFlight: number;
   queue: QueueWaiter[];
+  /** Idle waiter slots (U3) — steady-state queue churn constructs nothing. */
+  waiterPool: WaiterSlot[];
   closeWaiters: (() => void)[];
   closePromise: Promise<CloseStatus> | null;
   /**
@@ -76,49 +71,11 @@ export const createLifecycle = (overload: OverloadOptions | undefined): Lifecycl
   draining: false,
   inFlight: 0,
   queue: [],
+  waiterPool: [],
   closeWaiters: [],
   closePromise: null,
   escalate: null,
 });
-
-const positiveInteger = (value: unknown, name: string): number => {
-  if (!Number.isInteger(value) || (value as number) <= 0) {
-    throw new TypeError(`overload.${name} requires a positive integer`);
-  }
-  return value as number;
-};
-
-export const normalizeOverload = (options: OverloadOptions): NormalizedOverload => {
-  if (typeof options !== "object" || options === null) {
-    throw new TypeError("overload requires an options object");
-  }
-  const maxConcurrency =
-    options.maxConcurrency === undefined
-      ? Number.POSITIVE_INFINITY
-      : options.maxConcurrency === Number.POSITIVE_INFINITY
-        ? Number.POSITIVE_INFINITY
-        : positiveInteger(options.maxConcurrency, "maxConcurrency");
-  const maxQueue =
-    options.maxQueue === undefined ? 0 : positiveInteger(options.maxQueue, "maxQueue");
-  const queueTimeoutMs =
-    options.queueTimeoutMs === undefined
-      ? 10_000
-      : positiveInteger(options.queueTimeoutMs, "queueTimeoutMs");
-  const retryAfter = options.retryAfterSeconds;
-  if (retryAfter !== undefined && (!Number.isInteger(retryAfter) || retryAfter < 0)) {
-    // 0 is the documented "omit the header" value — non-negative integer.
-    throw new TypeError("overload.retryAfterSeconds requires a non-negative integer");
-  }
-  const retryAfterSeconds = retryAfter ?? 1;
-  const handler = options.handler;
-  if (handler !== undefined && typeof handler !== "function") {
-    throw new TypeError("overload.handler requires a function");
-  }
-  if (maxQueue > 0 && maxConcurrency === Number.POSITIVE_INFINITY) {
-    throw new TypeError("overload.maxQueue requires a finite overload.maxConcurrency");
-  }
-  return { maxConcurrency, maxQueue, queueTimeoutMs, retryAfterSeconds, handler };
-};
 
 export const normalizeRequestTimeout = (value: unknown): number => {
   if (value === undefined || value === 0) return 0;

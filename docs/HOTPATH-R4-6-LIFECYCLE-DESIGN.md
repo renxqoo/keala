@@ -101,12 +101,15 @@ r4-4 迁移文档 §2 的规则表整体继承为本轮规格：
 
 ```ts
 interface AdmissionStrategy {
-  /** 满载时被调用：返回 Response=拒绝，null/Promise<null>=排队后被准许。 */
-  onSaturated(state: LifecycleState, request: RequestSourceLike): Response | Promise<Response | null> | null;
+  /** 满载时被调用：返回 Response=拒绝；null（同步或经 Promise）=准许。
+   *  `admit()` 在获得容量的那一刻同步占槽（内置 queue 的槽位移交依赖它——
+   *  drain 记账不能观察到计数器下探）；未调用 admit 的 null 由核心在
+   *  同步点/决议微任务点补占（此时不得有新请求插入，微任务先于宏任务保证）。 */
+  onSaturated(state: LifecycleState, request: Request, admit: () => void): Response | Promise<Response | null> | null;
 }
 ```
 
-机制（计数、draining 拒绝、释放移交循环 `refillFromQueue`）留在核心；策略只决定"满载之后怎么办"。内置 `failFast`（默认）与 `queue`（maxQueue>0 时）两个实现。
+机制（计数、draining 拒绝、释放移交循环 `refillFromQueue`）留在核心；策略只决定"满载之后怎么办"。内置 `failFast`（默认）与 `queue`（maxQueue>0 时）两个实现。**实施修正（P3）**：策略收到的 request 由核心物化为 fetch Request（与 `overload.handler` 同契约——策略作者不应面对 RequestSource 双形状）；策略 Promise 决议 null 时若已 drain 则拒绝（draining），已占槽者（槽位移交）除外——服务照常。
 
 ## 5. 核心机制 × 策略边界（可插拔架构，裁决 D2）
 

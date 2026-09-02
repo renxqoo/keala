@@ -354,7 +354,12 @@ export class Keala implements NativeApplication {
       return this.#serve(request, runtime);
     }
     const admission = admitRequest(lc, request);
-    if (admission !== null) return admission;
+    if (admission !== null) {
+      // Queued admission resolves null once a slot transfers in.
+      return admission instanceof Response
+        ? admission
+        : admission.then((wake) => (wake === null ? this.#serve(request, runtime) : wake));
+    }
     return this.#serve(request, runtime);
   }
 
