@@ -1,6 +1,6 @@
 # HOTPATH-R4 — 企业级执行架构施工图
 
-> 状态：R4.1–R4.3 已核销；R4.4 施工图已定稿、实施中
+> 状态：R4.1–R4.4 已核销
 > 设计基线：[HOTPATH-R4-DESIGN.md](./HOTPATH-R4-DESIGN.md)
 > 首个迁移单元：[HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md](./HOTPATH-R4-MIGRATION-COMMIT-FAST-LANE.md)
 > 当前迁移单元：[HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md](./HOTPATH-R4-4-MIGRATION-CORE-HOTPATH.md)
@@ -221,3 +221,42 @@ R4.4 不复用 R4.1 的 header fast-lane 假设，而是两个可独立回滚的
    再以本地构建替换依赖执行 Tillgate 只读验证并确认其工作树无变化。
 
 逐文件审计、测试矩阵、预算与停止条件以当前迁移单元文档为准。
+
+## 10. R4.4 核销结果（2026-09-02）
+
+R4.4 按两个独立提交完成：`4f794af` 删除请求 dispatch/同步 finish 闭包固定税，
+`1044048` 将 body cache + facade + 方法闭包重写为一个固定形状状态机。实现没有新增公开
+API，没有保留旧/新双轨，也没有削减 error funnel 或 413 守卫。
+
+8 轮 fresh-process 三方交替中位数（ns/request）：
+
+| 场景                       | R4.4 前 | R4.4 后 | Hono 4.13.5 | 后 vs 前 | 后 vs Hono |
+| -------------------------- | ------: | ------: | ----------: | -------: | ---------: |
+| probe（不适用 scope gate） |     423 |     400 |         502 |    −5.6% |     −20.3% |
+| 3 层 sync global           |     460 |     459 |         777 |    −0.2% |     −41.0% |
+| 6 层 sync global           |     516 |     498 |         943 |    −3.5% |     −47.2% |
+| 3 层 async global          |     700 |     688 |         889 |    −1.8% |     −22.6% |
+| 6 层 async global          |     935 |     911 |        1163 |    −2.6% |     −21.7% |
+| 安全 JSON + memo facade    |    1414 |    1346 |       1173¹ |    −4.8% |     +14.8% |
+| bare text                  |     343 |     323 |         327 |    −5.8% |      −1.2% |
+| 正确 dirty text            |     808 |     782 |        1108 |    −3.2% |     −29.4% |
+
+¹ Hono 行是一条路由内手写 `raw.bytes()` + actual-byte guard + decode/parse，不提供跨
+reader/parsed-object Promise memo。Keala 同样手写的内部下界约 1014ns，快于 Hono；
+剩余 facade 差值来自生产契约。Hono 官方 `bodyLimit + c.req.json()` 8 轮中位数约 1472ns，
+Keala 安全 facade 同轮约 1303ns（快 11.5%），且 Hono 官方实现仍放过 lying length 与
+UTF-8 实际超限。因此不能用 1173ns 行宣称“同完整语义 Hono 更快”，也不能隐藏它是
+手写无 memo 下界。
+
+热态 live HTTP（100 connections、10 pipelining、3 秒、交替三轮）：body 187.6k→
+192.6k RPS（+2.6%），p99 8→8ms，RSS 样本 51.4→41.9MB；3 层 async global
+45.3k→44.8k RPS（−1.2%，视为饱和噪声），p99 42→43ms。所有样本 0 error / 0 timeout。
+进程内固定税下降未被包装成 wire 提升结论。
+
+门禁：Node 1974 passed / 8 skipped、Bun 1952 passed / 30 skipped；coverage、
+fmt/lint/typecheck/build、smoke、example、soak 全绿。覆盖率
+`97.24/92.04/96.19/98.58%`，四项高于 R4.3 基线。性能/内存围栏改用当前线程 CPU，
+并串行执行测试文件，避免 Bun 共享 VM 的并行 JIT/GC 污染 A/B 计时；预算未放宽。
+Tillgate 临时加载本地构建并
+禁用 Turbo cache：HTTP 133/133、Gateway 205/205、两包 typecheck 全过；依赖恢复后
+Tillgate 工作树 clean。

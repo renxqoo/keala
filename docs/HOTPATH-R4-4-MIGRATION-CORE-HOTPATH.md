@@ -1,6 +1,6 @@
 # HOTPATH-R4.4 — 探针与安全 JSON 核心热路径迁移单元
 
-> 状态：设计/审计/测试计划已定稿；实施中
+> 状态：已核销（2026-09-02）
 > 分支：`codex/hotpath-r4-4-core-rewrite`
 > 范围：仅 keala；Tillgate 只读验证，不修改其源码、测试或生成物。
 
@@ -27,16 +27,16 @@ keala 约 1402ns、Hono 约 1141ns，慢约 22.9%；两端对 lying-length 与 U
 
 ## 3. 旧实现逐模块审计与裁决
 
-| 文件/模块 | 现状与成本 | 裁决 |
-| --- | --- | --- |
-| `src/core/app.ts` | 每请求创建 `dispatchOf` 闭包；路由匹配后再交给 dispatcher | 重构为参数化内部函数/内联同步路径，删除无条件闭包 |
-| `src/core/dispatch.ts` | 同步链也先创建 `finish` 闭包；公开 Promise 包装与 pooling 混合 | 分离同步 finish 与仅异步回调；保持 never-reject/pool retire |
-| `src/core/compose.ts` | 每个适用 middleware 每请求一个 guarded `next` 闭包 | 先测层数曲线；仅在等价性可证明时替换链执行器 |
-| `src/router/router.ts` | 注册期合并 global + route；静态 Map 已优于 Hono | 保留路由/匹配算法，只允许改变 chain 编译产物 |
-| `src/core/context/context.ts` | 固定形状单 context；完整 Koa 状态槽每请求重置 | 暂保留；只有分配剖析证明主导且 pooling/自定义属性等价时再改 |
-| `src/plugins/body-parser.ts` | cache 对象、facade、局部 `read`、五个箭头方法；JSON 两级 continuation | 重写为单一固定形状 facade/state，方法放 prototype；合并可合并的 continuation |
-| `src/middleware/validator.ts` | 依赖 `readBodyLimited` 和 `bodyJsonLimit` | 保留调用契约，加入交叉回归 |
-| `src/core/error-response.ts` | 正确/错误路径最终安全兜底 | 保留，不以削弱错误守卫换数字 |
+| 文件/模块                     | 现状与成本                                                            | 裁决                                                                         |
+| ----------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `src/core/app.ts`             | 每请求创建 `dispatchOf` 闭包；路由匹配后再交给 dispatcher             | 重构为参数化内部函数/内联同步路径，删除无条件闭包                            |
+| `src/core/dispatch.ts`        | 同步链也先创建 `finish` 闭包；公开 Promise 包装与 pooling 混合        | 分离同步 finish 与仅异步回调；保持 never-reject/pool retire                  |
+| `src/core/compose.ts`         | 每个适用 middleware 每请求一个 guarded `next` 闭包                    | 先测层数曲线；仅在等价性可证明时替换链执行器                                 |
+| `src/router/router.ts`        | 注册期合并 global + route；静态 Map 已优于 Hono                       | 保留路由/匹配算法，只允许改变 chain 编译产物                                 |
+| `src/core/context/context.ts` | 固定形状单 context；完整 Koa 状态槽每请求重置                         | 暂保留；只有分配剖析证明主导且 pooling/自定义属性等价时再改                  |
+| `src/plugins/body-parser.ts`  | cache 对象、facade、局部 `read`、五个箭头方法；JSON 两级 continuation | 重写为单一固定形状 facade/state，方法放 prototype；合并可合并的 continuation |
+| `src/middleware/validator.ts` | 依赖 `readBodyLimited` 和 `bodyJsonLimit`                             | 保留调用契约，加入交叉回归                                                   |
+| `src/core/error-response.ts`  | 正确/错误路径最终安全兜底                                             | 保留，不以削弱错误守卫换数字                                                 |
 
 审计结论：router 不是当前问题；context 延迟拆分风险高且证据不足；第一批实现应只删除
 可证明冗余的请求级闭包/continuation，并将 body 状态合并为单一所有者。
@@ -120,3 +120,42 @@ Hono 对照必须显式执行实际字节复核；官方 `bodyLimit` 因信任 d
 只有两条目标热路径均给出前后与 Hono 同语义 fresh-process 数据，所有功能/安全/并发
 矩阵通过，四项覆盖率不下降，双运行时与进程门禁全绿，Tillgate 工作树保持原样，本文档
 记录最终提交与数字后，R4.4 才能核销。
+
+## 10. 核销记录
+
+### 10.1 实现与算法裁决
+
+- `4f794af`：`handle` 改为参数化 `dispatchRequest`，非 pooling 不再创建 pool；同步链
+  直接 finish，只在真实异步/pooling 分支创建 continuation。
+- `1044048`：一个 `BodyReaderState` 同时承担 facade 与 memo；方法全部在 prototype，
+  rare reader cache 延迟分配；declared JSON 在一个 continuation 中完成 actual-byte
+  guard、UTF-8 decode 与 `JSON.parse`。
+- compose 没有重写。新增层数矩阵证明当前预编译链在 sync/async 1/3/6 层均领先 Hono，
+  重写它会扩大并发/浮动 next 风险而没有瓶颈证据。
+- body 算法已达到本契约下的结构下界：O(n) 单次读取，stream 多 chunk 一次 O(n) 合并，
+  JSON 一次 decode/parse，一个 facade/state allocation，一个 parsed Promise memo。继续
+  靠委托裸 `raw.json()` 提速只能删除 actual-byte guard 或跨 reader memo，裁决不采用。
+
+### 10.2 fresh-process 结果
+
+8 轮独立进程交替中位数（ns/request）：probe 423→400；3/6 sync global 460→459、
+516→498；3/6 async global 700→688、935→911；body-safe 1414→1346；bare text
+343→323；dirty text 808→782。
+
+同轮 Hono：probe 502；3/6 sync global 777/943；3/6 async global 889/1163；bare text
+327；dirty text 1108。Hono 手写 raw-byte 安全 JSON 为 1173，但不含 reader/parsed memo；
+Hono 官方 bodyLimit 组合约 1472 且安全语义更弱，Keala 完整 facade 约 1303。
+
+### 10.3 live、正确性与消费方
+
+- live body：187.6k→192.6k RPS，p99 8→8ms，RSS 51.4→41.9MB；
+- live 3 层 async global：45.3k→44.8k RPS，p99 42→43ms，判定无显著 wire 改善；
+- 所有 live 样本 0 error / 0 timeout；
+- Node 104 files（1974 passed / 8 skipped）；真 Bun 104 files（1952 passed / 30 skipped）；
+  性能围栏使用 current-thread CPU 且文件串行，消除共享 VM 的 JIT/GC 串扰，阈值不变；coverage
+  `97.24/92.04/96.19/98.58%`；build/smoke/example/soak 全绿；
+- smoke 在 Bun 1.4 真实 HTTP 上通过 text `Content-Type` 检查；
+- Tillgate HTTP 133/133、Gateway 205/205、两包 typecheck 全绿，前后工作树 clean。
+
+R4.4 的目标场景、回归预算、安全不变量和消费方验证均已核销。严格手写无 memo JSON
+仍是一个不同契约的下界，不再作为本单元未完成项。
