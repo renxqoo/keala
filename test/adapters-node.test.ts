@@ -271,6 +271,16 @@ describe("node adapter: raw socket behavior", () => {
 });
 
 describe("node adapter: failure surfaces", () => {
+  it("reports stable defaults before an asynchronously bound socket is ready", async () => {
+    const app = new Keala(quiet);
+    const pending = startNodeServer(app, { port: 0 });
+    expect(pending.port).toBe(0);
+    expect(pending.hostname).toBe("localhost");
+    const server = await pending.ready();
+    servers.push(server);
+    expect(server.port).toBeGreaterThan(0);
+  });
+
   it("repeated request headers arrive as an array value", async () => {
     const app = new Keala(quiet);
     app.get("/x-forwarded", (c) => {
@@ -349,6 +359,22 @@ describe("node adapter: failure surfaces", () => {
     expect(data).toContain("part1");
   });
 
+  it("a response writer failure before headers returns an isolated 500", async () => {
+    const invalid = new Proxy(new Response("body"), {
+      get(target, key) {
+        if (key === "status") throw new Error("invalid response status");
+        return Reflect.get(target, key, target) as unknown;
+      },
+    });
+    const app = new Keala(quiet);
+    app.get("/invalid-response", () => invalid);
+    const server = await listen(app, 0, "127.0.0.1").ready();
+    servers.push(server);
+    const response = await fetch(`http://127.0.0.1:${server.port}/invalid-response`);
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("Internal Server Error");
+  });
+
   it("malformed HTTP answers 400 and drops the connection", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
@@ -407,7 +433,7 @@ describe("node adapter: review hardening", () => {
   it("absolute-form request targets route like origin-form", async () => {
     const app = new Keala(quiet);
     app.get("/proxy-style", (c) => {
-      c.body = "routed";
+      c.body = c.URL!.pathname;
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -426,7 +452,7 @@ describe("node adapter: review hardening", () => {
       socket.on("error", reject);
     });
     expect(body).toContain("200");
-    expect(body).toContain("routed");
+    expect(body).toContain("/proxy-style");
   });
 
   it("an IPv6-bound server answers Host-less HTTP/1.0 requests", async () => {

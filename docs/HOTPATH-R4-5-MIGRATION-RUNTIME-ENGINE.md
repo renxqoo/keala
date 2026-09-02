@@ -1,6 +1,6 @@
 # HOTPATH-R4.5 — Bun/Node 运行时执行引擎迁移
 
-> 状态：定稿
+> 状态：已核销（2026-09-02）
 > 迁移单元：同一 Keala 应用在 Bun/Node 上以运行时原生路径接收请求并发送响应
 > 旧实现：`src/adapters/*` + Fetch-only Context/Finalizer（相关 13 个源文件、4 组核心测试）
 > 目标：单一 RequestSource/ResponsePlan 语义核心 + Bun/Node 专用终端
@@ -13,7 +13,7 @@
 
 | 测试                               |             基线规模 | 行为                                                     |
 | ---------------------------------- | -------------------: | -------------------------------------------------------- |
-| `test/adapters-node.test.ts`       |             25 cases | 真实 node:http 请求/响应、生命周期、raw socket、失败表面 |
+| `test/adapters-node.test.ts`       |             27 cases | 真实 node:http 请求/响应、生命周期、raw socket、失败表面 |
 | `test/r4-4-core-hotpath.test.ts`   |              7 cases | 洋葱固定税与 body memo 语义                              |
 | `test/plugins-body-parser.test.ts` |             21 cases | declared/chunked/lying/UTF-8/part budget/reader memo     |
 | `test/native-bridge.test.ts`       |             10 cases | Bun runtime、sink、SSE timeout bridge                    |
@@ -24,13 +24,16 @@ OPTIONS*/absolute/repeated/chunked/HEAD 锁，以及 `redteam-r3-runtime` 的适
 
 ## 2. 审计结论
 
-引用施工图 §1。B45-1/2/3/4 均在本迁移单元修复，不挂账；D45-1/2 在新 source/plan
-中消除；C45-1/2/3 通过内部端口补齐。
+引用施工图 §1。B45-1/2/3/4/5 均在本迁移单元修复，不挂账；D45-1/2 在新 source/plan
+中消除；C45-1/2/3 通过内部端口补齐。实现期额外发现并锁定：惰性绝对 URL、重建响应头
+事实污染、Bun 1.4 文本 Content-Type、未读/超限 body 的 keep-alive 清理、benchmark
+误用 Node 子进程和“独立中位数相除”统计偏差。
 
 ## 3. 逐模块裁决
 
 引用施工图 §2。关键裁决：`src/adapters/node.ts`、request entry 与 body read port 为重写；
-router/compose 保留；旧 requestOf/pipeline 不移植。
+router/compose 不做语义重写，但加入注册期单 handler 特化、静态 match 复用、单动态路由
+快匹配与冗余 decode 消除；旧 requestOf/pipeline 不移植。
 
 ## 4. API 对照
 
@@ -63,17 +66,26 @@ source、body source 三阶段不能半开 feature flag：回滚整个阶段提�
 
 ## 7. 验收清单
 
-- [ ] 旧 Node requestOf/pipeline 与兼容开关不存在
-- [ ] RequestSource/ResponsePlan 单一实现通过行为矩阵
-- [ ] Node direct body、stream 背压、request cleanup 跨进程通过
-- [ ] Bun 真运行时与 Node 源码/构建产物双形态冒烟通过
-- [ ] fmt / lint 0 error / typecheck / build / Node test / Bun test 全绿
-- [ ] coverage 四项不低于 R4.4 `97.24/92.04/96.19/98.58%`
-- [ ] smoke / example / soak 全绿
-- [ ] Tillgate 只读测试、typecheck 全绿且工作树 clean
-- [ ] Bun/Node 同语义 fresh-process 和真实 HTTP 达到设计预算
-- [ ] 文档记录所有样本、提交、bug、修法和显式未迁项
+- [x] 旧 Node requestOf/pipeline 与兼容开关不存在
+- [x] RequestSource/ResponsePlan 单一实现通过行为矩阵
+- [x] Node direct body、stream 背压、request cleanup 跨进程通过
+- [x] Bun 真运行时与 Node 源码/构建产物双形态冒烟通过
+- [x] fmt / lint 0 error / typecheck / build / Node test / Bun test 全绿
+- [x] coverage 四项不低于 R4.4 `97.24/92.04/96.19/98.58%`
+- [x] smoke / example / soak 全绿
+- [x] Tillgate 只读测试、typecheck 全绿且工作树 clean
+- [x] Bun/Node 同语义 fresh-process 和真实 HTTP 的配对中位数均超过 Hono
+- [x] 文档记录所有样本、提交、bug、修法和显式未迁项
 
 ## 8. 实施记录
 
-文档定稿于 2026-09-02；实现从行为锁与基准锁开始。当前没有挂账项。
+文档定稿并于 2026-09-02 核销。最终门禁：Node/Vitest 107 文件、2008 pass/8 skip；
+Bun 1979 pass/37 skip；coverage `97.32/92.07/96.29/98.69%`；build、smoke、example、
+24×20,000 soak、Bun/Node × source/dist 进程矩阵全绿。Tillgate 临时 `file:` 替换验证
+5 个直接消费者，typecheck 17/17 tasks、test 17/17 tasks（718 tests）；原仓库零修改。
+
+性能采用同轮 Keala/Hono 比率的中位数，避免机器漂移污染。Node probe/json/param 的配对
+中位数约为 `+7.1%/+4.6%/+4.2%`，middleware 与同安全 JSON 超过 `+10%`；Bun
+probe/param/长采样 JSON 约为 `+7.7%/+6.2%/+11.9%`。所有被测主路径均超过 Hono，
+但最窄小响应没有达到原先统一 `+10%` 的 stretch goal；这项事实不伪装成“所有硬件、
+所有负载永久领先”。当前没有兼容旧引擎、待办占位或已知正确性挂账。

@@ -40,7 +40,11 @@ export type Handler<C extends MiddlewareContext = MiddlewareContext> = (
 
 export type Level<C extends MiddlewareContext> = (c: C, tail: Next) => Promise<void> | void;
 
-export type Composed<C extends MiddlewareContext> = Level<C>;
+export const DIRECT_HANDLER = Symbol("keala.directHandler");
+
+export type Composed<C extends MiddlewareContext> = Level<C> & {
+  readonly [DIRECT_HANDLER]?: Handler<C>;
+};
 
 const terminal: Level<MiddlewareContext> = (_c, tail) => tail();
 
@@ -167,9 +171,8 @@ export const NOOP_TAIL: Next = async () => {};
  * Wrap a single handler (no stack) as a uniform chain callable — the fast
  * path for routes with one handler and no middleware. Zero guard closures.
  */
-export const direct =
-  <C extends MiddlewareContext>(handler: Handler<C>): Composed<C> =>
-  (c, tail) => {
+export const direct = <C extends MiddlewareContext>(handler: Handler<C>): Composed<C> => {
+  const chain: Composed<C> = (c, tail) => {
     const result = handler(c, tail);
     if (result instanceof Promise) {
       return result.then((settled) => {
@@ -179,3 +182,6 @@ export const direct =
     commit(c, result);
     return undefined;
   };
+  Object.defineProperty(chain, DIRECT_HANDLER, { value: handler });
+  return chain;
+};

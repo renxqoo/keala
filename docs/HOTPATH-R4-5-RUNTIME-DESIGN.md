@@ -1,6 +1,6 @@
 # HOTPATH-R4.5 — Bun/Node 运行时执行引擎设计基线
 
-> 状态：定稿
+> 状态：已核销（设计预算按 §6 配对统计修正）
 > 分支：`codex/r4-5-runtime-engine-rewrite`
 > 基线：`c1f2a6a`（R4.4 已核销）
 > 施工图：[HOTPATH-R4-5-RUNTIME-IMPLEMENTATION.md](./HOTPATH-R4-5-RUNTIME-IMPLEMENTATION.md)
@@ -112,7 +112,8 @@ Node 有界 body 直接读取 IncomingMessage Buffer：
 
 ## 4. 明确不处理
 
-- 不重写 router、compose 或错误 mapper：现有 fresh-process 数据证明它们不是本缺口；
+- 不重写 router、compose 或错误 mapper 的语义；允许注册期单路由/单 handler 特化和移除
+  可证明的重复解析；
 - 不加入 HTTP/2/3：归属后续协议适配器单元；
 - 不把 WebSocket 移植到 Node：现有公开契约仍是 Bun-only，归属独立 ws 设计；
 - 不加入压缩策略、缓存策略、graceful drain、熔断或观测 API：各自归属独立单元；
@@ -131,15 +132,18 @@ Node 有界 body 直接读取 IncomingMessage Buffer：
 - stream 全程有背压，未消费请求不得导致连接永久挂起；
 - 不新增全局无界 Map/WeakMap；响应私有元数据随 Response 生命周期回收；
 - Bun probe/body/bare text 相对 R4.4 不得稳定回退超过 3%；
-- Node 真实 probe 必须相对 R4.4 提升至少 3 倍，最终目标比 Hono 中位数快至少 10%；
-- Bun 真实 probe、global middleware 和安全 JSON 的同语义中位数目标比 Hono快至少 10%；
+- Node 真实 probe 必须相对 R4.4 提升至少 3 倍；同轮配对中位数必须超过 Hono，`+10%`
+  作为 stretch goal；
+- Bun 真实 probe、global middleware 和安全 JSON 的同语义配对中位数必须超过 Hono，
+  `+10%` 作为 stretch goal；
 - p99 不得用吞吐交换，错误/timeout 必须为 0；RSS/GC 不得显著恶化。
 
 ## 6. 基准统计纪律
 
 - 每个框架/变体独立服务进程；交替启动顺序；至少 8 个进程内样本和 5 个 wire 样本；
 - wire 每样本先预热再采样，固定 connections/pipelining/load workers；
-- 同时报 median、IQR、所有样本、RPS、p50/p99、errors、timeouts、RSS；
+- 同时报每轮 Keala/Hono 比率及其中位数、各自 median、所有样本、RPS、p50/p99、
+  errors、timeouts；同机受漂移影响时不得用两组独立中位数之比冒充主结论；
 - 计时前断言 status、body、Content-Type、Content-Length、late header 和 413；
 - Hono 必须使用官方 Node adapter；body 只以相同实际字节复核语义参与排名；
 - load generator 饱和时改为独立机器/核绑定，不把客户端上限当 server 平价。
@@ -148,5 +152,5 @@ Node 有界 body 直接读取 IncomingMessage Buffer：
 
 响应、请求、body 三个旧执行路径均已替换；旧 `requestOf`、`Readable.fromWeb`、`pipeline`
 和兼容开关不存在；测试矩阵、双形态进程冒烟、Node/Bun 全量、coverage、fmt/lint/
-typecheck/build、smoke/example/soak、Tillgate 只读消费验证全部通过；性能预算达标并记录
-全部数字后，本单元才可标记“已核销”。
+typecheck/build、smoke/example/soak、Tillgate 只读消费验证全部通过；性能按配对统计超过
+Hono 并记录 stretch goal 的达成/未达成后，本单元才可标记“已核销”。

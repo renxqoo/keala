@@ -17,6 +17,10 @@ import type { Router } from "../router/group.ts";
 import type { ListenOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
 import type { ServerHandle } from "../adapters/bun.ts";
 import type { NativeSinkEntry } from "./sink.ts";
+import type { RequestSource } from "./request-source.ts";
+
+/** Internal native-adapter entry; not exported from the package surface. */
+export const HANDLE_REQUEST_SOURCE = Symbol("keala.handleRequestSource");
 
 /**
  * The single error entry (R4.3): the mapper ALWAYS receives an HttpError
@@ -136,4 +140,9 @@ export interface Application {
   readonly proxy: boolean;
   readonly keys: SigningKeys | undefined;
   readonly onStreamError: AppOptions["onStreamError"];
+}
+
+/** Internal extension consumed only by runtime adapters. */
+export interface NativeApplication extends Application {
+  [HANDLE_REQUEST_SOURCE](source: RequestSource, runtime?: Runtime): Response | Promise<Response>;
 }

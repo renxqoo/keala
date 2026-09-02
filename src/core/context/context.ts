@@ -19,6 +19,8 @@ import { requestApi } from "./request.ts";
 import type { ResponseApi } from "./response.ts";
 import { responseApi } from "./response.ts";
 import type { ContextState } from "./state.ts";
+import type { RequestSource } from "../request-source.ts";
+import { sourceHeader, sourceHeaders } from "../request-source.ts";
 
 export interface ContextCore extends RequestApi, ResponseApi {
   readonly app: Application;
@@ -74,7 +76,7 @@ const contextApi: ThisType<Context> & {
     const headers = (c.headersRecord ??= Object.create(null) as HeaderMap);
     const cookies = createCookies({
       get cookieHeader(): string | null {
-        return c.rawRequest.headers.get("cookie");
+        return sourceHeader(c.rawRequest, "cookie");
       },
       // Koa's "get secure from request": cookies set over a secure request
       // (incl. proxy-trusted x-forwarded-proto) carry Secure unless the
@@ -103,7 +105,7 @@ const contextApi: ThisType<Context> & {
     return {
       method: this.method,
       url: this.url,
-      header: Object.fromEntries(this.rawRequest.headers.entries()),
+      header: Object.fromEntries(sourceHeaders(this.rawRequest).entries()),
       status: this.statusValue,
       message: this.message,
       headers: record === null ? {} : { ...record },
@@ -111,37 +113,42 @@ const contextApi: ThisType<Context> & {
   },
 };
 
-/** The base prototype shared by every app (before `decorate` extensions). */
-export const baseContextProto = mergeProtos(requestApi, responseApi, contextApi);
+/**
+ * Immutable fresh-request sentinels. They live on the prototype: a request
+ * only creates own properties for state it actually changes. Every value is
+ * primitive/null/undefined, so no request can mutate shared state. This
+ * removes twenty cold slot writes from the common routing/response path.
+ */
+const CONTEXT_DEFAULTS = {
+  runtimeValue: undefined,
+  pathValue: null,
+  urlValue: null,
+  originalUrlValue: null,
+  queryValue: null,
+  ipValue: null,
+  allowedValue: null,
+  params: null,
+  statusValue: 404,
+  messageValue: "",
+  headersRecord: null,
+  bodyValue: null,
+  flags: 0,
+  removedValue: null,
+  _res: undefined,
+  implicitTextResponseValue: undefined,
+  stateValue: null,
+  cookiesValue: null,
+  bodyCache: undefined,
+  validValue: undefined,
+} satisfies Partial<ContextState>;
 
-/** Assign the full internal slot set (fixed order, one hidden class). */
-const assignSlots = (c: Context): Context => {
-  c.pathValue = null;
-  c.urlValue = null;
-  c.originalUrlValue = null;
-  c.queryValue = null;
-  c.ipValue = null;
-  c.allowedValue = null;
-  c.params = null;
-  c.statusValue = 404;
-  c.messageValue = "";
-  c.headersRecord = null;
-  c.bodyValue = null;
-  c.flags = 0;
-  c.removedValue = null;
-  c._res = undefined;
-  c.stateValue = null;
-  c.cookiesValue = null;
-  // Plugin memo slots: undefined clears any own property a previous
-  // request created (body bytes / validated value must never survive a
-  // pool recycle — cross-request disclosure).
-  c.bodyCache = undefined;
-  c.validValue = undefined;
-  // A recycled object starts a new generation with no outstanding branches
-  // (any leftover registration belongs to the previous request).
-  clearBranches(c);
-  return c;
-};
+/** The base prototype shared by every app (before `decorate` extensions). */
+export const baseContextProto = Object.assign(
+  mergeProtos(requestApi, responseApi, contextApi),
+  CONTEXT_DEFAULTS,
+);
+
+const CONTEXT_SLOT_KEYS = Object.keys(CONTEXT_DEFAULTS);
 
 /**
  * Own keys a healthy context may carry: every assignSlots slot (probed from a
@@ -152,7 +159,7 @@ const assignSlots = (c: Context): Context => {
  * (cross-request disclosure).
  */
 const INTERNAL_SLOTS: ReadonlySet<string> = new Set([
-  ...Object.keys(assignSlots(Object.create(baseContextProto) as Context)),
+  ...CONTEXT_SLOT_KEYS,
   "appValue",
   "appSettings",
   "rawRequest",
@@ -174,34 +181,51 @@ const sweepForeignKeys = (c: Context): void => {
   }
 };
 
+/** Drop prior-generation state so prototype sentinels become visible again. */
+const clearRequestSlots = (c: Context): void => {
+  const own = c as unknown as Record<string, unknown>;
+  for (const key of CONTEXT_SLOT_KEYS) delete own[key];
+  clearBranches(c);
+};
+
 /** Create the per-request context. One flat allocation, fixed field order. */
 export const createContext = (
   app: Application,
   proto: object,
-  raw: Request,
+  raw: RequestSource,
   runtime: ContextState["runtimeValue"],
 ): Context => {
   const c = Object.create(proto) as Context;
-  c.appValue = app;
+  if (c.appValue !== app) c.appValue = app;
   c.rawRequest = raw;
-  c.appSettings = app.settings;
-  c.runtimeValue = runtime;
-  assignSlots(c);
+  if (c.appSettings !== app.settings) c.appSettings = app.settings;
+  if (runtime !== undefined) c.runtimeValue = runtime;
   // Dev chain tracing (DOGFOOD-R2 C2): one bit, written only in dev.
   if (app.env === "development") c.flags |= FLAG_DEV_CHAIN;
+  return c;
+};
+
+/** Hot internal constructor for an app-bound prototype. */
+export const createBoundContext = (
+  proto: object,
+  raw: RequestSource,
+  runtime: ContextState["runtimeValue"],
+): Context => {
+  const c = Object.create(proto) as Context;
+  c.rawRequest = raw;
+  if (runtime !== undefined) c.runtimeValue = runtime;
   return c;
 };
 
 /** Reset a recycled context in place (pooling is opt-in; see app options). */
 export const resetContext = (
   c: Context,
-  raw: Request,
+  raw: RequestSource,
   runtime: ContextState["runtimeValue"],
 ): Context => {
   sweepForeignKeys(c);
+  clearRequestSlots(c);
   c.rawRequest = raw;
-  c.runtimeValue = runtime;
-  assignSlots(c);
-  if (c.appValue.env === "development") c.flags |= FLAG_DEV_CHAIN;
+  if (runtime !== undefined) c.runtimeValue = runtime;
   return c;
 };

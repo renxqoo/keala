@@ -16,6 +16,7 @@ import { contentTypeParameters } from "../utils/mime.ts";
 import type { Plugin } from "../types.ts";
 import type { Application } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
+import { isNativeRequestSource, sourceBody, sourceBytes } from "../core/request-source.ts";
 
 export interface BodyParserOptions {
   /** Max bytes for json()/text(). Default 1MB. */
@@ -176,11 +177,13 @@ const bodyTooLarge = (limit: number, declared?: number): Error =>
 class BodyReaderState implements RequestBodyFacade {
   readonly context: Context;
   config: BodyReaderConfig | null;
-  rawBytes: Promise<Uint8Array> | null = null;
-  bytes: Promise<Uint8Array> | null = null;
-  bytesLimit = 0;
-  jsonValue: Promise<unknown> | null = null;
-  rare: RareReaderState | null = null;
+  // Cold memo fields are shape-lazy: JSON-only requests create raw/json,
+  // while text/form/blob/validator state does not occupy or initialize slots.
+  declare rawBytes?: Promise<Uint8Array>;
+  declare bytes?: Promise<Uint8Array>;
+  declare bytesLimit?: number;
+  declare jsonValue?: Promise<unknown>;
+  declare rare?: RareReaderState;
 
   constructor(context: Context, config: BodyReaderConfig | null) {
     this.context = context;
@@ -189,26 +192,40 @@ class BodyReaderState implements RequestBodyFacade {
 
   /** Start exactly one native/streamed read and remember the first budget. */
   raw(limit: number): Promise<Uint8Array> {
-    if (this.rawBytes !== null) return this.rawBytes;
+    if (this.rawBytes !== undefined) return this.rawBytes;
     this.bytesLimit = limit;
     const c = this.context;
-    const declared = c.reqLength;
+    const source = c.rawRequest;
+    const native = isNativeRequestSource(source);
+    let declared: number | undefined;
+    if (native) {
+      declared = c.reqLength;
+    } else {
+      const value = (source as Request).headers.get("content-length");
+      if (value !== null && value.length > 0) {
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isNaN(parsed)) declared = parsed;
+      }
+    }
     if (declared !== undefined && declared > limit) {
       return (this.rawBytes = Promise.reject(bodyTooLarge(limit, declared)));
     }
-    const body = c.raw.body;
-    if (body === null) return (this.rawBytes = Promise.resolve(new Uint8Array(0)));
+    if (native) {
+      return (this.rawBytes = sourceBytes(source, limit));
+    }
     if (declared !== undefined) {
       // The common path: the native promise stays internal. Every public
       // reader validates its actual byteLength before exposing/decoding it.
-      return (this.rawBytes = (c.raw as Request & { bytes(): Promise<Uint8Array> }).bytes());
+      return (this.rawBytes = (source as Request & { bytes(): Promise<Uint8Array> }).bytes());
     }
+    const body = sourceBody(source);
+    if (body === null) return (this.rawBytes = Promise.resolve(new Uint8Array(0)));
     return (this.rawBytes = this.readStream(body, limit));
   }
 
   /** Enforce both the first consumer's budget and this reader's budget. */
   checked(bytes: Uint8Array, limit: number): Uint8Array {
-    const firstLimit = this.bytesLimit;
+    const firstLimit = this.bytesLimit as number;
     const effective = limit < firstLimit ? limit : firstLimit;
     if (bytes.byteLength > effective) throw bodyTooLarge(effective);
     return bytes;
@@ -216,8 +233,8 @@ class BodyReaderState implements RequestBodyFacade {
 
   /** Memoized guarded bytes used by validator()/arrayBuffer(). */
   read(limit: number): Promise<Uint8Array> {
-    if (this.bytes !== null) {
-      if (limit >= this.bytesLimit) return this.bytes;
+    if (this.bytes !== undefined) {
+      if (limit >= (this.bytesLimit as number)) return this.bytes;
       return this.bytes.then((bytes) => this.checked(bytes, limit));
     }
     const raw = this.raw(limit);
@@ -225,12 +242,12 @@ class BodyReaderState implements RequestBodyFacade {
   }
 
   json(): Promise<unknown> {
-    if (this.jsonValue !== null) return this.jsonValue;
+    if (this.jsonValue !== undefined) return this.jsonValue;
     const limit = (this.config as BodyReaderConfig).jsonLimit;
     return (this.jsonValue = this.raw(limit).then((raw) => {
       // JSON is the dominant reader. Inline its actual-byte guard so the
       // native-read continuation proceeds directly into decode/parse.
-      const firstLimit = this.bytesLimit;
+      const firstLimit = this.bytesLimit as number;
       const effective = limit < firstLimit ? limit : firstLimit;
       if (raw.byteLength > effective) throw bodyTooLarge(effective);
       const bytes = raw;

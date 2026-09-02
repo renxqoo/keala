@@ -1,21 +1,9 @@
 /**
  * Node adapter: `node:http` glue for running the same app under Node.
  *
- * The framework stays fetch-shaped: an IncomingMessage is bridged to a web
- * Request (the body streams through, it is never buffered by the adapter),
- * and the returned web Response is piped into the ServerResponse with
- * set-cookie fanout. Websockets are Bun-only: this handle exposes no
- * `upgrade`, so `app.ws()` routes answer 501 and raw Upgrade requests are
- * refused before routing.
- *
- * ```ts
- * import { Keala } from "keala";
- * import { listen } from "keala/node";
- *
- * const app = new Keala();
- * app.get("/", (c) => { c.body = "hello"; });
- * listen(app, 3000);
- * ```
+ * IncomingMessage enters the lazy native RequestSource; direct bodies write
+ * to ServerResponse without a WebStream bridge, while foreign streams retain
+ * backpressure/cancellation. Websockets remain Bun-only and answer 501.
  */
 
 import {
@@ -26,8 +14,11 @@ import {
   type ServerResponse,
 } from "node:http";
 import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import type { Application } from "../core/app.ts";
+import { responseFactsOf, type ResponseHeadersInit } from "../core/response-plan.ts";
+import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
+import { NATIVE_REQUEST_SOURCE, type NativeRequestSource } from "../core/request-source.ts";
+import { createError } from "../http/errors.ts";
 
 export interface NodeServerHandle {
   readonly port: number;
@@ -55,55 +46,340 @@ const mayCarryBody = (method: string): boolean => method !== "GET" && method !==
 const authorityOf = (host: string, port: number): string =>
   host.includes(":") && !host.startsWith("[") ? `[${host}]:${port}` : `${host}:${port}`;
 
-const requestOf = (incoming: IncomingMessage, fallbackHost: string): Request => {
-  const method = incoming.method ?? "GET";
-  const headers = new Headers();
-  // Node joins repeated request headers into one value at runtime (the
-  // array shape in the type is response-side); the join keeps even a
-  // hypothetical request-side array correct.
-  for (const [name, value] of Object.entries(incoming.headers)) {
-    if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+class InvalidRequestTargetError extends Error {}
+
+class NodeRequestSource implements NativeRequestSource {
+  readonly [NATIVE_REQUEST_SOURCE] = true as const;
+  readonly method: string;
+  readonly url: string;
+  readonly incoming: IncomingMessage;
+  readonly server: NodeServerHandle;
+  // Cold transport state is added only when an API consumes it. `declare`
+  // emits no class fields, keeping GET/probe sources at four own slots.
+  declare _headers?: Headers;
+  declare _body?: ReadableStream<Uint8Array> | null;
+  declare _bodySet?: true;
+  declare _request?: Request;
+  declare _bytes?: Promise<Uint8Array>;
+  declare _bodyOwned?: true;
+
+  get remote(): string | undefined {
+    return this.incoming.socket.remoteAddress;
   }
-  // Origin-form is prefixed with an authority: the request's own Host header
-  // when present (`c.host` and same-origin checks must see it), else the
-  // bound address. An absolute-form target (proxy-style requests) is used
-  // verbatim — its own authority IS the identity. `OPTIONS *` (server-wide
-  // options, RFC 7231 §4.3.7) addresses the whole server, not a path — map
-  // it to "/" so the router decides instead of the URL constructor throwing.
-  const target = incoming.url ?? "/";
-  const requestTarget = target === "*" ? "/" : target;
-  const url = /^https?:\/\//i.test(requestTarget)
-    ? requestTarget
-    : `http://${incoming.headers.host ?? fallbackHost}${requestTarget}`;
-  const declared = incoming.headers["content-length"];
-  const chunked = incoming.headers["transfer-encoding"] !== undefined;
-  if (!mayCarryBody(method) || (declared === undefined && !chunked) || declared === "0") {
-    return new Request(url, { method, headers });
+
+  constructor(incoming: IncomingMessage, server: NodeServerHandle) {
+    this.incoming = incoming;
+    this.server = server;
+    this.method = incoming.method ?? "GET";
+    // Origin-form is prefixed with the request Host (or bound address), while
+    // proxy absolute-form stays verbatim. OPTIONS * addresses the server root.
+    const target = incoming.url ?? "/";
+    const requestTarget = target === "*" ? "/" : target;
+    if (requestTarget.charCodeAt(0) === 47 /* "/" */) {
+      this.url = requestTarget;
+    } else if (requestTarget.startsWith("http://") || requestTarget.startsWith("https://")) {
+      this.url = requestTarget;
+    } else {
+      throw new InvalidRequestTargetError("unsupported HTTP request-target");
+    }
   }
-  return new Request(url, {
-    method,
-    headers,
-    body: Readable.toWeb(incoming) as ReadableStream<Uint8Array>,
-    duplex: "half",
-  });
+
+  absoluteUrl(): string {
+    if (this.url.charCodeAt(0) !== 47 /* "/" */) return this.url;
+    const fallbackHost = authorityOf(this.server.hostname, this.server.port);
+    return `http://${this.incoming.headers.host ?? fallbackHost}${this.url}`;
+  }
+
+  header(name: string): string | null {
+    const value = this.incoming.headers[name.toLowerCase()];
+    if (value === undefined) return null;
+    return Array.isArray(value) ? value.join(", ") : value;
+  }
+
+  headers(): Headers {
+    if (this._headers !== undefined) return this._headers;
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(this.incoming.headers)) {
+      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+    }
+    return (this._headers = headers);
+  }
+
+  body(): ReadableStream<Uint8Array> | null {
+    if (this._bodySet === true) return this._body as ReadableStream<Uint8Array> | null;
+    this._bodySet = true;
+    const declared = this.incoming.headers["content-length"];
+    const chunked = this.incoming.headers["transfer-encoding"] !== undefined;
+    if (!mayCarryBody(this.method) || (declared === undefined && !chunked) || declared === "0") {
+      return (this._body = null);
+    }
+    this._bodyOwned = true;
+    return (this._body = Readable.toWeb(this.incoming) as ReadableStream<Uint8Array>);
+  }
+
+  request(): Request {
+    if (this._request !== undefined) return this._request;
+    if (this._bytes !== undefined && mayCarryBody(this.method)) {
+      // The native source already owns/consumed the IncomingMessage. Expose a
+      // standards-shaped consumed Request: bodyUsed is true and every second
+      // reader rejects, matching Request.bytes() ownership semantics without
+      // re-wrapping or copying the original payload.
+      const consumed = new Request(this.absoluteUrl(), {
+        method: this.method,
+        headers: this.headers(),
+        body: new Uint8Array(0),
+        duplex: "half",
+      });
+      void consumed.arrayBuffer().catch(() => undefined);
+      return (this._request = consumed);
+    }
+    const body = this.body();
+    return (this._request = new Request(this.absoluteUrl(), {
+      method: this.method,
+      headers: this.headers(),
+      ...(body === null ? {} : { body, duplex: "half" }),
+    }));
+  }
+
+  bytes(limit = Number.MAX_SAFE_INTEGER): Promise<Uint8Array> {
+    if (this._bytes !== undefined) return this._bytes;
+    this._bodyOwned = true;
+    if (this._request !== undefined || this._bodySet === true) {
+      const body = this.request().body;
+      if (body === null) return (this._bytes = Promise.resolve(new Uint8Array(0)));
+      return (this._bytes = this.#readWebBody(body, limit));
+    }
+    const declared = this.incoming.headers["content-length"];
+    const chunked = this.incoming.headers["transfer-encoding"] !== undefined;
+    if (!mayCarryBody(this.method) || (declared === undefined && !chunked) || declared === "0") {
+      return (this._bytes = Promise.resolve(new Uint8Array(0)));
+    }
+    return (this._bytes = this.#readIncoming(limit));
+  }
+
+  /** Drain an unread request so the keep-alive connection can parse its next message. */
+  cleanupUnread(): void {
+    if (this._bodyOwned === true || this.incoming.readableEnded || this.incoming.destroyed) return;
+    this.incoming.resume();
+  }
+
+  #tooLarge(limit: number): Error {
+    return createError(413, `request body exceeds the ${limit} byte limit`, {
+      expose: true,
+      code: "payload_too_large",
+    });
+  }
+
+  #readIncoming(limit: number): Promise<Uint8Array> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let total = 0;
+      let settled = false;
+      const cleanup = (): void => {
+        this.incoming.off("data", onData);
+        this.incoming.off("end", onEnd);
+        this.incoming.off("aborted", onAborted);
+        this.incoming.off("error", onError);
+      };
+      const fail = (error: Error): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+      const onData = (chunk: Buffer): void => {
+        total += chunk.byteLength;
+        if (total > limit) {
+          fail(this.#tooLarge(limit));
+          // Keep consuming without buffering so Node can safely reuse the
+          // connection after the early 413 response.
+          this.incoming.resume();
+          return;
+        }
+        chunks.push(chunk);
+      };
+      const onEnd = (): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (chunks.length === 0) resolve(new Uint8Array(0));
+        else if (chunks.length === 1) resolve(chunks[0] as Buffer);
+        else resolve(Buffer.concat(chunks, total));
+      };
+      const onAborted = (): void => fail(new Error("client disconnected while reading request"));
+      const onError = (error: Error): void => fail(error);
+      this.incoming.on("data", onData);
+      this.incoming.once("end", onEnd);
+      this.incoming.once("aborted", onAborted);
+      this.incoming.once("error", onError);
+    });
+  }
+
+  async #readWebBody(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        throw this.#tooLarge(limit);
+      }
+      chunks.push(value);
+    }
+    if (chunks.length === 0) return new Uint8Array(0);
+    if (chunks.length === 1) return chunks[0] as Uint8Array;
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return out;
+  }
+}
+
+const writeHeaderInit = (headers: ResponseHeadersInit, out: ServerResponse): void => {
+  if (headers instanceof Headers) {
+    const cookies = headers.getSetCookie();
+    for (const [name, value] of headers) {
+      if (name !== "set-cookie") out.setHeader(name, value);
+    }
+    if (cookies.length > 0) out.setHeader("set-cookie", cookies);
+    return;
+  }
+  if (Array.isArray(headers)) {
+    for (const entry of headers as [string, string][]) {
+      out.appendHeader(entry[0], entry[1]);
+    }
+    return;
+  }
+  for (const [name, value] of Object.entries(headers as Record<string, unknown>)) {
+    out.setHeader(name, value as string | readonly string[]);
+  }
 };
 
-const writeResponse = async (res: Response, out: ServerResponse): Promise<void> => {
+const writeHeaders = (res: Response, out: ServerResponse, facts = responseFactsOf(res)): void => {
   out.statusCode = res.status;
   if (res.statusText.length > 0) out.statusMessage = res.statusText;
+  if (facts?.planned === true) {
+    if (facts.headersInit !== undefined) writeHeaderInit(facts.headersInit, out);
+    return;
+  }
   const cookies = res.headers.getSetCookie();
   for (const [name, value] of res.headers) {
     if (name === "set-cookie") continue;
     out.setHeader(name, value);
   }
   if (cookies.length > 0) out.setHeader("set-cookie", cookies);
-  if (res.body === null) {
+};
+
+const directBodyLength = (body: string | Uint8Array): number =>
+  typeof body === "string" ? Buffer.byteLength(body) : body.byteLength;
+
+const endDirectBody = (out: ServerResponse, body: string | Uint8Array): void => {
+  if (typeof body === "string") out.end(body);
+  else out.end(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
+};
+
+const waitForDrain = (out: ServerResponse): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      out.off("drain", drained);
+      out.off("close", closed);
+      out.off("error", failed);
+    };
+    const drained = (): void => {
+      cleanup();
+      resolve();
+    };
+    const closed = (): void => {
+      cleanup();
+      reject(new Error("client disconnected while streaming response"));
+    };
+    const failed = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+    out.once("drain", drained);
+    out.once("close", closed);
+    out.once("error", failed);
+  });
+
+const writeStream = async (
+  body: ReadableStream<Uint8Array>,
+  out: ServerResponse,
+): Promise<void> => {
+  const reader = body.getReader();
+  let completed = false;
+  const cancel = (): void => {
+    if (!completed) void reader.cancel("client disconnected").catch(() => undefined);
+  };
+  out.once("close", cancel);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        completed = true;
+        out.end();
+        return;
+      }
+      if (!out.write(value)) await waitForDrain(out);
+    }
+  } finally {
+    out.off("close", cancel);
+    try {
+      reader.releaseLock();
+    } catch {
+      // A failed/cancelled reader can already be detached.
+    }
+  }
+};
+
+const writeResponse = (res: Response, out: ServerResponse): void | Promise<void> => {
+  const facts = responseFactsOf(res);
+  if (
+    facts?.planned === true &&
+    facts.headersInit === undefined &&
+    facts.headersResolved !== true
+  ) {
+    const length = directBodyLength(facts.directBody);
+    const headers =
+      facts.implicitContentType === undefined
+        ? { "content-length": length }
+        : { "content-type": facts.implicitContentType, "content-length": length };
+    const status = facts.responseStatus as number;
+    const statusText = facts.responseStatusText as string;
+    if (statusText.length === 0) out.writeHead(status, headers);
+    else out.writeHead(status, statusText, headers);
+    endDirectBody(out, facts.directBody);
+    return;
+  }
+  writeHeaders(res, out, facts);
+  if (facts === undefined && res.body === null) {
     out.end();
     return;
   }
-  // pipeline() propagates backpressure and destroys the source when the
-  // client disconnects mid-stream.
-  await pipeline(Readable.fromWeb(res.body as import("node:stream/web").ReadableStream), out);
+  if (facts !== undefined) {
+    if (
+      facts.headersResolved !== true &&
+      !out.hasHeader("content-type") &&
+      facts.implicitContentType !== undefined
+    ) {
+      out.setHeader("content-type", facts.implicitContentType);
+    }
+    // The byte-exact body is already known. A fixed length avoids chunk
+    // framing and also replaces an application-supplied stale length, which
+    // must never desynchronize a keep-alive connection.
+    if (!out.hasHeader("transfer-encoding")) {
+      out.setHeader("content-length", directBodyLength(facts.directBody));
+    }
+    endDirectBody(out, facts.directBody);
+    return;
+  }
+  return writeStream(res.body as ReadableStream<Uint8Array>, out);
 };
 
 /**
@@ -148,29 +424,40 @@ export const startNodeServer = (
       return handle;
     },
   };
-
   const server: Server = createServer(options.http ?? {}, (incoming, out) => {
-    void (async () => {
-      try {
-        const fallbackHost = authorityOf(handle.hostname, handle.port);
-        const remote = incoming.socket.remoteAddress;
-        const response = await app.handle(requestOf(incoming, fallbackHost), {
-          server: handle,
-          ...(remote !== undefined ? { remote } : {}),
-        });
-        await writeResponse(response, out);
-      } catch {
-        // app.handle itself never rejects — this is a bridge failure (socket
-        // torn down mid-body, unwritable response).
-        if (!out.headersSent) {
-          out.statusCode = 500;
-          out.setHeader("content-type", "text/plain; charset=utf-8");
-          out.end("Internal Server Error");
-        } else {
-          out.destroy();
-        }
+    const fail = (error: unknown): void => {
+      // app dispatch itself never rejects — failures here are native source
+      // validation, socket teardown or response writer failures.
+      if (!out.headersSent) {
+        out.statusCode = error instanceof InvalidRequestTargetError ? 400 : 500;
+        out.setHeader("content-type", "text/plain; charset=utf-8");
+        out.end(
+          error instanceof InvalidRequestTargetError ? "Bad Request" : "Internal Server Error",
+        );
+      } else {
+        out.destroy();
       }
-    })();
+    };
+    let source: NodeRequestSource | null = null;
+    const answer = (response: Response): void => {
+      if (source !== null && mayCarryBody(source.method)) source.cleanupUnread();
+      try {
+        const writing = writeResponse(response, out);
+        if (writing instanceof Promise) void writing.catch(fail);
+      } catch (error) {
+        fail(error);
+      }
+    };
+    try {
+      source = new NodeRequestSource(incoming, handle);
+      // The native source is also the Runtime view (`server` + `remote`), so
+      // the adapter does not allocate a second request-local carrier object.
+      const result = (app as NativeApplication)[HANDLE_REQUEST_SOURCE](source);
+      if (result instanceof Promise) void result.then(answer, fail);
+      else answer(result);
+    } catch (error) {
+      fail(error);
+    }
   });
 
   server.on("listening", () => {

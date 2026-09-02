@@ -49,6 +49,11 @@ const SERVERS = [
   { name: "keala (bun 1.4)", cmd: ["bun", "bench/server-keala.ts"], port: 4103 },
   { name: "hono 4 (bun 1.4)", cmd: ["bun", "bench/server-hono.ts"], port: 4102 },
   { name: `keala (${NODE_LABEL})`, cmd: ["node", "bench/server-keala-node.ts"], port: 4109 },
+  {
+    name: `hono 4 official adapter (${NODE_LABEL})`,
+    cmd: ["node", "bench/server-hono-node.ts"],
+    port: 4110,
+  },
   { name: `koa 3 (${NODE_LABEL})`, cmd: ["node", "bench/server-koa.mjs"], port: 4101 },
   { name: `fastify 5 (${NODE_LABEL})`, cmd: ["node", "bench/server-fastify.mjs"], port: 4105 },
   { name: "koa 3 (bun 1.4)", cmd: ["bun", "bench/server-koa.mjs"], port: 4106 },
@@ -85,6 +90,12 @@ const SCALE_SERVERS = [
     name: `keala (${NODE_LABEL})`,
     cmd: ["node", "bench/server-keala-node-scale.ts"],
     port: 4119,
+    scale: true,
+  },
+  {
+    name: `hono 4 official adapter (${NODE_LABEL})`,
+    cmd: ["node", "bench/server-hono-node-scale.ts"],
+    port: 4120,
     scale: true,
   },
   {

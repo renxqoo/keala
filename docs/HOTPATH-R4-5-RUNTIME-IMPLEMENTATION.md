@@ -1,6 +1,6 @@
 # HOTPATH-R4.5 — 运行时执行引擎施工图
 
-> 状态：定稿
+> 状态：已核销（2026-09-02）
 > 设计基线：[HOTPATH-R4-5-RUNTIME-DESIGN.md](./HOTPATH-R4-5-RUNTIME-DESIGN.md)
 > 迁移单元：[HOTPATH-R4-5-MIGRATION-RUNTIME-ENGINE.md](./HOTPATH-R4-5-MIGRATION-RUNTIME-ENGINE.md)
 
@@ -14,12 +14,13 @@
 | B45-2 | P1 可用性   | handler 未读请求 body 提前响应时没有统一 drain/destroy 所有权，keep-alive 可能被残留 body 阻塞 | `src/adapters/node.ts` 无 cleanup 状态；既有测试未覆盖 | 新 source 在 response settle 时清理 |
 | B45-3 | P1 验证缺口 | “客户端先断开”测试只验证不崩溃，不断言 source/producer 被取消或资源释放                        | `test/adapters-node.test.ts`                           | 补可观察回归                        |
 | B45-4 | P2 性能     | Node 请求无条件创建 Headers、Request；GET probe 从不需要大部分对象                             | `requestOf()`                                          | 改为 lazy RequestSource             |
+| B45-5 | P2 测试装置 | Node framing 测试跨整个 pipelined 报文搜索 Content-Length，会误取第二条响应的长度              | `test/agent-review-security.test.ts`                   | 只解析第一条 header block           |
 
 ### 1.2 结构证据
 
 | 编号  | 结论                                                                    | 裁决                                      |
 | ----- | ----------------------------------------------------------------------- | ----------------------------------------- |
-| A45-1 | Node 进程内核心 probe 平价，3/6 层洋葱与 late-header 领先 Hono          | router/compose 保留                       |
+| A45-1 | Node 进程内核心 probe 平价，3/6 层洋葱与 late-header 领先 Hono          | 不改语义；只做可证明的注册期特化          |
 | A45-2 | sugar 和 state finalizer 在 Response 构造前拥有原始 string/bytes/object | 提取单一 ResponsePlan/元数据              |
 | A45-3 | 现有 implicit-text 私有 symbol 已证明 Response 可携带无全局表的构造事实 | 扩展为统一 body metadata 后删除单用途标记 |
 | A45-4 | 外部 Response 可能是锁定、disturbed、未知流，不能假装为直接 body        | 归一为 foreign/stream，严格 fallback      |
@@ -34,6 +35,19 @@
 - **C45-2**：body reader 只接受 Web Request，无法利用 Node IncomingMessage 的直接 bytes。
 - **C45-3**：adapter 没有可观察的 in-flight request body cleanup 生命周期。
 
+### 1.4 实现期发现并修复
+
+| 编号   | 问题                                                        | 修复与回归锁                                                       |
+| ------ | ----------------------------------------------------------- | ------------------------------------------------------------------ |
+| B45-6  | Node origin-form 为路由提前拼绝对 URL                       | source 保存 request-target；只在 `c.raw/c.URL` 首次访问时拼 origin |
+| B45-7  | 计划响应重建若继承旧 headers facts，会丢 late header        | 重建只继承 byte-exact body；新 header 集合归新 Response 所有       |
+| B45-8  | Bun 1.4 对轻量文本 Response 的隐式 Content-Type 行为不同    | plan 暴露标准 headers，并在删除/重建后保持真实用户修改             |
+| B45-9  | declared body 在 Bun 路径仍可能先进入 WebStream             | declared 路径直接 `Request.bytes()`，再以实际字节复核预算          |
+| B45-10 | benchmark Bun wrapper 实际用 `process.execPath` 启动了 Node | Bun 模式显式使用 Bun binary；进程结果记录 runtime                  |
+| B45-11 | 两组独立 RPS 中位数相除会被同机漂移扭曲                     | 主指标改为每轮配对比率的中位数，独立中位数只作诊断                 |
+| B45-12 | Bun `it.each` 把空数组 fixture 当作零参数展开               | fixture 改为对象行，Node/Bun 两套测试都执行真实空数组 case         |
+| B45-13 | pooled context 从显式 runtime 切到无 runtime 时保留旧值     | `runtimeValue` 纳入原型 sentinel，回收时删 own slot 并加泄漏锁     |
+
 ## 2. 逐模块裁决
 
 | 旧文件                        | 裁决         | 审计状态            | 动作                                                 |
@@ -43,14 +57,14 @@
 | `src/core/app.ts`             | 重构         | 已审（C45-1）       | 单一内部 dispatchSource；公开 handle 包 Fetch source |
 | `src/core/application.ts`     | 重构         | 已审                | 用私有 symbol 暴露 adapter 调度端口，不增加用户 API  |
 | `src/core/dispatch.ts`        | 重构         | 已审（D45-2）       | 从 source path/method 调度，算法不变                 |
-| `src/core/context/state.ts`   | 重构         | 已审                | rawRequest 改 requestSource；固定字段序不漂移        |
-| `src/core/context/context.ts` | 重构         | 已审                | create/reset 接 source；pool 清理 source 生命周期    |
+| `src/core/context/state.ts`   | 重构         | 已审                | rawRequest 改 requestSource；冷字段迁入原型 sentinel |
+| `src/core/context/context.ts` | 重构         | 已审                | 热字段固定 own slots；pool 清理 source 生命周期      |
 | `src/core/context/request.ts` | 重写入口     | 已审（D45-2）       | lazy raw/headers；其余 Koa API 语义保留              |
 | `src/core/context/sugar.ts`   | 重构         | 已审（A45-2/3）     | 用统一 body metadata 替代 implicit-text 专用标记     |
 | `src/core/respond.ts`         | 重构         | 已审（A45-2/4）     | 生成/传播唯一计划事实，fallback 不读流               |
 | `src/plugins/body-parser.ts`  | 重构读取端口 | 已审（A45-6/C45-2） | source 有界 bytes；memo/413 语义不变                 |
-| `src/core/compose.ts`         | 保留         | 已审（A45-1）       | 只允许传播响应事实，不改 onion 算法                  |
-| `src/router/*`                | 保留         | 已审（A45-1）       | 不改 matcher                                         |
+| `src/core/compose.ts`         | 特化         | 已审（A45-1）       | 洋葱语义不变；单 handler 走直接调度                  |
+| `src/router/*`                | 特化         | 已审（A45-1）       | 静态 match 复用、单动态 fast matcher、无冗余 decode  |
 | `test/adapters-node.test.ts`  | 扩展/改写    | 已审（25 cases）    | 新 source/writer/cleanup/wire 矩阵                   |
 | body/stream/property tests    | 扩展         | 已审                | 新端口等价、断连、背压、pool 隔离                    |
 | benchmark harness             | 重构         | 已审                | 官方 Node Hono、fresh server、正确性断言             |
@@ -126,3 +140,34 @@ source/plan 只能依赖 Web/Node 的最小结构；router 不依赖 adapter；c
 - Bun 非目标热路径稳定回退超过 3%；
 - Node 提升不足 3 倍或仍明显落后 Hono；
 - 需要全局替换 Request/Response 或修改 Tillgate 才能达标。
+
+## 7. 最终实现与性能核销
+
+最终实现不是全局替换 `Request/Response`，而是作用域内 `PlannedResponse`：自身承载 direct
+body/status/header facts；Bun 在 Fetch 边界使用标准 Response，Node 对已知 string/bytes
+直接 `writeHead/end`，对未知流使用有背压、断连取消的单 writer。Node source 的常见 probe
+只有 incoming/server/method/url 四个 own slots，Headers、Request、body、absolute URL 均按需。
+
+真实 HTTP 使用 Hono 4.13.5 官方 Node adapter，200 connections、pipeline 1、交错 5 轮；
+主统计量是同轮配对 Keala/Hono 比率中位数。代表性结果：
+
+| Runtime | 场景                    | Keala 相对 Hono（配对中位数） | p99        |
+| ------- | ----------------------- | ----------------------------: | ---------- |
+| Node 22 | probe                   |                         +7.1% | 2ms vs 3ms |
+| Node 22 | JSON 小响应             |                         +4.6% | 3ms vs 3ms |
+| Node 22 | param                   |                         +4.2% | 3ms vs 3ms |
+| Node 22 | 3 层 middleware         |                        +61.0% | 不劣       |
+| Node 22 | 同实际字节复核安全 JSON |                        +11.2% | 不劣       |
+| Bun 1.4 | probe                   |                         +7.7% | 2ms vs 3ms |
+| Bun 1.4 | param（5 秒样本）       |                         +6.2% | 2ms vs 2ms |
+| Bun 1.4 | JSON（5 秒样本）        |                        +11.9% | 3ms vs 3ms |
+
+Node probe 从 R4.4 的约 28.35k RPS 提升到约 133k RPS，约 4.7 倍，并超过本机同口径 Hono。
+所有记录场景 error/timeout 为 0。统一 `+10%` 是 stretch goal，middleware/安全 JSON 达到，
+最窄 probe/json/param 未达到；生产验收采用更严格、也更诚实的结论：本版本与同语义矩阵下
+两运行时所有主场景配对中位数均领先，不声称跨硬件或未来 Hono 的数学永久最优。
+
+质量门：Node 2008 pass/8 skip，Bun 1979 pass/37 skip，coverage
+`97.32/92.07/96.29/98.69%`，构建、smoke、example、soak、四象限进程检查全绿；Tillgate
+5 个直接消费者以本地构建产物验证 718 tests，原仓库未修改。旧 requestOf、pipeline、
+WebStream 小响应桥、兼容开关和双 writer 均不存在，无待办占位或已知正确性挂账。

@@ -28,7 +28,7 @@ const prepareDirectResponse = (c: ContextState): boolean => {
   const response = c._res;
   if (
     response !== undefined &&
-    isImplicitTextResponse(response) &&
+    isImplicitTextResponse(c, response) &&
     !response.headers.has("content-type")
   ) {
     return trySetCommittedHeader(c, "content-type", TEXT_PLAIN);

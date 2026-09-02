@@ -123,7 +123,7 @@ describe("perf evidence: structural fences", () => {
     await expect(pending).resolves.toHaveProperty("status", 200);
   });
 
-  it("every context carries the exact same hidden-class key order", () => {
+  it("every fresh context carries the same minimal own-key order", () => {
     const app2 = new Keala({ env: "test" });
     app2.get("/k", () => undefined);
     const shapes = new Set<string>();
@@ -136,7 +136,9 @@ describe("perf evidence: structural fences", () => {
       for (let i = 0; i < 50; i++) await app2.handle(requestFor("/k"));
       for (const c of seen) shapes.add(Object.keys(c).join(","));
       expect(shapes.size).toBe(1);
-      expect((shapes.values().next().value as string).startsWith("appValue,rawRequest")).toBe(true);
+      const shape = shapes.values().next().value as string;
+      expect(shape.startsWith("rawRequest,params")).toBe(true);
+      expect(shape).not.toContain("pathValue");
     })();
   });
 

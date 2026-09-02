@@ -27,6 +27,8 @@ import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
 import { isImplicitTextResponse, TEXT_PLAIN } from "./context/sugar.ts";
 import { FLAG_COMMITTED_HEADERS_APPLIED } from "./context/state.ts";
+import { createPlannedResponse, inheritResponseFacts } from "./response-plan.ts";
+import { isNativeRequestSource } from "./request-source.ts";
 
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
 
@@ -161,7 +163,7 @@ const rebuildCommitted = (c: Context, res: Response): Response => {
     (c.flags & 128) === 0 &&
     !contentTypeRemoved &&
     !headers.has("content-type") &&
-    isImplicitTextResponse(res)
+    isImplicitTextResponse(c, res)
   ) {
     headers.set("content-type", TEXT_PLAIN);
   }
@@ -183,7 +185,8 @@ const rebuildCommitted = (c: Context, res: Response): Response => {
     headers.delete("transfer-encoding");
     return new Response(null, { status, statusText, headers });
   }
-  return new Response(body, { status, statusText, headers });
+  const rebuilt = new Response(body, { status, statusText, headers });
+  return (c.flags & 128) === 0 ? inheritResponseFacts(rebuilt, res) : rebuilt;
 };
 
 /** Response headers for a rebuild: the committed headers as-is — content-type
@@ -340,7 +343,19 @@ const fromState = (c: Context, head: boolean): Response => {
   // Bare fast path: default status, no custom headers, no message — the
   // runtime provides content-type/length.
   if (!multiValue && !hasRecord && status === 200 && custom.length === 0) {
-    if (isObject && !isStreaming(body)) return Response.json(body);
+    if (isObject && !isStreaming(body)) {
+      if (isNativeRequestSource(c.rawRequest)) {
+        const json = JSON.stringify(body) ?? "null";
+        return createPlannedResponse(json, {}, "application/json");
+      }
+      return Response.json(body);
+    }
+    if (
+      isNativeRequestSource(c.rawRequest) &&
+      (typeof body === "string" || body instanceof Uint8Array)
+    ) {
+      return createPlannedResponse(body, {}, typeof body === "string" ? TEXT_PLAIN : undefined);
+    }
     return new Response(bodyInitOf(body));
   }
 
@@ -350,8 +365,23 @@ const fromState = (c: Context, head: boolean): Response => {
   }
   if (!hasRecord) {
     // Status/message only — the cheap init shape.
-    if (isObject && !isStreaming(body))
+    if (isObject && !isStreaming(body)) {
+      if (isNativeRequestSource(c.rawRequest)) {
+        const json = JSON.stringify(body) ?? "null";
+        return createPlannedResponse(json, { status, statusText: reason }, "application/json");
+      }
       return jsonInit(body as object, { status, statusText: reason });
+    }
+    if (
+      isNativeRequestSource(c.rawRequest) &&
+      (typeof body === "string" || body instanceof Uint8Array)
+    ) {
+      return createPlannedResponse(
+        body,
+        { status, statusText: reason },
+        typeof body === "string" ? TEXT_PLAIN : undefined,
+      );
+    }
     return new Response(bodyInitOf(body), { status, statusText: reason });
   }
   // Headers-instance init (faster than a record init by ~60ns).
@@ -365,8 +395,24 @@ const fromState = (c: Context, head: boolean): Response => {
       headers.set(key, value);
     }
   }
-  if (isObject && !isStreaming(body))
+  if (isObject && !isStreaming(body)) {
+    if (isNativeRequestSource(c.rawRequest)) {
+      const json = JSON.stringify(body) ?? "null";
+      if (!headers.has("content-type")) headers.set("content-type", "application/json");
+      return createPlannedResponse(json, { status, statusText: reason, headers });
+    }
     return jsonInit(body as object, { status, statusText: reason, headers });
+  }
+  if (
+    isNativeRequestSource(c.rawRequest) &&
+    (typeof body === "string" || body instanceof Uint8Array)
+  ) {
+    return createPlannedResponse(
+      body,
+      { status, statusText: reason, headers },
+      typeof body === "string" ? TEXT_PLAIN : undefined,
+    );
+  }
   return new Response(bodyInitOf(body), { status, statusText: reason, headers });
 };
 

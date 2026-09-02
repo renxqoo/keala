@@ -1,18 +1,12 @@
 /**
  * Context recycling semantics .
  *
- * The core removed the `pooling: true` app option — pooling is now opt-in BY THE
- * HOST via the exported `resetContext` (recycle a context object in place for
- * the next request). These tests lock the recycling contract directly:
- * a recycled context must be indistinguishable from a freshly created one
- * (design contract #6: every field reset, `routerAllowed` cleared — the
- * field-conservation lock). The app-level cases re-check the user-visible
- * guarantees the old pooling suite covered (isolation across serial,
- * concurrent, error and cookie/header traffic) which the core provides by
- * construction (fresh context per request).
- *
- * The old "pooling stays correct with currentContext enabled" case is gone:
- * `currentContext` was removed from the core along with the pool.
+ * Pooling is opt-in through `new Keala({ pooling: true })`; resetContext is
+ * exported for hosts that own their lifecycle. Fresh contexts inherit cold
+ * primitive sentinels from the live prototype, while recycled contexts reset
+ * the corresponding own slots. The contract is observable value equality,
+ * not identical Object.keys() layout: requiring identical own keys would put
+ * twenty cold writes back on every non-pooled request.
  */
 
 import { describe, expect, it } from "vitest";
@@ -50,18 +44,19 @@ const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
 };
 
 describe("resetContext recycling semantics", () => {
-  it("field conservation: a recycled context carries exactly the fresh context's state fields", () => {
+  it("field conservation: recycled and fresh contexts expose identical state values", () => {
     const app = new Keala({ keys: ["k"] });
     const raw = new Request("http://localhost:3000/b?y=2");
     const runtime = { remote: "2.2.2.2" };
     const fresh = createContext(app, baseContextProto, raw, runtime);
     const recycled = resetContext(usedContext(app), raw, runtime);
 
-    const freshKeys = Object.keys(fresh).toSorted();
-    expect(Object.keys(recycled).toSorted()).toEqual(freshKeys);
     const freshState = fresh as unknown as Record<string, unknown>;
     const recycledState = recycled as unknown as Record<string, unknown>;
-    for (const key of freshKeys) {
+    const freshKeys = Object.keys(fresh);
+    const recycledKeys = Object.keys(recycled);
+    expect(recycledKeys).toEqual(expect.arrayContaining(freshKeys));
+    for (const key of recycledKeys) {
       expect(recycledState[key]).toEqual(freshState[key]);
     }
   });
@@ -107,6 +102,19 @@ describe("resetContext recycling semantics", () => {
       remote: () => "3.3.3.3",
     });
     expect(recycled.ip).toBe("3.3.3.3");
+  });
+
+  it("clears an explicit runtime when the next pooled request has none", async () => {
+    const app = new Keala({ ...quiet, pooling: true });
+    app.get("/runtime", (c) => c.json({ remote: c.runtime?.remote ?? null }));
+
+    const first = await app.handle(new Request("http://localhost/runtime"), {
+      remote: "4.4.4.4",
+    });
+    expect(await first.json()).toEqual({ remote: "4.4.4.4" });
+
+    const second = await app.handle(new Request("http://localhost/runtime"));
+    expect(await second.json()).toEqual({ remote: null });
   });
 });
 

@@ -77,9 +77,11 @@
     "smoke": "bun scripts/smoke.ts",
     "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage",
     "soak": "bun scripts/soak.ts",
-    "example:check": "bun scripts/example-check.ts"
+    "example:check": "bun scripts/example-check.ts",
+    "process:check": "node scripts/process-check.mjs"
   },
   "devDependencies": {
+    "@hono/node-server": "2.1.1",
     "@koa/router": "^15.7.0",
     "@types/bun": "1.4.0",
     "@types/node": "^22.10.0",

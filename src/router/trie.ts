@@ -38,6 +38,8 @@ export interface RouteTarget {
   allowed: Set<string>;
   /** route name for `router.url(name, params)` */
   name?: string;
+  /** Registration-time immutable result reused by exact static matches. */
+  staticMatch: TrieMatch | null;
 }
 
 export interface ParamChild {
@@ -79,6 +81,7 @@ export const createTarget = (): RouteTarget => ({
   methods: new Map(),
   layers: new Map(),
   allowed: new Set(),
+  staticMatch: null,
 });
 
 interface ParamLink {

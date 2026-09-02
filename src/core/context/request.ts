@@ -20,6 +20,15 @@ import { typeIs } from "../../negotiation/typeis.ts";
 import { getPath, getSearch, parseHostHeader, toURL } from "../../utils/url.ts";
 import type { Runtime } from "../../types.ts";
 import type { ContextState } from "./state.ts";
+import {
+  isNativeRequestSource,
+  sourceAbsoluteUrl,
+  sourceHeader,
+  sourceHeaders,
+  sourceMethod,
+  sourceRequest,
+  sourceUrl,
+} from "../request-source.ts";
 
 export interface RequestApi {
   readonly raw: Request;
@@ -131,13 +140,14 @@ const stringifyQuery = (value: QueryMap): string => {
 
 export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   get raw(): Request {
-    return this.rawRequest;
+    return sourceRequest(this.rawRequest);
   },
   get method(): string {
-    return this.rawRequest.method;
+    return sourceMethod(this.rawRequest);
   },
   get url(): string {
-    return (this.urlValue ??= `${getPath(this.rawRequest.url)}${getSearch(this.rawRequest.url)}`);
+    const rawUrl = sourceUrl(this.rawRequest);
+    return (this.urlValue ??= `${getPath(rawUrl)}${getSearch(rawUrl)}`);
   },
   set url(value: string) {
     this.urlValue = value;
@@ -157,7 +167,8 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     this.pathValue = null;
   },
   get originalUrl(): string {
-    return (this.originalUrlValue ??= `${getPath(this.rawRequest.url)}${getSearch(this.rawRequest.url)}`);
+    const rawUrl = sourceUrl(this.rawRequest);
+    return (this.originalUrlValue ??= `${getPath(rawUrl)}${getSearch(rawUrl)}`);
   },
   get querystring(): string {
     const url = this.url;
@@ -205,13 +216,16 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     this.url = parts.path + search + parts.hash;
   },
   get URL(): URL | null {
-    return toURL(this.rawRequest.url);
+    return toURL(sourceAbsoluteUrl(this.rawRequest));
   },
   get headers(): Headers {
-    return this.rawRequest.headers;
+    return sourceHeaders(this.rawRequest);
   },
   get runtime(): Runtime | undefined {
-    return this.runtimeValue;
+    return (
+      this.runtimeValue ??
+      (isNativeRequestSource(this.rawRequest) ? (this.rawRequest as unknown as Runtime) : undefined)
+    );
   },
   header(field: string): string {
     return this.get(field);
@@ -222,10 +236,10 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     // store the latter, so both lookups must fall through to it.
     if (name === "referer" || name === "referrer") {
       return (
-        this.rawRequest.headers.get("referrer") ?? this.rawRequest.headers.get("referer") ?? ""
+        sourceHeader(this.rawRequest, "referrer") ?? sourceHeader(this.rawRequest, "referer") ?? ""
       );
     }
-    return this.rawRequest.headers.get(name) ?? "";
+    return sourceHeader(this.rawRequest, name) ?? "";
   },
   get host(): string {
     // Strip userinfo (user:pass@host) — only the authority is trusted, in
@@ -242,7 +256,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     }
     const header = stripUserinfo(this.get("host"));
     if (header.length > 0) return header;
-    return authorityOf(this.rawRequest.url);
+    return authorityOf(sourceAbsoluteUrl(this.rawRequest));
   },
   get hostname(): string {
     const host = this.host;
@@ -260,7 +274,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
       const forwarded = this.get("x-forwarded-proto").split(",")[0]?.trim();
       if (forwarded !== undefined && forwarded.length > 0) return forwarded;
     }
-    return this.rawRequest.url.startsWith("https://") ? "https" : "http";
+    return sourceAbsoluteUrl(this.rawRequest).startsWith("https://") ? "https" : "http";
   },
   get secure(): boolean {
     return this.protocol === "https";
@@ -282,7 +296,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     // Memo: null = unresolved, "" = resolved to no address. The resolver runs
     // exactly once either way.
     if (this.ipValue === null) {
-      const runtime = this.runtimeValue;
+      const runtime = this.runtime;
       const remote = runtime?.remote;
       if (typeof remote === "string") this.ipValue = remote;
       else if (typeof remote === "function") this.ipValue = remote() ?? "";
@@ -290,7 +304,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
         const server = runtime?.server as
           | { requestIP(request: Request): { readonly address: string } | null }
           | undefined;
-        this.ipValue = server?.requestIP(this.rawRequest)?.address ?? "";
+        this.ipValue = server?.requestIP(sourceRequest(this.rawRequest))?.address ?? "";
       }
     }
     return this.ipValue;
@@ -311,16 +325,16 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return host.length === 0 ? original : `${this.protocol}://${host}${original}`;
   },
   get idempotent(): boolean {
-    return IDEMPOTENT.has(this.rawRequest.method);
+    return IDEMPOTENT.has(sourceMethod(this.rawRequest));
   },
   get charset(): string {
-    return charsetFromContentType(this.rawRequest.headers.get("content-type") ?? "");
+    return charsetFromContentType(sourceHeader(this.rawRequest, "content-type") ?? "");
   },
   get reqType(): string {
-    return normalizeType(this.rawRequest.headers.get("content-type") ?? "");
+    return normalizeType(sourceHeader(this.rawRequest, "content-type") ?? "");
   },
   get reqLength(): number | undefined {
-    const raw = this.rawRequest.headers.get("content-length");
+    const raw = sourceHeader(this.rawRequest, "content-length");
     if (raw === null || raw.length === 0) return undefined;
     const parsed = Number.parseInt(raw, 10);
     return Number.isNaN(parsed) ? undefined : parsed;
@@ -329,7 +343,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return !this.fresh;
   },
   get fresh(): boolean {
-    const method = this.rawRequest.method;
+    const method = sourceMethod(this.rawRequest);
     if (method !== "GET" && method !== "HEAD") return false;
     const status = this.statusValue;
     if ((status >= 200 && status < 300) || status === 304) {
@@ -338,7 +352,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return false;
   },
   is(...types: (string | string[])[]): string | null | false {
-    const contentType = this.rawRequest.headers.get("content-type");
+    const contentType = sourceHeader(this.rawRequest, "content-type");
     if (types.length === 0) {
       return contentType === null ? "" : normalizeType(contentType);
     }
@@ -347,25 +361,25 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return typeIs(contentType, list);
   },
   accepts(...types: (string | string[])[]): string | string[] | false {
-    const header = this.rawRequest.headers.get("accept");
+    const header = sourceHeader(this.rawRequest, "accept");
     const list = flatten(types);
     if (list.length === 0) return acceptableValues(header);
     return acceptsType(header, list);
   },
   acceptsEncodings(...encodings: (string | string[])[]): string | string[] | false {
-    const header = this.rawRequest.headers.get("accept-encoding");
+    const header = sourceHeader(this.rawRequest, "accept-encoding");
     const list = flatten(encodings);
     if (list.length === 0) return acceptableValues(header);
     return acceptsEncoding(header, list);
   },
   acceptsCharsets(...charsets: (string | string[])[]): string | string[] | false {
-    const header = this.rawRequest.headers.get("accept-charset");
+    const header = sourceHeader(this.rawRequest, "accept-charset");
     const list = flatten(charsets);
     if (list.length === 0) return acceptableValues(header);
     return acceptsCharset(header, list);
   },
   acceptsLanguages(...langs: (string | string[])[]): string | string[] | false {
-    const header = this.rawRequest.headers.get("accept-language");
+    const header = sourceHeader(this.rawRequest, "accept-language");
     const list = flatten(langs);
     if (list.length === 0) return acceptableValues(header);
     return acceptsLanguage(header, list);
@@ -378,14 +392,13 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
  * must hold; `Cache-Control: no-cache` always forces a full response.
  */
 const isFresh = (c: ContextState): boolean => {
-  const headers = c.rawRequest.headers;
-  const modifiedSince = headers.get("if-modified-since");
-  const noneMatch = headers.get("if-none-match");
+  const modifiedSince = sourceHeader(c.rawRequest, "if-modified-since");
+  const noneMatch = sourceHeader(c.rawRequest, "if-none-match");
 
   if (modifiedSince === null && noneMatch === null) return false;
 
   // Always stale on end-to-end reload requests (RFC 2616 §14.9.4).
-  const cacheControl = headers.get("cache-control");
+  const cacheControl = sourceHeader(c.rawRequest, "cache-control");
   if (cacheControl !== null && NO_CACHE.test(cacheControl)) return false;
 
   // If-None-Match takes precedence, except for the existence wildcard `*`.

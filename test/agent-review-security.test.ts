@@ -112,11 +112,17 @@ describe("agent security review: error.headers content framing", () => {
           sock.on("error", reject);
           setTimeout(finish, 8000);
         });
-        const declared = Number(/^content-length: (\d+)\r$/im.exec(wire)?.[1] ?? "-1");
+        // Parse only the FIRST response header block. The second pipelined
+        // direct response legitimately carries its own Content-Length; a
+        // whole-wire regexp would attribute that value to the first streamed
+        // response and manufacture a framing failure.
+        const firstHeaderEnd = wire.indexOf("\r\n\r\n");
+        const firstHeaders = wire.slice(0, firstHeaderEnd);
+        const declared = Number(/^content-length: (\d+)\r?$/im.exec(firstHeaders)?.[1] ?? "-1");
         // FIXED WORLD: the forged content-length from error.headers never
         // reaches the wire (pre-fix: declared === 5 over a 39-byte body).
         expect(declared).not.toBe(5);
-        const bodyStart = wire.indexOf("\r\n\r\n") + 4;
+        const bodyStart = firstHeaderEnd + 4;
         const nextResponse = wire.indexOf("HTTP/1.1", bodyStart);
         const firstBodyBytes = wire.slice(
           bodyStart,

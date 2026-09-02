@@ -1,13 +1,22 @@
 // keala bench server (Bun runtime) — mirrors the other bench servers.
-import { Keala } from "../src/index.ts";
+import { createBodyParser, Keala, type Context } from "../src/index.ts";
+import type { ContextWithBody } from "../src/plugins/body-parser.ts";
 
 const app = new Keala();
+
+const pass = (_c: Context, next: () => Promise<void>) => next();
+for (const prefix of ["/v1", "/oauth", "/admin"]) app.use(`${prefix}/*`, pass);
+app.use(createBodyParser({ jsonLimit: 1024 }));
+
+app.get("/livez", (c) => c.json({ status: "ok" }));
 
 app.get("/text", (c) => c.text("hello world"));
 
 app.get("/json", (c) => c.json({ hello: "world" }));
 
 app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+
+app.post("/echo-safe", async (c) => c.json(await (c as ContextWithBody).req.json()));
 
 app.get(
   "/mw",

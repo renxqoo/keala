@@ -17,27 +17,24 @@ import { byteLengthOf } from "../../utils/url.ts";
 import { isEmptyStatus } from "../../http/status.ts";
 import { isStatusText } from "../../utils/text.ts";
 import type { ContextState } from "./state.ts";
+import { createPlannedResponse, responseFactsOf } from "../response-plan.ts";
+import { isNativeRequestSource, sourceMethod } from "../request-source.ts";
 
 export const TEXT_PLAIN = "text/plain; charset=utf-8";
 export const TEXT_HTML = "text/html; charset=utf-8";
 
-/**
- * Bun remembers that a directly-constructed string Response is text only
- * inside that original Response. Rebuilding it from `res.body` turns the
- * body into an untyped stream, so Bun.serve falls back to octet-stream.
- * A private symbol preserves the constructor intent without allocating
- * Headers or a side-table entry on the untouched c.text() hot path.
- */
-const IMPLICIT_TEXT_RESPONSE = Symbol("keala.implicitTextResponse");
-type ImplicitTextResponse = Response & { [IMPLICIT_TEXT_RESPONSE]?: true };
+export const isImplicitTextResponse = (c: ContextState, response: Response): boolean =>
+  c.implicitTextResponseValue === response ||
+  responseFactsOf(response)?.implicitContentType === TEXT_PLAIN;
 
-const markImplicitText = (response: Response): Response => {
-  (response as ImplicitTextResponse)[IMPLICIT_TEXT_RESPONSE] = true;
+const textResponse = (c: ContextState, body: string, init?: ResponseInit): Response => {
+  if (isNativeRequestSource(c.rawRequest)) {
+    return createPlannedResponse(body, init, TEXT_PLAIN);
+  }
+  const response = new Response(body, init);
+  c.implicitTextResponseValue = response;
   return response;
 };
-
-export const isImplicitTextResponse = (response: Response): boolean =>
-  (response as ImplicitTextResponse)[IMPLICIT_TEXT_RESPONSE] === true;
 
 /** Latin-1-safe statusText candidate from a staged c.message. */
 const stagedStatusText = (c: ContextState): string | undefined => {
@@ -177,7 +174,7 @@ export const sugarText = (
   if (st !== undefined && isEmptyStatus(st)) {
     return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
   }
-  if (c.rawRequest.method === "HEAD") {
+  if (sourceMethod(c.rawRequest) === "HEAD") {
     return sugarHead(
       merged,
       TEXT_PLAIN,
@@ -189,20 +186,24 @@ export const sugarText = (
   if (merged === undefined && status === undefined && staged === undefined) {
     // Bare path only when nothing is staged — a staged c.message must ride
     // along as statusText exactly like the state-mode finalizer.
-    if (statusText === undefined) return markImplicitText(new Response(body));
-    return markImplicitText(new Response(body, { statusText }));
+    if (statusText === undefined) return textResponse(c, body);
+    return textResponse(c, body, { statusText });
   }
   if (merged === undefined) {
-    return markImplicitText(
-      new Response(body, { status: st, ...(statusText !== undefined ? { statusText } : {}) }),
-    );
+    return textResponse(c, body, {
+      status: st,
+      ...(statusText !== undefined ? { statusText } : {}),
+    });
   }
   if (merged["content-type"] === undefined) merged["content-type"] = TEXT_PLAIN;
-  return new Response(body, {
+  const init = {
     status: st as number,
     ...(statusText !== undefined ? { statusText } : {}),
     headers: headersInitOf(merged),
-  });
+  };
+  return isNativeRequestSource(c.rawRequest)
+    ? createPlannedResponse(body, init)
+    : new Response(body, init);
 };
 
 export const sugarJson = (
@@ -224,7 +225,7 @@ export const sugarJson = (
   if (st !== undefined && isEmptyStatus(st)) {
     return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
   }
-  if (c.rawRequest.method === "HEAD") {
+  if (sourceMethod(c.rawRequest) === "HEAD") {
     // The HEAD view serializes once, here — Response.json would attach a body.
     return sugarHead(
       merged,
@@ -233,6 +234,28 @@ export const sugarJson = (
       st,
       statusText,
     );
+  }
+  if (isNativeRequestSource(c.rawRequest)) {
+    const bodyText = JSON.stringify(payload) ?? "null";
+    if (merged === undefined) {
+      return createPlannedResponse(
+        bodyText,
+        {
+          ...(st !== undefined ? { status: st } : {}),
+          ...(statusText !== undefined ? { statusText } : {}),
+        },
+        "application/json",
+      );
+    }
+    const initHeaders = merged;
+    if (initHeaders["content-type"] === undefined) {
+      initHeaders["content-type"] = "application/json";
+    }
+    return createPlannedResponse(bodyText, {
+      ...(st !== undefined ? { status: st } : {}),
+      ...(statusText !== undefined ? { statusText } : {}),
+      headers: headersInitOf(initHeaders),
+    });
   }
   if (merged === undefined && status === undefined && staged === undefined) {
     if (statusText === undefined) return Response.json(payload);
@@ -283,7 +306,7 @@ export const sugarHtml = (
       headers: headersInitOf(dropContentHeaders(withType) ?? {}),
     });
   }
-  if (c.rawRequest.method === "HEAD") {
+  if (sourceMethod(c.rawRequest) === "HEAD") {
     return sugarHead(
       withType,
       undefined,
@@ -293,7 +316,13 @@ export const sugarHtml = (
     );
   }
   if (st === undefined && statusText === undefined) {
-    return new Response(body, { headers: headersInitOf(withType) });
+    const init = { headers: headersInitOf(withType) };
+    return isNativeRequestSource(c.rawRequest)
+      ? createPlannedResponse(body, init)
+      : new Response(body, init);
   }
-  return new Response(body, { ...statusInit, headers: headersInitOf(withType) });
+  const init = { ...statusInit, headers: headersInitOf(withType) };
+  return isNativeRequestSource(c.rawRequest)
+    ? createPlannedResponse(body, init)
+    : new Response(body, init);
 };

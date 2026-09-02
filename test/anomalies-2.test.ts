@@ -57,9 +57,12 @@ describe("anomalies: query and URL parsing stress", () => {
 });
 
 describe("anomalies: compose illegal usage", () => {
-  it.each([undefined, null, 42, "fn", {}, []])("compose([%p]) throws TypeError", (value) => {
-    expect(() => compose([value as Middleware])).toThrow(TypeError);
-  });
+  it.each([undefined, null, 42, "fn", {}, []].map((value) => ({ value })))(
+    "compose([$value]) throws TypeError",
+    ({ value }) => {
+      expect(() => compose([value as Middleware])).toThrow(TypeError);
+    },
+  );
 
   it("empty stack invokes tail exactly once", async () => {
     let calls = 0;

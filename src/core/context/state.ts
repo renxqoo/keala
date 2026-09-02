@@ -10,10 +10,11 @@ import type { QueryMap } from "../../utils/query.ts";
 import type { HeaderMap, ResponseBody, Runtime } from "../../types.ts";
 import type { RequestSettings } from "./settings.ts";
 import type { Application } from "../app.ts";
+import type { RequestSource } from "../request-source.ts";
 
 export interface ContextState {
   appValue: Application;
-  rawRequest: Request;
+  rawRequest: RequestSource;
   appSettings: RequestSettings;
   runtimeValue: Runtime | undefined;
   // request side
@@ -61,6 +62,8 @@ export interface ContextState {
   removedValue: string[] | null;
   // dual-mode commit slot (see core/compose.ts)
   _res: Response | undefined;
+  /** Bun c.text() identity used only if a later committed-header write rebuilds it. */
+  implicitTextResponseValue: Response | undefined;
   // lazy facades
   stateValue: Record<string, unknown> | null;
   cookiesValue: unknown;

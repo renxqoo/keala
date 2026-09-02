@@ -6,7 +6,11 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import {
+  createBodyParser,
+  readBodyLimited,
+  type ContextWithBody,
+} from "../src/plugins/body-parser.ts";
 import {
   validator,
   type ContextWithValid,
@@ -18,12 +22,62 @@ const quiet = { env: "test" } as const;
 const post = (
   body: string | FormData | ReadableStream,
   headers: Record<string, string> = {},
-): Request => new Request("http://localhost:3000/x", { method: "POST", body, headers });
+): Request =>
+  new Request("http://localhost:3000/x", {
+    method: "POST",
+    body,
+    headers,
+    ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
+  } as RequestInit);
 
 const jsonBody = (value: unknown, headers: Record<string, string> = {}): Request =>
   post(JSON.stringify(value), { "content-type": "application/json", ...headers });
 
 describe("bodyParser: readers", () => {
+  it("upgrades an existing raw memo to the stricter facade budget", async () => {
+    const app = new Keala(quiet);
+    app.use(createBodyParser({ jsonLimit: 4 }));
+    app.post("/x", async (c0) => {
+      await readBodyLimited(c0, 16);
+      await (c0 as ContextWithBody).req.arrayBuffer();
+      c0.body = "unreachable";
+    });
+    const request = post(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(8));
+          controller.close();
+        },
+      }),
+    );
+    const response = await app.handle(request);
+    expect(response.status).toBe(413);
+  });
+
+  it("keeps 413 authoritative when cancelling an oversized stream fails", async () => {
+    const app = new Keala(quiet);
+    app.use(createBodyParser({ jsonLimit: 4 }));
+    let cancelObserved = false;
+    app.post("/x", async (c0) => {
+      await (c0 as ContextWithBody).req.arrayBuffer();
+      c0.body = "unreachable";
+    });
+    const request = post(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(8));
+        },
+        cancel() {
+          cancelObserved = true;
+          throw new Error("cancel failure is secondary to 413");
+        },
+      }),
+    );
+    const response = await app.handle(request);
+    expect(response.status).toBe(413);
+    expect(cancelObserved).toBe(true);
+  });
+
   it("json/text/arrayBuffer/blob read the memoized body", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());

@@ -7,7 +7,12 @@
 import type { AppOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
-import { baseContextProto, createContext, resetContext, type Context } from "./context/context.ts";
+import {
+  baseContextProto,
+  createBoundContext,
+  resetContext,
+  type Context,
+} from "./context/context.ts";
 import { createPool, type ContextPool } from "./context/pool.ts";
 import { createDecorators, type Decorators } from "./context/decorate.ts";
 import {
@@ -23,7 +28,7 @@ import {
   pluginInstallerOf,
   registerRedirect,
   routeShortcut,
-  settleHandle,
+  settleNativeHandle,
   wsUpgradeHandler,
 } from "./dispatch.ts";
 import {
@@ -46,9 +51,13 @@ import { buildNativeRoutes, registerSink, type NativeSinkEntry } from "./sink.ts
 import {
   type Application,
   type ErrorMapper,
+  type NativeApplication,
   type NotFoundHandler,
   type WebSocketHandlers,
+  HANDLE_REQUEST_SOURCE,
 } from "./application.ts";
+import type { RequestSource } from "./request-source.ts";
+import { FLAG_DEV_CHAIN } from "./context/state.ts";
 
 export type {
   Application,
@@ -64,7 +73,7 @@ const NO_WS_HANDLERS: ReadonlyMap<string, WebSocketHandlers> = new Map();
 
 export { isRouter };
 
-export class Keala implements Application {
+export class Keala implements NativeApplication {
   readonly env: string;
   readonly proxy: boolean;
   readonly keys: SigningKeys | undefined;
@@ -75,8 +84,8 @@ export class Keala implements Application {
   readonly nativeSinks: Map<string, NativeSinkEntry> = new Map();
 
   // Per-app prototype: decorators never leak into another application.
-  #contextProto: object = Object.create(baseContextProto);
-  #decorators: Decorators = createDecorators(this.#contextProto);
+  #contextProto: object;
+  #decorators: Decorators;
   // R4.3: single error-mapper slot — a second onError registration throws.
   #errorMapper: ErrorMapper | undefined;
   #middleware: MiddlewareStack = createMiddlewareStack();
@@ -102,6 +111,12 @@ export class Keala implements Application {
       subdomainOffset: options.subdomainOffset ?? 2,
     });
     this.router = createRouterState();
+    this.#contextProto = Object.assign(Object.create(baseContextProto) as object, {
+      appValue: this,
+      appSettings: this.settings,
+      flags: this.env === "development" ? FLAG_DEV_CHAIN : 0,
+    });
+    this.#decorators = createDecorators(this.#contextProto);
     this.#errorMapper = undefined;
     this.#poolingEnabled = options.pooling === true;
     // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
@@ -404,15 +419,20 @@ export class Keala implements Application {
   }
 
   handle(request: Request, runtime?: Runtime): Promise<Response> {
+    const settled = this[HANDLE_REQUEST_SOURCE](request, runtime);
+    return settled instanceof Promise ? settled : Promise.resolve(settled);
+  }
+
+  [HANDLE_REQUEST_SOURCE](request: RequestSource, runtime?: Runtime): Response | Promise<Response> {
     const recycled = this.#pool?.acquire();
     const c =
       recycled === undefined
-        ? createContext(this, this.#contextProto, request, runtime)
+        ? createBoundContext(this.#contextProto, request, runtime)
         : resetContext(recycled, request, runtime);
 
     const settled = dispatchRequest(this, c, this.router, this.#middleware, request);
     if (this.#poolingEnabled) this.#pool ??= createPool(this, this.#contextProto);
-    return settleHandle(this.#pool, this.#poolingEnabled, c, settled);
+    return settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled);
   }
 
   callback(): (request: Request, runtime?: Runtime) => Promise<Response> {

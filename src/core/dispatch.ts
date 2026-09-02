@@ -15,7 +15,8 @@ import {
   registerDef,
 } from "../router/router.ts";
 import { getPath } from "../utils/url.ts";
-import { NOOP_TAIL } from "./compose.ts";
+import { isEmptyStatus } from "../http/status.ts";
+import { DIRECT_HANDLER, NOOP_TAIL, type HandlerResult } from "./compose.ts";
 import type { Context } from "./context/context.ts";
 import {
   fallbackMiddlewareForPath,
@@ -26,6 +27,8 @@ import { FLAG_CHAIN_STALLED, FLAG_ROUTE_REACHED } from "./context/state.ts";
 import { retireWithBody, type ContextPool } from "./context/pool.ts";
 import { errorResponse } from "./error-response.ts";
 import { finalize } from "./respond.ts";
+import type { RequestSource } from "./request-source.ts";
+import { sourceMethod, sourceUrl } from "./request-source.ts";
 
 /** A plugin is any object exposing `install(app)`; middleware is not one. */
 export const pluginInstallerOf = (value: unknown): ((app: Application) => void) | null => {
@@ -178,14 +181,15 @@ export const finalizeGuarded = (app: Application, c: Context): Response | Promis
  * `Response | Promise<Response>` union). Never throws, never rejects: the
  * dispatcher's own guards already answer error Responses.
  */
-export const settleHandle = (
+/** Native adapters keep synchronous chains synchronous; public handle wraps once. */
+export const settleNativeHandle = (
   pool: ContextPool | null,
   pooling: boolean,
   c: Context,
   settled: Response | Promise<Response>,
-): Promise<Response> => {
+): Response | Promise<Response> => {
   if (!pooling) {
-    return settled instanceof Promise ? settled : Promise.resolve(settled);
+    return settled;
   }
   if (pool === null) throw new TypeError("pooling dispatch requires a context pool");
   // Guarded lifecycle: settle (sync or async), then retire to the pool — a
@@ -195,7 +199,7 @@ export const settleHandle = (
   if (settled instanceof Promise) {
     return settled.then((value) => retireWithBody(pool, c, value));
   }
-  return Promise.resolve(retireWithBody(pool, c, settled));
+  return retireWithBody(pool, c, settled);
 };
 
 /** Dev-only trace of which matched route a chain was dispatched for.
@@ -296,6 +300,57 @@ export const dispatchChain = (
   return finishDispatch(app, c, trace);
 };
 
+/**
+ * A route with one handler and no middleware has no downstream observer that
+ * could mutate its committed response. Return a valid Response immediately;
+ * state-style/HEAD/error cases still enter the full finalizer. This removes
+ * the commit slot and a second finalization pass from the dominant endpoint
+ * shape without weakening onion semantics anywhere they can exist.
+ */
+const dispatchDirect = (
+  app: Application,
+  c: Context,
+  handler: RouteHandler,
+  method: string,
+): Response | Promise<Response> => {
+  const finish = (result: HandlerResult): Response | Promise<Response> => {
+    if (result === undefined || result === null) return finalizeGuarded(app, c);
+    if (!(result instanceof Response)) {
+      if (typeof (result as PromiseLike<unknown>).then === "function") {
+        return errorResponse(
+          app,
+          c,
+          new TypeError("handler returned a promise — await it inside the handler instead"),
+        );
+      }
+      return errorResponse(
+        app,
+        c,
+        new TypeError(
+          `handler returned ${typeof result}; only Response, undefined or null are valid`,
+        ),
+      );
+    }
+    if (
+      c.headersRecord === null &&
+      method !== "HEAD" &&
+      !(isEmptyStatus(result.status) && result.body !== null)
+    ) {
+      return result;
+    }
+    c._res = result;
+    return finalizeGuarded(app, c);
+  };
+  try {
+    const result = handler(c, NOOP_TAIL);
+    return result instanceof Promise
+      ? result.then(finish, (error: unknown) => errorResponse(app, c, error))
+      : finish(result);
+  } catch (error) {
+    return errorResponse(app, c, error);
+  }
+};
+
 const finishDispatch = (
   app: Application,
   c: Context,
@@ -318,13 +373,13 @@ export const dispatchRequest = (
   c: Context,
   router: RouterState,
   middleware: MiddlewareStack,
-  request: Request,
+  request: RequestSource,
 ): Response | Promise<Response> => {
-  const path = getPath(request.url);
+  const path = getPath(sourceUrl(request));
   const match = matchRoute(router, path);
   if (match !== null) {
     c.params = match.params ?? EMPTY_PARAMS;
-    const rawMethod = request.method;
+    const rawMethod = sourceMethod(request);
     const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
     // Express-style convenience: HEAD falls back to the GET handler.
     const chain =
@@ -332,6 +387,10 @@ export const dispatchRequest = (
       (method === "HEAD" ? (match.target.methods.get("GET") as Chain | undefined) : undefined) ??
       (match.target.methods.get("ALL") as Chain | undefined);
     if (chain !== undefined) {
+      const directHandler = chain[DIRECT_HANDLER];
+      if (directHandler !== undefined) {
+        return dispatchDirect(app, c, directHandler, method);
+      }
       return dispatchChain(
         app,
         c,

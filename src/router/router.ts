@@ -94,6 +94,9 @@ export interface RouterState {
   paramMiddlewares: Map<string, RouteHandler>;
   staticMap: Map<string, RouteTarget>;
   buckets: Map<string, Bucket>;
+  /** Whole-router specialization while exactly one simple dynamic def exists. */
+  fastDynamic: FastMatcher | null;
+  dynamicDefCount: number;
   trieRoot: TrieNode;
   hasDynamic: boolean;
   prefix: string;
@@ -115,6 +118,8 @@ export const createRouterState = (prefix = ""): RouterState => ({
   paramMiddlewares: new Map(),
   staticMap: new Map(),
   buckets: new Map(),
+  fastDynamic: null,
+  dynamicDefCount: 0,
   trieRoot: createNode(),
   hasDynamic: false,
   prefix: normalizePrefix(prefix),
@@ -149,6 +154,7 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
     let target = state.staticMap.get(key);
     if (target === undefined) {
       target = createTarget();
+      target.staticMatch = Object.freeze({ target, params: null });
       state.staticMap.set(key, target);
     }
     return [target];
@@ -160,6 +166,7 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
     if (!targets.includes(target)) targets.push(target);
   }
   state.hasDynamic = true;
+  state.dynamicDefCount++;
   const first = ir.segments[0] as CompiledSegment;
   if (first.kind !== "static") return targets;
   let bucket = state.buckets.get(first.value);
@@ -173,6 +180,14 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
       ? {
           // Full static head ("/v1/users"), not just the first segment — the
           // matcher must skip every leading static before captures begin.
+          prefix: staticHeadOf(ir.segments),
+          names: paramNamesOf(ir.segments),
+          target: targets[0] as RouteTarget,
+        }
+      : null;
+  state.fastDynamic =
+    state.dynamicDefCount === 1 && ir.isSimple
+      ? {
           prefix: staticHeadOf(ir.segments),
           names: paramNamesOf(ir.segments),
           target: targets[0] as RouteTarget,
@@ -262,6 +277,8 @@ const bindDef = (state: RouterState, def: RouteDef, middleware: MiddlewareStack)
 const resetIndex = (state: RouterState): void => {
   state.staticMap = new Map();
   state.buckets = new Map();
+  state.fastDynamic = null;
+  state.dynamicDefCount = 0;
   state.trieRoot = createNode();
   state.hasDynamic = false;
 };
@@ -391,8 +408,7 @@ const canonicalKey = (path: string): string =>
     .join("/");
 
 /** Try the fast matcher for a bucket; provably equivalent to the trie walk. */
-const fastMatch = (bucket: Bucket, path: string): RouteMatch | null => {
-  const fast = bucket.fast;
+const fastMatch = (fast: FastMatcher | null, path: string): RouteMatch | null => {
   if (fast === null) return null;
   const prefix = fast.prefix;
   // The static head must match exactly AND on a segment boundary — otherwise
@@ -408,7 +424,10 @@ const fastMatch = (bucket: Bucket, path: string): RouteMatch | null => {
     const value = rest.slice(1);
     if (value.indexOf("/") !== -1) return null;
     const params: Record<string, string> = Object.create(null);
-    params[names[0] as string] = decodeSegment(value);
+    // matchRoute only enters a fast matcher after proving the whole path has
+    // no "%". The trie owns escaped-path decoding; scanning this capture a
+    // second time would be redundant fixed work on every plain param route.
+    params[names[0] as string] = value;
     return { target: fast.target, params };
   }
   if (rest.length <= 1) return null;
@@ -418,7 +437,7 @@ const fastMatch = (bucket: Bucket, path: string): RouteMatch | null => {
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i] as string;
     if (part.length === 0) return null;
-    params[names[i] as string] = decodeSegment(part);
+    params[names[i] as string] = part;
   }
   return { target: fast.target, params };
 };
@@ -438,8 +457,13 @@ export const matchRoute = (state: RouterState, path: string): RouteMatch | null 
       target = state.staticMap.get(canonicalKey(stripped));
     }
   }
-  if (target !== undefined) return { target, params: null };
+  if (target !== undefined) return target.staticMatch as RouteMatch;
   if (!state.hasDynamic) return null;
+
+  if (state.fastDynamic !== null && path.indexOf("%") === -1) {
+    const matched = fastMatch(state.fastDynamic, path);
+    if (matched !== null) return matched;
+  }
 
   // Bucket by first segment. The fast matcher's prefix is a DECODED pattern
   // value — a request path carrying escapes compares in a different key
@@ -450,7 +474,7 @@ export const matchRoute = (state: RouterState, path: string): RouteMatch | null 
   if (first.length > 0 && path.indexOf("%") === -1) {
     const bucket = state.buckets.get(first);
     if (bucket !== undefined) {
-      const fast = fastMatch(bucket, path);
+      const fast = fastMatch(bucket.fast, path);
       if (fast !== null) return fast;
     }
   }
