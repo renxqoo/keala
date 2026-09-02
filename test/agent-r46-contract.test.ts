@@ -127,7 +127,8 @@ describe("R4.4 contract coherence (agent-r44)", () => {
     // hands back the ORIGINAL 30s-drain promise — drain:0 is silently
     // swallowed, the second signal is a no-op.
     const registered: Array<[string, () => void]> = [];
-    const once = vi.spyOn(process, "once").mockImplementation(((
+    // REVIEW-BUG-1 fix: the bridge registers PERMANENT process.on listeners.
+    const once = vi.spyOn(process, "on").mockImplementation(((
       event: string | symbol,
       handler: () => void,
     ) => {
@@ -135,7 +136,7 @@ describe("R4.4 contract coherence (agent-r44)", () => {
         registered.push([event, handler]);
       }
       return process;
-    }) as unknown as typeof process.once);
+    }) as unknown as typeof process.on);
     const gate = deferred();
     try {
       const app = new Keala({ env: "test" });

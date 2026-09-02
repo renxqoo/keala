@@ -155,11 +155,12 @@ describe("R4.6 Bun adapter: stopGraceful", () => {
 describe("R4.6 signal bridge (listen signals: true)", () => {
   it("SIGTERM/SIGINT handlers drain via app.close(); a second signal force-closes", async () => {
     const registered: Array<[string, () => void]> = [];
-    const once = vi.spyOn(process, "once").mockImplementation(
+    // The bridge registers PERMANENT listeners (REVIEW-BUG-1 fix).
+    const onSpy = vi.spyOn(process, "on").mockImplementation(
       ((event: string | symbol, handler: () => void) => {
         if (typeof event === "string") registered.push([event, handler]);
         return process;
-      }) as unknown as typeof process.once,
+      }) as unknown as typeof process.on,
     );
     try {
       const app = new Keala({ env: "test" });
@@ -174,13 +175,13 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
       handler(); // second signal: force
       await app.close(); // idempotent — returns the already-running close
     } finally {
-      once.mockRestore();
+      onSpy.mockRestore();
     }
   });
 
   it("the Node listen() options form registers the bridge and the server slot", async () => {
     const registered: string[] = [];
-    const once = vi.spyOn(process, "once").mockImplementation((event: string | symbol) => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation((event: string | symbol) => {
       if (typeof event === "string") registered.push(event);
       return process;
     });
@@ -202,13 +203,14 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
       await closed;
       server.stop(true);
     } finally {
-      once.mockRestore();
+      onSpy.mockRestore();
     }
     expect(closedViaSlot).toBe(true);
   });
 
   it("startNodeServer without signals does NOT register handlers", async () => {
     const once = vi.spyOn(process, "once").mockImplementation(() => process);
+    const onProbe = vi.spyOn(process, "on").mockImplementation(() => process);
     try {
       const app = new Keala({ env: "test" });
       app.get("/x", (c) => {
@@ -216,9 +218,16 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       expect(once).not.toHaveBeenCalled();
+      // process.on fires for unrelated listeners; the bridge specifically
+      // must not arm signal handlers.
+      const signalEvents = onProbe.mock.calls
+        .map(([event]) => String(event))
+        .filter((event) => event === "SIGTERM" || event === "SIGINT");
+      expect(signalEvents).toHaveLength(0);
       server.stop(true);
     } finally {
       once.mockRestore();
+      onProbe.mockRestore();
     }
   });
 });

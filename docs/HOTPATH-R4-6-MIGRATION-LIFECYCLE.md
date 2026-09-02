@@ -98,4 +98,15 @@
 
 **显式挂账**：per-route 差异化预算、熔断/重试、压力式准入（Envoy 型）、AIMD 自适应（tower 型）——见 DESIGN §3.2（U1 策略生态为承载缝）。
 
-**多 agent 红测 review**：5 个独立 review agent（bugs/contract/security/perf/HA）只写红测不改业务代码，发现项由终审核验后按最优方案修复——结果见验收清单勾选与后续提交。
+**多 agent 红测 review**（5 个独立 agent，只写红测不改业务代码；产出 91 个新测试）：
+- perf 6/6 预算达标（结构性围栏：未配置零 AbortController/零定时器/Response 恒等、waiter 五离队路径定时器 1:1:1、期限 1 timer 恰一次 504、holdBody 恰一次包装、全局定时器收支平衡、拒绝路径零池交互）。
+- HA 8/8 场景守住（含 wire 断开风暴×drain×pooling 组合、双信号强停、升级风暴）。
+- **确认缺陷 7 项（终审全部按最优方案修复，红测转绿）**：
+  1. REVIEW-BUG-1/CT-43（双 agent 独立确认，r4-4 继承）：信号桥 `process.once` 二次同名信号落到 OS 默认处置——改永久监听器，`fired` 承担 once 语义。
+  2. REVIEW-SEC-15（P1 DoS）：P3 策略物化使内置队列订阅惰性 signal——协议 v3 追加 `source` 参数，队列经原生通道驱逐失联排队者。
+  3. REVIEW-CT-34：策略同步 throw 逃出 `app.handle`——onSaturated 全包裹容器化。
+  4. REVIEW-SEC-3/4：策略垃圾返回值 throw、undefined 决议穿透——decision/wake 全形状校验回落 503。
+  5. REVIEW-SEC-17：未启写的流水线响应在 socket 死亡时不发 res close（wire 幻影计数拖满 drain 窗）——socket 级 close 结算，keep-alive 复用零监听器堆积。
+  6. REVIEW-BUG-9：drain 期迟到 keep-alive 请求的零交叉不再唤醒 waiter（bogus timedOut:true）——waiter 常驻至 close 完成，每次零交叉重跑 trySettle（done 守卫幂等）。
+  7. REVIEW-BUG-11：close 完成后 escalate 仍可重触发第三方 force——finish 清空 escalate + running 判空。
+- 附带收紧：预中止排队者免创建定时器（arm 先查 aborted 再武装）；测试装置适配（信号桥 spy once→on、CloseStatus 形状断言）。

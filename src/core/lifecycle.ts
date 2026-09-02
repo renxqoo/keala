@@ -198,8 +198,10 @@ export const closeApp = (
   if (lc.closePromise !== null) {
     // Escalation (CT-1/FINDING-2/SEC-8b/HA-3): a repeat close with drain 0
     // while a close is running means FORCE — the signal bridge's second
-    // SIGTERM must not be swallowed by idempotency.
-    if (options?.drain === 0) lc.escalate?.();
+    // SIGTERM must not be swallowed by idempotency. A COMPLETED close
+    // escalates nothing (REVIEW-BUG-11: third-party force routines must
+    // observe "running" only).
+    if (options?.drain === 0 && lc.escalate !== null) lc.escalate?.();
     return lc.closePromise;
   }
   const drain = options?.drain ?? DEFAULT_DRAIN_MS;
@@ -218,6 +220,9 @@ export const closeApp = (
     const finish = (timedOut: boolean): void => {
       if (done) return;
       done = true;
+      // The close is over — later repeat closes must not re-fire adapter
+      // force routines (REVIEW-BUG-11).
+      lc.escalate = null;
       if (timer !== undefined) clearTimeout(timer);
       if (timedOut) handle?.stop(true);
       resolve({ timedOut, inFlight: lc.inFlight });
@@ -275,9 +280,15 @@ export const closeApp = (
 
 /**
  * SIGTERM/SIGINT bridge (`listen({ signals: true })`): first signal drains
- * with the default timeout, a second force-closes. The bridge never exits
- * the process itself — the drain timer holds the event loop, and once
+ * with the default timeout, any later signal force-closes. The bridge never
+ * exits the process itself — the drain timer holds the event loop, and once
  * everything settles the loop empties naturally.
+ *
+ * PERMANENT listeners (REVIEW-BUG-1/CT-43): `process.once` would consume
+ * the handler on first delivery, so a repeated SAME-NAME signal (the k8s
+ * SIGTERM→SIGTERM pattern) would fall through to the OS default disposition
+ * and kill the process mid-drain. The `fired` flag carries the once-
+ * semantics; the listener stays armed for the escalation lifetime.
  */
 export const installSignalBridge = (app: Application): void => {
   let fired = false;
@@ -285,6 +296,6 @@ export const installSignalBridge = (app: Application): void => {
     void (fired ? app.close({ drain: 0 }) : app.close());
     fired = true;
   };
-  process.once("SIGTERM", onSignal);
-  process.once("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  process.on("SIGINT", onSignal);
 };

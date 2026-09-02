@@ -262,6 +262,10 @@ export const startNodeServer = (
         const finish = (timedOut: boolean): void => {
           if (done) return;
           done = true;
+          // The waiters live for the whole close (zero-crossings re-run
+          // trySettle until both conditions align — see onWire); retire
+          // them here so a later stopGraceful starts clean.
+          wireWaiters.length = 0;
           if (timer !== undefined) clearTimeout(timer);
           if (timedOut) server.closeAllConnections();
           else server.closeIdleConnections();
@@ -297,25 +301,37 @@ export const startNodeServer = (
     wireInFlight++;
     // Client-disconnect bridge: `c.signal` (and the admission queue's abort
     // listening) must fire when the client walks away mid-response — Node
-    // gives us res 'close' before 'finish' as the only observable.
+    // gives us res 'close' before 'finish' as the only observable for a
+    // STARTED response. A pipelined response that never started writing
+    // gets no res 'close' on socket death at all (REVIEW-SEC-17), so the
+    // SOCKET's own close settles the wire count too. Both listeners are
+    // idempotent through `wireDone` and detached once it flips — a keep-alive
+    // socket must not accumulate per-request listeners.
     let source: NodeRequestSource | null = null;
     let wireDone = false;
     const onWire = (): void => {
       if (wireDone) return;
       wireDone = true;
       wireInFlight--;
+      incoming.socket.removeListener("close", onSocketClose);
       if (wireInFlight === 0 && wireWaiters.length > 0) {
-        const waiters = wireWaiters.splice(0);
-        for (const wake of waiters) wake();
+        // Waiters stay registered (cleared only when a close finishes): a
+        // zero-crossing can be unproductive — the app counter may settle
+        // later, and a LATE keep-alive request can dip the wire to zero
+        // again (REVIEW-BUG-9). Every zero-crossing re-runs trySettle;
+        // the done-guard makes repeats free.
+        for (const wake of wireWaiters) wake();
       }
     };
-    out.on("finish", onWire);
-    out.on("close", () => {
+    const onSocketClose = (): void => {
       if (!out.writableEnded && source !== null) {
         source.disconnect(new DOMException("client disconnected", "AbortError"));
       }
       onWire();
-    });
+    };
+    out.on("finish", onWire);
+    out.on("close", onSocketClose);
+    incoming.socket.on("close", onSocketClose);
     const fail = (error: unknown): void => {
       // app dispatch itself never rejects — failures here are native source
       // validation, socket teardown or response writer failures.

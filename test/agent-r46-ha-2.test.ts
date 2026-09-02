@@ -56,17 +56,18 @@ const openSocket = (port: number): Promise<Socket> =>
     sock.once("error", reject);
   });
 
-/** Capture process.once registrations (the signal bridge) without real signals. */
+/** Capture the signal bridge's registrations without real signals — the
+ * bridge registers PERMANENT listeners via process.on (REVIEW-BUG-1 fix). */
 const captureOnce = (): { registered: Array<[string, () => void]>; restore: () => void } => {
   const registered: Array<[string, () => void]> = [];
-  const once = vi.spyOn(process, "once").mockImplementation(((
+  const onSpy = vi.spyOn(process, "on").mockImplementation(((
     event: string | symbol,
     handler: () => void,
   ) => {
     if (typeof event === "string") registered.push([event, handler]);
     return process;
-  }) as unknown as typeof process.once);
-  return { registered, restore: () => once.mockRestore() };
+  }) as unknown as typeof process.on);
+  return { registered, restore: () => onSpy.mockRestore() };
 };
 
 /** Count live Timeout handles — a leaked deadline timer survives here. */

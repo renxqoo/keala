@@ -126,13 +126,16 @@ describe("agent-r44 bug hunt: signal bridge force semantics", () => {
       // pending 200ms later instead of having resolved {timedOut:true}.
       // STATUS: CONFIRMED-RED — observed "still-draining" after 200ms.
       const registered: Array<[string, () => void]> = [];
-      const once = vi.spyOn(process, "once").mockImplementation(((
+      // REVIEW-BUG-1 fix: the bridge registers PERMANENT process.on
+      // listeners (a once-listener consumed itself and let a repeated
+      // same-name signal fall to the OS default disposition).
+      const once = vi.spyOn(process, "on").mockImplementation(((
         event: string | symbol,
         handler: () => void,
       ) => {
         if (typeof event === "string") registered.push([event, handler]);
         return process;
-      }) as unknown as typeof process.once);
+      }) as unknown as typeof process.on);
       try {
         const app = new Keala({ env: "test" });
         const gate = deferred();

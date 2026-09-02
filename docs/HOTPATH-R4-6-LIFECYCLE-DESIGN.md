@@ -32,7 +32,7 @@ type CloseStatus = { timedOut: boolean; inFlight: number };
 app.isDraining(): boolean;      // readiness 翻转用，一旦 true 永不回退
 app.inFlight: number;           // readonly：已准入未结算
 
-app.listen(3000, { signals: true });  // SIGTERM/SIGINT → close()；二次信号强停
+app.listen(3000, { signals: true });  // SIGTERM/SIGINT → close()；任意后续信号强停（桥为永久监听器——once 监听器会在首信号后自我消费，令同名二次信号落到 OS 默认处置直接杀进程）
 
 // 过载保护 —— 构造级
 new Keala({
@@ -97,19 +97,26 @@ r4-4 迁移文档 §2 的规则表整体继承为本轮规格：
 | U2 | deadline 每请求 2 个闭包（settleOnce + releaseOnce）+ race promise + timer | 单一 once 状态对象 + timer（≤1 闭包） | 用户裁决 D3 配置路径加严；行为不变 | perf 断言更新，行为用例零改动 |
 | U3 | 排队 waiter 每请求新建（waiter 对象 + Promise + settle 三件套） | waiter 槽池化，稳态突发零分配 | 用户裁决 D3；行为不变（FIFO/移交/超时/断开语义不变） | perf 断言更新，行为用例零改动 |
 
-**AdmissionStrategy 协议（U1 的形态）**：
+**AdmissionStrategy 协议（U1 的形态，review 轮后定稿 v3）**：
 
 ```ts
 interface AdmissionStrategy {
   /** 满载时被调用：返回 Response=拒绝；null（同步或经 Promise）=准许。
    *  `admit()` 在获得容量的那一刻同步占槽（内置 queue 的槽位移交依赖它——
    *  drain 记账不能观察到计数器下探）；未调用 admit 的 null 由核心在
-   *  同步点/决议微任务点补占（此时不得有新请求插入，微任务先于宏任务保证）。 */
-  onSaturated(state: LifecycleState, request: Request, admit: () => void): Response | Promise<Response | null> | null;
+   *  同步点/决议微任务点补占（此时不得有新请求插入，微任务先于宏任务保证）。
+   *  `source` 是原始 RequestSource：客户端断开的驱逐信号只存在于原生
+   *  source 的 lazy abort 通道，物化 Request 的 signal 对原生传输是惰性的。 */
+  onSaturated(
+    state: LifecycleState,
+    request: Request,
+    admit: () => void,
+    source: RequestSource,
+  ): Response | Promise<Response | null> | null;
 }
 ```
 
-机制（计数、draining 拒绝、释放移交循环 `refillFromQueue`）留在核心；策略只决定"满载之后怎么办"。内置 `failFast`（默认）与 `queue`（maxQueue>0 时）两个实现。**实施修正（P3）**：策略收到的 request 由核心物化为 fetch Request（与 `overload.handler` 同契约——策略作者不应面对 RequestSource 双形状）；策略 Promise 决议 null 时若已 drain 则拒绝（draining），已占槽者（槽位移交）除外——服务照常。
+机制（计数、draining 拒绝、释放移交循环 `refillFromQueue`）留在核心；策略只决定"满载之后怎么办"。内置 `failFast`（默认）与 `queue`（maxQueue>0 时）两个实现。**实施与 review 修正**：策略收到的 request 由核心物化为 fetch Request（与 `overload.handler` 同契约）；策略的**全部失活形态**（同步 throw、非 Response/非 null/非 thenable 返回、决议 undefined/垃圾值、Promise rejection）一律响亮记录后回落内建 503——`app.handle` 永不因此逃逸异常（REVIEW-CT-34/SEC-3/SEC-4）；策略 Promise 决议 null 时若已 drain 则拒绝（draining），已占槽者（槽位移交）除外——服务照常；内置 queue 通过 `source` 订阅驱逐信号（REVIEW-SEC-15：排队中的失联客户端立即出队，而非占槽到超时）。
 
 ## 5. 核心机制 × 策略边界（可插拔架构，裁决 D2）
 

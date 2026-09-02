@@ -105,6 +105,7 @@ export interface AdmissionStrategy {
     state: import("./core/lifecycle.ts").LifecycleState,
     request: Request,
     admit: () => void,
+    source: import("./core/request-source.ts").RequestSource,
   ): Response | Promise<Response | null> | null;
 }
 

@@ -76,13 +76,31 @@ export const admitRequest = (
     lc.inFlight++;
   };
   // Strategies speak the same fetch-Request contract as overload.handler —
-  // a native source is materialized (saturation is the cold path).
-  const decision = overload.strategy.onSaturated(lc, sourceRequest(request), admit);
+  // a native source is materialized (saturation is the cold path). The RAW
+  // source rides along as the last argument: eviction signals (the client's
+  // disconnect) live there, and a materialized Request's own signal is
+  // inert for native transports (REVIEW-SEC-15 — queue starvation).
+  const fallback = (error: unknown): Response => {
+    console.error("\n  keala: overload strategy misbehaved — answering the built-in 503\n", error);
+    return rejectResponse(lc, request, "concurrency");
+  };
+  let decision: ReturnType<AdmissionStrategy["onSaturated"]>;
+  try {
+    decision = overload.strategy.onSaturated(lc, sourceRequest(request), admit, request);
+  } catch (error) {
+    // A throwing strategy must not escape app.handle (REVIEW-CT-34).
+    return fallback(error);
+  }
   if (decision === null) {
     if (!taken) admit();
     return null;
   }
   if (decision instanceof Response) return decision;
+  if (typeof (decision as { then?: unknown }).then !== "function") {
+    // Garbage returns (strings, numbers, objects) are strategy bugs, not
+    // responses (REVIEW-SEC-3).
+    return fallback(new TypeError("onSaturated returned a non-Response, non-null, non-thenable value"));
+  }
   return decision.then(
     (wake) => {
       if (wake === null) {
@@ -94,13 +112,13 @@ export const admitRequest = (
         admit();
         return null;
       }
-      return wake;
+      if (wake instanceof Response) return wake;
+      // Undefined et al. from an async strategy is the same bug class as
+      // garbage sync returns (REVIEW-SEC-4).
+      return fallback(new TypeError("onSaturated resolved a non-Response, non-null value"));
     },
     (error: unknown) => {
-      // A rejecting strategy must not take the gate down with it — loud
-      // first, then the built-in refusal.
-      console.error("\n  keala: overload strategy rejected — answering the built-in 503\n", error);
-      return rejectResponse(lc, request, "concurrency");
+      return fallback(error);
     },
   );
 };
@@ -116,14 +134,18 @@ export const failFastAdmission: AdmissionStrategy = {
  * timeout, client disconnect, drain start, or a full-queue refusal.
  */
 export const queueAdmission: AdmissionStrategy = {
-  onSaturated: (lc, request, admit) => {
+  onSaturated: (lc, request, admit, source) => {
     const overload = lc.overload;
     if (overload === null || lc.queue.length >= overload.maxQueue) {
       return rejectResponse(lc, request, "concurrency");
     }
     // The waiter's transfer IS the strategy's admit: synchronous slot
-    // acquisition at refill time, exactly when capacity frees.
-    return enqueueRequest(lc, request, overload.queueTimeoutMs, admit);
+    // acquisition at refill time, exactly when capacity frees. The waiter
+    // subscribes to the RAW source's abort channel — the materialized
+    // request's signal is inert for native transports, and a vanished
+    // queued client must evict at once, not hold its slot to the timeout
+    // (REVIEW-SEC-15).
+    return enqueueRequest(lc, source, overload.queueTimeoutMs, admit);
   },
 };
 
@@ -136,14 +158,14 @@ export const waiterPoolStats = (): { constructed: number } => ({ constructed: wa
 
 const enqueueRequest = (
   lc: LifecycleState,
-  request: RequestSource,
+  source: RequestSource,
   timeoutMs: number,
   transfer: () => void,
 ): Promise<Response | null> => {
   const waiter = lc.waiterPool.pop() ?? new WaiterSlot();
   // withResolvers: the promise pair without an executor closure.
   const { promise, resolve } = Promise.withResolvers<Response | null>();
-  waiter.arm(lc, request, resolve, timeoutMs, transfer);
+  waiter.arm(lc, source, resolve, timeoutMs, transfer);
   if (!waiter.isSettled) lc.queue.push(waiter);
   return promise;
 };
