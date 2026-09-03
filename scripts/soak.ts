@@ -69,8 +69,27 @@ const fetchRetry = async (url: string, init?: RequestInit): Promise<Response> =>
   throw lastError;
 };
 
+const freshApp = (): InstanceType<typeof Keala> => {
+  const clone = new Keala({ keys: ["soak"], env: "test" });
+  clone.use(async (c, next) => {
+    await next();
+    void c.get("x-soak");
+  });
+  clone.get("/text", (c) => c.text("hello world"));
+  clone.get("/json", (c) => c.json({ hello: "world", list: [1, 2, 3] }));
+  clone.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+  clone.get("/boom", () => {
+    throw new Error("boom");
+  });
+  clone.get("/cookies", (c) => {
+    c.cookies.set("soak", "1", { signed: true });
+    c.body = "ok";
+  });
+  return clone;
+};
+
 const driveHttp = async (label: string): Promise<void> => {
-  const server = app.listen({ port: 0, hostname: "127.0.0.1" });
+  const server = freshApp().listen({ port: 0, hostname: "127.0.0.1" });
   await new Promise((resolve) => setTimeout(resolve, 30));
   const base = `http://127.0.0.1:${server.port}`;
   gc();

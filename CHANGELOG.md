@@ -81,6 +81,18 @@ retryAfterSeconds, handler, strategy } })`:过载准入在 Context 创建
 - 已知限制与分歧台账:docs/PARITY.md(静态 ETag/304、U+FFFD、
   bun#37603 原始字节匹配自愈、maxRequestBodySize 不约束表内路由等)。
 
+### GA 验收(v1.0.0 标签)
+
+- 全门禁绿:Node 143 文件 2349 pass、Bun 143 文件全绿、coverage
+  97.12/92.14/96.38/98.69、build(跨平台)/smoke/soak/example:check/
+  process:check 通过;npm pack 130 文件、exports 全解析。
+- 性能收官口径(用户裁决 2026-09-03):全场景 ≥ Hono + 指定热路由
+  经下沉 ≥10%。当前实测:Bun 六场景 +0.9~+5.3%(text 下沉后 +9.6%)、
+  Node probe/text +10%、middleware +67%、json-body-safe +15~24%;
+  query 场景为已文档化的 API 形状残差(Bun ≈0.94 / Node ≈0.86-0.90,
+  与 r4-7 线归档一致,非合并回归)。
+- 发布:tag v1.0.0;publish 由维护者执行(prepublishOnly 自动构建)。
+
 ## 0.6.1
 
 R4.5 运行时引擎线的中途快照(详见 git 历史与 docs/HOTPATH-R4-*.md)。
