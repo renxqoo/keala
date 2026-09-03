@@ -22,7 +22,7 @@ const sample = (count: number, value: number, start = 1000, finish = 2000): Clie
     connections: 1,
     startedAt: start,
     finishedAt: finish,
-    cpu: { user: 200000, system: 100000, elapsedUs: 1000000 },
+    cpu: { user: 200000, system: 100000, elapsedUs: (finish - start) * 1000 },
     result: {
       totalCompletedRequests: count,
       errors: 0,
@@ -99,5 +99,15 @@ describe("R4.6 multiprocess measurement", () => {
     const result = aggregateLoad([one]);
     expect(result.clientCapacityConstrained).toBe(true);
     expect(result.clients[0]!.cpu.percentOfOneCore).toBe(100);
+  });
+
+  it("B46-6 rejects wall-clock jumps even when all clients jump together", () => {
+    const one = sample(100, 1);
+    const two = sample(200, 1);
+    expect(() =>
+      aggregateLoad([one, two].map((value) => ({ ...value, finishedAt: value.finishedAt + 1000 }))),
+    ).toThrow("clock");
+    expect(() => aggregateLoad([{ ...one, finishedAt: one.finishedAt - 100 }])).toThrow("clock");
+    expect(aggregateLoad([{ ...one, finishedAt: one.finishedAt + 1 }]).total).toBe(100);
   });
 });

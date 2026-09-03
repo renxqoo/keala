@@ -135,6 +135,22 @@ describe("R4.6 isolated load processes", () => {
     expect(pids).toEqual([]);
   });
 
+  it("rejects an unreachable endpoint and reaps every client", async () => {
+    const server = await fixture((_req, res) => {
+      res.end("ok");
+    });
+    const url = server.url;
+    await server.close();
+    const pids: number[] = [];
+    await expect(
+      runLoad(
+        { url, connections: 2, processes: 2, duration: 1 },
+        { onSpawn: (pid) => pids.push(pid) },
+      ),
+    ).rejects.toThrow(/failed|exited/);
+    assertExited(pids);
+  }, 15000);
+
   it("cancels an active measurement and reaps every client", async () => {
     const server = await fixture((_req, res) => {
       res.end("ok");

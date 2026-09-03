@@ -109,6 +109,11 @@ export const aggregateLoad = (samples: readonly ClientSample[]) => {
     ) {
       throw new TypeError("invalid or failed load sample");
     }
+    // Date.now is cross-process comparable but adjustable; hrtime is monotonic.
+    // Millisecond rounding is allowed, NTP/manual clock steps are not.
+    if (Math.abs(sample.finishedAt - sample.startedAt - cpu.elapsedUs / 1000) > 2) {
+      throw new Error("wall clock and monotonic measurement window disagree");
+    }
     const histogram = decodeHist(result.latencies);
     if (histogram.totalCount !== result.totalCompletedRequests) {
       throw new Error("latency histogram/completed request count mismatch");

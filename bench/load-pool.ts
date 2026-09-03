@@ -164,6 +164,16 @@ export const runLoad = async (
     const at = Date.now() + 100;
     clients.forEach((client) => send(client.child, { kind: "run", at }));
     const results = await Promise.all(clients.map((client) => client.wait("result")));
+    const exitDeadline = setTimeout(
+      () => abort.abort(new Error("load client exit deadline exceeded")),
+      2000,
+    );
+    try {
+      await interruptible(() => Promise.all(clients.map((client) => client.exited)), abort.signal);
+      abort.signal.throwIfAborted();
+    } finally {
+      clearTimeout(exitDeadline);
+    }
     return aggregateLoad(
       results.map((message) => {
         if (message.sample === undefined) throw new Error("missing client sample");
