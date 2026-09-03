@@ -77,7 +77,14 @@ export type {
 } from "./types.ts";
 export type { RouteHandler } from "./router/router.ts";
 export type { Plugin } from "./types.ts";
-export type { NativeSinkEntry, NativeStaticSink, NativeDirSink } from "./core/sink.ts";
+export type {
+  NativeSinkEntry,
+  NativeStaticSink,
+  NativeDirSink,
+  NativeFnSink,
+  SunkHandler,
+} from "./core/sink.ts";
+export { noOpFor, type NoOpDeclaration } from "./core/middleware-stack.ts";
 export {
   createBodyParser,
   readBodyLimited,

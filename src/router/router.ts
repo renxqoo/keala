@@ -25,7 +25,7 @@ import {
   type MiddlewareStack,
 } from "../core/middleware-stack.ts";
 import type { CompiledSegment, PatternIR } from "./pattern.ts";
-import { compilePattern, decodeSegment, paramNamesOf } from "./pattern.ts";
+import { compilePattern, decodeSegment, paramNamesOf, patternsOverlap } from "./pattern.ts";
 import {
   createNode,
   createTarget,
@@ -323,7 +323,10 @@ export const registerDef = (
   };
   if (state.sunkPaths.size > 0) {
     for (const sunk of state.sunkPaths) {
-      if (pathsConflict(def.path, sunk)) {
+      // Pattern-aware union: a dynamic segment on either side can consume
+      // what the other spells literally (sunk `/users/:id` shadows a JS
+      // `/users/admin`); pathsConflict keeps the decoded-keyspace coverage.
+      if (pathsConflict(def.path, sunk) || patternsOverlap(def.path, sunk)) {
         throw new TypeError(
           `route ${upper} ${def.path} overlaps natively-sunk ${sunk} — the Bun routing table would silently shadow it`,
         );

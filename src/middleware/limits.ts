@@ -3,25 +3,41 @@
  */
 
 import { createError } from "../http/errors.ts";
+import { noOpFor } from "../core/middleware-stack.ts";
 import type { RouteHandler } from "../router/router.ts";
 
 /**
  * Fast Content-Length pre-check: rejects oversized declared bodies before a
  * single byte is read (the bodyParser limits remain the streaming backstop).
+ *
+ * Declared transparent for bodyless requests (noOpFor): a GET/HEAD without
+ * a declared length takes the `declared === undefined` branch and calls
+ * next() with no observable action, so a natively-sunk GET may bypass this
+ * layer. Residual, documented in PARITY.md: a spec-violating GET that DOES
+ * declare an oversized body gets 413 on the JS mirror and 200 from the
+ * native table (which never runs the layer — nor does maxRequestBodySize
+ * bound table-served routes; probe-verified on Bun 1.4).
  */
 export const bodyLimit = (bytes: number): RouteHandler => {
   if (!Number.isFinite(bytes) || bytes < 0) {
     throw new TypeError("bodyLimit() requires a non-negative byte count");
   }
-  return async (c, next) => {
-    const declared = c.reqLength;
-    if (declared !== undefined && declared > bytes) {
-      throw createError(413, `request body of ${declared} bytes exceeds the ${bytes} byte limit`, {
-        expose: true,
-      });
-    }
-    return next();
-  };
+  return noOpFor(
+    async (c, next) => {
+      const declared = c.reqLength;
+      if (declared !== undefined && declared > bytes) {
+        throw createError(
+          413,
+          `request body of ${declared} bytes exceeds the ${bytes} byte limit`,
+          {
+            expose: true,
+          },
+        );
+      }
+      return next();
+    },
+    { bodyless: true },
+  );
 };
 
 /**

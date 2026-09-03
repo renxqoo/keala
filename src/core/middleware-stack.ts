@@ -83,6 +83,75 @@ interface ConditionalMeta {
 
 const conditionalMeta = new WeakMap<MiddlewareHandler, ConditionalMeta>();
 
+/**
+ * Transparency declaration for sinking: the author attests this layer
+ * performs no observable action (and always calls next()) for the declared
+ * request class, so a natively-sunk route may bypass it on the Bun table.
+ * Proof obligation — the framework cannot verify it; a lying declaration
+ * diverges the native leg only (the JS mirror keeps running the layer),
+ * where the sink parity suite can observe it.
+ */
+export interface NoOpDeclaration {
+  /** No observable action for requests with these (case-insensitive) methods. */
+  readonly methods?: readonly string[];
+  /** No observable action for bodyless requests — excuses GET/HEAD sinks. */
+  readonly bodyless?: boolean;
+}
+
+const noOpMeta = new WeakMap<
+  MiddlewareHandler,
+  { methods?: ReadonlySet<string>; bodyless?: true }
+>();
+
+/** The methods keala treats as bodyless by contract (sink decisions are static). */
+const BODYLESS_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
+
+export const noOpFor = <T extends MiddlewareHandler>(fn: T, declaration: NoOpDeclaration): T => {
+  const methods =
+    declaration.methods === undefined
+      ? undefined
+      : new Set(
+          declaration.methods.map((method) => {
+            if (typeof method !== "string" || method.length === 0) {
+              throw new TypeError("noOpFor methods must be non-empty strings");
+            }
+            return method.toUpperCase();
+          }),
+        );
+  if (methods !== undefined && methods.size === 0) {
+    throw new TypeError("noOpFor declaration needs methods, bodyless, or both");
+  }
+  if (methods === undefined && declaration.bodyless !== true) {
+    throw new TypeError("noOpFor declaration needs methods, bodyless, or both");
+  }
+  noOpMeta.set(fn, {
+    ...(methods === undefined ? {} : { methods }),
+    ...(declaration.bodyless === true ? { bodyless: true } : {}),
+  });
+  return fn;
+};
+
+/** Does this layer's declaration excuse it for a sink serving `methods`? */
+export const noOpExcuses = (handler: MiddlewareHandler, methods: ReadonlySet<string>): boolean => {
+  const declaration = noOpMeta.get(handler);
+  if (declaration === undefined) return false;
+  if (declaration.bodyless) {
+    let allBodyless = true;
+    for (const method of methods) {
+      if (!BODYLESS_METHODS.has(method)) {
+        allBodyless = false;
+        break;
+      }
+    }
+    if (allBodyless) return true;
+  }
+  if (declaration.methods === undefined) return false;
+  for (const method of methods) {
+    if (!declaration.methods.has(method)) return false;
+  }
+  return true;
+};
+
 export const compileMiddlewareScope = (pattern: string): MiddlewareScope => {
   const ir = compilePattern(pattern);
   let prefix = false;
@@ -179,11 +248,16 @@ export const addMiddleware = (
   rebuildFallbacks(stack);
 };
 
+/** One sunk path with the method set it serves (HEAD rides GET). */
+export interface SinkGuardSpec {
+  readonly path: string;
+  readonly methods: ReadonlySet<string>;
+}
+
 /** Parse and transactionally add one public app.use(...) call. */
 export const registerMiddleware = (
   stack: MiddlewareStack,
-  sunkPaths: ReadonlySet<string>,
-  nativeSinkCount: number,
+  sinkSpecs: readonly SinkGuardSpec[],
   input: readonly unknown[],
   installerOf: (value: unknown) => ((app: Application) => void) | null,
   app: Application,
@@ -194,16 +268,22 @@ export const registerMiddleware = (
   if (scope !== null && args.length === 0) {
     throw new TypeError("app.use(pattern) requires at least one middleware function");
   }
-  if (scope === null && nativeSinkCount > 0 && args.some((value) => typeof value === "function")) {
+  const hasUnexcusedFn = (): boolean =>
+    args.some((value) => {
+      if (typeof value !== "function") return false;
+      const handler = value as MiddlewareHandler;
+      return !sinkSpecs.every((spec) => noOpExcuses(handler, spec.methods));
+    });
+  if (scope === null && sinkSpecs.length > 0 && hasUnexcusedFn()) {
     throw new TypeError(
-      "app.use(fn) cannot run alongside sunk routes — the native routing table bypasses global middleware",
+      "app.use(fn) cannot run alongside sunk routes unless every fn is declared a per-request no-op (noOpFor)",
     );
   }
   if (scope !== null) {
-    for (const sunk of sunkPaths) {
-      if (scopeOverlapsPath(scope, sunk)) {
+    for (const spec of sinkSpecs) {
+      if (scopeOverlapsPath(scope, spec.path) && hasUnexcusedFn()) {
         throw new TypeError(
-          `app.use(${JSON.stringify(pattern)}) middleware overlaps natively-sunk ${sunk}`,
+          `app.use(${JSON.stringify(pattern)}) middleware overlaps natively-sunk ${spec.path}`,
         );
       }
     }
@@ -339,23 +419,47 @@ export const hasMiddlewareForPath = (stack: MiddlewareStack, path: string): bool
   );
 };
 
-/** Does a static/prefix middleware scope intersect a static/prefix route? */
-export const scopeOverlapsPath = (scope: MiddlewareScope, path: string): boolean => {
-  const other = compileMiddlewareScope(path);
-  if (!scope.prefix && !other.prefix) return keyOf(scope.segments) === keyOf(other.segments);
-  if (scope.prefix && other.prefix) {
-    return (
-      startsWithSegments(scope.segments, other.segments) ||
-      startsWithSegments(other.segments, scope.segments)
+/**
+ * Does a middleware scope intersect a route pattern? The pattern may carry
+ * dynamic segments (a sunk `/users/:id`): compile it as a ROUTE, never as a
+ * middleware scope — compiling a param pattern as a scope would throw the
+ * app.use()-shaped error in sink guards. Dynamic segments are compatible
+ * with everything and optional segments may collapse (conservative: overlap).
+ */
+export const scopeOverlapsPath = (scope: MiddlewareScope, pattern: string): boolean => {
+  const route = compilePattern(pattern).segments;
+  const collapsible = route.some((segment) => segment.optional);
+  if (!scope.prefix) {
+    if (route.length !== scope.segments.length) {
+      return collapsible && route.length > scope.segments.length;
+    }
+    return scope.segments.every(
+      (segment, index) =>
+        (route[index] as CompiledSegment).kind !== "static" ||
+        (route[index] as CompiledSegment).value === segment,
     );
   }
-  const exact = scope.prefix ? other.segments : scope.segments;
-  const prefix = scope.prefix ? scope.segments : other.segments;
-  return startsWithSegments(prefix, exact);
+  for (let index = 0; index < scope.segments.length; index++) {
+    const segment = route[index];
+    if (segment === undefined) return collapsible;
+    if (segment.kind !== "static") continue;
+    if (segment.value !== scope.segments[index]) return false;
+  }
+  return true;
 };
 
-export const middlewareConflictForPath = (stack: MiddlewareStack, path: string): string | null => {
+/**
+ * Middleware layers that would observe a sink serving `path` for `methods`.
+ * Layers whose handler carries a transparency declaration excusing those
+ * methods are skipped — the native table bypasses them by attestation.
+ */
+export const middlewareConflictForPath = (
+  stack: MiddlewareStack,
+  path: string,
+  methods: ReadonlySet<string>,
+): string | null => {
   for (const layer of stack.layers) {
+    if (noOpExcuses(layer.handler, methods)) continue;
     if (layer.scope === null) return "global";
     if (scopeOverlapsPath(layer.scope, path)) return layer.scope.pattern;
   }

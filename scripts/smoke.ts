@@ -9,6 +9,7 @@ import { dirname } from "node:path";
 
 import { Keala } from "../src/core/app.ts";
 import { Router } from "../src/router/group.ts";
+import { createError } from "../src/http/errors.ts";
 
 const root = dirname(new URL(import.meta.url).pathname);
 
@@ -203,6 +204,115 @@ if (typeof Bun !== "undefined") {
     );
   }
   pooledServer.stop(true);
+
+  // --- Sink parity legs (real Bun.serve) ----------------------------------
+  // L2: the native routes table against the mirror's predictions, including
+  // the LEDGERED divergences pinned by direction (docs/PARITY.md): malformed
+  // escapes decode to U+FFFD natively and pass through verbatim on the
+  // mirror; bun#37603 raw-byte misses self-heal through fetch. L3: the
+  // nativeRoutes:false opt-out equals the mirror exactly.
+  {
+    const sunkApp = new Keala({ env: "production" });
+    sunkApp.sink("/sp-health", new Response("fine"));
+    sunkApp.sink(
+      "/sp/h",
+      () => new Response("b", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    );
+    sunkApp.sink("/sp/users/:id", (_request, params) =>
+      Response.json({ id: params["id"] ?? null }),
+    );
+    sunkApp.sink("/sp/teapot", () => {
+      throw createError(418, "short and stout", { expose: true });
+    });
+    // @ts-expect-error -- runtime contract check: never Bun's 200 help page
+    sunkApp.sink("/sp/bad", () => "not-a-response");
+    const sunkServer = sunkApp.listen({ port: 0, hostname: "127.0.0.1" });
+    const sb = `http://127.0.0.1:${sunkServer.port}`;
+
+    const nativeRow = async (
+      path: string,
+      init?: RequestInit,
+    ): Promise<[number, string, string | null, string | null]> => {
+      const res = await fetch(`${sb}${path}`, init);
+      return [
+        res.status,
+        await res.text(),
+        res.headers.get("content-type"),
+        res.headers.get("allow"),
+      ];
+    };
+    const parityRow = async (
+      name: string,
+      path: string,
+      expect:
+        | [number, string]
+        | ((observed: [number, string, string | null, string | null]) => boolean),
+      init?: RequestInit,
+    ): Promise<void> => {
+      const observed = await nativeRow(path, init);
+      const ok =
+        typeof expect === "function"
+          ? expect(observed)
+          : observed[0] === expect[0] && observed[1] === expect[1];
+      check(`sink native ${name}`, ok, `${path} -> ${JSON.stringify(observed)}`);
+    };
+
+    await parityRow("GET static", "/sp-health", [200, "fine"]);
+    await parityRow("GET fn", "/sp/h", [200, "b"]);
+    await parityRow("GET param plain", "/sp/users/12345", [200, '{"id":"12345"}']);
+    await parityRow("GET param unicode", "/sp/users/caf%C3%A9", [
+      200,
+      JSON.stringify({ id: "café" }),
+    ]);
+    await parityRow("GET param digits", "/sp/users/%31%32%33", [200, '{"id":"123"}']);
+    await parityRow("GET param %2F decoded", "/sp/users/a%2Fb", [200, '{"id":"a/b"}']);
+    // LEDGERED: native substitutes U+FFFD for malformed escapes; the mirror
+    // passes them through verbatim (asserted on the L3 leg below).
+    await parityRow("GET param malformed → U+FFFD", "/sp/users/%zz", [
+      200,
+      JSON.stringify({ id: "�" }),
+    ]);
+    await parityRow("empty param misses to fetch 404", "/sp/users/", [404, "Not Found"]);
+    // bun#37603: the native table matches raw bytes — the encoded variant
+    // misses the table, falls through fetch, and the decoding router serves
+    // it anyway (final behavior identical, mechanism ledgered).
+    await parityRow("raw-byte miss self-heals", "/sp%2Dhealth", [200, "fine"]);
+    await parityRow("HEAD rides GET", "/sp/h", [200, ""], { method: "HEAD" });
+    await parityRow(
+      "POST falls through to 405",
+      "/sp/h",
+      ([status, , , allow]) => status === 405 && (allow ?? "").includes("GET"),
+      { method: "POST" },
+    );
+    await parityRow(
+      "OPTIONS falls through with Allow",
+      "/sp/h",
+      ([status, , , allow]) => status === 200 && (allow ?? "").includes("GET"),
+      { method: "OPTIONS" },
+    );
+    await parityRow("exposed 4xx through the builtin funnel", "/sp/teapot", [
+      418,
+      "short and stout",
+    ]);
+    await parityRow("non-Response return is a loud 500", "/sp/bad", [500, "Internal Server Error"]);
+    sunkServer.stop(true);
+
+    // L3: the JS-mirror contract under nativeRoutes:false — including the
+    // OTHER side of the malformed-escape ledger row.
+    const mirrorApp = new Keala({ env: "production" });
+    mirrorApp.sink("/sp/users/:id", (_request, params) =>
+      Response.json({ id: params["id"] ?? null }),
+    );
+    const mirrorServer = mirrorApp.listen({ port: 0, hostname: "127.0.0.1", nativeRoutes: false });
+    const mb = `http://127.0.0.1:${mirrorServer.port}`;
+    const mirrorRes = await fetch(`${mb}/sp/users/%zz`);
+    check(
+      "sink mirror malformed passes through verbatim",
+      mirrorRes.status === 200 && (await mirrorRes.text()) === JSON.stringify({ id: "%zz" }),
+      `${mirrorRes.status}`,
+    );
+    mirrorServer.stop(true);
+  }
 }
 
 server.stop(true);

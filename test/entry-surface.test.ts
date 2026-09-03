@@ -27,6 +27,7 @@ const ROOT_EXPORTS = new Set([
   "serializeCookie",
   "createError",
   "isHttpError",
+  "noOpFor",
   "normalizeError",
   "isEmptyStatus",
   "isRedirectStatus",

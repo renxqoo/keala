@@ -12,8 +12,23 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { Keala, startBunServer, type ServeImplementation } from "../src/index.ts";
+import {
+  Keala,
+  startBunServer,
+  noOpFor,
+  createError,
+  type RouteHandler,
+  type ServeImplementation,
+} from "../src/index.ts";
+import { bodyLimit } from "../src/middleware/limits.ts";
 import { buildNativeRoutes } from "../src/core/sink.ts";
+import { patternsOverlap } from "../src/router/pattern.ts";
+import { sunkErrorResponse } from "../src/core/error-response.ts";
+import {
+  compileMiddlewareScope,
+  noOpExcuses,
+  scopeOverlapsPath,
+} from "../src/core/middleware-stack.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
@@ -38,7 +53,7 @@ describe("sink: guard matrix (every refusal is loud)", () => {
   it("rejects values that are neither Response nor { dir }", () => {
     const app = new Keala(quiet);
     // @ts-expect-error -- runtime contract check for JS callers
-    expect(() => app.sink("/health", "ok")).toThrow(/Response or \{ dir \}/);
+    expect(() => app.sink("/health", "ok")).toThrow(/Response.*\{ dir \}.*handler/);
   });
 
   it("rejects duplicate sinks of the same path", () => {
@@ -68,7 +83,7 @@ describe("sink: guard matrix (every refusal is loud)", () => {
   it("rejects app.use(fn) after a sink exists (ordering invariants are bidirectional)", () => {
     const app = new Keala(quiet);
     app.sink("/health", new Response("ok"));
-    expect(() => app.use((_c, next) => next())).toThrow(/bypasses global middleware/);
+    expect(() => app.use((_c, next) => next())).toThrow(/alongside sunk routes/);
   });
 
   it("rejects app.param() after a sink exists", () => {
@@ -130,6 +145,83 @@ describe("sink: guard matrix (every refusal is loud)", () => {
     app.sink("/assets/*", { dir: root });
     app.get("/assetx", (c) => c.text("x"));
     expect(app.stack.length).toBeGreaterThan(0);
+  });
+
+  it("function sinks refuse unsupported pattern shapes loudly", () => {
+    const app = new Keala(quiet);
+    expect(() => app.sink("/users/:id?", () => new Response("x"))).toThrow(/plain ":param"/);
+    expect(() => app.sink("/users/:id(\\d+)", () => new Response("x"))).toThrow(/plain ":param"/);
+    expect(() => app.sink("/files/*", () => new Response("x"))).toThrow(/plain ":param"/);
+    expect(() => app.sink("/a%2Fb", () => new Response("x"))).toThrow(/percent-encoded/);
+    expect(() => app.sink("/dup", () => new Response("x"))).not.toThrow();
+    expect(() => app.sink("/dup", () => new Response("x"))).toThrow(/already registered/);
+  });
+
+  it("param sinks and literal JS routes shadow-refuse in BOTH directions", () => {
+    const sinkFirst = new Keala(quiet);
+    sinkFirst.sink("/users/:id", () => new Response("sunk"));
+    expect(() => sinkFirst.get("/users/admin", (c) => c.text("js"))).toThrow(
+      /overlaps natively-sunk/,
+    );
+    const routeFirst = new Keala(quiet);
+    routeFirst.get("/users/admin", (c) => c.text("js"));
+    expect(() => routeFirst.sink("/users/:id", () => new Response("sunk"))).toThrow(
+      /overlaps an existing/,
+    );
+    // Param-vs-param shapes are equally a shadow risk.
+    const paramFirst = new Keala(quiet);
+    paramFirst.get("/users/:uid", (c) => c.text("js"));
+    expect(() => paramFirst.sink("/users/:id", () => new Response("sunk"))).toThrow(
+      /overlaps an existing/,
+    );
+  });
+
+  it("function sinks and app.onError() are mutually exclusive, both orders", () => {
+    const mapperFirst = new Keala(quiet);
+    mapperFirst.onError(() => new Response("mapped"));
+    expect(() => mapperFirst.sink("/users/:id", () => new Response("x"))).toThrow(/onError/);
+    const sinkFirst = new Keala(quiet);
+    sinkFirst.sink("/users/:id", () => new Response("x"));
+    expect(() => sinkFirst.onError(() => new Response("mapped"))).toThrow(/onError/);
+    // Static sinks cannot throw — the mapper stays legal next to them.
+    const staticSink = new Keala(quiet);
+    staticSink.sink("/health", new Response("ok"));
+    expect(() => staticSink.onError(() => new Response("mapped"))).not.toThrow();
+  });
+
+  it("noOpFor-excused middleware sinks alongside, undeclared does not", () => {
+    // Excused (bodyLimit declares itself bodyless-transparent): both orders.
+    const sinkFirst = new Keala(quiet);
+    sinkFirst.sink("/health", new Response("ok"));
+    expect(() => sinkFirst.use(bodyLimit(1024))).not.toThrow();
+    const useFirst = new Keala(quiet);
+    useFirst.use(bodyLimit(1024));
+    expect(() => useFirst.sink("/health", new Response("ok"))).not.toThrow();
+    // A plain fn is not excused.
+    const plain = new Keala(quiet);
+    plain.sink("/health", new Response("ok"));
+    expect(() => plain.use((_c, next) => next())).toThrow(/noOpFor/);
+    // A methods:["GET"] declaration excuses a GET-serving sink.
+    const methodDeclared = new Keala(quiet);
+    methodDeclared.use(noOpFor((_c, next) => next(), { methods: ["get"] }));
+    expect(() => methodDeclared.sink("/health", new Response("ok"))).not.toThrow();
+    // Scoped layers follow the same rule.
+    const scoped = new Keala(quiet);
+    scoped.use("/health", bodyLimit(1024));
+    expect(() => scoped.sink("/health", new Response("ok"))).not.toThrow();
+    const scopedPlain = new Keala(quiet);
+    scopedPlain.use("/health", (_c, next) => next());
+    expect(() => scopedPlain.sink("/health", new Response("ok"))).toThrow(
+      /conflicts with \/health middleware/,
+    );
+  });
+
+  it("noOpFor validates its declaration", () => {
+    const fn: RouteHandler = (_c, next) => next();
+    expect(() => noOpFor(fn, {})).toThrow(/methods, bodyless, or both/);
+    expect(() => noOpFor(fn, { methods: [] })).toThrow(/methods, bodyless, or both/);
+    expect(() => noOpFor(fn, { methods: [""] })).toThrow(/non-empty strings/);
+    expect(() => noOpFor(fn, { methods: ["GET"] })).not.toThrow();
   });
 });
 
@@ -293,4 +385,116 @@ describe("sink: native routes table (adapter)", () => {
       }
     },
   );
+});
+
+describe("sink: unit contracts for the native-only machinery", () => {
+  it("patternsOverlap detects param-vs-literal and param-vs-param shadows", () => {
+    // Shadows (some URL matches both).
+    expect(patternsOverlap("/users/:id", "/users/admin")).toBe(true);
+    expect(patternsOverlap("/users/admin", "/users/:id")).toBe(true);
+    expect(patternsOverlap("/users/:id", "/users/:uid")).toBe(true);
+    expect(patternsOverlap("/users/:id/posts/:pid", "/users/a/posts/b")).toBe(true);
+    expect(patternsOverlap("/a/*", "/a/b/c")).toBe(true);
+    expect(patternsOverlap("/a/*", "/a")).toBe(true); // bare-prefix twin rule
+    expect(patternsOverlap("/users/:id?", "/users")).toBe(true); // optional may collapse
+    // Disjoint shapes.
+    expect(patternsOverlap("/users/:id", "/health")).toBe(false);
+    expect(patternsOverlap("/users/:id", "/assetx")).toBe(false);
+    expect(patternsOverlap("/a/*", "/b/c")).toBe(false);
+    // Unparseable input reports overlap (callers refuse loudly).
+    expect(patternsOverlap("not-a-path", "/x")).toBe(true);
+  });
+
+  it("the native fn wrapper keeps sync sync and funnels every failure", async () => {
+    const app = new Keala(quiet);
+    app.sink("/ok", (_request, params) => new Response(`v:${params["id"] ?? "-"}`));
+    app.sink("/slow", async () => new Response("later"));
+    app.sink("/boom", () => {
+      throw createError(418, "teapot", { expose: true });
+    });
+    app.sink("/rejects", async () => {
+      throw new Error("hidden");
+    });
+    // @ts-expect-error -- runtime contract check for JS callers
+    app.sink("/bad", () => "not-a-response");
+    const routes = buildNativeRoutes(app.nativeSinks) as Record<
+      string,
+      { GET: (request: Request) => Response | Promise<Response> }
+    >;
+    const requestFor = (path: string, params?: Record<string, string>): Request => {
+      const request = new Request(`http://localhost:3000${path}`);
+      if (params !== undefined) {
+        (request as Request & { params?: Record<string, string> }).params = params;
+      }
+      return request;
+    };
+    const routeAt = (path: string): { GET: (request: Request) => Response | Promise<Response> } =>
+      routes[path] as { GET: (request: Request) => Response | Promise<Response> };
+    expect(routeAt("/ok").GET(requestFor("/ok/7", { id: "7" }))).toBeInstanceOf(Response);
+    expect(await (await routeAt("/slow").GET(requestFor("/slow"))).text()).toBe("later");
+    const thrown = routeAt("/boom").GET(requestFor("/boom")) as Response;
+    expect([thrown.status, await thrown.text()]).toEqual([418, "teapot"]);
+    const rejected = await routeAt("/rejects").GET(requestFor("/rejects"));
+    expect([rejected.status, await rejected.text()]).toEqual([500, "Internal Server Error"]);
+    const bad = await routeAt("/bad").GET(requestFor("/bad"));
+    expect([bad.status, await bad.text(), bad.headers.get("content-type")]).toEqual([
+      500,
+      "Internal Server Error",
+      "text/plain; charset=utf-8",
+    ]);
+  });
+
+  it("sunkErrorResponse mirrors the builtin funnel byte for byte", async () => {
+    const exposed = sunkErrorResponse("GET", createError(404, "no such user", { expose: true }));
+    expect([exposed.status, await exposed.text()]).toEqual([404, "no such user"]);
+    expect(exposed.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    // Hidden errors never leak the message.
+    const hidden = sunkErrorResponse("GET", new Error("secret"));
+    expect([hidden.status, await hidden.text()]).toEqual([500, "Internal Server Error"]);
+    // HEAD stays bodiless even for exposed errors.
+    const head = sunkErrorResponse("HEAD", createError(418, "teapot", { expose: true }));
+    expect([head.status, head.body]).toEqual([418, null]);
+    // Error-declared headers ride along.
+    const decorated = sunkErrorResponse(
+      "GET",
+      createError(400, "bad", { expose: true, headers: { "x-reason": "sink" } }),
+    );
+    expect(decorated.headers.get("x-reason")).toBe("sink");
+  });
+
+  it("scoped middleware overlapping a PARAM sink refuses with the sink error (B1/B2 regression)", () => {
+    const app = new Keala(quiet);
+    app.use("/users/*", (_c, next) => next());
+    // B1 regression: used to throw "app.use() scope must be a static path".
+    expect(() => app.sink("/users/:id", () => new Response("u"))).toThrow(
+      /conflicts with \/users\/\* middleware/,
+    );
+    const reverse = new Keala(quiet);
+    reverse.sink("/users/:id", () => new Response("u"));
+    expect(() => reverse.use("/users/*", (_c, next) => next())).toThrow(
+      /overlaps natively-sunk \/users\/:id/,
+    );
+  });
+});
+
+describe("sink: transparency predicate edges", () => {
+  it("a bodyless declaration does not excuse non-bodyless methods", () => {
+    const layer: RouteHandler = noOpFor((_c, next) => next(), { bodyless: true });
+    expect(noOpExcuses(layer, new Set(["GET"]))).toBe(true);
+    expect(noOpExcuses(layer, new Set(["GET", "HEAD"]))).toBe(true);
+    expect(noOpExcuses(layer, new Set(["POST"]))).toBe(false);
+    expect(noOpExcuses((_c, next) => next(), new Set(["GET"]))).toBe(false);
+  });
+
+  it("an exact scope overlaps an optional-tail route that can collapse to it", () => {
+    expect(scopeOverlapsPath(compileMiddlewareScope("/users"), "/users/:id?")).toBe(true);
+    expect(scopeOverlapsPath(compileMiddlewareScope("/users"), "/users/:id")).toBe(false);
+  });
+
+  it("a root directory sink mirrors onto the bare root route", async () => {
+    const app = new Keala(quiet);
+    app.sink("/*", { dir: root });
+    const res = await app.handle(req("/app.js"));
+    expect([res.status, await res.text()]).toEqual([200, "console.log(1)"]);
+  });
 });

@@ -42,6 +42,12 @@ const sessionOf = (cookie: string): string | undefined => cookie.match(/session=
 // --- native sinks (zero-JS fast paths; mirrored for portability) ----------
 app.sink("/health", new Response("ok", { headers: { "cache-control": "no-store" } }));
 app.sink("/assets/*", { dir: "./examples/public" });
+// A FUNCTION sink runs without middleware/context/sugar — it takes
+// (request, params) and returns a Response. Patterns may use plain
+// ":param" segments; the JS mirror serves it identically on every runtime.
+app.sink("/api/time/:zone", (_request, params) =>
+  Response.json({ zone: params["zone"] ?? "utc", now: Date.now() }),
+);
 
 // --- routes ---------------------------------------------------------------
 app.get("/", (c) =>

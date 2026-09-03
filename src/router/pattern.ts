@@ -122,3 +122,58 @@ export const compilePattern = (path: string): PatternIR => {
 /** Names of the dynamic parameters in a compiled pattern. */
 export const paramNamesOf = (segments: readonly CompiledSegment[]): string[] =>
   segments.filter((s) => s.kind !== "static").map((s) => s.value);
+
+/**
+ * Pattern-aware overlap: two patterns overlap when some request URL can
+ * match both — a dynamic segment (`:param`) on EITHER side can consume what
+ * the other spells literally (a sunk `/users/:id` shadows a JS
+ * `/users/admin` in the native table). Conservative by construction:
+ * static segments must be equal, any dynamic segment is compatible with
+ * everything, wildcards swallow the rest (zero-or-more — the bare-prefix
+ * twin rule), and optional params fork into present/absent shapes. Sunk-path
+ * guards use this ALONGSIDE pathsConflict, never instead of it:
+ * compilePattern decodes `%2F` without splitting the segment, while the
+ * canonical keyspace splits it — the union covers both vocabularies.
+ */
+export const patternsOverlap = (a: string, b: string): boolean => {
+  let aIR: PatternIR;
+  let bIR: PatternIR;
+  try {
+    aIR = compilePattern(a);
+    bIR = compilePattern(b);
+  } catch {
+    // An unparseable path cannot be compared — report overlap so callers
+    // refuse loudly instead of guessing.
+    return true;
+  }
+  return overlapSegments(aIR.segments, bIR.segments);
+};
+
+const overlapSegments = (a: readonly CompiledSegment[], b: readonly CompiledSegment[]): boolean => {
+  if (a.length === 0 && b.length === 0) return true;
+  // One side exhausted: the other can still collapse to nothing through a
+  // LEADING optional segment (`:id?` may be absent) or a wildcard (which
+  // matches zero-or-more — the bare-prefix twin rule).
+  if (a.length === 0) {
+    const head = b[0] as CompiledSegment;
+    return (head.optional || head.kind === "wildcard") && overlapSegments(a, b.slice(1));
+  }
+  if (b.length === 0) {
+    const head = a[0] as CompiledSegment;
+    return (head.optional || head.kind === "wildcard") && overlapSegments(a.slice(1), b);
+  }
+  const x = a[0] as CompiledSegment;
+  const y = b[0] as CompiledSegment;
+  // A wildcard swallows whatever remains on the other side (zero-or-more —
+  // the bare-prefix twin rule), so reaching it with compatible history is
+  // already an overlap.
+  if (x.kind === "wildcard" || y.kind === "wildcard") return true;
+  const compatible = x.kind === "param" || y.kind === "param" || x.value === y.value;
+  if (!compatible) return false;
+  if (overlapSegments(a.slice(1), b.slice(1))) return true;
+  // Optional params may be absent: skip this position on the side that owns
+  // one and keep comparing.
+  if (x.optional && overlapSegments(a.slice(1), b)) return true;
+  if (y.optional && overlapSegments(a, b.slice(1))) return true;
+  return false;
+};

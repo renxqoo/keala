@@ -345,6 +345,45 @@ const builtinErrorResponse = (
 };
 
 /**
+ * Context-free error funnel for natively-sunk function handlers: they run
+ * outside dispatch with no context, so the mapper contract cannot apply
+ * (registration refuses the combination loudly). Byte-faithful to the
+ * builtin fast path above for the nothing-staged case — exposed 4xx
+ * messages, hidden 5xx status text, bodiless HEAD — with the error's own
+ * headers riding along exactly as the staged path would deliver them.
+ * Empty statuses cannot occur here: toHttpError normalizes any invalid
+ * error status to an unexposed 500 in place, so a sunk funnel always
+ * answers a bodied status.
+ */
+export const sunkErrorResponse = (method: string, error: unknown): Response => {
+  const http = toHttpError(error);
+  const bodyless = method === "HEAD";
+  const headers = new Headers({ "content-type": "text/plain; charset=utf-8" });
+  if (http.headers !== undefined) {
+    for (const [field, value] of Object.entries(http.headers)) {
+      try {
+        if (Array.isArray(value)) {
+          for (const item of value) headers.append(field, item);
+        } else {
+          headers.append(field, String(value));
+        }
+      } catch {
+        // An invalid header from an error object — drop it silently; the
+        // error path must never throw.
+      }
+    }
+  }
+  return new Response(
+    bodyless
+      ? null
+      : http.expose === true
+        ? http.message
+        : statusMessage(http.status) || "Internal Server Error",
+    { status: http.status, headers },
+  );
+};
+
+/**
  * Wrap the funnel in the never-throw guard: a failing error response builder
  * answers the static 500 instead of rejecting past `app.handle`.
  */

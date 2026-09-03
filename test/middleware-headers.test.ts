@@ -216,6 +216,14 @@ describe("etag + compress", () => {
 });
 
 describe("bodyLimit + timeout", () => {
+  it("bodyLimit passes bodyless requests through untouched", async () => {
+    const app = new Keala(quiet);
+    app.use(bodyLimit(10));
+    app.get("/g", (c) => c.text("ok"));
+    const res = await app.handle(req("/g"));
+    expect([res.status, await res.text()]).toEqual([200, "ok"]);
+  });
+
   it("bodyLimit rejects declared oversize with 413 before reading", async () => {
     const app = new Keala(quiet);
     app.use(bodyLimit(10));

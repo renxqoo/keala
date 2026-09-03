@@ -47,7 +47,13 @@ import type { Router } from "../router/group.ts";
 import { parseListenArgs } from "./listen.ts";
 import { compilePattern } from "../router/pattern.ts";
 import { startBunServer, type ServerHandle } from "../adapters/bun.ts";
-import { buildNativeRoutes, registerSink, type NativeSinkEntry } from "./sink.ts";
+import {
+  buildNativeRoutes,
+  registerSink,
+  sinkGuardSpecs,
+  type NativeSinkEntry,
+  type SunkHandler,
+} from "./sink.ts";
 import {
   type Application,
   type ErrorMapper,
@@ -142,8 +148,7 @@ export class Keala implements NativeApplication {
   use(...args: (string | RouteHandler | AppOptionsPlugin)[]): Application {
     const changed = registerMiddleware(
       this.#middleware,
-      this.router.sunkPaths,
-      this.nativeSinks.size,
+      sinkGuardSpecs(this.router.sunkPaths, this.nativeSinks),
       args,
       pluginInstallerOf,
       this,
@@ -247,8 +252,15 @@ export class Keala implements NativeApplication {
     return this;
   }
 
-  sink(path: string, response: Response | { dir: string }): Application {
-    registerSink(this.router, this.nativeSinks, path, response, this.#middleware);
+  sink(path: string, response: Response | { dir: string } | SunkHandler): Application {
+    registerSink(
+      this.router,
+      this.nativeSinks,
+      path,
+      response,
+      this.#middleware,
+      this.#errorMapper !== undefined,
+    );
     if (this.#serverHandle !== null && this.#nativeRoutesEnabled) {
       this.#serverHandle.reload({ routes: buildNativeRoutes(this.nativeSinks) });
     }
@@ -461,6 +473,16 @@ export class Keala implements NativeApplication {
   onError(mapper: ErrorMapper): Application {
     if (typeof mapper !== "function") {
       throw new TypeError("app.onError() requires a function");
+    }
+    // The mapper contract is context-based; sunk function handlers run
+    // without one and answer through the builtin funnel — refuse the mix
+    // instead of silently diverging (mirrors the use-after-sink guard).
+    for (const entry of this.nativeSinks.values()) {
+      if ("handler" in entry) {
+        throw new TypeError(
+          "app.onError() cannot run alongside a sunk function handler — the error mapper contract is context-based and sunk handlers have no context",
+        );
+      }
     }
     if (this.#errorMapper !== undefined) {
       throw new TypeError(

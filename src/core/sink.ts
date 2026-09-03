@@ -9,14 +9,28 @@
  *
  * Eligibility is deliberately narrow and loud: a sunk route bypasses the
  * onion entirely, so anything that needs per-request JS refuses to sink
- * instead of silently diverging between the two layers. Concretely:
- *  - no global or overlapping scoped middleware may be registered
- *    (`app.use()` throws while a conflicting native sink exists — the native
- *    table would skip it),
- *  - no param middleware may be registered,
+ * instead of silently diverging between the two layers — with two explicit
+ * exceptions this module owns:
+ *  - FUNCTION sinks: the handler opts IN to running without middleware,
+ *    context, or sugar; it receives `(request, params)` and returns a
+ *    Response. Non-participation is the documented contract, guarded the
+ *    same way as every other sink (global/scoped middleware must be
+ *    excused via noOpFor, param middleware always refuses).
+ *  - Transparency declarations (noOpFor): a middleware AUTHOR may attest a
+ *    layer performs no observable action for a sink's methods, excusing it
+ *    from the guards below. The JS mirror keeps running the layer; only
+ *    the native table skips it — a lying declaration is observable in the
+ *    sink parity suite, never silently.
+ *
+ * Remaining invariants:
+ *  - no param middleware may be registered (per-request JS by definition),
  *  - a sunk path may not overlap any JS route path (either direction —
- *    the native table wins at runtime, so overlap is a silent-shadow bug),
- *  - static sinks must be plain paths; `{dir}` sinks must end in `/*`.
+ *    including param-vs-literal shapes; the native table wins at runtime,
+ *    so overlap is a silent-shadow bug),
+ *  - static sinks must be plain paths; `{dir}` sinks must end in `/*`;
+ *    function sinks support static and plain `:param` segments only,
+ *  - function sinks and app.onError() are mutually exclusive (the error
+ *    mapper contract is context-based; sunk handlers have no context).
  *
  * `{dir}` sinks mirror to `serveStatic({root, prefix})`: index resolution
  * and 404s match, but the native table adds 301 trailing-slash redirects
@@ -32,7 +46,14 @@ import {
   type RouteHandler,
   type RouterState,
 } from "../router/router.ts";
-import { middlewareConflictForPath, type MiddlewareStack } from "./middleware-stack.ts";
+import { compilePattern, patternsOverlap } from "../router/pattern.ts";
+import { sourceRequest } from "../core/request-source.ts";
+import { sunkErrorResponse } from "./error-response.ts";
+import {
+  middlewareConflictForPath,
+  type MiddlewareStack,
+  type SinkGuardSpec,
+} from "./middleware-stack.ts";
 
 /** A prebuilt static response (Bun reuses the instance natively). */
 export interface NativeStaticSink {
@@ -44,13 +65,40 @@ export interface NativeDirSink {
   readonly dir: string;
 }
 
-export type NativeSinkEntry = NativeStaticSink | NativeDirSink;
+/**
+ * A handler served from the native routes table. It runs WITHOUT
+ * middleware, context, or sugar — that elimination is the point — and must
+ * be usable identically on the JS mirror, so the signature takes what both
+ * runtimes can provide: the fetch Request and the decoded params record
+ * (null-prototype on both Bun's native table and keala's trie). It must
+ * never close over request state; `server` is deliberately not exposed
+ * (the mirror has none — `c.ip` users keep ordinary routes).
+ */
+export type SunkHandler = (
+  request: Request,
+  params: Readonly<Record<string, string>>,
+) => Response | Promise<Response>;
+
+export interface NativeFnSink {
+  readonly handler: SunkHandler;
+  /** Methods served natively; GET-only for now (HEAD rides GET). */
+  readonly methods: readonly ["GET"];
+}
+
+export type NativeSinkEntry = NativeStaticSink | NativeDirSink | NativeFnSink;
+
+const GET_METHODS: ReadonlySet<string> = new Set(["GET"]);
+
+const EMPTY_PARAMS: Readonly<Record<string, string>> = Object.freeze(Object.create(null));
 
 // Prior sinks are already mirrored into defs, so one pass over the route
-// table covers both JS routes and earlier sinks.
+// table covers both JS routes and earlier sinks. Pattern-aware: a dynamic
+// segment on either side can consume what the other spells literally.
 const conflictsWithAny = (path: string, defs: readonly RouteDef[]): string | false => {
   for (const def of defs) {
-    if (pathsConflict(path, def.path)) return `route ${def.method} ${def.path}`;
+    if (pathsConflict(path, def.path) || patternsOverlap(path, def.path)) {
+      return `route ${def.method} ${def.path}`;
+    }
   }
   return false;
 };
@@ -63,8 +111,9 @@ export const registerSink = (
   router: RouterState,
   sinks: Map<string, NativeSinkEntry>,
   path: string,
-  value: Response | { dir: string },
+  value: Response | { dir: string } | SunkHandler,
   middleware: MiddlewareStack,
+  hasErrorMapper: boolean,
 ): void => {
   if (typeof path !== "string" || path.length === 0 || !path.startsWith("/")) {
     throw new TypeError(`sink path must be an absolute path, got ${JSON.stringify(path)}`);
@@ -72,11 +121,11 @@ export const registerSink = (
   if (sinks.has(path)) {
     throw new TypeError(`sink ${path} is already registered`);
   }
-  const middlewareConflict = middlewareConflictForPath(middleware, path);
+  const middlewareConflict = middlewareConflictForPath(middleware, path, GET_METHODS);
   if (middlewareConflict !== null) {
     if (middlewareConflict === "global") {
       throw new TypeError(
-        "app.sink() requires an app without global middleware — the native routing table bypasses it",
+        "app.sink() requires an app without global middleware — declare per-request no-ops with noOpFor() or drop the sink",
       );
     }
     throw new TypeError(
@@ -90,12 +139,17 @@ export const registerSink = (
   }
 
   const isResponse = value instanceof Response;
+  const isFn = !isResponse && typeof value === "function";
   const dirValue =
-    !isResponse && typeof value === "object" && value !== null && typeof value.dir === "string"
+    !isResponse &&
+    !isFn &&
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.dir === "string"
       ? value.dir
       : null;
-  if (!isResponse && dirValue === null) {
-    throw new TypeError("app.sink() requires a Response or { dir } value");
+  if (!isResponse && !isFn && dirValue === null) {
+    throw new TypeError("app.sink() requires a Response, { dir }, or handler function");
   }
   if (isResponse) {
     const response = value as Response;
@@ -113,8 +167,10 @@ export const registerSink = (
   }
   const entry: NativeSinkEntry = isResponse
     ? { response: value as Response }
-    : { dir: dirValue as string };
-  const isDir = !isResponse;
+    : isFn
+      ? { handler: value as SunkHandler, methods: ["GET"] }
+      : { dir: dirValue as string };
+  const isDir = !isResponse && !isFn;
 
   if (isDir) {
     if ((entry as NativeDirSink).dir.length === 0) {
@@ -122,6 +178,27 @@ export const registerSink = (
     }
     if (!path.endsWith("/*")) {
       throw new TypeError(`sink ${path}: directory sinks must end in /* (e.g. "/assets/*")`);
+    }
+  } else if (isFn) {
+    if (hasErrorMapper) {
+      throw new TypeError(
+        "app.sink(path, fn) requires an app without app.onError() — the error mapper contract is context-based and a sunk handler has no context",
+      );
+    }
+    if (path.includes("%")) {
+      throw new TypeError(
+        `sink ${path}: percent-encoded paths cannot sink — the native table matches raw bytes while the router decodes (bun#37603)`,
+      );
+    }
+    // Static and plain `:param` segments only: optional params fork into
+    // present/absent shapes, custom regexes and wildcards have no verified
+    // native-table equivalent.
+    for (const segment of compilePattern(path).segments) {
+      if (segment.kind === "static") continue;
+      if (segment.kind === "param" && !segment.optional && segment.pattern === null) continue;
+      throw new TypeError(
+        `sink ${path}: function sinks support static and plain ":param" segments only`,
+      );
     }
   } else if (path.includes("*") || path.includes(":")) {
     throw new TypeError(
@@ -157,6 +234,19 @@ export const registerSink = (
     return;
   }
 
+  if (isFn) {
+    // The mirror is an ordinary one-handler route: dispatch's direct fast
+    // path serves it, transparent middleware still runs (a lying noOpFor
+    // declaration diverges the native leg only), and the handler receives a
+    // real Request on every runtime (native sources materialize lazily).
+    const handler = (entry as NativeFnSink).handler;
+    const mirror: RouteHandler = (c) =>
+      handler(sourceRequest(c.rawRequest), c.params ?? EMPTY_PARAMS);
+    registerDef(router, "GET", path, [mirror], undefined, middleware);
+    markSunk();
+    return;
+  }
+
   // The static mirror rebuilds a fresh Response per hit — an instance can be
   // consumed once, and the native table must keep the original untouched.
   // The recipe is captured lazily from a clone on the first JS request.
@@ -185,9 +275,61 @@ export const registerSink = (
 };
 
 /**
+ * Guard specs for app.use(): every path in the router's sunkPaths set
+ * (mirror twins included) with the methods its native entry serves. HEAD
+ * rides GET everywhere, so a declaration covering GET covers its rider.
+ */
+export const sinkGuardSpecs = (
+  sunkPaths: ReadonlySet<string>,
+  sinks: ReadonlyMap<string, NativeSinkEntry>,
+): readonly SinkGuardSpec[] => {
+  if (sunkPaths.size === 0) return [];
+  const specs: SinkGuardSpec[] = [];
+  for (const path of sunkPaths) {
+    const entry = sinks.get(path);
+    specs.push({
+      path,
+      methods: entry !== undefined && "handler" in entry ? new Set(entry.methods) : GET_METHODS,
+    });
+  }
+  return specs;
+};
+
+/**
+ * Wrap a sunk handler for the native table. Sync stays sync (Bun.serve
+ * accepts `Response | Promise<Response>`); every failure routes through
+ * the context-free builtin funnel — a bare throw would reach Bun's serve
+ * `error` callback (plain 500, no exposed-4xx parity) and a non-Response
+ * return would get Bun's SILENT 200 help page (probe-verified on 1.4),
+ * both unacceptable next to the mirror's loud builtin answers.
+ */
+const nativeFnRoute =
+  (handler: SunkHandler) =>
+  (request: Request): Response | Promise<Response> => {
+    const fail = (method: string, error: unknown): Response => sunkErrorResponse(method, error);
+    const check = (method: string, result: unknown): Response =>
+      result instanceof Response
+        ? result
+        : fail(method, new TypeError("a sunk handler must return a Response"));
+    const params = (request as Request & { params?: Readonly<Record<string, string>> }).params;
+    try {
+      const result = handler(request, params ?? EMPTY_PARAMS);
+      return result instanceof Promise
+        ? result.then(
+            (value) => check(request.method, value),
+            (error) => fail(request.method, error),
+          )
+        : check(request.method, result);
+    } catch (error) {
+      return fail(request.method, error);
+    }
+  };
+
+/**
  * Build the plain routes-table object for `Bun.serve({routes})` /
  * `server.reload({routes})`. Response instances are reused natively; dir
- * sinks become `{ dir }` entries (index/Range handled by Bun).
+ * sinks become `{ dir }` entries (index/Range handled by Bun); function
+ * sinks get the contained wrapper above.
  *
  * Every entry is scoped `{ GET: value }` — a bare key would answer POST/
  * DELETE/… with the sunk response (verified against Bun 1.4), while the
@@ -200,6 +342,10 @@ export const buildNativeRoutes = (
 ): Record<string, unknown> => {
   const routes: Record<string, unknown> = {};
   for (const [path, entry] of sinks) {
+    if ("handler" in entry) {
+      routes[path] = { GET: nativeFnRoute(entry.handler) };
+      continue;
+    }
     routes[path] = { GET: "response" in entry ? entry.response : { dir: entry.dir } };
   }
   return routes;

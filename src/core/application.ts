@@ -16,7 +16,7 @@ import type { HttpError } from "../http/errors.ts";
 import type { Router } from "../router/group.ts";
 import type { ListenOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
 import type { ServerHandle } from "../adapters/bun.ts";
-import type { NativeSinkEntry } from "./sink.ts";
+import type { NativeSinkEntry, SunkHandler } from "./sink.ts";
 import type { RequestSource } from "./request-source.ts";
 
 /** Internal native-adapter entry; not exported from the package surface. */
@@ -81,7 +81,7 @@ export interface Application {
    * route). Requires an app without global/param middleware — the native
    * table bypasses them. See src/core/sink.ts.
    */
-  sink(path: string, response: Response | { dir: string }): Application;
+  sink(path: string, response: Response | { dir: string } | SunkHandler): Application;
   /** Registered native sinks (consumed by the Bun adapter at listen()). */
   readonly nativeSinks: ReadonlyMap<string, NativeSinkEntry>;
   /** Rebuild the native routes table on the running server (Bun only). */
