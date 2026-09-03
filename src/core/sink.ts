@@ -47,7 +47,8 @@ import {
   type RouterState,
 } from "../router/router.ts";
 import { compilePattern, patternsOverlap } from "../router/pattern.ts";
-import { sourceRequest } from "../core/request-source.ts";
+import { isNativeRequestSource, sourceRequest } from "../core/request-source.ts";
+import { createPlannedResponse } from "../core/response-plan.ts";
 import { sunkErrorResponse } from "./error-response.ts";
 import {
   middlewareConflictForPath,
@@ -250,26 +251,41 @@ export const registerSink = (
   // The static mirror rebuilds a fresh Response per hit — an instance can be
   // consumed once, and the native table must keep the original untouched.
   // The recipe is captured lazily from a clone on the first JS request.
+  // Native sources (the Node adapter) get a PLANNED per-hit response: the
+  // writer then serves the cached bytes through its header-snapshot +
+  // direct-body path with no stream hop — the R4.8 matrix showed the
+  // per-hit rebuild costing Node ~4.5μs/req. Other sources (Bun's mirror,
+  // in-process handle tests) keep the real Response; a PlannedResponse must
+  // never be handed to Bun.serve's native writer.
   const source = (entry as NativeStaticSink).response;
   let rebuild: (() => Response) | null = null;
-  const capture = async (): Promise<Response> => {
+  let direct = false;
+  const capture = async (native: boolean): Promise<Response> => {
     const clone = source.clone();
-    const bytes = await clone.arrayBuffer();
+    const bytes = new Uint8Array(await clone.arrayBuffer());
     const status = clone.status;
     const statusText = clone.statusText;
     // clone.headers stays readable after the body is consumed; passing it as
     // ResponseInit preserves multi-value headers (e.g. multiple Set-Cookie).
     const headers = clone.headers;
+    direct = native && bytes.byteLength !== 0 && status !== 204 && status !== 205 && status !== 304;
     rebuild = () =>
       // Fetch-spec null-body statuses reject a body at construction. The
       // statusText rides along — the native table reuses the original
       // instance verbatim and the JS mirror must not diverge from it.
       bytes.byteLength === 0 || status === 204 || status === 205 || status === 304
         ? new Response(null, { status, statusText, headers })
-        : new Response(bytes, { status, statusText, headers });
+        : direct
+          ? createPlannedResponse(bytes, { status, statusText, headers })
+          : new Response(bytes, { status, statusText, headers });
     return rebuild();
   };
-  const mirror: RouteHandler = () => (rebuild === null ? capture() : rebuild());
+  const mirror: RouteHandler = (c) => {
+    if (rebuild === null) {
+      return capture(isNativeRequestSource(c.rawRequest));
+    }
+    return rebuild();
+  };
   registerDef(router, "GET", path, [mirror], undefined, middleware);
   markSunk();
 };

@@ -9,6 +9,8 @@
 import { createServer, type Server, type ServerOptions, type ServerResponse } from "node:http";
 import type { Application } from "../core/app.ts";
 import { responseFactsOf } from "../core/response-plan.ts";
+import { consoleFallback } from "../core/error-response.ts";
+import { toHttpError } from "../http/errors.ts";
 import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
 import type { GracefulStopOptions } from "../core/lifecycle.ts";
 import { installSignalBridge } from "../core/lifecycle.ts";
@@ -40,6 +42,13 @@ export interface NodeListenOptions {
    * `app.close()`; a second signal force-closes.
    */
   signals?: boolean;
+  /**
+   * Server-level error handler, mirroring the Bun adapter's option: when a
+   * transport/write failure happens before any byte was sent, its Response
+   * replaces the plain envelope. 500-class failures also log through the
+   * app error hook's console fallback (silenced under env:"test").
+   */
+  onServeError?: (error: Error) => Response;
 }
 
 const writeHeaders = (headers: Headers, out: ServerResponse): void => {
@@ -320,6 +329,22 @@ export const startNodeServer = (
         // A failed writer may already have staged another body's framing,
         // encoding, cookies and reason phrase. None describes this envelope.
         for (const name of out.getHeaderNames()) out.removeHeader(name);
+        if (!(error instanceof InvalidRequestTargetError)) {
+          // 500-class transport/writer failures surface through the app error
+          // hook's console fallback (silenced under env:"test"), mirroring the
+          // Bun adapter's serve-error path — Node used to fail silently.
+          consoleFallback(app, undefined, toHttpError(error));
+          if (options.onServeError !== undefined) {
+            try {
+              const mapped = options.onServeError(toHttpError(error));
+              const writing = writeResponse(mapped, out, draining);
+              if (writing instanceof Promise) void writing.catch(() => out.destroy());
+              return;
+            } catch {
+              // A failing mapper falls back to the plain envelope below.
+            }
+          }
+        }
         out.statusCode = error instanceof InvalidRequestTargetError ? 400 : 500;
         out.statusMessage =
           error instanceof InvalidRequestTargetError ? "Bad Request" : "Internal Server Error";
