@@ -64,6 +64,19 @@ export const parseQuery = (search: string): QueryMap => {
   const input = search.charCodeAt(0) === 63 /* "?" */ ? search.slice(1) : search;
   if (input.length === 0) return out;
 
+  // Plain-query fast path: without "+" or "%", decode() is an identity on
+  // every segment (its two early-out scans are the whole cost otherwise), so
+  // the pass below can skip it entirely. Detected in the same scan, not a
+  // separate one: a plain charCode run clears the flag as it goes.
+  let plain = true;
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    if (code === 43 /* "+" */ || code === 37 /* "%" */) {
+      plain = false;
+      break;
+    }
+  }
+
   // Single pass over the string: each character is visited exactly once.
   // (`indexOf("=")` restarts per segment and scans to the end of the string
   // when the remainder holds no "=", which made crafted keys-only queries
@@ -76,9 +89,9 @@ export const parseQuery = (search: string): QueryMap => {
       if (i > start) {
         const rawKey = eq === -1 ? input.slice(start, i) : input.slice(start, eq);
         const rawValue = eq === -1 ? "" : input.slice(eq + 1, i);
-        const key = decode(rawKey);
+        const key = plain ? rawKey : decode(rawKey);
         if (!isUnsafeKey(key)) {
-          const value = decode(rawValue);
+          const value = plain ? rawValue : decode(rawValue);
           const previous: QueryValue | undefined = out[key];
           if (previous === undefined) {
             out[key] = value;

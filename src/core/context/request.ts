@@ -171,12 +171,24 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return (this.originalUrlValue ??= `${getPath(rawUrl)}${getSearch(rawUrl)}`);
   },
   get querystring(): string {
-    const url = this.url;
-    const hash = url.indexOf("#");
-    const limit = hash === -1 ? url.length : hash;
-    const q = url.indexOf("?");
-    if (q === -1 || q > limit) return "";
-    return url.slice(q + 1, limit);
+    // Single scan of the raw request target (or a rewritten url): touching
+    // only the query must not materialize the joined path+search string.
+    // Equivalent to getSearch(url).slice(1): the first "#" ends the search
+    // (even before any "?"), the first "?" starts the query.
+    const url = this.urlValue ?? sourceUrl(this.rawRequest);
+    let query = -1;
+    let limit = -1;
+    for (let i = 0; i < url.length; i++) {
+      const code = url.charCodeAt(i);
+      if (code === 63 /* "?" */) {
+        if (query === -1) query = i;
+      } else if (code === 35 /* "#" */) {
+        limit = i;
+        break;
+      }
+    }
+    if (query === -1 || (limit !== -1 && query > limit)) return "";
+    return url.slice(query + 1, limit === -1 ? url.length : limit);
   },
   get search(): string {
     const qs = this.querystring;

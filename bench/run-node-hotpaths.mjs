@@ -5,6 +5,9 @@
 // KEALA_BENCH_BASELINE=/path/to/checkout adds a third, before-change variant.
 // KEALA_BENCH_OUTPUT=/path/to/new.jsonl retains metadata and every raw sample.
 // KEALA_BENCH_PROCESSES=4 splits total connections across independent Node clients.
+// KEALA_BENCH_CONTROLS=1 adds a bare-runtime control server (no framework) per
+// runtime; it joins the interleaved rotation and per-summary CPU map so the
+// framework overhead per scenario can be read off the same paired run.
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -49,12 +52,26 @@ const servers =
 for (const server of servers) server.cwd = root;
 if (baseline !== undefined)
   servers.push({ ...servers[0], name: "keala-baseline", cwd: resolve(baseline) });
+if (process.env["KEALA_BENCH_CONTROLS"] === "1")
+  servers.push({
+    name: "bare",
+    file: runtime === "node" ? "bench/server-bare-node.ts" : "bench/server-bare.ts",
+    cwd: root,
+  });
 const body = '{"message":"hello world"}';
 const scenarios = [
   { name: "probe-scoped-3", path: "/livez", expected: '{"status":"ok"}' },
   { name: "text", path: "/text", expected: "hello world" },
   { name: "json", path: "/json", expected: '{"hello":"world"}' },
   { name: "param", path: "/users/12345", expected: "user 12345" },
+  {
+    // The composite real-world shape from Hono's flagship http-server bench:
+    // param + query reads + a staged response header + interpolated text.
+    name: "query",
+    path: "/search/12345?name=keala&page=3",
+    expected: "12345 keala 3",
+    expectHeaders: [["x-query", "hit"]],
+  },
   { name: "middleware-3", path: "/mw", expected: "middleware" },
   {
     name: "json-body-safe",
@@ -158,6 +175,12 @@ const verify = async (server, scenario) => {
   const type = scenario.expected.startsWith("{") ? "application/json" : "text/plain";
   if (response.headers.get("content-type")?.split(";")[0] !== type)
     throw new Error("wrong content-type");
+  if (scenario.expectHeaders !== undefined) {
+    for (const [name, value] of scenario.expectHeaders) {
+      if (response.headers.get(name) !== value)
+        throw new Error(`missing expected header ${name}=${value}`);
+    }
+  }
   if (scenario.name === "middleware-3") {
     for (const [name, value] of [
       ["x-step", "1"],
