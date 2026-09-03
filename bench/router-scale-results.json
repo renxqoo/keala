@@ -6,29 +6,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 1,
-          "regMs": 0.46,
-          "firstMs": 0.41,
+          "regMs": 0.49,
+          "firstMs": 0.38,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 430,
-              "p25": 384,
-              "p75": 466
+              "median": 301,
+              "p25": 278,
+              "p75": 401
             },
             "hit-last": {
-              "median": 452,
-              "p25": 354,
-              "p75": 509
+              "median": 310,
+              "p25": 274,
+              "p75": 326
             },
             "miss-global": {
-              "median": 453,
-              "p25": 374,
-              "p75": 548
+              "median": 319,
+              "p25": 312,
+              "p75": 413
             },
             "miss-deep": {
-              "median": 366,
-              "p25": 324,
-              "p75": 421
+              "median": 290,
+              "p25": 286,
+              "p75": 344
             }
           }
         },
@@ -36,59 +36,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 1,
-          "regMs": 0.46,
-          "firstMs": 0.45,
+          "regMs": 0.44,
+          "firstMs": 0.3,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 425,
-              "p25": 346,
-              "p75": 501
+              "median": 317,
+              "p25": 273,
+              "p75": 382
             },
             "hit-last": {
-              "median": 388,
-              "p25": 314,
-              "p75": 444
+              "median": 305,
+              "p25": 272,
+              "p75": 343
             },
             "miss-global": {
-              "median": 383,
-              "p25": 367,
-              "p75": 482
+              "median": 316,
+              "p25": 307,
+              "p75": 418
             },
             "miss-deep": {
-              "median": 376,
-              "p25": 334,
-              "p75": 415
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "static",
-          "size": 1,
-          "regMs": 0.4,
-          "firstMs": 0.4,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 416,
-              "p25": 330,
-              "p75": 569
-            },
-            "hit-last": {
-              "median": 426,
-              "p25": 325,
-              "p75": 459
-            },
-            "miss-global": {
-              "median": 368,
-              "p25": 355,
-              "p75": 472
-            },
-            "miss-deep": {
-              "median": 350,
-              "p25": 322,
-              "p75": 395
+              "median": 289,
+              "p25": 287,
+              "p75": 346
             }
           }
         },
@@ -97,28 +67,58 @@
           "kind": "static",
           "size": 1,
           "regMs": 0.42,
-          "firstMs": 0.4,
+          "firstMs": 0.28,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 407,
-              "p25": 324,
-              "p75": 514
+              "median": 307,
+              "p25": 274,
+              "p75": 387
             },
             "hit-last": {
-              "median": 373,
-              "p25": 324,
-              "p75": 447
+              "median": 311,
+              "p25": 277,
+              "p75": 340
             },
             "miss-global": {
-              "median": 432,
-              "p25": 365,
-              "p75": 530
+              "median": 321,
+              "p25": 312,
+              "p75": 397
             },
             "miss-deep": {
-              "median": 402,
-              "p25": 335,
-              "p75": 429
+              "median": 286,
+              "p25": 285,
+              "p75": 328
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "static",
+          "size": 1,
+          "regMs": 0.45,
+          "firstMs": 0.32,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 309,
+              "p25": 278,
+              "p75": 401
+            },
+            "hit-last": {
+              "median": 302,
+              "p25": 273,
+              "p75": 339
+            },
+            "miss-global": {
+              "median": 317,
+              "p25": 311,
+              "p75": 421
+            },
+            "miss-deep": {
+              "median": 285,
+              "p25": 283,
+              "p75": 341
             }
           }
         }
@@ -128,119 +128,119 @@
           "framework": "hono",
           "kind": "static",
           "size": 1,
-          "regMs": 0.3,
-          "firstMs": 0.94,
-          "heapMB": 0.1,
+          "regMs": 0.24,
+          "firstMs": 0.59,
+          "heapMB": 0,
           "probes": {
             "hit-mid": {
-              "median": 391,
-              "p25": 309,
-              "p75": 502
-            },
-            "hit-last": {
-              "median": 368,
-              "p25": 289,
-              "p75": 387
-            },
-            "miss-global": {
-              "median": 674,
-              "p25": 633,
-              "p75": 708
-            },
-            "miss-deep": {
-              "median": 608,
-              "p25": 584,
-              "p75": 623
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 1,
-          "regMs": 0.27,
-          "firstMs": 0.57,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 379,
-              "p25": 305,
-              "p75": 488
-            },
-            "hit-last": {
-              "median": 337,
-              "p25": 276,
-              "p75": 381
-            },
-            "miss-global": {
-              "median": 630,
-              "p25": 608,
-              "p75": 743
-            },
-            "miss-deep": {
-              "median": 607,
-              "p25": 583,
-              "p75": 628
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 1,
-          "regMs": 0.26,
-          "firstMs": 0.6,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 386,
-              "p25": 324,
-              "p75": 531
-            },
-            "hit-last": {
-              "median": 353,
-              "p25": 291,
-              "p75": 392
-            },
-            "miss-global": {
-              "median": 662,
-              "p25": 619,
-              "p75": 744
-            },
-            "miss-deep": {
-              "median": 600,
-              "p25": 579,
-              "p75": 606
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 1,
-          "regMs": 0.26,
-          "firstMs": 0.69,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 367,
-              "p25": 298,
-              "p75": 519
-            },
-            "hit-last": {
               "median": 357,
-              "p25": 290,
-              "p75": 392
+              "p25": 282,
+              "p75": 407
+            },
+            "hit-last": {
+              "median": 314,
+              "p25": 263,
+              "p75": 326
             },
             "miss-global": {
-              "median": 653,
-              "p25": 626,
-              "p75": 693
+              "median": 618,
+              "p25": 600,
+              "p75": 644
             },
             "miss-deep": {
-              "median": 591,
-              "p25": 562,
-              "p75": 616
+              "median": 566,
+              "p25": 558,
+              "p75": 574
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 1,
+          "regMs": 0.24,
+          "firstMs": 0.53,
+          "heapMB": 0,
+          "probes": {
+            "hit-mid": {
+              "median": 337,
+              "p25": 284,
+              "p75": 379
+            },
+            "hit-last": {
+              "median": 351,
+              "p25": 281,
+              "p75": 365
+            },
+            "miss-global": {
+              "median": 637,
+              "p25": 592,
+              "p75": 676
+            },
+            "miss-deep": {
+              "median": 556,
+              "p25": 551,
+              "p75": 566
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 1,
+          "regMs": 0.24,
+          "firstMs": 0.57,
+          "heapMB": 0,
+          "probes": {
+            "hit-mid": {
+              "median": 365,
+              "p25": 304,
+              "p75": 435
+            },
+            "hit-last": {
+              "median": 335,
+              "p25": 273,
+              "p75": 361
+            },
+            "miss-global": {
+              "median": 624,
+              "p25": 605,
+              "p75": 648
+            },
+            "miss-deep": {
+              "median": 553,
+              "p25": 551,
+              "p75": 565
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 1,
+          "regMs": 0.25,
+          "firstMs": 0.52,
+          "heapMB": 0,
+          "probes": {
+            "hit-mid": {
+              "median": 350,
+              "p25": 283,
+              "p75": 393
+            },
+            "hit-last": {
+              "median": 329,
+              "p25": 277,
+              "p75": 372
+            },
+            "miss-global": {
+              "median": 623,
+              "p25": 599,
+              "p75": 665
+            },
+            "miss-deep": {
+              "median": 557,
+              "p25": 552,
+              "p75": 565
             }
           }
         }
@@ -252,29 +252,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 10,
-          "regMs": 0.57,
-          "firstMs": 0.42,
+          "regMs": 0.52,
+          "firstMs": 0.33,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 436,
-              "p25": 327,
-              "p75": 539
+              "median": 323,
+              "p25": 286,
+              "p75": 412
             },
             "hit-last": {
-              "median": 705,
-              "p25": 543,
-              "p75": 1021
+              "median": 332,
+              "p25": 288,
+              "p75": 362
             },
             "miss-global": {
-              "median": 413,
-              "p25": 359,
-              "p75": 459
+              "median": 310,
+              "p25": 303,
+              "p75": 411
             },
             "miss-deep": {
-              "median": 385,
-              "p25": 337,
-              "p75": 417
+              "median": 300,
+              "p25": 293,
+              "p75": 387
             }
           }
         },
@@ -282,29 +282,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 10,
-          "regMs": 0.85,
-          "firstMs": 0.46,
+          "regMs": 0.51,
+          "firstMs": 0.34,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 418,
-              "p25": 348,
-              "p75": 526
+              "median": 319,
+              "p25": 282,
+              "p75": 412
             },
             "hit-last": {
-              "median": 381,
-              "p25": 330,
-              "p75": 466
+              "median": 330,
+              "p25": 290,
+              "p75": 346
             },
             "miss-global": {
-              "median": 422,
-              "p25": 361,
-              "p75": 441
+              "median": 317,
+              "p25": 308,
+              "p75": 442
             },
             "miss-deep": {
-              "median": 347,
-              "p25": 333,
-              "p75": 407
+              "median": 296,
+              "p25": 293,
+              "p75": 386
             }
           }
         },
@@ -312,29 +312,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 10,
-          "regMs": 0.5,
-          "firstMs": 0.39,
+          "regMs": 0.52,
+          "firstMs": 0.31,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 407,
-              "p25": 339,
-              "p75": 538
+              "median": 358,
+              "p25": 297,
+              "p75": 400
             },
             "hit-last": {
-              "median": 406,
-              "p25": 356,
-              "p75": 457
+              "median": 332,
+              "p25": 299,
+              "p75": 388
             },
             "miss-global": {
-              "median": 396,
-              "p25": 349,
-              "p75": 498
+              "median": 325,
+              "p25": 311,
+              "p75": 388
             },
             "miss-deep": {
-              "median": 411,
-              "p25": 337,
-              "p75": 426
+              "median": 300,
+              "p25": 295,
+              "p75": 385
             }
           }
         },
@@ -342,29 +342,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 10,
-          "regMs": 0.46,
-          "firstMs": 0.42,
+          "regMs": 0.54,
+          "firstMs": 0.34,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 409,
-              "p25": 322,
-              "p75": 480
+              "median": 335,
+              "p25": 288,
+              "p75": 403
             },
             "hit-last": {
-              "median": 430,
-              "p25": 351,
-              "p75": 474
+              "median": 332,
+              "p25": 295,
+              "p75": 403
             },
             "miss-global": {
-              "median": 428,
-              "p25": 359,
-              "p75": 512
+              "median": 313,
+              "p25": 308,
+              "p75": 398
             },
             "miss-deep": {
-              "median": 378,
-              "p25": 326,
-              "p75": 426
+              "median": 299,
+              "p25": 295,
+              "p75": 371
             }
           }
         }
@@ -374,29 +374,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 10,
-          "regMs": 0.22,
-          "firstMs": 0.61,
+          "regMs": 0.26,
+          "firstMs": 0.63,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 377,
-              "p25": 343,
-              "p75": 432
+              "median": 380,
+              "p25": 307,
+              "p75": 420
             },
             "hit-last": {
-              "median": 406,
-              "p25": 312,
-              "p75": 434
+              "median": 341,
+              "p25": 297,
+              "p75": 377
             },
             "miss-global": {
-              "median": 661,
-              "p25": 648,
-              "p75": 713
+              "median": 612,
+              "p25": 594,
+              "p75": 632
             },
             "miss-deep": {
-              "median": 620,
-              "p25": 586,
-              "p75": 655
+              "median": 564,
+              "p25": 558,
+              "p75": 579
             }
           }
         },
@@ -404,59 +404,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 10,
-          "regMs": 0.43,
-          "firstMs": 0.74,
+          "regMs": 0.25,
+          "firstMs": 0.62,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 376,
-              "p25": 319,
-              "p75": 469
+              "median": 383,
+              "p25": 309,
+              "p75": 430
             },
             "hit-last": {
-              "median": 391,
-              "p25": 352,
-              "p75": 463
+              "median": 353,
+              "p25": 301,
+              "p75": 373
             },
             "miss-global": {
-              "median": 646,
-              "p25": 610,
-              "p75": 680
-            },
-            "miss-deep": {
-              "median": 632,
+              "median": 617,
               "p25": 589,
-              "p75": 641
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 10,
-          "regMs": 0.31,
-          "firstMs": 0.69,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 405,
-              "p25": 358,
-              "p75": 497
-            },
-            "hit-last": {
-              "median": 410,
-              "p25": 323,
-              "p75": 496
-            },
-            "miss-global": {
-              "median": 636,
-              "p25": 623,
-              "p75": 671
+              "p75": 648
             },
             "miss-deep": {
-              "median": 626,
-              "p25": 610,
-              "p75": 646
+              "median": 587,
+              "p25": 571,
+              "p75": 600
             }
           }
         },
@@ -465,28 +435,58 @@
           "kind": "static",
           "size": 10,
           "regMs": 0.26,
-          "firstMs": 0.65,
+          "firstMs": 0.64,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 379,
-              "p25": 324,
-              "p75": 509
+              "median": 384,
+              "p25": 308,
+              "p75": 430
             },
             "hit-last": {
-              "median": 386,
-              "p25": 308,
-              "p75": 457
+              "median": 368,
+              "p25": 299,
+              "p75": 382
             },
             "miss-global": {
-              "median": 646,
-              "p25": 634,
-              "p75": 688
+              "median": 626,
+              "p25": 613,
+              "p75": 641
             },
             "miss-deep": {
-              "median": 627,
-              "p25": 579,
-              "p75": 668
+              "median": 589,
+              "p25": 574,
+              "p75": 610
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 10,
+          "regMs": 0.27,
+          "firstMs": 0.68,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 365,
+              "p25": 306,
+              "p75": 406
+            },
+            "hit-last": {
+              "median": 394,
+              "p25": 329,
+              "p75": 408
+            },
+            "miss-global": {
+              "median": 623,
+              "p25": 605,
+              "p75": 662
+            },
+            "miss-deep": {
+              "median": 585,
+              "p25": 559,
+              "p75": 614
             }
           }
         }
@@ -498,29 +498,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 100,
-          "regMs": 0.8,
-          "firstMs": 0.42,
+          "regMs": 0.85,
+          "firstMs": 0.32,
           "heapMB": 0.3,
           "probes": {
             "hit-mid": {
-              "median": 425,
-              "p25": 339,
-              "p75": 561
+              "median": 363,
+              "p25": 287,
+              "p75": 426
             },
             "hit-last": {
-              "median": 410,
-              "p25": 356,
-              "p75": 486
+              "median": 305,
+              "p25": 287,
+              "p75": 376
             },
             "miss-global": {
-              "median": 411,
-              "p25": 363,
-              "p75": 461
+              "median": 309,
+              "p25": 299,
+              "p75": 361
             },
             "miss-deep": {
-              "median": 364,
-              "p25": 327,
-              "p75": 440
+              "median": 299,
+              "p25": 295,
+              "p75": 345
             }
           }
         },
@@ -528,29 +528,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 100,
-          "regMs": 0.86,
-          "firstMs": 0.47,
+          "regMs": 1.05,
+          "firstMs": 0.35,
           "heapMB": 0.3,
           "probes": {
             "hit-mid": {
-              "median": 448,
-              "p25": 345,
-              "p75": 536
+              "median": 346,
+              "p25": 290,
+              "p75": 411
             },
             "hit-last": {
-              "median": 403,
-              "p25": 339,
-              "p75": 459
+              "median": 325,
+              "p25": 286,
+              "p75": 368
             },
             "miss-global": {
-              "median": 419,
-              "p25": 366,
-              "p75": 483
+              "median": 306,
+              "p25": 301,
+              "p75": 369
             },
             "miss-deep": {
-              "median": 361,
-              "p25": 337,
-              "p75": 410
+              "median": 296,
+              "p25": 291,
+              "p75": 365
             }
           }
         },
@@ -558,29 +558,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 100,
-          "regMs": 0.86,
-          "firstMs": 0.41,
+          "regMs": 0.93,
+          "firstMs": 0.33,
           "heapMB": 0.3,
           "probes": {
             "hit-mid": {
-              "median": 459,
-              "p25": 338,
-              "p75": 755
+              "median": 369,
+              "p25": 297,
+              "p75": 406
             },
             "hit-last": {
-              "median": 403,
-              "p25": 350,
-              "p75": 469
+              "median": 325,
+              "p25": 289,
+              "p75": 378
             },
             "miss-global": {
-              "median": 387,
-              "p25": 360,
-              "p75": 480
+              "median": 308,
+              "p25": 303,
+              "p75": 383
             },
             "miss-deep": {
-              "median": 375,
-              "p25": 332,
-              "p75": 459
+              "median": 294,
+              "p25": 290,
+              "p75": 360
             }
           }
         },
@@ -588,29 +588,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 100,
-          "regMs": 0.91,
-          "firstMs": 0.41,
+          "regMs": 0.96,
+          "firstMs": 0.36,
           "heapMB": 0.3,
           "probes": {
             "hit-mid": {
-              "median": 434,
-              "p25": 356,
-              "p75": 508
+              "median": 347,
+              "p25": 298,
+              "p75": 436
             },
             "hit-last": {
-              "median": 400,
-              "p25": 346,
-              "p75": 470
+              "median": 337,
+              "p25": 292,
+              "p75": 384
             },
             "miss-global": {
-              "median": 436,
-              "p25": 356,
-              "p75": 472
+              "median": 313,
+              "p25": 310,
+              "p75": 371
             },
             "miss-deep": {
-              "median": 343,
-              "p25": 330,
-              "p75": 423
+              "median": 302,
+              "p25": 298,
+              "p75": 381
             }
           }
         }
@@ -620,29 +620,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 100,
-          "regMs": 0.31,
-          "firstMs": 0.98,
+          "regMs": 0.33,
+          "firstMs": 1.07,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 388,
-              "p25": 311,
-              "p75": 477
+              "median": 382,
+              "p25": 320,
+              "p75": 433
             },
             "hit-last": {
-              "median": 432,
-              "p25": 392,
-              "p75": 530
+              "median": 374,
+              "p25": 302,
+              "p75": 392
             },
             "miss-global": {
-              "median": 629,
-              "p25": 608,
-              "p75": 681
+              "median": 612,
+              "p25": 580,
+              "p75": 632
             },
             "miss-deep": {
-              "median": 585,
-              "p25": 554,
-              "p75": 605
+              "median": 692,
+              "p25": 676,
+              "p75": 713
             }
           }
         },
@@ -651,88 +651,88 @@
           "kind": "static",
           "size": 100,
           "regMs": 0.33,
-          "firstMs": 0.97,
+          "firstMs": 0.98,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 399,
-              "p25": 373,
-              "p75": 429
-            },
-            "hit-last": {
-              "median": 369,
-              "p25": 324,
-              "p75": 427
-            },
-            "miss-global": {
-              "median": 633,
-              "p25": 609,
-              "p75": 695
-            },
-            "miss-deep": {
-              "median": 599,
-              "p25": 586,
-              "p75": 616
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 100,
-          "regMs": 0.35,
-          "firstMs": 1.04,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 386,
-              "p25": 309,
-              "p75": 458
-            },
-            "hit-last": {
-              "median": 382,
-              "p25": 310,
-              "p75": 466
-            },
-            "miss-global": {
-              "median": 650,
-              "p25": 613,
-              "p75": 671
-            },
-            "miss-deep": {
-              "median": 601,
-              "p25": 568,
-              "p75": 625
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 100,
-          "regMs": 0.34,
-          "firstMs": 1,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 387,
+              "median": 395,
               "p25": 308,
-              "p75": 558
+              "p75": 454
             },
             "hit-last": {
-              "median": 389,
-              "p25": 322,
-              "p75": 473
+              "median": 355,
+              "p25": 306,
+              "p75": 382
             },
             "miss-global": {
-              "median": 640,
-              "p25": 616,
-              "p75": 658
+              "median": 611,
+              "p25": 593,
+              "p75": 642
             },
             "miss-deep": {
-              "median": 604,
-              "p25": 588,
-              "p75": 637
+              "median": 696,
+              "p25": 674,
+              "p75": 702
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 100,
+          "regMs": 0.33,
+          "firstMs": 1.01,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 365,
+              "p25": 304,
+              "p75": 426
+            },
+            "hit-last": {
+              "median": 366,
+              "p25": 310,
+              "p75": 383
+            },
+            "miss-global": {
+              "median": 610,
+              "p25": 585,
+              "p75": 634
+            },
+            "miss-deep": {
+              "median": 707,
+              "p25": 697,
+              "p75": 727
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 100,
+          "regMs": 0.31,
+          "firstMs": 1.02,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 382,
+              "p25": 305,
+              "p75": 465
+            },
+            "hit-last": {
+              "median": 374,
+              "p25": 300,
+              "p75": 421
+            },
+            "miss-global": {
+              "median": 627,
+              "p25": 593,
+              "p75": 641
+            },
+            "miss-deep": {
+              "median": 591,
+              "p25": 573,
+              "p75": 607
             }
           }
         }
@@ -744,29 +744,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 1000,
-          "regMs": 2.27,
-          "firstMs": 0.47,
-          "heapMB": 1.4,
+          "regMs": 2.33,
+          "firstMs": 0.4,
+          "heapMB": 1.5,
           "probes": {
             "hit-mid": {
-              "median": 417,
-              "p25": 390,
-              "p75": 505
+              "median": 368,
+              "p25": 291,
+              "p75": 403
             },
             "hit-last": {
-              "median": 413,
-              "p25": 340,
-              "p75": 455
+              "median": 339,
+              "p25": 301,
+              "p75": 412
             },
             "miss-global": {
-              "median": 407,
-              "p25": 364,
-              "p75": 443
+              "median": 315,
+              "p25": 304,
+              "p75": 404
             },
             "miss-deep": {
-              "median": 379,
-              "p25": 314,
-              "p75": 395
+              "median": 307,
+              "p25": 292,
+              "p75": 362
             }
           }
         },
@@ -774,59 +774,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 1000,
-          "regMs": 2.93,
-          "firstMs": 0.55,
-          "heapMB": 1.4,
+          "regMs": 2.18,
+          "firstMs": 0.39,
+          "heapMB": 1.5,
           "probes": {
             "hit-mid": {
-              "median": 431,
-              "p25": 360,
-              "p75": 523
-            },
-            "hit-last": {
-              "median": 443,
-              "p25": 352,
-              "p75": 498
-            },
-            "miss-global": {
-              "median": 398,
-              "p25": 361,
-              "p75": 453
-            },
-            "miss-deep": {
-              "median": 413,
-              "p25": 340,
-              "p75": 444
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "static",
-          "size": 1000,
-          "regMs": 2.11,
-          "firstMs": 0.43,
-          "heapMB": 1.4,
-          "probes": {
-            "hit-mid": {
-              "median": 432,
-              "p25": 401,
-              "p75": 520
-            },
-            "hit-last": {
-              "median": 426,
-              "p25": 379,
-              "p75": 517
-            },
-            "miss-global": {
-              "median": 421,
-              "p25": 363,
-              "p75": 492
-            },
-            "miss-deep": {
               "median": 369,
-              "p25": 327,
-              "p75": 390
+              "p25": 304,
+              "p75": 461
+            },
+            "hit-last": {
+              "median": 349,
+              "p25": 303,
+              "p75": 420
+            },
+            "miss-global": {
+              "median": 314,
+              "p25": 306,
+              "p75": 398
+            },
+            "miss-deep": {
+              "median": 297,
+              "p25": 292,
+              "p75": 370
             }
           }
         },
@@ -834,29 +804,59 @@
           "framework": "keala",
           "kind": "static",
           "size": 1000,
-          "regMs": 2.13,
-          "firstMs": 0.49,
-          "heapMB": 1.4,
+          "regMs": 2.14,
+          "firstMs": 0.36,
+          "heapMB": 1.5,
           "probes": {
             "hit-mid": {
-              "median": 471,
-              "p25": 366,
-              "p75": 618
+              "median": 382,
+              "p25": 299,
+              "p75": 428
             },
             "hit-last": {
-              "median": 422,
-              "p25": 353,
-              "p75": 514
+              "median": 329,
+              "p25": 301,
+              "p75": 396
             },
             "miss-global": {
-              "median": 410,
-              "p25": 361,
-              "p75": 454
+              "median": 314,
+              "p25": 310,
+              "p75": 406
             },
             "miss-deep": {
-              "median": 407,
-              "p25": 331,
-              "p75": 456
+              "median": 301,
+              "p25": 293,
+              "p75": 383
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "static",
+          "size": 1000,
+          "regMs": 2.19,
+          "firstMs": 0.37,
+          "heapMB": 1.5,
+          "probes": {
+            "hit-mid": {
+              "median": 371,
+              "p25": 296,
+              "p75": 393
+            },
+            "hit-last": {
+              "median": 337,
+              "p25": 293,
+              "p75": 372
+            },
+            "miss-global": {
+              "median": 309,
+              "p25": 302,
+              "p75": 384
+            },
+            "miss-deep": {
+              "median": 293,
+              "p25": 289,
+              "p75": 374
             }
           }
         }
@@ -866,89 +866,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 1000,
-          "regMs": 0.73,
-          "firstMs": 2.51,
+          "regMs": 0.69,
+          "firstMs": 2.5,
           "heapMB": 0.4,
           "probes": {
             "hit-mid": {
-              "median": 406,
-              "p25": 333,
-              "p75": 527
-            },
-            "hit-last": {
-              "median": 375,
-              "p25": 334,
-              "p75": 420
-            },
-            "miss-global": {
-              "median": 634,
-              "p25": 615,
-              "p75": 662
-            },
-            "miss-deep": {
-              "median": 602,
-              "p25": 579,
-              "p75": 640
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 1000,
-          "regMs": 0.75,
-          "firstMs": 2.49,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 407,
-              "p25": 332,
-              "p75": 495
-            },
-            "hit-last": {
-              "median": 392,
-              "p25": 318,
-              "p75": 434
-            },
-            "miss-global": {
-              "median": 639,
-              "p25": 610,
-              "p75": 688
-            },
-            "miss-deep": {
-              "median": 616,
-              "p25": 590,
-              "p75": 623
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "static",
-          "size": 1000,
-          "regMs": 0.75,
-          "firstMs": 3.35,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 421,
-              "p25": 330,
+              "median": 405,
+              "p25": 329,
               "p75": 488
             },
             "hit-last": {
-              "median": 390,
-              "p25": 339,
-              "p75": 425
+              "median": 376,
+              "p25": 340,
+              "p75": 419
             },
             "miss-global": {
-              "median": 648,
-              "p25": 635,
-              "p75": 713
+              "median": 625,
+              "p25": 576,
+              "p75": 665
             },
             "miss-deep": {
-              "median": 628,
-              "p25": 599,
-              "p75": 654
+              "median": 583,
+              "p25": 573,
+              "p75": 602
             }
           }
         },
@@ -956,29 +896,89 @@
           "framework": "hono",
           "kind": "static",
           "size": 1000,
-          "regMs": 0.73,
-          "firstMs": 2.6,
+          "regMs": 0.69,
+          "firstMs": 2.47,
           "heapMB": 0.4,
           "probes": {
             "hit-mid": {
-              "median": 424,
-              "p25": 315,
-              "p75": 462
+              "median": 403,
+              "p25": 340,
+              "p75": 435
             },
             "hit-last": {
-              "median": 399,
-              "p25": 336,
-              "p75": 411
+              "median": 411,
+              "p25": 349,
+              "p75": 541
             },
             "miss-global": {
-              "median": 628,
-              "p25": 597,
-              "p75": 688
+              "median": 642,
+              "p25": 623,
+              "p75": 664
             },
             "miss-deep": {
-              "median": 613,
-              "p25": 605,
-              "p75": 653
+              "median": 596,
+              "p25": 585,
+              "p75": 601
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 1000,
+          "regMs": 0.69,
+          "firstMs": 2.4,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 393,
+              "p25": 329,
+              "p75": 467
+            },
+            "hit-last": {
+              "median": 378,
+              "p25": 333,
+              "p75": 399
+            },
+            "miss-global": {
+              "median": 623,
+              "p25": 601,
+              "p75": 648
+            },
+            "miss-deep": {
+              "median": 596,
+              "p25": 575,
+              "p75": 604
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "static",
+          "size": 1000,
+          "regMs": 0.68,
+          "firstMs": 2.27,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 385,
+              "p25": 319,
+              "p75": 443
+            },
+            "hit-last": {
+              "median": 371,
+              "p25": 318,
+              "p75": 409
+            },
+            "miss-global": {
+              "median": 617,
+              "p25": 602,
+              "p75": 637
+            },
+            "miss-deep": {
+              "median": 600,
+              "p25": 572,
+              "p75": 610
             }
           }
         }
@@ -990,29 +990,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 10000,
-          "regMs": 12.1,
-          "firstMs": 0.58,
-          "heapMB": 12.1,
+          "regMs": 10.62,
+          "firstMs": 0.62,
+          "heapMB": 12.7,
           "probes": {
             "hit-mid": {
-              "median": 382,
-              "p25": 339,
-              "p75": 518
+              "median": 327,
+              "p25": 296,
+              "p75": 379
             },
             "hit-last": {
-              "median": 367,
-              "p25": 348,
-              "p75": 412
+              "median": 310,
+              "p25": 306,
+              "p75": 355
             },
             "miss-global": {
-              "median": 378,
-              "p25": 371,
-              "p75": 414
+              "median": 319,
+              "p25": 316,
+              "p75": 325
             },
             "miss-deep": {
-              "median": 349,
-              "p25": 344,
-              "p75": 363
+              "median": 310,
+              "p25": 304,
+              "p75": 318
             }
           }
         },
@@ -1020,29 +1020,29 @@
           "framework": "keala",
           "kind": "static",
           "size": 10000,
-          "regMs": 12.97,
-          "firstMs": 0.54,
-          "heapMB": 12.1,
+          "regMs": 12.41,
+          "firstMs": 0.48,
+          "heapMB": 12.7,
           "probes": {
             "hit-mid": {
-              "median": 375,
-              "p25": 342,
-              "p75": 492
-            },
-            "hit-last": {
-              "median": 359,
-              "p25": 341,
+              "median": 331,
+              "p25": 296,
               "p75": 384
             },
+            "hit-last": {
+              "median": 312,
+              "p25": 305,
+              "p75": 354
+            },
             "miss-global": {
-              "median": 370,
-              "p25": 359,
-              "p75": 398
+              "median": 320,
+              "p25": 316,
+              "p75": 327
             },
             "miss-deep": {
-              "median": 344,
-              "p25": 339,
-              "p75": 377
+              "median": 312,
+              "p25": 308,
+              "p75": 324
             }
           }
         },
@@ -1050,59 +1050,59 @@
           "framework": "keala",
           "kind": "static",
           "size": 10000,
-          "regMs": 11.68,
-          "firstMs": 1.09,
-          "heapMB": 12.1,
+          "regMs": 12.5,
+          "firstMs": 0.44,
+          "heapMB": 12.7,
           "probes": {
             "hit-mid": {
-              "median": 422,
-              "p25": 347,
-              "p75": 501
-            },
-            "hit-last": {
-              "median": 361,
-              "p25": 341,
-              "p75": 389
-            },
-            "miss-global": {
-              "median": 377,
-              "p25": 364,
-              "p75": 414
-            },
-            "miss-deep": {
-              "median": 354,
-              "p25": 347,
-              "p75": 397
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "static",
-          "size": 10000,
-          "regMs": 32.2,
-          "firstMs": 0.62,
-          "heapMB": 12.1,
-          "probes": {
-            "hit-mid": {
-              "median": 371,
-              "p25": 338,
-              "p75": 504
-            },
-            "hit-last": {
-              "median": 354,
-              "p25": 337,
+              "median": 346,
+              "p25": 296,
               "p75": 383
             },
+            "hit-last": {
+              "median": 308,
+              "p25": 299,
+              "p75": 339
+            },
             "miss-global": {
-              "median": 369,
-              "p25": 364,
-              "p75": 400
+              "median": 322,
+              "p25": 317,
+              "p75": 327
             },
             "miss-deep": {
-              "median": 348,
-              "p25": 343,
-              "p75": 367
+              "median": 316,
+              "p25": 312,
+              "p75": 326
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "static",
+          "size": 10000,
+          "regMs": 12.31,
+          "firstMs": 0.52,
+          "heapMB": 12.7,
+          "probes": {
+            "hit-mid": {
+              "median": 325,
+              "p25": 287,
+              "p75": 374
+            },
+            "hit-last": {
+              "median": 300,
+              "p25": 291,
+              "p75": 334
+            },
+            "miss-global": {
+              "median": 313,
+              "p25": 308,
+              "p75": 316
+            },
+            "miss-deep": {
+              "median": 312,
+              "p25": 303,
+              "p75": 319
             }
           }
         }
@@ -1112,29 +1112,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 10000,
-          "regMs": 2.41,
-          "firstMs": 12.65,
+          "regMs": 2.24,
+          "firstMs": 11.69,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 396,
-              "p25": 319,
-              "p75": 453
+              "median": 372,
+              "p25": 306,
+              "p75": 428
             },
             "hit-last": {
-              "median": 399,
-              "p25": 330,
-              "p75": 447
+              "median": 406,
+              "p25": 325,
+              "p75": 459
             },
             "miss-global": {
-              "median": 675,
-              "p25": 641,
-              "p75": 708
+              "median": 644,
+              "p25": 589,
+              "p75": 658
             },
             "miss-deep": {
-              "median": 635,
-              "p25": 615,
-              "p75": 672
+              "median": 619,
+              "p25": 583,
+              "p75": 640
             }
           }
         },
@@ -1142,29 +1142,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 10000,
-          "regMs": 2.92,
-          "firstMs": 11.51,
+          "regMs": 2.42,
+          "firstMs": 12.79,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 399,
-              "p25": 327,
-              "p75": 460
+              "median": 375,
+              "p25": 306,
+              "p75": 443
             },
             "hit-last": {
-              "median": 425,
-              "p25": 351,
-              "p75": 474
+              "median": 411,
+              "p25": 329,
+              "p75": 521
             },
             "miss-global": {
-              "median": 743,
-              "p25": 703,
-              "p75": 781
+              "median": 643,
+              "p25": 631,
+              "p75": 653
             },
             "miss-deep": {
-              "median": 647,
-              "p25": 596,
-              "p75": 688
+              "median": 633,
+              "p25": 617,
+              "p75": 641
             }
           }
         },
@@ -1172,29 +1172,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 10000,
-          "regMs": 2.56,
-          "firstMs": 13.15,
+          "regMs": 2.27,
+          "firstMs": 11.41,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 396,
-              "p25": 323,
-              "p75": 433
+              "median": 361,
+              "p25": 311,
+              "p75": 439
             },
             "hit-last": {
-              "median": 407,
-              "p25": 347,
-              "p75": 453
+              "median": 366,
+              "p25": 318,
+              "p75": 448
             },
             "miss-global": {
-              "median": 680,
-              "p25": 635,
-              "p75": 743
+              "median": 642,
+              "p25": 605,
+              "p75": 675
             },
             "miss-deep": {
-              "median": 669,
-              "p25": 632,
-              "p75": 698
+              "median": 624,
+              "p25": 590,
+              "p75": 640
             }
           }
         },
@@ -1202,29 +1202,29 @@
           "framework": "hono",
           "kind": "static",
           "size": 10000,
-          "regMs": 3.08,
-          "firstMs": 20.11,
+          "regMs": 2.29,
+          "firstMs": 11.36,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 455,
-              "p25": 343,
-              "p75": 493
+              "median": 361,
+              "p25": 300,
+              "p75": 429
             },
             "hit-last": {
-              "median": 429,
-              "p25": 363,
-              "p75": 578
+              "median": 395,
+              "p25": 320,
+              "p75": 495
             },
             "miss-global": {
-              "median": 724,
-              "p25": 673,
-              "p75": 754
+              "median": 691,
+              "p25": 627,
+              "p75": 700
             },
             "miss-deep": {
-              "median": 663,
-              "p25": 658,
-              "p75": 691
+              "median": 623,
+              "p25": 586,
+              "p75": 646
             }
           }
         }
@@ -1238,29 +1238,89 @@
           "framework": "keala",
           "kind": "param-distinct",
           "size": 1,
-          "regMs": 0.49,
-          "firstMs": 0.42,
+          "regMs": 0.56,
+          "firstMs": 0.34,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 461,
-              "p25": 413,
-              "p75": 630
+              "median": 417,
+              "p25": 343,
+              "p75": 463
             },
             "hit-last": {
-              "median": 468,
-              "p25": 391,
-              "p75": 483
+              "median": 364,
+              "p25": 318,
+              "p75": 392
             },
             "miss-global": {
-              "median": 570,
-              "p25": 475,
-              "p75": 609
+              "median": 444,
+              "p25": 436,
+              "p75": 550
             },
             "miss-deep": {
-              "median": 598,
-              "p25": 534,
-              "p75": 612
+              "median": 563,
+              "p25": 509,
+              "p75": 577
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 1,
+          "regMs": 0.57,
+          "firstMs": 0.39,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 393,
+              "p25": 324,
+              "p75": 458
+            },
+            "hit-last": {
+              "median": 355,
+              "p25": 318,
+              "p75": 395
+            },
+            "miss-global": {
+              "median": 464,
+              "p25": 434,
+              "p75": 556
+            },
+            "miss-deep": {
+              "median": 541,
+              "p25": 512,
+              "p75": 576
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 1,
+          "regMs": 0.58,
+          "firstMs": 0.35,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 400,
+              "p25": 319,
+              "p75": 442
+            },
+            "hit-last": {
+              "median": 372,
+              "p25": 317,
+              "p75": 393
+            },
+            "miss-global": {
+              "median": 446,
+              "p25": 433,
+              "p75": 557
+            },
+            "miss-deep": {
+              "median": 582,
+              "p25": 511,
+              "p75": 601
             }
           }
         },
@@ -1269,88 +1329,28 @@
           "kind": "param-distinct",
           "size": 1,
           "regMs": 0.56,
-          "firstMs": 0.37,
+          "firstMs": 0.41,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 479,
-              "p25": 421,
-              "p75": 640
+              "median": 402,
+              "p25": 318,
+              "p75": 444
             },
             "hit-last": {
-              "median": 474,
-              "p25": 401,
-              "p75": 541
+              "median": 366,
+              "p25": 310,
+              "p75": 395
             },
             "miss-global": {
-              "median": 515,
-              "p25": 496,
-              "p75": 590
+              "median": 446,
+              "p25": 432,
+              "p75": 527
             },
             "miss-deep": {
-              "median": 589,
-              "p25": 528,
-              "p75": 614
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 1,
-          "regMs": 0.83,
-          "firstMs": 0.45,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 508,
-              "p25": 440,
-              "p75": 635
-            },
-            "hit-last": {
-              "median": 453,
-              "p25": 397,
-              "p75": 481
-            },
-            "miss-global": {
-              "median": 549,
-              "p25": 482,
-              "p75": 610
-            },
-            "miss-deep": {
-              "median": 596,
-              "p25": 538,
-              "p75": 656
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 1,
-          "regMs": 0.53,
-          "firstMs": 0.39,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 531,
-              "p25": 423,
-              "p75": 614
-            },
-            "hit-last": {
-              "median": 464,
-              "p25": 390,
-              "p75": 511
-            },
-            "miss-global": {
-              "median": 556,
-              "p25": 479,
-              "p75": 615
-            },
-            "miss-deep": {
-              "median": 613,
-              "p25": 538,
-              "p75": 635
+              "median": 541,
+              "p25": 503,
+              "p75": 584
             }
           }
         }
@@ -1361,28 +1361,28 @@
           "kind": "param-distinct",
           "size": 1,
           "regMs": 0.26,
-          "firstMs": 0.67,
-          "heapMB": 0.1,
+          "firstMs": 0.72,
+          "heapMB": 0,
           "probes": {
             "hit-mid": {
-              "median": 426,
-              "p25": 413,
-              "p75": 511
-            },
-            "hit-last": {
               "median": 435,
-              "p25": 383,
-              "p75": 506
+              "p25": 408,
+              "p75": 513
+            },
+            "hit-last": {
+              "median": 405,
+              "p25": 386,
+              "p75": 421
             },
             "miss-global": {
-              "median": 665,
-              "p25": 637,
-              "p75": 687
+              "median": 611,
+              "p25": 592,
+              "p75": 623
             },
             "miss-deep": {
-              "median": 574,
-              "p25": 560,
-              "p75": 605
+              "median": 570,
+              "p25": 551,
+              "p75": 580
             }
           }
         },
@@ -1390,29 +1390,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 1,
-          "regMs": 0.24,
-          "firstMs": 1.24,
-          "heapMB": 0.1,
+          "regMs": 0.25,
+          "firstMs": 0.73,
+          "heapMB": 0,
           "probes": {
             "hit-mid": {
-              "median": 455,
-              "p25": 421,
-              "p75": 551
+              "median": 428,
+              "p25": 413,
+              "p75": 513
             },
             "hit-last": {
-              "median": 430,
-              "p25": 401,
-              "p75": 506
+              "median": 436,
+              "p25": 397,
+              "p75": 487
             },
             "miss-global": {
-              "median": 636,
-              "p25": 614,
-              "p75": 663
+              "median": 635,
+              "p25": 603,
+              "p75": 649
             },
             "miss-deep": {
-              "median": 612,
-              "p25": 596,
-              "p75": 633
+              "median": 573,
+              "p25": 568,
+              "p75": 592
             }
           }
         },
@@ -1420,59 +1420,59 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 1,
-          "regMs": 0.24,
-          "firstMs": 0.7,
-          "heapMB": 0.1,
+          "regMs": 0.25,
+          "firstMs": 0.74,
+          "heapMB": 0,
           "probes": {
             "hit-mid": {
-              "median": 444,
-              "p25": 407,
-              "p75": 517
+              "median": 452,
+              "p25": 430,
+              "p75": 562
             },
             "hit-last": {
-              "median": 464,
-              "p25": 416,
+              "median": 398,
+              "p25": 340,
+              "p75": 425
+            },
+            "miss-global": {
+              "median": 639,
+              "p25": 616,
+              "p75": 649
+            },
+            "miss-deep": {
+              "median": 587,
+              "p25": 579,
+              "p75": 596
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-distinct",
+          "size": 1,
+          "regMs": 0.25,
+          "firstMs": 0.81,
+          "heapMB": 0,
+          "probes": {
+            "hit-mid": {
+              "median": 432,
+              "p25": 393,
               "p75": 509
             },
-            "miss-global": {
-              "median": 675,
-              "p25": 652,
-              "p75": 716
-            },
-            "miss-deep": {
-              "median": 607,
-              "p25": 593,
-              "p75": 627
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-distinct",
-          "size": 1,
-          "regMs": 0.46,
-          "firstMs": 0.83,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 462,
-              "p25": 427,
-              "p75": 580
-            },
             "hit-last": {
-              "median": 411,
-              "p25": 386,
-              "p75": 448
+              "median": 433,
+              "p25": 394,
+              "p75": 488
             },
             "miss-global": {
-              "median": 670,
-              "p25": 640,
-              "p75": 717
+              "median": 651,
+              "p25": 627,
+              "p75": 673
             },
             "miss-deep": {
-              "median": 602,
-              "p25": 578,
-              "p75": 615
+              "median": 587,
+              "p25": 580,
+              "p75": 602
             }
           }
         }
@@ -1484,29 +1484,29 @@
           "framework": "keala",
           "kind": "param-distinct",
           "size": 10,
-          "regMs": 0.63,
-          "firstMs": 0.42,
+          "regMs": 0.58,
+          "firstMs": 0.32,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 501,
-              "p25": 446,
-              "p75": 607
+              "median": 413,
+              "p25": 351,
+              "p75": 582
             },
             "hit-last": {
-              "median": 552,
-              "p25": 442,
-              "p75": 597
+              "median": 407,
+              "p25": 371,
+              "p75": 474
             },
             "miss-global": {
-              "median": 530,
-              "p25": 469,
-              "p75": 574
+              "median": 439,
+              "p25": 421,
+              "p75": 540
             },
             "miss-deep": {
-              "median": 592,
-              "p25": 538,
-              "p75": 639
+              "median": 524,
+              "p25": 490,
+              "p75": 609
             }
           }
         },
@@ -1515,88 +1515,88 @@
           "kind": "param-distinct",
           "size": 10,
           "regMs": 0.61,
-          "firstMs": 0.46,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 530,
-              "p25": 423,
-              "p75": 664
-            },
-            "hit-last": {
-              "median": 484,
-              "p25": 423,
-              "p75": 569
-            },
-            "miss-global": {
-              "median": 569,
-              "p25": 493,
-              "p75": 621
-            },
-            "miss-deep": {
-              "median": 576,
-              "p25": 531,
-              "p75": 638
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 10,
-          "regMs": 0.64,
-          "firstMs": 0.6,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 524,
-              "p25": 440,
-              "p75": 626
-            },
-            "hit-last": {
-              "median": 535,
-              "p25": 458,
-              "p75": 596
-            },
-            "miss-global": {
-              "median": 561,
-              "p25": 500,
-              "p75": 615
-            },
-            "miss-deep": {
-              "median": 609,
-              "p25": 557,
-              "p75": 680
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 10,
-          "regMs": 0.62,
           "firstMs": 0.39,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 501,
-              "p25": 446,
-              "p75": 598
+              "median": 438,
+              "p25": 365,
+              "p75": 524
             },
             "hit-last": {
-              "median": 518,
-              "p25": 438,
-              "p75": 579
+              "median": 407,
+              "p25": 368,
+              "p75": 557
             },
             "miss-global": {
-              "median": 589,
-              "p25": 487,
-              "p75": 630
+              "median": 440,
+              "p25": 419,
+              "p75": 555
             },
             "miss-deep": {
-              "median": 622,
-              "p25": 555,
-              "p75": 655
+              "median": 553,
+              "p25": 486,
+              "p75": 582
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 10,
+          "regMs": 0.66,
+          "firstMs": 0.35,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 438,
+              "p25": 354,
+              "p75": 466
+            },
+            "hit-last": {
+              "median": 406,
+              "p25": 374,
+              "p75": 478
+            },
+            "miss-global": {
+              "median": 444,
+              "p25": 422,
+              "p75": 528
+            },
+            "miss-deep": {
+              "median": 560,
+              "p25": 489,
+              "p75": 592
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 10,
+          "regMs": 0.67,
+          "firstMs": 0.34,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 431,
+              "p25": 365,
+              "p75": 465
+            },
+            "hit-last": {
+              "median": 404,
+              "p25": 368,
+              "p75": 487
+            },
+            "miss-global": {
+              "median": 446,
+              "p25": 421,
+              "p75": 549
+            },
+            "miss-deep": {
+              "median": 562,
+              "p25": 490,
+              "p75": 582
             }
           }
         }
@@ -1607,27 +1607,57 @@
           "kind": "param-distinct",
           "size": 10,
           "regMs": 0.26,
-          "firstMs": 1,
+          "firstMs": 0.93,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 491,
-              "p25": 418,
-              "p75": 587
+              "median": 474,
+              "p25": 452,
+              "p75": 525
             },
             "hit-last": {
-              "median": 530,
-              "p25": 448,
-              "p75": 633
+              "median": 478,
+              "p25": 438,
+              "p75": 567
             },
             "miss-global": {
-              "median": 618,
-              "p25": 595,
-              "p75": 662
+              "median": 609,
+              "p25": 596,
+              "p75": 635
+            },
+            "miss-deep": {
+              "median": 587,
+              "p25": 575,
+              "p75": 609
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-distinct",
+          "size": 10,
+          "regMs": 0.24,
+          "firstMs": 0.97,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 472,
+              "p25": 442,
+              "p75": 489
+            },
+            "hit-last": {
+              "median": 474,
+              "p25": 470,
+              "p75": 538
+            },
+            "miss-global": {
+              "median": 625,
+              "p25": 596,
+              "p75": 654
             },
             "miss-deep": {
               "median": 599,
-              "p25": 581,
+              "p25": 586,
               "p75": 618
             }
           }
@@ -1636,29 +1666,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 10,
-          "regMs": 0.33,
-          "firstMs": 0.95,
+          "regMs": 0.24,
+          "firstMs": 0.92,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
               "median": 478,
-              "p25": 451,
-              "p75": 562
+              "p25": 465,
+              "p75": 522
             },
             "hit-last": {
-              "median": 502,
-              "p25": 455,
-              "p75": 575
+              "median": 482,
+              "p25": 449,
+              "p75": 595
             },
             "miss-global": {
-              "median": 613,
-              "p25": 604,
-              "p75": 671
+              "median": 636,
+              "p25": 605,
+              "p75": 655
             },
             "miss-deep": {
-              "median": 612,
-              "p25": 598,
-              "p75": 628
+              "median": 596,
+              "p25": 583,
+              "p75": 618
             }
           }
         },
@@ -1666,59 +1696,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 10,
-          "regMs": 0.28,
+          "regMs": 0.26,
           "firstMs": 0.96,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 516,
-              "p25": 448,
-              "p75": 634
+              "median": 470,
+              "p25": 418,
+              "p75": 543
             },
             "hit-last": {
-              "median": 490,
-              "p25": 478,
-              "p75": 641
+              "median": 471,
+              "p25": 440,
+              "p75": 513
             },
             "miss-global": {
-              "median": 636,
-              "p25": 609,
-              "p75": 685
+              "median": 619,
+              "p25": 597,
+              "p75": 691
             },
             "miss-deep": {
-              "median": 620,
-              "p25": 605,
-              "p75": 638
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-distinct",
-          "size": 10,
-          "regMs": 0.28,
-          "firstMs": 1.02,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 499,
-              "p25": 460,
-              "p75": 606
-            },
-            "hit-last": {
-              "median": 446,
-              "p25": 433,
-              "p75": 518
-            },
-            "miss-global": {
-              "median": 648,
-              "p25": 625,
-              "p75": 677
-            },
-            "miss-deep": {
-              "median": 612,
-              "p25": 587,
-              "p75": 665
+              "median": 608,
+              "p25": 588,
+              "p75": 619
             }
           }
         }
@@ -1730,29 +1730,89 @@
           "framework": "keala",
           "kind": "param-distinct",
           "size": 100,
-          "regMs": 1.48,
-          "firstMs": 0.49,
+          "regMs": 1.09,
+          "firstMs": 0.34,
           "heapMB": 0.4,
           "probes": {
             "hit-mid": {
-              "median": 487,
-              "p25": 435,
-              "p75": 681
+              "median": 421,
+              "p25": 383,
+              "p75": 505
             },
             "hit-last": {
-              "median": 536,
-              "p25": 439,
-              "p75": 599
+              "median": 417,
+              "p25": 372,
+              "p75": 483
             },
             "miss-global": {
-              "median": 524,
-              "p25": 471,
-              "p75": 595
+              "median": 457,
+              "p25": 407,
+              "p75": 508
             },
             "miss-deep": {
-              "median": 597,
-              "p25": 530,
-              "p75": 638
+              "median": 529,
+              "p25": 497,
+              "p75": 572
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 100,
+          "regMs": 1.12,
+          "firstMs": 0.33,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 445,
+              "p25": 351,
+              "p75": 470
+            },
+            "hit-last": {
+              "median": 412,
+              "p25": 371,
+              "p75": 522
+            },
+            "miss-global": {
+              "median": 460,
+              "p25": 410,
+              "p75": 528
+            },
+            "miss-deep": {
+              "median": 530,
+              "p25": 491,
+              "p75": 569
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 100,
+          "regMs": 1.2,
+          "firstMs": 0.39,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 435,
+              "p25": 367,
+              "p75": 489
+            },
+            "hit-last": {
+              "median": 417,
+              "p25": 370,
+              "p75": 474
+            },
+            "miss-global": {
+              "median": 454,
+              "p25": 416,
+              "p75": 525
+            },
+            "miss-deep": {
+              "median": 529,
+              "p25": 500,
+              "p75": 575
             }
           }
         },
@@ -1761,88 +1821,28 @@
           "kind": "param-distinct",
           "size": 100,
           "regMs": 1.08,
-          "firstMs": 0.45,
+          "firstMs": 0.39,
           "heapMB": 0.4,
           "probes": {
             "hit-mid": {
-              "median": 510,
-              "p25": 425,
-              "p75": 664
+              "median": 448,
+              "p25": 360,
+              "p75": 555
             },
             "hit-last": {
-              "median": 498,
-              "p25": 443,
-              "p75": 666
+              "median": 425,
+              "p25": 377,
+              "p75": 482
             },
             "miss-global": {
-              "median": 556,
-              "p25": 467,
-              "p75": 578
+              "median": 464,
+              "p25": 418,
+              "p75": 527
             },
             "miss-deep": {
-              "median": 609,
-              "p25": 565,
-              "p75": 661
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 100,
-          "regMs": 1.23,
-          "firstMs": 0.49,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 520,
-              "p25": 439,
-              "p75": 558
-            },
-            "hit-last": {
-              "median": 545,
-              "p25": 478,
-              "p75": 575
-            },
-            "miss-global": {
-              "median": 540,
-              "p25": 483,
-              "p75": 607
-            },
-            "miss-deep": {
-              "median": 622,
-              "p25": 545,
-              "p75": 675
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 100,
-          "regMs": 1.14,
-          "firstMs": 0.45,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 543,
-              "p25": 434,
-              "p75": 571
-            },
-            "hit-last": {
-              "median": 520,
-              "p25": 438,
-              "p75": 663
-            },
-            "miss-global": {
-              "median": 534,
-              "p25": 491,
-              "p75": 575
-            },
-            "miss-deep": {
-              "median": 593,
-              "p25": 553,
-              "p75": 653
+              "median": 552,
+              "p25": 494,
+              "p75": 583
             }
           }
         }
@@ -1852,28 +1852,58 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 100,
-          "regMs": 0.31,
-          "firstMs": 1.94,
+          "regMs": 0.38,
+          "firstMs": 1.88,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 777,
-              "p25": 640,
-              "p75": 985
+              "median": 685,
+              "p25": 652,
+              "p75": 876
             },
             "hit-last": {
-              "median": 813,
-              "p25": 722,
-              "p75": 897
+              "median": 755,
+              "p25": 696,
+              "p75": 839
             },
             "miss-global": {
-              "median": 665,
-              "p25": 615,
-              "p75": 671
+              "median": 649,
+              "p25": 621,
+              "p75": 667
             },
             "miss-deep": {
-              "median": 622,
-              "p25": 598,
+              "median": 630,
+              "p25": 614,
+              "p75": 664
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-distinct",
+          "size": 100,
+          "regMs": 0.32,
+          "firstMs": 1.74,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 689,
+              "p25": 660,
+              "p75": 741
+            },
+            "hit-last": {
+              "median": 761,
+              "p25": 722,
+              "p75": 809
+            },
+            "miss-global": {
+              "median": 647,
+              "p25": 617,
+              "p75": 665
+            },
+            "miss-deep": {
+              "median": 626,
+              "p25": 603,
               "p75": 630
             }
           }
@@ -1882,29 +1912,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 100,
-          "regMs": 0.35,
+          "regMs": 0.36,
           "firstMs": 1.73,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 776,
-              "p25": 680,
-              "p75": 845
-            },
-            "hit-last": {
-              "median": 799,
-              "p25": 729,
+              "median": 675,
+              "p25": 643,
               "p75": 873
             },
+            "hit-last": {
+              "median": 753,
+              "p25": 710,
+              "p75": 812
+            },
             "miss-global": {
-              "median": 652,
-              "p25": 629,
-              "p75": 676
+              "median": 669,
+              "p25": 630,
+              "p75": 700
             },
             "miss-deep": {
-              "median": 640,
-              "p25": 628,
-              "p75": 650
+              "median": 621,
+              "p25": 607,
+              "p75": 634
             }
           }
         },
@@ -1912,59 +1942,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 100,
-          "regMs": 0.34,
-          "firstMs": 1.79,
+          "regMs": 0.37,
+          "firstMs": 1.85,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 756,
-              "p25": 714,
-              "p75": 1036
+              "median": 689,
+              "p25": 673,
+              "p75": 853
             },
             "hit-last": {
-              "median": 832,
-              "p25": 764,
-              "p75": 879
-            },
-            "miss-global": {
-              "median": 676,
-              "p25": 627,
-              "p75": 689
-            },
-            "miss-deep": {
-              "median": 638,
-              "p25": 621,
-              "p75": 667
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-distinct",
-          "size": 100,
-          "regMs": 0.76,
-          "firstMs": 2.13,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 761,
-              "p25": 679,
-              "p75": 907
-            },
-            "hit-last": {
-              "median": 786,
+              "median": 777,
               "p25": 739,
-              "p75": 925
+              "p75": 861
             },
             "miss-global": {
-              "median": 672,
-              "p25": 665,
-              "p75": 698
+              "median": 650,
+              "p25": 632,
+              "p75": 659
             },
             "miss-deep": {
-              "median": 634,
-              "p25": 620,
-              "p75": 673
+              "median": 601,
+              "p25": 587,
+              "p75": 637
             }
           }
         }
@@ -1976,59 +1976,29 @@
           "framework": "keala",
           "kind": "param-distinct",
           "size": 1000,
-          "regMs": 3.09,
-          "firstMs": 0.53,
-          "heapMB": 1.9,
+          "regMs": 2.7,
+          "firstMs": 0.4,
+          "heapMB": 2,
           "probes": {
             "hit-mid": {
-              "median": 598,
-              "p25": 528,
-              "p75": 684
+              "median": 456,
+              "p25": 372,
+              "p75": 582
             },
             "hit-last": {
-              "median": 548,
-              "p25": 508,
-              "p75": 595
+              "median": 432,
+              "p25": 399,
+              "p75": 511
             },
             "miss-global": {
-              "median": 583,
-              "p25": 521,
-              "p75": 637
+              "median": 498,
+              "p25": 431,
+              "p75": 525
             },
             "miss-deep": {
-              "median": 622,
-              "p25": 603,
-              "p75": 718
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 1000,
-          "regMs": 3.24,
-          "firstMs": 0.52,
-          "heapMB": 1.9,
-          "probes": {
-            "hit-mid": {
-              "median": 539,
-              "p25": 489,
-              "p75": 625
-            },
-            "hit-last": {
-              "median": 542,
-              "p25": 480,
-              "p75": 625
-            },
-            "miss-global": {
               "median": 588,
-              "p25": 548,
-              "p75": 634
-            },
-            "miss-deep": {
-              "median": 638,
-              "p25": 598,
-              "p75": 681
+              "p25": 529,
+              "p75": 611
             }
           }
         },
@@ -2036,29 +2006,29 @@
           "framework": "keala",
           "kind": "param-distinct",
           "size": 1000,
-          "regMs": 2.82,
-          "firstMs": 0.5,
-          "heapMB": 1.9,
+          "regMs": 2.7,
+          "firstMs": 0.41,
+          "heapMB": 2,
           "probes": {
             "hit-mid": {
-              "median": 585,
-              "p25": 509,
-              "p75": 678
+              "median": 446,
+              "p25": 377,
+              "p75": 478
             },
             "hit-last": {
-              "median": 557,
-              "p25": 521,
-              "p75": 595
+              "median": 434,
+              "p25": 393,
+              "p75": 536
             },
             "miss-global": {
-              "median": 577,
-              "p25": 547,
-              "p75": 638
+              "median": 489,
+              "p25": 436,
+              "p75": 541
             },
             "miss-deep": {
-              "median": 655,
-              "p25": 632,
-              "p75": 705
+              "median": 581,
+              "p25": 522,
+              "p75": 592
             }
           }
         },
@@ -2066,29 +2036,59 @@
           "framework": "keala",
           "kind": "param-distinct",
           "size": 1000,
-          "regMs": 2.61,
-          "firstMs": 0.48,
-          "heapMB": 1.9,
+          "regMs": 2.72,
+          "firstMs": 0.4,
+          "heapMB": 2,
           "probes": {
             "hit-mid": {
-              "median": 528,
-              "p25": 489,
-              "p75": 604
+              "median": 460,
+              "p25": 379,
+              "p75": 534
             },
             "hit-last": {
-              "median": 529,
-              "p25": 487,
-              "p75": 591
+              "median": 495,
+              "p25": 391,
+              "p75": 551
             },
             "miss-global": {
-              "median": 573,
-              "p25": 532,
-              "p75": 631
+              "median": 501,
+              "p25": 445,
+              "p75": 552
             },
             "miss-deep": {
-              "median": 655,
-              "p25": 612,
-              "p75": 674
+              "median": 592,
+              "p25": 538,
+              "p75": 611
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 1000,
+          "regMs": 2.65,
+          "firstMs": 0.4,
+          "heapMB": 2,
+          "probes": {
+            "hit-mid": {
+              "median": 439,
+              "p25": 374,
+              "p75": 470
+            },
+            "hit-last": {
+              "median": 435,
+              "p25": 391,
+              "p75": 546
+            },
+            "miss-global": {
+              "median": 497,
+              "p25": 438,
+              "p75": 538
+            },
+            "miss-deep": {
+              "median": 572,
+              "p25": 533,
+              "p75": 594
             }
           }
         }
@@ -2098,89 +2098,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 1000,
-          "regMs": 0.78,
-          "firstMs": 7.68,
+          "regMs": 0.79,
+          "firstMs": 6.99,
           "heapMB": 0.4,
           "probes": {
             "hit-mid": {
-              "median": 2911,
-              "p25": 2689,
-              "p75": 3468
+              "median": 2726,
+              "p25": 2674,
+              "p75": 3067
             },
             "hit-last": {
-              "median": 3553,
-              "p25": 3471,
-              "p75": 3716
+              "median": 3491,
+              "p25": 3453,
+              "p75": 3546
             },
             "miss-global": {
-              "median": 891,
-              "p25": 845,
-              "p75": 911
+              "median": 869,
+              "p25": 834,
+              "p75": 909
             },
             "miss-deep": {
-              "median": 867,
-              "p25": 841,
-              "p75": 879
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-distinct",
-          "size": 1000,
-          "regMs": 0.92,
-          "firstMs": 7.62,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 2805,
-              "p25": 2727,
-              "p75": 3212
-            },
-            "hit-last": {
-              "median": 3642,
-              "p25": 3549,
-              "p75": 3741
-            },
-            "miss-global": {
-              "median": 936,
-              "p25": 867,
-              "p75": 950
-            },
-            "miss-deep": {
-              "median": 893,
-              "p25": 862,
-              "p75": 927
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-distinct",
-          "size": 1000,
-          "regMs": 0.76,
-          "firstMs": 7.38,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 2951,
-              "p25": 2812,
-              "p75": 3137
-            },
-            "hit-last": {
-              "median": 3780,
-              "p25": 3676,
-              "p75": 3835
-            },
-            "miss-global": {
-              "median": 932,
-              "p25": 893,
-              "p75": 964
-            },
-            "miss-deep": {
-              "median": 899,
-              "p25": 875,
-              "p75": 948
+              "median": 833,
+              "p25": 819,
+              "p75": 849
             }
           }
         },
@@ -2189,28 +2129,88 @@
           "kind": "param-distinct",
           "size": 1000,
           "regMs": 0.74,
-          "firstMs": 7.21,
+          "firstMs": 7.07,
           "heapMB": 0.4,
           "probes": {
             "hit-mid": {
-              "median": 2932,
-              "p25": 2799,
-              "p75": 3133
+              "median": 2862,
+              "p25": 2735,
+              "p75": 3013
             },
             "hit-last": {
-              "median": 3653,
-              "p25": 3627,
-              "p75": 3737
+              "median": 3547,
+              "p25": 3509,
+              "p75": 3588
             },
             "miss-global": {
-              "median": 907,
-              "p25": 877,
-              "p75": 952
+              "median": 865,
+              "p25": 846,
+              "p75": 889
             },
             "miss-deep": {
-              "median": 877,
-              "p25": 869,
-              "p75": 889
+              "median": 845,
+              "p25": 825,
+              "p75": 871
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-distinct",
+          "size": 1000,
+          "regMs": 0.73,
+          "firstMs": 7.02,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 2785,
+              "p25": 2744,
+              "p75": 2971
+            },
+            "hit-last": {
+              "median": 3576,
+              "p25": 3522,
+              "p75": 3640
+            },
+            "miss-global": {
+              "median": 892,
+              "p25": 857,
+              "p75": 898
+            },
+            "miss-deep": {
+              "median": 842,
+              "p25": 824,
+              "p75": 866
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-distinct",
+          "size": 1000,
+          "regMs": 0.75,
+          "firstMs": 7.09,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 2818,
+              "p25": 2740,
+              "p75": 2937
+            },
+            "hit-last": {
+              "median": 3592,
+              "p25": 3531,
+              "p75": 3700
+            },
+            "miss-global": {
+              "median": 886,
+              "p25": 861,
+              "p75": 905
+            },
+            "miss-deep": {
+              "median": 852,
+              "p25": 845,
+              "p75": 872
             }
           }
         }
@@ -2222,119 +2222,119 @@
           "framework": "keala",
           "kind": "param-distinct",
           "size": 10000,
-          "regMs": 15.69,
-          "firstMs": 0.58,
-          "heapMB": 17.3,
+          "regMs": 16.66,
+          "firstMs": 0.47,
+          "heapMB": 17.6,
           "probes": {
             "hit-mid": {
-              "median": 510,
-              "p25": 410,
-              "p75": 612
+              "median": 401,
+              "p25": 379,
+              "p75": 460
             },
             "hit-last": {
-              "median": 441,
-              "p25": 428,
-              "p75": 481
+              "median": 388,
+              "p25": 373,
+              "p75": 413
             },
             "miss-global": {
-              "median": 508,
-              "p25": 479,
-              "p75": 590
-            },
-            "miss-deep": {
-              "median": 565,
-              "p25": 551,
-              "p75": 608
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 10000,
-          "regMs": 19.19,
-          "firstMs": 0.57,
-          "heapMB": 17.3,
-          "probes": {
-            "hit-mid": {
-              "median": 489,
-              "p25": 424,
-              "p75": 577
-            },
-            "hit-last": {
-              "median": 449,
-              "p25": 436,
-              "p75": 517
-            },
-            "miss-global": {
-              "median": 522,
-              "p25": 505,
-              "p75": 595
-            },
-            "miss-deep": {
-              "median": 580,
-              "p25": 550,
-              "p75": 682
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 10000,
-          "regMs": 17.49,
-          "firstMs": 1.07,
-          "heapMB": 17.3,
-          "probes": {
-            "hit-mid": {
-              "median": 505,
-              "p25": 440,
-              "p75": 623
-            },
-            "hit-last": {
-              "median": 448,
-              "p25": 425,
-              "p75": 471
-            },
-            "miss-global": {
-              "median": 512,
-              "p25": 485,
-              "p75": 594
-            },
-            "miss-deep": {
-              "median": 597,
-              "p25": 564,
-              "p75": 630
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-distinct",
-          "size": 10000,
-          "regMs": 17.94,
-          "firstMs": 0.67,
-          "heapMB": 17.3,
-          "probes": {
-            "hit-mid": {
-              "median": 483,
+              "median": 429,
               "p25": 420,
-              "p75": 558
-            },
-            "hit-last": {
-              "median": 454,
-              "p25": 428,
-              "p75": 496
-            },
-            "miss-global": {
-              "median": 498,
-              "p25": 473,
-              "p75": 554
+              "p75": 474
             },
             "miss-deep": {
-              "median": 610,
-              "p25": 560,
-              "p75": 691
+              "median": 524,
+              "p25": 513,
+              "p75": 534
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 10000,
+          "regMs": 15.96,
+          "firstMs": 0.49,
+          "heapMB": 17.6,
+          "probes": {
+            "hit-mid": {
+              "median": 406,
+              "p25": 370,
+              "p75": 456
+            },
+            "hit-last": {
+              "median": 390,
+              "p25": 371,
+              "p75": 413
+            },
+            "miss-global": {
+              "median": 435,
+              "p25": 420,
+              "p75": 475
+            },
+            "miss-deep": {
+              "median": 529,
+              "p25": 518,
+              "p75": 533
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 10000,
+          "regMs": 15.6,
+          "firstMs": 0.46,
+          "heapMB": 17.6,
+          "probes": {
+            "hit-mid": {
+              "median": 397,
+              "p25": 379,
+              "p75": 467
+            },
+            "hit-last": {
+              "median": 400,
+              "p25": 385,
+              "p75": 419
+            },
+            "miss-global": {
+              "median": 441,
+              "p25": 425,
+              "p75": 497
+            },
+            "miss-deep": {
+              "median": 536,
+              "p25": 526,
+              "p75": 544
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-distinct",
+          "size": 10000,
+          "regMs": 15.79,
+          "firstMs": 0.47,
+          "heapMB": 17.6,
+          "probes": {
+            "hit-mid": {
+              "median": 404,
+              "p25": 378,
+              "p75": 454
+            },
+            "hit-last": {
+              "median": 395,
+              "p25": 384,
+              "p75": 411
+            },
+            "miss-global": {
+              "median": 436,
+              "p25": 422,
+              "p75": 468
+            },
+            "miss-deep": {
+              "median": 532,
+              "p25": 528,
+              "p75": 537
             }
           }
         }
@@ -2344,29 +2344,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 10000,
-          "regMs": 2.43,
-          "firstMs": 63.04,
+          "regMs": 2.21,
+          "firstMs": 56.39,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 23482,
-              "p25": 22916,
-              "p75": 24255
+              "median": 23138,
+              "p25": 22919,
+              "p75": 23410
             },
             "hit-last": {
-              "median": 31791,
-              "p25": 31393,
-              "p75": 32410
+              "median": 31132,
+              "p25": 31020,
+              "p75": 31232
             },
             "miss-global": {
-              "median": 6627,
-              "p25": 6285,
-              "p75": 6929
+              "median": 5527,
+              "p25": 5479,
+              "p75": 5778
             },
             "miss-deep": {
-              "median": 8187,
-              "p25": 7297,
-              "p75": 9510
+              "median": 5553,
+              "p25": 5446,
+              "p75": 5621
             }
           }
         },
@@ -2375,28 +2375,28 @@
           "kind": "param-distinct",
           "size": 10000,
           "regMs": 2.23,
-          "firstMs": 63.47,
+          "firstMs": 57.08,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 24023,
-              "p25": 23554,
-              "p75": 27848
+              "median": 23442,
+              "p25": 23113,
+              "p75": 23610
             },
             "hit-last": {
-              "median": 33928,
-              "p25": 32565,
-              "p75": 35813
+              "median": 31522,
+              "p25": 31275,
+              "p75": 31639
             },
             "miss-global": {
-              "median": 5724,
-              "p25": 5642,
-              "p75": 5982
+              "median": 5573,
+              "p25": 5418,
+              "p75": 5864
             },
             "miss-deep": {
-              "median": 5687,
-              "p25": 5630,
-              "p75": 5898
+              "median": 5707,
+              "p25": 5497,
+              "p75": 5783
             }
           }
         },
@@ -2404,29 +2404,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 10000,
-          "regMs": 2.3,
-          "firstMs": 65.79,
+          "regMs": 2.25,
+          "firstMs": 57.3,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 24735,
-              "p25": 24344,
-              "p75": 25044
+              "median": 23741,
+              "p25": 23229,
+              "p75": 24029
             },
             "hit-last": {
-              "median": 33131,
-              "p25": 32980,
-              "p75": 35260
+              "median": 31993,
+              "p25": 31763,
+              "p75": 32205
             },
             "miss-global": {
-              "median": 5917,
-              "p25": 5812,
-              "p75": 6053
+              "median": 5782,
+              "p25": 5601,
+              "p75": 5971
             },
             "miss-deep": {
-              "median": 5852,
-              "p25": 5729,
-              "p75": 5898
+              "median": 5630,
+              "p25": 5508,
+              "p75": 5857
             }
           }
         },
@@ -2434,29 +2434,29 @@
           "framework": "hono",
           "kind": "param-distinct",
           "size": 10000,
-          "regMs": 2.33,
-          "firstMs": 61.65,
+          "regMs": 2.26,
+          "firstMs": 55.99,
           "heapMB": 3.9,
           "probes": {
             "hit-mid": {
-              "median": 24205,
-              "p25": 23683,
-              "p75": 24396
+              "median": 23764,
+              "p25": 23667,
+              "p75": 24165
             },
             "hit-last": {
-              "median": 32825,
-              "p25": 32631,
-              "p75": 32897
+              "median": 32306,
+              "p25": 31981,
+              "p75": 32407
             },
             "miss-global": {
-              "median": 5845,
-              "p25": 5758,
-              "p75": 5896
+              "median": 5764,
+              "p25": 5681,
+              "p75": 5948
             },
             "miss-deep": {
-              "median": 5780,
-              "p25": 5705,
-              "p75": 5893
+              "median": 5618,
+              "p25": 5587,
+              "p75": 5939
             }
           }
         }
@@ -2470,29 +2470,59 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 1,
-          "regMs": 1.27,
-          "firstMs": 1.18,
+          "regMs": 0.49,
+          "firstMs": 0.43,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 2311,
-              "p25": 1424,
-              "p75": 2856
+              "median": 532,
+              "p25": 474,
+              "p75": 609
             },
             "hit-last": {
-              "median": 1454,
-              "p25": 1039,
-              "p75": 2347
+              "median": 511,
+              "p25": 460,
+              "p75": 573
             },
             "miss-global": {
-              "median": 802,
-              "p25": 519,
-              "p75": 1723
+              "median": 426,
+              "p25": 415,
+              "p75": 503
             },
             "miss-deep": {
-              "median": 995,
-              "p25": 577,
-              "p75": 1378
+              "median": 520,
+              "p25": 473,
+              "p75": 543
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-shared",
+          "size": 1,
+          "regMs": 0.52,
+          "firstMs": 0.49,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 553,
+              "p25": 451,
+              "p75": 618
+            },
+            "hit-last": {
+              "median": 498,
+              "p25": 461,
+              "p75": 578
+            },
+            "miss-global": {
+              "median": 439,
+              "p25": 422,
+              "p75": 540
+            },
+            "miss-deep": {
+              "median": 504,
+              "p25": 475,
+              "p75": 549
             }
           }
         },
@@ -2501,58 +2531,28 @@
           "kind": "param-shared",
           "size": 1,
           "regMs": 0.53,
-          "firstMs": 0.52,
+          "firstMs": 0.44,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 606,
-              "p25": 569,
-              "p75": 816
+              "median": 534,
+              "p25": 457,
+              "p75": 635
             },
             "hit-last": {
-              "median": 548,
-              "p25": 507,
-              "p75": 669
+              "median": 492,
+              "p25": 447,
+              "p75": 533
             },
             "miss-global": {
-              "median": 540,
-              "p25": 495,
-              "p75": 603
+              "median": 426,
+              "p25": 415,
+              "p75": 510
             },
             "miss-deep": {
-              "median": 555,
-              "p25": 526,
-              "p75": 592
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-shared",
-          "size": 1,
-          "regMs": 0.49,
-          "firstMs": 0.47,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 637,
-              "p25": 583,
-              "p75": 710
-            },
-            "hit-last": {
-              "median": 573,
-              "p25": 539,
-              "p75": 596
-            },
-            "miss-global": {
-              "median": 532,
+              "median": 531,
               "p25": 473,
-              "p75": 579
-            },
-            "miss-deep": {
-              "median": 592,
-              "p25": 537,
-              "p75": 605
+              "p75": 536
             }
           }
         },
@@ -2560,29 +2560,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 1,
-          "regMs": 0.51,
-          "firstMs": 0.48,
+          "regMs": 0.6,
+          "firstMs": 0.42,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 566,
-              "p25": 552,
-              "p75": 706
+              "median": 550,
+              "p25": 463,
+              "p75": 616
             },
             "hit-last": {
-              "median": 560,
-              "p25": 528,
-              "p75": 606
+              "median": 510,
+              "p25": 460,
+              "p75": 571
             },
             "miss-global": {
-              "median": 527,
-              "p25": 477,
-              "p75": 599
+              "median": 433,
+              "p25": 419,
+              "p75": 517
             },
             "miss-deep": {
-              "median": 570,
-              "p25": 532,
-              "p75": 589
+              "median": 491,
+              "p25": 479,
+              "p75": 549
             }
           }
         }
@@ -2592,29 +2592,89 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 1,
-          "regMs": 0.39,
-          "firstMs": 2.03,
+          "regMs": 0.24,
+          "firstMs": 0.72,
+          "heapMB": 0,
+          "probes": {
+            "hit-mid": {
+              "median": 462,
+              "p25": 396,
+              "p75": 575
+            },
+            "hit-last": {
+              "median": 419,
+              "p25": 343,
+              "p75": 448
+            },
+            "miss-global": {
+              "median": 634,
+              "p25": 605,
+              "p75": 656
+            },
+            "miss-deep": {
+              "median": 584,
+              "p25": 564,
+              "p75": 603
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-shared",
+          "size": 1,
+          "regMs": 0.24,
+          "firstMs": 0.7,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 789,
-              "p25": 695,
-              "p75": 1013
+              "median": 440,
+              "p25": 411,
+              "p75": 560
             },
             "hit-last": {
-              "median": 801,
-              "p25": 490,
-              "p75": 969
+              "median": 440,
+              "p25": 409,
+              "p75": 465
             },
             "miss-global": {
-              "median": 1004,
-              "p25": 847,
-              "p75": 1231
+              "median": 641,
+              "p25": 635,
+              "p75": 678
             },
             "miss-deep": {
-              "median": 1318,
-              "p25": 666,
-              "p75": 1467
+              "median": 597,
+              "p25": 590,
+              "p75": 612
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-shared",
+          "size": 1,
+          "regMs": 0.28,
+          "firstMs": 0.77,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 450,
+              "p25": 415,
+              "p75": 505
+            },
+            "hit-last": {
+              "median": 416,
+              "p25": 339,
+              "p75": 456
+            },
+            "miss-global": {
+              "median": 634,
+              "p25": 606,
+              "p75": 648
+            },
+            "miss-deep": {
+              "median": 584,
+              "p25": 574,
+              "p75": 603
             }
           }
         },
@@ -2623,88 +2683,28 @@
           "kind": "param-shared",
           "size": 1,
           "regMs": 0.25,
-          "firstMs": 0.72,
+          "firstMs": 0.71,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 485,
-              "p25": 448,
-              "p75": 560
+              "median": 446,
+              "p25": 417,
+              "p75": 522
             },
             "hit-last": {
-              "median": 442,
-              "p25": 411,
-              "p75": 544
+              "median": 399,
+              "p25": 381,
+              "p75": 459
             },
             "miss-global": {
-              "median": 651,
-              "p25": 633,
-              "p75": 696
+              "median": 631,
+              "p25": 607,
+              "p75": 645
             },
             "miss-deep": {
-              "median": 609,
-              "p25": 576,
-              "p75": 633
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-shared",
-          "size": 1,
-          "regMs": 0.24,
-          "firstMs": 0.95,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 466,
-              "p25": 431,
-              "p75": 572
-            },
-            "hit-last": {
-              "median": 437,
-              "p25": 403,
-              "p75": 561
-            },
-            "miss-global": {
-              "median": 653,
-              "p25": 619,
-              "p75": 670
-            },
-            "miss-deep": {
-              "median": 593,
-              "p25": 573,
-              "p75": 629
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-shared",
-          "size": 1,
-          "regMs": 0.24,
-          "firstMs": 0.76,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 449,
-              "p25": 388,
-              "p75": 550
-            },
-            "hit-last": {
-              "median": 403,
-              "p25": 351,
-              "p75": 434
-            },
-            "miss-global": {
-              "median": 661,
-              "p25": 635,
-              "p75": 701
-            },
-            "miss-deep": {
-              "median": 600,
-              "p25": 591,
-              "p75": 626
+              "median": 587,
+              "p25": 580,
+              "p75": 596
             }
           }
         }
@@ -2716,29 +2716,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 10,
-          "regMs": 0.76,
-          "firstMs": 0.78,
+          "regMs": 0.71,
+          "firstMs": 0.46,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 1552,
-              "p25": 1291,
-              "p75": 2830
+              "median": 548,
+              "p25": 459,
+              "p75": 653
             },
             "hit-last": {
-              "median": 1446,
-              "p25": 732,
-              "p75": 1981
+              "median": 512,
+              "p25": 473,
+              "p75": 577
             },
             "miss-global": {
-              "median": 1203,
-              "p25": 720,
-              "p75": 1504
+              "median": 421,
+              "p25": 414,
+              "p75": 510
             },
             "miss-deep": {
-              "median": 634,
-              "p25": 594,
-              "p75": 850
+              "median": 531,
+              "p25": 494,
+              "p75": 561
             }
           }
         },
@@ -2746,29 +2746,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 10,
-          "regMs": 0.71,
-          "firstMs": 0.53,
+          "regMs": 0.63,
+          "firstMs": 0.41,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 614,
-              "p25": 565,
-              "p75": 749
+              "median": 547,
+              "p25": 465,
+              "p75": 671
             },
             "hit-last": {
-              "median": 617,
-              "p25": 571,
-              "p75": 706
+              "median": 539,
+              "p25": 471,
+              "p75": 565
             },
             "miss-global": {
-              "median": 564,
-              "p25": 486,
-              "p75": 621
+              "median": 423,
+              "p25": 418,
+              "p75": 509
             },
             "miss-deep": {
-              "median": 595,
-              "p25": 532,
-              "p75": 617
+              "median": 539,
+              "p25": 491,
+              "p75": 553
             }
           }
         },
@@ -2777,28 +2777,28 @@
           "kind": "param-shared",
           "size": 10,
           "regMs": 0.59,
-          "firstMs": 0.55,
+          "firstMs": 0.46,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 598,
-              "p25": 566,
-              "p75": 792
+              "median": 548,
+              "p25": 458,
+              "p75": 586
             },
             "hit-last": {
-              "median": 623,
-              "p25": 542,
-              "p75": 680
+              "median": 518,
+              "p25": 475,
+              "p75": 577
             },
             "miss-global": {
-              "median": 516,
-              "p25": 472,
-              "p75": 600
+              "median": 421,
+              "p25": 413,
+              "p75": 513
             },
             "miss-deep": {
-              "median": 594,
-              "p25": 548,
-              "p75": 625
+              "median": 520,
+              "p25": 491,
+              "p75": 567
             }
           }
         },
@@ -2806,29 +2806,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 10,
-          "regMs": 0.67,
-          "firstMs": 0.55,
+          "regMs": 0.61,
+          "firstMs": 0.45,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 608,
-              "p25": 575,
-              "p75": 766
+              "median": 550,
+              "p25": 452,
+              "p75": 673
             },
             "hit-last": {
-              "median": 585,
-              "p25": 560,
-              "p75": 670
+              "median": 527,
+              "p25": 464,
+              "p75": 617
             },
             "miss-global": {
-              "median": 547,
-              "p25": 476,
-              "p75": 592
+              "median": 425,
+              "p25": 411,
+              "p75": 489
             },
             "miss-deep": {
-              "median": 605,
-              "p25": 535,
-              "p75": 652
+              "median": 544,
+              "p25": 486,
+              "p75": 573
             }
           }
         }
@@ -2838,29 +2838,59 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 10,
-          "regMs": 0.3,
-          "firstMs": 2.04,
+          "regMs": 0.25,
+          "firstMs": 0.87,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 675,
-              "p25": 567,
-              "p75": 972
+              "median": 456,
+              "p25": 426,
+              "p75": 542
             },
             "hit-last": {
-              "median": 1265,
-              "p25": 658,
-              "p75": 1781
+              "median": 467,
+              "p25": 415,
+              "p75": 516
             },
             "miss-global": {
-              "median": 824,
-              "p25": 697,
-              "p75": 1565
+              "median": 606,
+              "p25": 581,
+              "p75": 633
             },
             "miss-deep": {
-              "median": 1217,
-              "p25": 837,
-              "p75": 1523
+              "median": 595,
+              "p25": 583,
+              "p75": 603
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-shared",
+          "size": 10,
+          "regMs": 0.25,
+          "firstMs": 0.92,
+          "heapMB": 0.1,
+          "probes": {
+            "hit-mid": {
+              "median": 455,
+              "p25": 442,
+              "p75": 525
+            },
+            "hit-last": {
+              "median": 470,
+              "p25": 442,
+              "p75": 533
+            },
+            "miss-global": {
+              "median": 609,
+              "p25": 582,
+              "p75": 649
+            },
+            "miss-deep": {
+              "median": 596,
+              "p25": 580,
+              "p75": 607
             }
           }
         },
@@ -2869,58 +2899,28 @@
           "kind": "param-shared",
           "size": 10,
           "regMs": 0.27,
-          "firstMs": 0.85,
+          "firstMs": 0.9,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 460,
-              "p25": 424,
-              "p75": 597
+              "median": 494,
+              "p25": 441,
+              "p75": 637
             },
             "hit-last": {
-              "median": 500,
-              "p25": 445,
-              "p75": 581
+              "median": 455,
+              "p25": 436,
+              "p75": 492
             },
             "miss-global": {
-              "median": 610,
+              "median": 620,
               "p25": 598,
-              "p75": 722
+              "p75": 644
             },
             "miss-deep": {
-              "median": 633,
-              "p25": 612,
-              "p75": 647
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-shared",
-          "size": 10,
-          "regMs": 0.27,
-          "firstMs": 0.81,
-          "heapMB": 0.1,
-          "probes": {
-            "hit-mid": {
-              "median": 444,
-              "p25": 423,
-              "p75": 555
-            },
-            "hit-last": {
-              "median": 480,
-              "p25": 444,
-              "p75": 593
-            },
-            "miss-global": {
-              "median": 629,
-              "p25": 618,
-              "p75": 667
-            },
-            "miss-deep": {
-              "median": 625,
-              "p25": 607,
-              "p75": 642
+              "median": 603,
+              "p25": 592,
+              "p75": 611
             }
           }
         },
@@ -2929,28 +2929,28 @@
           "kind": "param-shared",
           "size": 10,
           "regMs": 0.28,
-          "firstMs": 0.97,
+          "firstMs": 0.9,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 468,
-              "p25": 435,
-              "p75": 673
+              "median": 452,
+              "p25": 431,
+              "p75": 516
             },
             "hit-last": {
-              "median": 469,
-              "p25": 445,
-              "p75": 537
+              "median": 452,
+              "p25": 425,
+              "p75": 506
             },
             "miss-global": {
-              "median": 634,
-              "p25": 600,
-              "p75": 690
+              "median": 627,
+              "p25": 608,
+              "p75": 639
             },
             "miss-deep": {
-              "median": 611,
-              "p25": 593,
-              "p75": 634
+              "median": 616,
+              "p25": 600,
+              "p75": 635
             }
           }
         }
@@ -2962,29 +2962,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 100,
-          "regMs": 3.01,
-          "firstMs": 2.04,
+          "regMs": 1.06,
+          "firstMs": 0.47,
           "heapMB": 0.3,
           "probes": {
             "hit-mid": {
-              "median": 1456,
-              "p25": 944,
-              "p75": 1937
+              "median": 559,
+              "p25": 481,
+              "p75": 693
             },
             "hit-last": {
-              "median": 1419,
-              "p25": 819,
-              "p75": 2065
+              "median": 560,
+              "p25": 475,
+              "p75": 566
             },
             "miss-global": {
-              "median": 644,
-              "p25": 498,
-              "p75": 1100
+              "median": 436,
+              "p25": 418,
+              "p75": 522
             },
             "miss-deep": {
-              "median": 1659,
-              "p25": 791,
-              "p75": 1793
+              "median": 536,
+              "p25": 494,
+              "p75": 574
             }
           }
         },
@@ -2992,29 +2992,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 100,
-          "regMs": 1.14,
-          "firstMs": 0.58,
+          "regMs": 1.06,
+          "firstMs": 0.44,
           "heapMB": 0.3,
           "probes": {
             "hit-mid": {
-              "median": 643,
-              "p25": 614,
-              "p75": 734
+              "median": 565,
+              "p25": 539,
+              "p75": 692
             },
             "hit-last": {
-              "median": 600,
-              "p25": 566,
-              "p75": 701
+              "median": 514,
+              "p25": 471,
+              "p75": 583
             },
             "miss-global": {
-              "median": 603,
-              "p25": 493,
-              "p75": 638
+              "median": 430,
+              "p25": 415,
+              "p75": 495
             },
             "miss-deep": {
-              "median": 616,
-              "p25": 543,
-              "p75": 658
+              "median": 525,
+              "p25": 485,
+              "p75": 562
             }
           }
         },
@@ -3022,59 +3022,59 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 100,
-          "regMs": 1.48,
-          "firstMs": 0.75,
+          "regMs": 1.09,
+          "firstMs": 0.45,
           "heapMB": 0.3,
           "probes": {
             "hit-mid": {
-              "median": 621,
-              "p25": 593,
-              "p75": 798
+              "median": 561,
+              "p25": 524,
+              "p75": 630
             },
             "hit-last": {
-              "median": 597,
-              "p25": 563,
-              "p75": 648
+              "median": 544,
+              "p25": 469,
+              "p75": 631
             },
             "miss-global": {
-              "median": 534,
-              "p25": 474,
-              "p75": 592
+              "median": 427,
+              "p25": 415,
+              "p75": 519
             },
             "miss-deep": {
-              "median": 597,
-              "p25": 552,
-              "p75": 644
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-shared",
-          "size": 100,
-          "regMs": 1.04,
-          "firstMs": 0.48,
-          "heapMB": 0.3,
-          "probes": {
-            "hit-mid": {
-              "median": 634,
-              "p25": 597,
-              "p75": 689
-            },
-            "hit-last": {
-              "median": 623,
-              "p25": 580,
-              "p75": 690
-            },
-            "miss-global": {
               "median": 537,
-              "p25": 479,
-              "p75": 597
+              "p25": 491,
+              "p75": 579
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-shared",
+          "size": 100,
+          "regMs": 1.1,
+          "firstMs": 0.44,
+          "heapMB": 0.3,
+          "probes": {
+            "hit-mid": {
+              "median": 561,
+              "p25": 523,
+              "p75": 651
+            },
+            "hit-last": {
+              "median": 543,
+              "p25": 488,
+              "p75": 633
+            },
+            "miss-global": {
+              "median": 425,
+              "p25": 419,
+              "p75": 539
             },
             "miss-deep": {
-              "median": 597,
-              "p25": 535,
-              "p75": 621
+              "median": 516,
+              "p25": 482,
+              "p75": 568
             }
           }
         }
@@ -3084,29 +3084,29 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 100,
-          "regMs": 1,
-          "firstMs": 3.41,
+          "regMs": 0.34,
+          "firstMs": 1.43,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 1024,
-              "p25": 712,
-              "p75": 1264
+              "median": 555,
+              "p25": 544,
+              "p75": 677
             },
             "hit-last": {
-              "median": 827,
-              "p25": 648,
-              "p75": 1196
+              "median": 598,
+              "p25": 570,
+              "p75": 646
             },
             "miss-global": {
-              "median": 1005,
-              "p25": 749,
-              "p75": 1565
+              "median": 633,
+              "p25": 602,
+              "p75": 669
             },
             "miss-deep": {
-              "median": 1293,
-              "p25": 697,
-              "p75": 1725
+              "median": 612,
+              "p25": 592,
+              "p75": 626
             }
           }
         },
@@ -3114,29 +3114,29 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 100,
-          "regMs": 0.33,
-          "firstMs": 1.51,
+          "regMs": 0.29,
+          "firstMs": 1.46,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 573,
-              "p25": 553,
-              "p75": 674
+              "median": 557,
+              "p25": 548,
+              "p75": 627
             },
             "hit-last": {
-              "median": 628,
-              "p25": 575,
-              "p75": 714
+              "median": 607,
+              "p25": 578,
+              "p75": 685
             },
             "miss-global": {
-              "median": 659,
-              "p25": 634,
-              "p75": 699
+              "median": 652,
+              "p25": 619,
+              "p75": 674
             },
             "miss-deep": {
-              "median": 628,
-              "p25": 606,
-              "p75": 667
+              "median": 604,
+              "p25": 596,
+              "p75": 621
             }
           }
         },
@@ -3145,28 +3145,28 @@
           "kind": "param-shared",
           "size": 100,
           "regMs": 0.36,
-          "firstMs": 1.42,
+          "firstMs": 1.45,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 591,
-              "p25": 546,
-              "p75": 683
+              "median": 573,
+              "p25": 545,
+              "p75": 708
             },
             "hit-last": {
-              "median": 614,
-              "p25": 586,
-              "p75": 715
+              "median": 584,
+              "p25": 569,
+              "p75": 653
             },
             "miss-global": {
-              "median": 652,
-              "p25": 636,
-              "p75": 691
+              "median": 664,
+              "p25": 630,
+              "p75": 695
             },
             "miss-deep": {
-              "median": 624,
-              "p25": 611,
-              "p75": 637
+              "median": 609,
+              "p25": 599,
+              "p75": 625
             }
           }
         },
@@ -3174,29 +3174,29 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 100,
-          "regMs": 0.31,
-          "firstMs": 1.43,
+          "regMs": 0.33,
+          "firstMs": 1.39,
           "heapMB": 0.1,
           "probes": {
             "hit-mid": {
-              "median": 579,
-              "p25": 542,
-              "p75": 664
+              "median": 550,
+              "p25": 524,
+              "p75": 671
             },
             "hit-last": {
               "median": 601,
-              "p25": 593,
-              "p75": 716
+              "p25": 571,
+              "p75": 647
             },
             "miss-global": {
-              "median": 649,
-              "p25": 618,
-              "p75": 673
+              "median": 638,
+              "p25": 615,
+              "p75": 671
             },
             "miss-deep": {
-              "median": 629,
-              "p25": 612,
-              "p75": 663
+              "median": 598,
+              "p25": 590,
+              "p75": 604
             }
           }
         }
@@ -3208,29 +3208,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 1000,
-          "regMs": 8.44,
-          "firstMs": 0.69,
-          "heapMB": 1.6,
+          "regMs": 2.69,
+          "firstMs": 0.5,
+          "heapMB": 1.7,
           "probes": {
             "hit-mid": {
-              "median": 1232,
-              "p25": 929,
-              "p75": 1769
+              "median": 563,
+              "p25": 549,
+              "p75": 698
             },
             "hit-last": {
-              "median": 1361,
-              "p25": 926,
-              "p75": 1633
+              "median": 560,
+              "p25": 530,
+              "p75": 627
             },
             "miss-global": {
-              "median": 1100,
-              "p25": 859,
-              "p75": 1817
+              "median": 469,
+              "p25": 428,
+              "p75": 520
             },
             "miss-deep": {
-              "median": 1404,
-              "p25": 847,
-              "p75": 2222
+              "median": 550,
+              "p25": 501,
+              "p75": 573
             }
           }
         },
@@ -3238,29 +3238,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 1000,
-          "regMs": 2.63,
-          "firstMs": 0.93,
-          "heapMB": 1.6,
+          "regMs": 2.65,
+          "firstMs": 0.47,
+          "heapMB": 1.7,
           "probes": {
             "hit-mid": {
-              "median": 658,
-              "p25": 609,
-              "p75": 774
+              "median": 584,
+              "p25": 533,
+              "p75": 650
             },
             "hit-last": {
-              "median": 635,
-              "p25": 602,
-              "p75": 743
+              "median": 554,
+              "p25": 526,
+              "p75": 637
             },
             "miss-global": {
-              "median": 570,
-              "p25": 508,
-              "p75": 608
+              "median": 474,
+              "p25": 425,
+              "p75": 526
             },
             "miss-deep": {
-              "median": 614,
-              "p25": 593,
-              "p75": 631
+              "median": 563,
+              "p25": 502,
+              "p75": 575
             }
           }
         },
@@ -3268,29 +3268,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 1000,
-          "regMs": 2.7,
-          "firstMs": 0.55,
-          "heapMB": 1.6,
+          "regMs": 2.68,
+          "firstMs": 0.46,
+          "heapMB": 1.7,
           "probes": {
             "hit-mid": {
-              "median": 697,
-              "p25": 603,
-              "p75": 779
+              "median": 574,
+              "p25": 552,
+              "p75": 708
             },
             "hit-last": {
-              "median": 643,
-              "p25": 598,
-              "p75": 670
+              "median": 536,
+              "p25": 516,
+              "p75": 614
             },
             "miss-global": {
-              "median": 572,
-              "p25": 485,
-              "p75": 641
+              "median": 475,
+              "p25": 424,
+              "p75": 524
             },
             "miss-deep": {
-              "median": 594,
-              "p25": 578,
-              "p75": 654
+              "median": 555,
+              "p25": 504,
+              "p75": 587
             }
           }
         },
@@ -3298,29 +3298,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 1000,
-          "regMs": 2.71,
-          "firstMs": 0.56,
-          "heapMB": 1.6,
+          "regMs": 2.67,
+          "firstMs": 0.48,
+          "heapMB": 1.7,
           "probes": {
             "hit-mid": {
-              "median": 662,
-              "p25": 617,
-              "p75": 767
+              "median": 573,
+              "p25": 544,
+              "p75": 665
             },
             "hit-last": {
-              "median": 657,
-              "p25": 611,
-              "p75": 664
+              "median": 568,
+              "p25": 520,
+              "p75": 606
             },
             "miss-global": {
-              "median": 553,
-              "p25": 486,
-              "p75": 580
+              "median": 472,
+              "p25": 426,
+              "p75": 537
             },
             "miss-deep": {
-              "median": 622,
-              "p25": 600,
-              "p75": 673
+              "median": 560,
+              "p25": 514,
+              "p75": 573
             }
           }
         }
@@ -3330,119 +3330,119 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 1000,
-          "regMs": 2.23,
-          "firstMs": 7.96,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 4805,
-              "p25": 3878,
-              "p75": 5839
-            },
-            "hit-last": {
-              "median": 5813,
-              "p25": 4069,
-              "p75": 6696
-            },
-            "miss-global": {
-              "median": 1828,
-              "p25": 1325,
-              "p75": 5139
-            },
-            "miss-deep": {
-              "median": 866,
-              "p25": 834,
-              "p75": 908
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-shared",
-          "size": 1000,
-          "regMs": 0.74,
-          "firstMs": 6.73,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 1887,
-              "p25": 1668,
-              "p75": 2085
-            },
-            "hit-last": {
-              "median": 2170,
-              "p25": 2108,
-              "p75": 2357
-            },
-            "miss-global": {
-              "median": 768,
-              "p25": 741,
-              "p75": 837
-            },
-            "miss-deep": {
-              "median": 754,
-              "p25": 738,
-              "p75": 782
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-shared",
-          "size": 1000,
-          "regMs": 0.71,
-          "firstMs": 4.46,
-          "heapMB": 0.4,
-          "probes": {
-            "hit-mid": {
-              "median": 1799,
-              "p25": 1701,
-              "p75": 2079
-            },
-            "hit-last": {
-              "median": 2155,
-              "p25": 2072,
-              "p75": 2270
-            },
-            "miss-global": {
-              "median": 769,
-              "p25": 744,
-              "p75": 813
-            },
-            "miss-deep": {
-              "median": 768,
-              "p25": 755,
-              "p75": 795
-            }
-          }
-        },
-        {
-          "framework": "hono",
-          "kind": "param-shared",
-          "size": 1000,
           "regMs": 0.7,
-          "firstMs": 4.74,
+          "firstMs": 4.6,
           "heapMB": 0.4,
           "probes": {
             "hit-mid": {
-              "median": 1755,
-              "p25": 1706,
-              "p75": 2013
+              "median": 1697,
+              "p25": 1626,
+              "p75": 1884
             },
             "hit-last": {
-              "median": 2172,
-              "p25": 2054,
-              "p75": 2256
+              "median": 2015,
+              "p25": 1984,
+              "p75": 2087
             },
             "miss-global": {
-              "median": 791,
-              "p25": 740,
-              "p75": 855
+              "median": 748,
+              "p25": 709,
+              "p75": 768
             },
             "miss-deep": {
-              "median": 754,
+              "median": 728,
+              "p25": 714,
+              "p75": 744
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-shared",
+          "size": 1000,
+          "regMs": 0.72,
+          "firstMs": 4.96,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 1696,
+              "p25": 1640,
+              "p75": 1976
+            },
+            "hit-last": {
+              "median": 2055,
+              "p25": 2025,
+              "p75": 2073
+            },
+            "miss-global": {
+              "median": 759,
+              "p25": 728,
+              "p75": 787
+            },
+            "miss-deep": {
+              "median": 749,
               "p25": 743,
-              "p75": 773
+              "p75": 765
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-shared",
+          "size": 1000,
+          "regMs": 0.68,
+          "firstMs": 4.36,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 1771,
+              "p25": 1641,
+              "p75": 1921
+            },
+            "hit-last": {
+              "median": 2074,
+              "p25": 2047,
+              "p75": 2132
+            },
+            "miss-global": {
+              "median": 756,
+              "p25": 742,
+              "p75": 772
+            },
+            "miss-deep": {
+              "median": 739,
+              "p25": 733,
+              "p75": 753
+            }
+          }
+        },
+        {
+          "framework": "hono",
+          "kind": "param-shared",
+          "size": 1000,
+          "regMs": 0.78,
+          "firstMs": 4.59,
+          "heapMB": 0.4,
+          "probes": {
+            "hit-mid": {
+              "median": 1720,
+              "p25": 1663,
+              "p75": 1962
+            },
+            "hit-last": {
+              "median": 2109,
+              "p25": 2040,
+              "p75": 2163
+            },
+            "miss-global": {
+              "median": 753,
+              "p25": 730,
+              "p75": 795
+            },
+            "miss-deep": {
+              "median": 746,
+              "p25": 727,
+              "p75": 757
             }
           }
         }
@@ -3454,29 +3454,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 10000,
-          "regMs": 15.13,
-          "firstMs": 0.83,
-          "heapMB": 13.5,
+          "regMs": 15.27,
+          "firstMs": 0.54,
+          "heapMB": 13.9,
           "probes": {
             "hit-mid": {
-              "median": 683,
-              "p25": 535,
-              "p75": 748
+              "median": 519,
+              "p25": 493,
+              "p75": 644
             },
             "hit-last": {
-              "median": 664,
-              "p25": 568,
-              "p75": 739
+              "median": 503,
+              "p25": 486,
+              "p75": 539
             },
             "miss-global": {
-              "median": 523,
-              "p25": 495,
-              "p75": 604
+              "median": 432,
+              "p25": 426,
+              "p75": 460
             },
             "miss-deep": {
-              "median": 595,
-              "p25": 566,
-              "p75": 708
+              "median": 520,
+              "p25": 512,
+              "p75": 563
             }
           }
         },
@@ -3484,59 +3484,29 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 10000,
-          "regMs": 16.58,
-          "firstMs": 0.69,
-          "heapMB": 13.5,
+          "regMs": 15.1,
+          "firstMs": 0.54,
+          "heapMB": 13.9,
           "probes": {
             "hit-mid": {
-              "median": 646,
-              "p25": 515,
-              "p75": 803
+              "median": 527,
+              "p25": 502,
+              "p75": 683
             },
             "hit-last": {
-              "median": 587,
-              "p25": 553,
-              "p75": 742
+              "median": 495,
+              "p25": 486,
+              "p75": 532
             },
             "miss-global": {
-              "median": 508,
-              "p25": 482,
-              "p75": 579
+              "median": 429,
+              "p25": 424,
+              "p75": 454
             },
             "miss-deep": {
-              "median": 568,
-              "p25": 551,
-              "p75": 669
-            }
-          }
-        },
-        {
-          "framework": "keala",
-          "kind": "param-shared",
-          "size": 10000,
-          "regMs": 14.81,
-          "firstMs": 0.63,
-          "heapMB": 13.5,
-          "probes": {
-            "hit-mid": {
-              "median": 662,
-              "p25": 548,
-              "p75": 733
-            },
-            "hit-last": {
-              "median": 580,
-              "p25": 559,
-              "p75": 681
-            },
-            "miss-global": {
-              "median": 508,
+              "median": 512,
               "p25": 503,
-              "p75": 612
-            },
-            "miss-deep": {
-              "median": 578,
-              "p25": 557,
-              "p75": 630
+              "p75": 540
             }
           }
         },
@@ -3544,29 +3514,59 @@
           "framework": "keala",
           "kind": "param-shared",
           "size": 10000,
-          "regMs": 15.45,
-          "firstMs": 0.72,
-          "heapMB": 13.5,
+          "regMs": 15.83,
+          "firstMs": 0.59,
+          "heapMB": 13.9,
           "probes": {
             "hit-mid": {
-              "median": 682,
-              "p25": 540,
-              "p75": 764
+              "median": 508,
+              "p25": 493,
+              "p75": 671
             },
             "hit-last": {
-              "median": 571,
-              "p25": 542,
-              "p75": 698
+              "median": 504,
+              "p25": 490,
+              "p75": 531
             },
             "miss-global": {
-              "median": 508,
-              "p25": 499,
-              "p75": 578
+              "median": 430,
+              "p25": 428,
+              "p75": 458
             },
             "miss-deep": {
-              "median": 590,
-              "p25": 562,
-              "p75": 669
+              "median": 509,
+              "p25": 502,
+              "p75": 539
+            }
+          }
+        },
+        {
+          "framework": "keala",
+          "kind": "param-shared",
+          "size": 10000,
+          "regMs": 16.16,
+          "firstMs": 0.56,
+          "heapMB": 13.9,
+          "probes": {
+            "hit-mid": {
+              "median": 507,
+              "p25": 488,
+              "p75": 653
+            },
+            "hit-last": {
+              "median": 503,
+              "p25": 490,
+              "p75": 538
+            },
+            "miss-global": {
+              "median": 437,
+              "p25": 430,
+              "p75": 455
+            },
+            "miss-deep": {
+              "median": 519,
+              "p25": 512,
+              "p75": 562
             }
           }
         }
@@ -3576,29 +3576,29 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 10000,
-          "regMs": 2.95,
-          "firstMs": 36.94,
+          "regMs": 2.15,
+          "firstMs": 29.71,
           "heapMB": 4,
           "probes": {
             "hit-mid": {
-              "median": 19717,
-              "p25": 17480,
-              "p75": 22571
+              "median": 11111,
+              "p25": 10857,
+              "p75": 11203
             },
             "hit-last": {
-              "median": 29073,
-              "p25": 25185,
-              "p75": 30305
+              "median": 15100,
+              "p25": 15042,
+              "p75": 15347
             },
             "miss-global": {
-              "median": 2134,
-              "p25": 2018,
-              "p75": 2285
+              "median": 1948,
+              "p25": 1927,
+              "p75": 1984
             },
             "miss-deep": {
-              "median": 2147,
-              "p25": 2072,
-              "p75": 2196
+              "median": 1938,
+              "p25": 1908,
+              "p75": 1971
             }
           }
         },
@@ -3606,29 +3606,29 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 10000,
-          "regMs": 2.27,
-          "firstMs": 35.12,
+          "regMs": 2.2,
+          "firstMs": 31.76,
           "heapMB": 4,
           "probes": {
             "hit-mid": {
-              "median": 11696,
-              "p25": 11584,
-              "p75": 11880
+              "median": 11265,
+              "p25": 11035,
+              "p75": 11453
             },
             "hit-last": {
-              "median": 15944,
-              "p25": 15788,
-              "p75": 16092
+              "median": 15344,
+              "p25": 15288,
+              "p75": 15425
             },
             "miss-global": {
-              "median": 2067,
-              "p25": 1968,
-              "p75": 2107
+              "median": 1952,
+              "p25": 1926,
+              "p75": 1985
             },
             "miss-deep": {
-              "median": 2106,
-              "p25": 2054,
-              "p75": 2216
+              "median": 1951,
+              "p25": 1884,
+              "p75": 1976
             }
           }
         },
@@ -3636,29 +3636,29 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 10000,
-          "regMs": 2.69,
-          "firstMs": 35.06,
+          "regMs": 2.2,
+          "firstMs": 31.29,
           "heapMB": 4,
           "probes": {
             "hit-mid": {
-              "median": 11600,
-              "p25": 11414,
-              "p75": 11702
+              "median": 11312,
+              "p25": 11208,
+              "p75": 11538
             },
             "hit-last": {
-              "median": 16296,
-              "p25": 16076,
-              "p75": 16668
+              "median": 15443,
+              "p25": 15287,
+              "p75": 15548
             },
             "miss-global": {
-              "median": 2087,
-              "p25": 2029,
-              "p75": 2096
+              "median": 2002,
+              "p25": 1965,
+              "p75": 2029
             },
             "miss-deep": {
-              "median": 2092,
-              "p25": 2035,
-              "p75": 2124
+              "median": 2014,
+              "p25": 1949,
+              "p75": 2033
             }
           }
         },
@@ -3666,29 +3666,29 @@
           "framework": "hono",
           "kind": "param-shared",
           "size": 10000,
-          "regMs": 2.4,
-          "firstMs": 35.01,
+          "regMs": 2.32,
+          "firstMs": 32.21,
           "heapMB": 4,
           "probes": {
             "hit-mid": {
-              "median": 11475,
-              "p25": 11368,
-              "p75": 11803
+              "median": 11375,
+              "p25": 11225,
+              "p75": 11430
             },
             "hit-last": {
-              "median": 15958,
-              "p25": 15829,
-              "p75": 16236
+              "median": 15562,
+              "p25": 15465,
+              "p75": 15847
             },
             "miss-global": {
-              "median": 2047,
-              "p25": 1962,
-              "p75": 2125
+              "median": 1983,
+              "p25": 1924,
+              "p75": 2042
             },
             "miss-deep": {
-              "median": 2093,
-              "p25": 2061,
-              "p75": 2141
+              "median": 1967,
+              "p25": 1928,
+              "p75": 2001
             }
           }
         }

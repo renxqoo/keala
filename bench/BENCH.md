@@ -1,9 +1,9 @@
 # keala performance report
 
-Generated: 2026-09-02T21:45:53.732Z
+Generated: 2026-09-03T15:55:13.363Z
 
 - Load tool: autocannon (4 client workers — one process saturates at ~177k req/s)
-- Connections: 200, duration: 8s per fire, 6 interleaved rounds
+- Connections: 200, duration: 10s per fire, 4 interleaved rounds
 - **ABAB-interleaved**: all servers resident; within each scenario every server fires once per round in rotating order
 - Ratio lines carry each side's run-to-run noise (±spread); a ratio inside the noise band is a TIE, not a win
 - Runtimes: bun 1.4.0 (raw / keala / hono) vs node 22 (keala / koa / fastify) vs go 1.27
@@ -14,104 +14,104 @@ Generated: 2026-09-02T21:45:53.732Z
 
 | Framework               | Runtime |   req/s | noise |
 | ----------------------- | ------- | ------: | ----: |
-| raw Bun.serve           | bun 1.4 | 248,208 |   ±3% |
-| keala                   | bun 1.4 | 249,376 |   ±4% |
-| hono 4                  | bun 1.4 | 247,200 |   ±3% |
-| keala                   | node 22 |  79,048 |   ±1% |
-| hono 4 official adapter | node 22 |  61,236 |   ±1% |
-| koa 3                   | node 22 |  61,556 |   ±2% |
-| fastify 5               | node 22 |  74,536 |   ±3% |
-| koa 3                   | bun 1.4 | 124,064 |   ±4% |
-| fastify 5               | bun 1.4 | 146,784 |   ±2% |
-| go net/http             | go 1.27 | 187,312 |   ±1% |
+| raw Bun.serve           | bun 1.4 | 261,719 |   ±3% |
+| keala                   | bun 1.4 | 259,276 |   ±4% |
+| hono 4                  | bun 1.4 | 258,426 |  ±10% |
+| keala                   | node 22 |  81,556 |   ±2% |
+| hono 4 official adapter | node 22 |  63,184 |   ±1% |
+| koa 3                   | node 22 |  62,934 |   ±0% |
+| fastify 5               | node 22 |  74,912 |   ±2% |
+| koa 3                   | bun 1.4 | 130,537 |   ±3% |
+| fastify 5               | bun 1.4 | 153,327 |   ±2% |
+| go net/http             | go 1.27 | 186,970 |   ±2% |
 
-- keala vs koa 3: **4.05x** (±4% / ±2%)
-- keala vs fastify 5: **3.35x** (±4% / ±3%)
-- keala vs hono 4: **1.01x** (±4% / ±3%)
-- keala vs raw Bun: **1.00x** (±4% / ±3%)
-- keala vs go net/http: **1.33x** (±4% / ±1%)
+- keala vs koa 3: **4.12x** (±4% / ±0%)
+- keala vs fastify 5: **3.46x** (±4% / ±2%)
+- keala vs hono 4: **1.00x** (±4% / ±10%)
+- keala vs raw Bun: **0.99x** (±4% / ±3%)
+- keala vs go net/http: **1.39x** (±4% / ±2%)
 
 ## JSON response
 
 | Framework               | Runtime |   req/s | noise |
 | ----------------------- | ------- | ------: | ----: |
-| raw Bun.serve           | bun 1.4 | 250,032 |   ±1% |
-| keala                   | bun 1.4 | 243,552 |   ±1% |
-| hono 4                  | bun 1.4 | 236,672 |   ±1% |
-| keala                   | node 22 |  77,664 |   ±1% |
-| hono 4 official adapter | node 22 |  60,240 |   ±1% |
-| koa 3                   | node 22 |  59,776 |   ±1% |
-| fastify 5               | node 22 |  73,992 |   ±2% |
-| koa 3                   | bun 1.4 | 119,816 |   ±2% |
-| fastify 5               | bun 1.4 | 143,312 |   ±3% |
-| go net/http             | go 1.27 | 186,320 |   ±1% |
+| raw Bun.serve           | bun 1.4 | 261,741 |   ±2% |
+| keala                   | bun 1.4 | 256,355 |   ±3% |
+| hono 4                  | bun 1.4 | 250,956 |   ±2% |
+| keala                   | node 22 |  79,537 |   ±1% |
+| hono 4 official adapter | node 22 |  62,048 |   ±0% |
+| koa 3                   | node 22 |  61,402 |   ±1% |
+| fastify 5               | node 22 |  73,709 |   ±1% |
+| koa 3                   | bun 1.4 | 128,119 |   ±2% |
+| fastify 5               | bun 1.4 | 149,836 |   ±1% |
+| go net/http             | go 1.27 | 186,304 |   ±1% |
 
-- keala vs koa 3: **4.07x** (±1% / ±1%)
-- keala vs fastify 5: **3.29x** (±1% / ±2%)
-- keala vs hono 4: **1.03x** (±1% / ±1%)
-- keala vs raw Bun: **0.97x** (±1% / ±1%)
-- keala vs go net/http: **1.31x** (±1% / ±1%)
+- keala vs koa 3: **4.18x** (±3% / ±1%)
+- keala vs fastify 5: **3.48x** (±3% / ±1%)
+- keala vs hono 4: **1.02x** (±3% / ±2%)
+- keala vs raw Bun: **0.98x** (±3% / ±2%)
+- keala vs go net/http: **1.38x** (±3% / ±1%)
 
 ## Param route
 
 | Framework               | Runtime |   req/s | noise |
 | ----------------------- | ------- | ------: | ----: |
-| raw Bun.serve           | bun 1.4 | 245,696 |   ±3% |
-| keala                   | bun 1.4 | 243,744 |   ±2% |
-| hono 4                  | bun 1.4 | 240,640 |   ±2% |
-| keala                   | node 22 |  78,432 |   ±3% |
-| hono 4 official adapter | node 22 |  59,924 |   ±1% |
-| koa 3                   | node 22 |  60,064 |   ±2% |
-| fastify 5               | node 22 |  74,312 |   ±3% |
-| koa 3                   | bun 1.4 | 122,000 |   ±2% |
-| fastify 5               | bun 1.4 | 142,256 |   ±3% |
-| go net/http             | go 1.27 | 186,976 |   ±2% |
+| raw Bun.serve           | bun 1.4 | 258,799 |   ±1% |
+| keala                   | bun 1.4 | 255,983 |   ±1% |
+| hono 4                  | bun 1.4 | 255,552 |   ±2% |
+| keala                   | node 22 |  76,640 |   ±1% |
+| hono 4 official adapter | node 22 |  61,837 |   ±0% |
+| koa 3                   | node 22 |  62,099 |   ±1% |
+| fastify 5               | node 22 |  74,633 |   ±2% |
+| koa 3                   | bun 1.4 | 127,107 |   ±1% |
+| fastify 5               | bun 1.4 | 150,383 |   ±1% |
+| go net/http             | go 1.27 | 185,587 |   ±2% |
 
-- keala vs koa 3: **4.06x** (±2% / ±2%)
-- keala vs fastify 5: **3.28x** (±2% / ±3%)
-- keala vs hono 4: **1.01x** (±2% / ±2%)
-- keala vs raw Bun: **0.99x** (±2% / ±3%)
-- keala vs go net/http: **1.30x** (±2% / ±2%)
+- keala vs koa 3: **4.12x** (±1% / ±1%)
+- keala vs fastify 5: **3.43x** (±1% / ±2%)
+- keala vs hono 4: **1.00x** (±1% / ±2%)
+- keala vs raw Bun: **0.99x** (±1% / ±1%)
+- keala vs go net/http: **1.38x** (±1% / ±2%)
 
 ## 3 middlewares
 
 | Framework               | Runtime |   req/s | noise |
 | ----------------------- | ------- | ------: | ----: |
-| raw Bun.serve           | bun 1.4 | 237,568 |   ±1% |
-| keala                   | bun 1.4 | 190,992 |   ±2% |
-| hono 4                  | bun 1.4 | 192,032 |   ±4% |
-| keala                   | node 22 |  61,400 |   ±1% |
-| hono 4 official adapter | node 22 |  39,928 |   ±3% |
-| koa 3                   | node 22 |  57,628 |   ±4% |
-| fastify 5               | node 22 |  75,256 |   ±2% |
-| koa 3                   | bun 1.4 | 115,272 |   ±2% |
-| fastify 5               | bun 1.4 | 148,928 |   ±2% |
-| go net/http             | go 1.27 | 184,368 |   ±2% |
+| raw Bun.serve           | bun 1.4 | 249,024 |   ±1% |
+| keala                   | bun 1.4 | 212,963 |   ±3% |
+| hono 4                  | bun 1.4 | 200,745 |   ±2% |
+| keala                   | node 22 |  61,648 |   ±1% |
+| hono 4 official adapter | node 22 |  40,368 |   ±0% |
+| koa 3                   | node 22 |  58,816 |   ±1% |
+| fastify 5               | node 22 |  75,366 |   ±1% |
+| koa 3                   | bun 1.4 | 122,883 |   ±4% |
+| fastify 5               | bun 1.4 | 155,212 |   ±1% |
+| go net/http             | go 1.27 | 183,296 |   ±1% |
 
-- keala vs koa 3: **3.31x** (±2% / ±4%)
-- keala vs fastify 5: **2.54x** (±2% / ±2%)
-- keala vs hono 4: **0.99x** (±2% / ±4%)
-- keala vs raw Bun: **0.80x** (±2% / ±1%)
-- keala vs go net/http: **1.04x** (±2% / ±2%)
+- keala vs koa 3: **3.62x** (±3% / ±1%)
+- keala vs fastify 5: **2.83x** (±3% / ±1%)
+- keala vs hono 4: **1.06x** (±3% / ±2%)
+- keala vs raw Bun: **0.86x** (±3% / ±1%)
+- keala vs go net/http: **1.16x** (±3% / ±1%)
 
 ## 1000-route scale (late)
 
 | Framework                       | Runtime |   req/s | noise |
 | ------------------------------- | ------- | ------: | ----: |
-| raw Bun.serve (scale)           | bun 1.4 | 179,088 |   ±3% |
-| keala (scale)                   | bun 1.4 | 246,272 |   ±2% |
-| hono 4 (scale)                  | bun 1.4 | 249,104 |   ±3% |
-| keala (scale)                   | node 22 |  92,856 |   ±3% |
-| hono 4 official adapter (scale) | node 22 |  91,568 |   ±3% |
-| koa 3 (scale)                   | node 22 |  15,592 |   ±1% |
-| fastify 5 (scale)               | node 22 |  93,936 |   ±2% |
-| go net/http (scale)             | go 1.27 | 189,600 |   ±2% |
+| raw Bun.serve (scale)           | bun 1.4 | 187,014 |   ±3% |
+| keala (scale)                   | bun 1.4 | 259,933 |   ±0% |
+| hono 4 (scale)                  | bun 1.4 | 259,985 |   ±1% |
+| keala (scale)                   | node 22 |  95,625 |   ±1% |
+| hono 4 official adapter (scale) | node 22 |  93,216 |   ±1% |
+| koa 3 (scale)                   | node 22 |  15,699 |   ±1% |
+| fastify 5 (scale)               | node 22 |  86,118 |   ±2% |
+| go net/http (scale)             | go 1.27 | 190,285 |   ±1% |
 
-- keala vs koa 3: **15.79x** (±2% / ±1%)
-- keala vs fastify 5: **2.62x** (±2% / ±2%)
-- keala vs hono 4: **0.99x** (±2% / ±3%)
-- keala vs raw Bun: **1.38x** (±2% / ±3%)
-- keala vs go net/http: **1.30x** (±2% / ±2%)
+- keala vs koa 3: **16.56x** (±0% / ±1%)
+- keala vs fastify 5: **3.02x** (±0% / ±2%)
+- keala vs hono 4: **1.00x** (±0% / ±1%)
+- keala vs raw Bun: **1.39x** (±0% / ±3%)
+- keala vs go net/http: **1.37x** (±0% / ±1%)
 
 ## Latency under load (median of interleaved rounds)
 
@@ -124,11 +124,11 @@ Generated: 2026-09-02T21:45:53.732Z
 | keala                           | Text response           |      0.0 |      1.0 |
 | keala                           | JSON response           |      0.0 |      1.0 |
 | keala                           | Param route             |      0.0 |      1.0 |
-| keala                           | 3 middlewares           |      0.0 |      2.0 |
+| keala                           | 3 middlewares           |      0.0 |      1.0 |
 | hono 4                          | Text response           |      0.0 |      1.0 |
 | hono 4                          | JSON response           |      0.0 |      1.0 |
 | hono 4                          | Param route             |      0.0 |      1.0 |
-| hono 4                          | 3 middlewares           |      0.0 |      2.0 |
+| hono 4                          | 3 middlewares           |      0.0 |      1.0 |
 | keala                           | Text response           |      2.0 |      2.0 |
 | keala                           | JSON response           |      2.0 |      2.0 |
 | keala                           | Param route             |      2.0 |      2.0 |
@@ -136,7 +136,7 @@ Generated: 2026-09-02T21:45:53.732Z
 | hono 4 official adapter         | Text response           |      3.0 |      3.0 |
 | hono 4 official adapter         | JSON response           |      3.0 |      3.0 |
 | hono 4 official adapter         | Param route             |      3.0 |      3.0 |
-| hono 4 official adapter         | 3 middlewares           |      5.0 |      5.0 |
+| hono 4 official adapter         | 3 middlewares           |      4.0 |      5.0 |
 | koa 3                           | Text response           |      3.0 |      3.0 |
 | koa 3                           | JSON response           |      3.0 |      3.0 |
 | koa 3                           | Param route             |      3.0 |      3.0 |
@@ -146,48 +146,48 @@ Generated: 2026-09-02T21:45:53.732Z
 | fastify 5                       | Param route             |      2.0 |      2.0 |
 | fastify 5                       | 3 middlewares           |      2.0 |      2.0 |
 | koa 3                           | Text response           |      1.0 |      2.0 |
-| koa 3                           | JSON response           |      1.0 |      3.0 |
-| koa 3                           | Param route             |      1.0 |      2.0 |
+| koa 3                           | JSON response           |      1.0 |      1.0 |
+| koa 3                           | Param route             |      1.0 |      1.0 |
 | koa 3                           | 3 middlewares           |      1.0 |      2.0 |
 | fastify 5                       | Text response           |      1.0 |      2.0 |
 | fastify 5                       | JSON response           |      1.0 |      2.0 |
 | fastify 5                       | Param route             |      1.0 |      2.0 |
 | fastify 5                       | 3 middlewares           |      1.0 |      2.0 |
-| go net/http                     | Text response           |      1.0 |      3.0 |
-| go net/http                     | JSON response           |      1.0 |      3.0 |
-| go net/http                     | Param route             |      1.0 |      3.0 |
-| go net/http                     | 3 middlewares           |      1.0 |      3.0 |
+| go net/http                     | Text response           |      1.0 |      2.0 |
+| go net/http                     | JSON response           |      1.0 |      2.0 |
+| go net/http                     | Param route             |      1.0 |      2.0 |
+| go net/http                     | 3 middlewares           |      1.0 |      2.0 |
 | raw Bun.serve (scale)           | 1000-route scale (late) |      1.0 |      2.0 |
 | keala (scale)                   | 1000-route scale (late) |      0.0 |      1.0 |
 | hono 4 (scale)                  | 1000-route scale (late) |      0.0 |      1.0 |
 | keala (scale)                   | 1000-route scale (late) |      2.0 |      2.0 |
 | hono 4 official adapter (scale) | 1000-route scale (late) |      2.0 |      2.0 |
 | koa 3 (scale)                   | 1000-route scale (late) |     12.0 |     14.0 |
-| fastify 5 (scale)               | 1000-route scale (late) |      2.0 |      2.0 |
-| go net/http (scale)             | 1000-route scale (late) |      1.0 |      3.0 |
+| fastify 5 (scale)               | 1000-route scale (late) |      2.0 |      3.0 |
+| go net/http (scale)             | 1000-route scale (late) |      1.0 |      2.0 |
 
 ## Memory footprint (sampled via /debug/memory)
 
 | Framework                       | idle RSS | steady RSS | peak RSS | idle heap | steady heap |
 | ------------------------------- | -------: | ---------: | -------: | --------: | ----------: |
-| raw Bun.serve                   |   13.7MB |     18.3MB |   34.5MB |     0.1MB |       0.2MB |
-| keala                           |   27.5MB |     26.9MB |   55.4MB |     0.9MB |       1.1MB |
-| hono 4                          |   29.1MB |     24.5MB |   53.0MB |     0.5MB |       0.6MB |
-| keala                           |   88.6MB |     48.1MB |  106.4MB |    11.3MB |      21.5MB |
-| hono 4 official adapter         |   80.8MB |     48.7MB |  106.4MB |    11.9MB |      15.3MB |
-| koa 3                           |   68.6MB |     46.0MB |  102.4MB |     9.7MB |      18.5MB |
-| fastify 5                       |   64.4MB |     43.2MB |   99.3MB |    11.4MB |      22.4MB |
-| koa 3                           |   40.9MB |     36.7MB |  131.5MB |     4.6MB |       4.5MB |
-| fastify 5                       |   43.7MB |     52.5MB |  145.1MB |     6.1MB |       4.7MB |
-| go net/http                     |   11.6MB |     14.5MB |   27.5MB |     0.3MB |       0.7MB |
-| raw Bun.serve (scale)           |   19.3MB |     32.8MB |   35.2MB |     0.2MB |       0.2MB |
-| keala (scale)                   |   36.4MB |     37.0MB |   46.4MB |     2.0MB |       1.9MB |
-| hono 4 (scale)                  |   33.0MB |     36.4MB |   40.6MB |     1.4MB |       0.9MB |
-| keala (scale)                   |   95.4MB |     95.9MB |  101.0MB |    12.4MB |      10.8MB |
-| hono 4 official adapter (scale) |   83.0MB |     95.4MB |  100.3MB |    11.0MB |      17.3MB |
-| koa 3 (scale)                   |   74.6MB |     97.9MB |  101.5MB |    12.5MB |      16.9MB |
-| fastify 5 (scale)               |  106.0MB |     99.6MB |  103.7MB |    30.4MB |      27.8MB |
-| go net/http (scale)             |   13.0MB |     26.0MB |   27.3MB |     1.2MB |       5.8MB |
+| raw Bun.serve                   |   14.4MB |     43.1MB |   43.2MB |     0.1MB |       0.2MB |
+| keala                           |   27.0MB |     63.7MB |   63.7MB |     0.9MB |       1.1MB |
+| hono 4                          |   28.8MB |     66.8MB |   66.9MB |     0.5MB |       0.6MB |
+| keala                           |   99.7MB |    131.8MB |  133.9MB |    11.5MB |      22.3MB |
+| hono 4 official adapter         |   81.2MB |     75.9MB |  122.2MB |    11.9MB |       7.8MB |
+| koa 3                           |   68.8MB |     69.1MB |  111.1MB |     9.7MB |       8.7MB |
+| fastify 5                       |   64.2MB |    104.2MB |  104.3MB |    11.3MB |      21.6MB |
+| koa 3                           |   41.4MB |    171.5MB |  171.6MB |     4.6MB |       5.0MB |
+| fastify 5                       |   43.5MB |    173.5MB |  173.6MB |     6.1MB |       4.8MB |
+| go net/http                     |   11.8MB |     29.4MB |   29.4MB |     0.3MB |       0.7MB |
+| raw Bun.serve (scale)           |   19.3MB |     45.7MB |   45.7MB |     0.2MB |       0.2MB |
+| keala (scale)                   |   36.4MB |     54.6MB |   54.6MB |     2.0MB |       1.9MB |
+| hono 4 (scale)                  |   33.3MB |     49.1MB |   49.1MB |     1.4MB |       0.9MB |
+| keala (scale)                   |  101.8MB |    125.6MB |  132.6MB |    12.5MB |      20.1MB |
+| hono 4 official adapter (scale) |   82.9MB |    110.6MB |  119.3MB |    11.0MB |      12.3MB |
+| koa 3 (scale)                   |   74.6MB |    107.2MB |  107.2MB |    12.6MB |      24.7MB |
+| fastify 5 (scale)               |   97.9MB |     73.2MB |  168.8MB |    27.8MB |      16.2MB |
+| go net/http (scale)             |   12.7MB |     28.3MB |   28.3MB |     1.2MB |       2.2MB |
 
 ---
 
