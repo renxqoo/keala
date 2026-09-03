@@ -119,6 +119,7 @@ import {
   requestId,
   logger,
   bodyLimit,
+  noOpFor,
   timeout,
   serveStatic,
   validator,
@@ -306,7 +307,7 @@ a final standalone `/*`; params/regex/infix wildcards throw at registration.
 
 In `env: "development"`, keala warns when a matched route never ran because a
 middleware stopped the chain — one line per (method, path), zero overhead in
-production (rules: `docs/DESIGN.md` §2).
+production (rules: `DESIGN.md` §2 in the [repo](https://github.com/renxqoo/keala)).
 
 ## Migrating from koa
 
@@ -321,7 +322,7 @@ production (rules: `docs/DESIGN.md` §2).
 | `ctx.state.user`                                        | `c.state.user` (same)                                   |
 | `ctx.cookies.get/set`                                   | `c.cookies.get/set` (same, signed + keys)               |
 
-Deliberate divergences (see `docs/DESIGN.md` §0): string bodies carry no
+Deliberate divergences (see `PARITY.md` in the [repo](https://github.com/renxqoo/keala)): string bodies carry no
 framework-set `content-type` (the runtime provides `text/plain`; use `c.type`
 or the sugar for explicit types); markup sniffing is gone; object bodies keep
 their object shape on `c.body` reads.
@@ -410,7 +411,7 @@ app.onError((error, c) => {
 | `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                 |
 | `app.handle(request, runtime?)`                                                | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                            |
 | `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node` |
-| `app.sink(path, Response \| { dir })` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                    |
+| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                    |
 | `app.onError(mapper)` / `app.notFound(fn)`                                     | Single-slot error mapper (`Response \| void`) and custom 404; `env: "test"` suppresses the default console fallback                                             |
 | `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                              |
 | `app.ws(path, handlers)`                                                       | WebSocket route (Bun only; a duplicate path throws at setup)                                                                                                    |
