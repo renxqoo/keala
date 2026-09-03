@@ -191,3 +191,18 @@ KEALA_BENCH_PROCESSES=4 KEALA_BENCH_BASELINE=/tmp/keala-baseline \
 10 轮 text 单场景）、`docs/bench/r4-7-query-{bun,node}.jsonl`（query 场景发现矩阵）、
 `docs/bench/r4-7-query-fixed-{bun,node}.jsonl`（修复后官方 7 场景矩阵）、
 `docs/bench/r4-7q-paired-{bun,node}.jsonl`（query 修复配对证明）。
+
+## 0.6.2 targeted-read measurement (2026-09-04)
+
+After the koa full-map removal (c.query(name)/c.queries(name), the ~111ns
+map build eliminated): query scenario paired medians — Node 0.875
+[0.847, 0.904] (pre-change archive 0.858/0.901), Bun 0.937 [0.926, 0.939]
+(pre-change 0.943/0.956). Both inside the pre-change bands: the map build
+was REAL cost but NOT the dominant term of the query-scenario gap. The
+residual is the param+query route shape itself — router match, param
+extraction, context, response construction — the same floor the plain
+param scenario pays, plus the querystring scan. Conclusion: the API change
+stands on its own merits (faster, allocation-free, structurally
+pollution-proof); it does not close the query scenario, which stays the
+one documented loss vs hono (API-shape residual wording updated: it is a
+route-shape residual, not a parse residual).

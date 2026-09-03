@@ -101,8 +101,9 @@ retryAfterSeconds, handler, strategy } })`:过载准入在 Context 创建
 - 性能收官口径(用户裁决 2026-09-03):全场景 ≥ Hono + 指定热路由
   经下沉 ≥10%。当前实测:Bun 六场景 +0.9~+5.3%(text 下沉后 +9.6%)、
   Node probe/text +10%、middleware +67%、json-body-safe +15~24%;
-  query 场景为已文档化的 API 形状残差(Bun ≈0.94 / Node ≈0.86-0.90,
-  与 r4-7 线归档一致,非合并回归)。
+  query 场景为已文档化的路由形状残差(Bun ≈0.94 / Node ≈0.86-0.90;
+  0.6.2 定向读消除了 ~111ns 建表成本但场景差距未收窄——残差在参数+
+  查询路由的整体形状,不在解析本身)。
 - 发布:tag v0.6.2;publish 由维护者执行(prepublishOnly 自动构建)。
 
 ## 0.6.1
