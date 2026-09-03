@@ -303,25 +303,27 @@ export const sinkGuardSpecs = (
  * return would get Bun's SILENT 200 help page (probe-verified on 1.4),
  * both unacceptable next to the mirror's loud builtin answers.
  */
+const sunkFail = (method: string, error: unknown): Response => sunkErrorResponse(method, error);
+
+const sunkCheck = (method: string, result: unknown): Response =>
+  result instanceof Response
+    ? result
+    : sunkFail(method, new TypeError("a sunk handler must return a Response"));
+
 const nativeFnRoute =
   (handler: SunkHandler) =>
   (request: Request): Response | Promise<Response> => {
-    const fail = (method: string, error: unknown): Response => sunkErrorResponse(method, error);
-    const check = (method: string, result: unknown): Response =>
-      result instanceof Response
-        ? result
-        : fail(method, new TypeError("a sunk handler must return a Response"));
     const params = (request as Request & { params?: Readonly<Record<string, string>> }).params;
     try {
       const result = handler(request, params ?? EMPTY_PARAMS);
       return result instanceof Promise
         ? result.then(
-            (value) => check(request.method, value),
-            (error) => fail(request.method, error),
+            (value) => sunkCheck(request.method, value),
+            (error) => sunkFail(request.method, error),
           )
-        : check(request.method, result);
+        : sunkCheck(request.method, result);
     } catch (error) {
-      return fail(request.method, error);
+      return sunkFail(request.method, error);
     }
   };
 

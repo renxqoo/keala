@@ -36,6 +36,15 @@ interface WriterInternal extends StreamWriter {
   _aborts: (() => void)[];
 }
 
+/** Run one cleanup handler; a throwing one must never break the cancel path. */
+const runCleanup = (fn: () => void): void => {
+  try {
+    fn();
+  } catch {
+    // cleanup handlers must not break the cancel path
+  }
+};
+
 const makeStream = (
   start: (writer: WriterInternal) => Promise<void> | void,
   headers: Record<string, string>,
@@ -48,13 +57,6 @@ const makeStream = (
   let cancelled = false;
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
   const encoder = new TextEncoder();
-  const runCleanup = (fn: () => void): void => {
-    try {
-      fn();
-    } catch {
-      // cleanup handlers must not break the cancel path
-    }
-  };
   const writer: WriterInternal = {
     _aborts: aborts,
     write(chunk) {

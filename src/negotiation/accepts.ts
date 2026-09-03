@@ -94,7 +94,7 @@ export const parsePreferenceEntries = (header: string | null): Preference[] => {
 export const parsePreferences = (header: string | null): Preference[] =>
   parsePreferenceEntries(header)
     .filter((pref) => pref.q > 0)
-    .sort((a, b) => b.q - a.q || a.order - b.order);
+    .toSorted((a, b) => b.q - a.q || a.order - b.order);
 
 /**
  * Split a PROVIDED media type into its type token and parameter map (values

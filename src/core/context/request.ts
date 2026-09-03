@@ -75,6 +75,12 @@ export interface RequestApi {
   acceptsLanguages(...langs: (string | string[])[]): string | string[] | false;
 }
 
+/** Strip userinfo (`user:pass@host`) — only the authority is ever trusted. */
+const stripUserinfo = (value: string): string => {
+  const at = value.lastIndexOf("@");
+  return at === -1 ? value : value.slice(at + 1);
+};
+
 const IPV4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const IPV6 = /^[0-9a-f]*:[0-9a-f:]*$/i;
 const IDEMPOTENT = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE"]);
@@ -281,10 +287,6 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     // Strip userinfo (user:pass@host) — only the authority is trusted, in
     // BOTH sources: a crafted "evil.com:fake@legitimate.com" in
     // X-Forwarded-Host or Host must never leak into origin/href/back().
-    const stripUserinfo = (value: string): string => {
-      const at = value.lastIndexOf("@");
-      return at === -1 ? value : value.slice(at + 1);
-    };
     if (this.appSettings.proxy) {
       // Koa: only the first entry of a chained X-Forwarded-Host is trusted.
       const forwarded = stripUserinfo(this.get("x-forwarded-host").split(",")[0]?.trim() ?? "");
