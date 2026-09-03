@@ -130,9 +130,28 @@ Node 适配器不消费 nativeSinks:静态镜像逐命中 rebuild(fn sink 镜像
 
 - Node 镜像快路径(fn 免物化/静态免 rebuild)——独立小切片,
   预期回收 Node sunk 腿大部分差距;不改变 Bun 结论。
+  **设计(v1.0.0 WS2 落地)**:
+  - 静态镜像:首次 capture 后,后续命中在 **native 请求源**(Node)上
+    改为逐命中 `createPlannedResponse(cachedBytes, {status, statusText,
+headers: captured})`——Node writer 走 headerSnapshot + directBody
+    直写(零流、零 Request 物化);非 native 源(Bun 镜像/测试)保留
+    逐命中 rebuild(PlannedResponse 不能交给 Bun.serve 原生写入)。
+    语义不变量:头/状态/statusText 逐字节同 rebuild 路径
+    (对拍套件回归锁定)。
+  - fn 镜像:Node 侧成本 = sourceRequest 物化(Headers 拷贝 + URL 解析
+    - undici Request 构造)+ 无 facts 响应的 writeStream 写路径。
+      契约固定为 `(Request, params)`,物化不可全免;优化面为写路径与
+      URL 复用,以 profiling 数据定案(见 WS2 实施记录)。
 - 多方法 map 下沉(类型已收、注册拒)与 HTMLBundle/BunFile 值:
   维持出界(D8)。
 - sink 热路由组合策略(哪些路由值得下沉)与 R4.5 收官路径:
   待用户裁决是否立项。
 - 1000 路由规模警示(BENCH.md:表查询输给 trie)仍然成立——下沉是
   少数热路由的精准杠杆,不是规模化方案。
+- **query 场景残差(v1.0.0 合并线查明,非合并回归)**:合并
+  r4-7-bun-hotpath 后 v1.0.0 sanity(Bun 0.943 / Node 0.859)与该线
+  自身修复后归档完全一致(Bun 0.9559 [0.925,0.971];Node 0.858/0.901,
+  docs/bench/r4-7-query-fixed-node 等)。残差为 koa 全量 QueryMap 契约
+  vs Hono 单键惯用的 API 形状差,已在 r4-7 线裁决为"不为此添加 API"。
+  GA 验收按"全场景 ≥Hono(query 场景例外,已文档化 API 形状残差)"
+  呈报;若未来裁决添加定向读 API,Node query 为最大受益场景。
