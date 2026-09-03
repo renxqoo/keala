@@ -14,8 +14,8 @@ Bun.serve({
   port: Number(process.argv[2] ?? 4111),
   hostname: "127.0.0.1",
   fetch(request) {
-    const { pathname } = new URL(request.url);
-    switch (pathname) {
+    const url = new URL(request.url);
+    switch (url.pathname) {
       case "/livez":
         return json({ status: "ok" });
       case "/text":
@@ -34,9 +34,18 @@ Bun.serve({
       case "/debug/memory":
         return json(serverMetrics("production"));
     }
-    const user = /^\/users\/([^/]+)$/.exec(pathname);
+    const user = /^\/users\/([^/]+)$/.exec(url.pathname);
     if (user !== null) return text(`user ${user[1]}`);
-    if (pathname === "/echo-safe" && request.method === "POST") {
+    // The composite control for the query scenario: URLSearchParams is the
+    // natural no-framework way to read the query string.
+    const search = /^\/search\/([^/]+)$/.exec(url.pathname);
+    if (search !== null) {
+      return new Response(
+        `${search[1]} ${url.searchParams.get("name")} ${url.searchParams.get("page")}`,
+        { headers: { "content-type": "text/plain", "x-query": "hit" } },
+      );
+    }
+    if (url.pathname === "/echo-safe" && request.method === "POST") {
       // Same observable contract as the body-safe fixtures: over the limit
       // answers 413 (declared length short-circuits the read), malformed
       // JSON answers 400, anything else echoes as JSON.

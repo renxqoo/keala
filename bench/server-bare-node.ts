@@ -46,6 +46,13 @@ const server = createServer((req, res) => {
     send(res, 200, "text/plain", `user ${user[1]}`);
     return;
   }
+  const search = /^\/search\/([^/]+)$/.exec(path);
+  if (search !== null) {
+    const query = new URL(req.url ?? "/", "http://localhost").searchParams;
+    res.writeHead(200, { "content-type": "text/plain", "x-query": "hit" });
+    res.end(`${search[1]} ${query.get("name")} ${query.get("page")}`);
+    return;
+  }
   if (path === "/echo-safe" && req.method === "POST") {
     // Same observable contract as the body-safe fixtures: over the limit
     // answers 413 (declared length short-circuits the read), malformed

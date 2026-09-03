@@ -130,7 +130,44 @@ echo-safe 的 1024 字节上限短路 413 / 坏 JSON 400）；冷端点复用 `s
 （−65 ~ −566ns），幅度被 4.4µs 的运行时 HTTP 栈封顶；唯一剩余的 Hono 结构差异
 经 15 轮配对测量证明无可主张收益。
 
-## 7. 复现
+## 7. query 场景：真实缺口的发现与收窄
+
+对比 `.parity/hono/benchmarks` 后补齐了其旗舰 HTTP bench 的第三个端点形态（param +
+query 读取 + 暂存响应头 + 插值文本），成为官方矩阵第 7 场景 `query`
+（`GET /search/12345?name=keala&page=3`，四 fixture + 裸对照同步对齐，
+`test/query-scenario.test.ts` 双运行时锁定）。**这是唯一一个 Keala 真实落后 Hono 的
+场景**（同轮配对）：
+
+- Bun：**0.9130 [0.814, 0.937]**；框架开销 Keala +429ns vs 裸、Hono +71ns。
+- Node：**0.9336 [0.878, 1.023]**；Keala +2293ns、Hono +1475ns。
+
+进程内分解（`/tmp/query-micro.mjs`，Node）：整链 251ns = url 物化 40.5 +
+querystring 22.4 + **parseQuery 150.7**；Hono 式两次单键定点提取仅 43.5ns。
+原因：`c.query` 的 koa 合同在首次触达时全量物化 QueryMap（先物化 path+search 拼接、
+再在其中定位 query、再单遍解析 + 每段 decode 早退检查），而 Hono 的
+`c.req.query(key)` 做零分配定点提取。
+
+**合同内修复（两处，语义位级一致，`/a#f`、`/a?f#g` 边界由既有测试锁定）：**
+
+1. `querystring` 单遍扫描原始请求目标（`urlValue ?? sourceUrl`）——只触 query 不再
+   物化拼接串；
+2. `parseQuery` 无转义快速路径——整串无 `+`/`%` 时 decode 为恒等，跳过全部调用。
+
+**配对复测**（baseline 为 35b5588 worktree + 当前 fixture，query 单场景 5 轮）：
+Node **+5.1% [1.007, 1.070]**（紧区间）、Bun +1.1%——与 R4.5「Node 显著、Bun 持平
+即保留」的先例一致，保留。进程内 parseQuery 150.7→112.4ns。
+
+修复后官方矩阵（7 场景全量，`r4-7-query-fixed-*`）：Bun query 差距收窄至
+**0.9559 [0.925, 0.971]**；Node 本轮 0.858 方差大（hono 相对裸地板的开销跨轮
++1475→+373ns 漂移，交叉轮 vs-hono 不可靠，以同轮配对为准）。其余六场景无回归
+（mw-3 1.067/1.628、json-body-safe 1.093/1.271）。
+
+**残差定性**：剩余 4-10% 差距是 API 形态差异而非算法劣汰——koa 的 `c.query` 返回
+完整 QueryMap（读全部键时一次解析反而占优），Hono 的 `c.req.query(key)` 为单键
+习语。在不动公共合同的前提下已无进一步可主张的空间；引入单键 API 属产品决策，
+不为基准分数增加。
+
+## 8. 复现
 
 ```sh
 # 裸对照矩阵（开销归因）
@@ -151,4 +188,6 @@ KEALA_BENCH_PROCESSES=4 KEALA_BENCH_BASELINE=/tmp/keala-baseline \
 `docs/bench/r4-7-capacity-{bun,node}-1proc.jsonl`（单进程容量对照）、
 `docs/bench/r4-7-paired-{bun,node}.jsonl`（候选优化的配对否决数据）、
 `docs/bench/r4-7-sync-boundary-{bun,text10-bun}.jsonl`（同步边界否决：5 轮全矩阵 +
-10 轮 text 单场景）。
+10 轮 text 单场景）、`docs/bench/r4-7-query-{bun,node}.jsonl`（query 场景发现矩阵）、
+`docs/bench/r4-7-query-fixed-{bun,node}.jsonl`（修复后官方 7 场景矩阵）、
+`docs/bench/r4-7q-paired-{bun,node}.jsonl`（query 修复配对证明）。

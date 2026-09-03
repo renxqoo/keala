@@ -64,6 +64,14 @@ const scenarios = [
   { name: "text", path: "/text", expected: "hello world" },
   { name: "json", path: "/json", expected: '{"hello":"world"}' },
   { name: "param", path: "/users/12345", expected: "user 12345" },
+  {
+    // The composite real-world shape from Hono's flagship http-server bench:
+    // param + query reads + a staged response header + interpolated text.
+    name: "query",
+    path: "/search/12345?name=keala&page=3",
+    expected: "12345 keala 3",
+    expectHeaders: [["x-query", "hit"]],
+  },
   { name: "middleware-3", path: "/mw", expected: "middleware" },
   {
     name: "json-body-safe",
@@ -167,6 +175,12 @@ const verify = async (server, scenario) => {
   const type = scenario.expected.startsWith("{") ? "application/json" : "text/plain";
   if (response.headers.get("content-type")?.split(";")[0] !== type)
     throw new Error("wrong content-type");
+  if (scenario.expectHeaders !== undefined) {
+    for (const [name, value] of scenario.expectHeaders) {
+      if (response.headers.get(name) !== value)
+        throw new Error(`missing expected header ${name}=${value}`);
+    }
+  }
   if (scenario.name === "middleware-3") {
     for (const [name, value] of [
       ["x-step", "1"],

@@ -16,6 +16,14 @@ app.get("/json", (c) => c.json({ hello: "world" }));
 
 app.get("/users/:id", (c) => c.text(`user ${c.req.param("id")}`));
 
+app.get("/search/:id", (c) => {
+  const id = c.req.param("id");
+  const name = c.req.query("name");
+  const page = c.req.query("page");
+  c.header("x-query", "hit");
+  return c.text(`${id} ${name} ${page}`);
+});
+
 app.post("/echo-safe", async (c) => {
   const limit = 1024;
   const declared = Number(c.req.header("content-length"));
