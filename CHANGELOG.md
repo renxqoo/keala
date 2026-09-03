@@ -1,9 +1,21 @@
 # Changelog
 
-## 1.0.0 (2026-09-03)
+> 0.6.x 为 pre-1.0 系列:表面可破坏,破坏性变更在 CHANGELOG 逐条记录。
+
+## 0.6.2 (2026-09-04)
 
 生产可用(GA)。相对 0.6.1 的完整变更叙事;测量结论以仓库
 docs/HOTPATH-R4.* 与 docs/bench/*.jsonl 原始数据为准。
+
+### 破坏性变更(0.6.2)
+
+- **`c.query` 从 koa 全量 Map 改为定向读方法**(用户裁决 2026-09-04):
+  `c.query.name` → `c.query("name")`;重复键 `c.queries("name")`;
+  `c.query = {...}` 赋值移除(用 `c.querystring = "..."`);全量枚举移除
+  (用 `c.querystring`)。`__proto__` 等危险键的丢弃逻辑随 Map 退役——
+  定向读返回字符串,原型污染结构性不可能。动机与语义边界见
+  README 与 docs/PARITY.md(0.6.2 targeted query reads 条目)。
+- 版本叙事修正:1.0.0 → 0.6.2(pre-1.0 语义,仅一个使用方)。
 
 ### 生命周期与过载控制(高可用)
 
@@ -81,7 +93,7 @@ retryAfterSeconds, handler, strategy } })`:过载准入在 Context 创建
 - 已知限制与分歧台账:docs/PARITY.md(静态 ETag/304、U+FFFD、
   bun#37603 原始字节匹配自愈、maxRequestBodySize 不约束表内路由等)。
 
-### GA 验收(v1.0.0 标签)
+### GA 验收(v0.6.2 标签)
 
 - 全门禁绿:Node 143 文件 2349 pass、Bun 143 文件全绿、coverage
   97.12/92.14/96.38/98.69、build(跨平台)/smoke/soak/example:check/
@@ -91,7 +103,7 @@ retryAfterSeconds, handler, strategy } })`:过载准入在 Context 创建
   Node probe/text +10%、middleware +67%、json-body-safe +15~24%;
   query 场景为已文档化的 API 形状残差(Bun ≈0.94 / Node ≈0.86-0.90,
   与 r4-7 线归档一致,非合并回归)。
-- 发布:tag v1.0.0;publish 由维护者执行(prepublishOnly 自动构建)。
+- 发布:tag v0.6.2;publish 由维护者执行(prepublishOnly 自动构建)。
 
 ## 0.6.1
 

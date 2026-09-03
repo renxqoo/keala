@@ -99,9 +99,13 @@ describe("header injection (response splitting)", () => {
 describe("prototype pollution", () => {
   it("neutralizes __proto__ / constructor / prototype query keys", async () => {
     const app = new Keala();
-    let captured: Record<string, unknown> | undefined;
+    let sawOk: string | undefined;
+    let sawProtoKey: string | undefined;
     app.use(async (c) => {
-      captured = c.query as Record<string, unknown>;
+      // Targeted reads return strings — no object, no property assignment,
+      // pollution structurally impossible. Unsafe-looking keys are just keys.
+      sawOk = c.query("ok");
+      sawProtoKey = c.query("__proto__[polluted]");
       c.body = "ok";
     });
     await drive(
@@ -111,8 +115,8 @@ describe("prototype pollution", () => {
       ),
     );
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-    expect(Object.prototype.hasOwnProperty.call(captured, "ok")).toBe(true);
-    expect(captured?.prototype).toBeUndefined();
+    expect(sawOk).toBe("1");
+    expect(sawProtoKey).toBe("1");
   });
 
   it("rejects __proto__-style header names", async () => {
@@ -168,14 +172,14 @@ describe("malformed input must never crash the process", () => {
     const app = new Keala();
     let queryKeys = 0;
     app.use(async (c) => {
-      queryKeys = Object.keys(c.query).length;
+      queryKeys = (c.query("k0") === "1" ? 1 : 0) + (c.query("k999") === "1" ? 1 : 0);
       return new Response(null, { status: 204 });
     });
     const longPath = `/${"a".repeat(4000)}`;
     const longQuery = `?${Array.from({ length: 1000 }, (_, i) => `k${i}=1`).join("&")}`;
     const res = await drive(app, new Request(`http://localhost:3000${longPath}${longQuery}`));
     expect(res.status).toBe(204);
-    expect(queryKeys).toBe(1000);
+    expect(queryKeys).toBe(2); // extremes k0 + k999 readable
   });
 
   it("survives malformed cookie headers", async () => {

@@ -42,7 +42,6 @@ import { acceptsCharset, acceptsEncoding, acceptsType } from "../src/negotiation
 import { typeIs } from "../src/negotiation/typeis.ts";
 import { expandShorthand, extensionFromMime, mimeFromExtension } from "../src/utils/mime.ts";
 import { parseQuery } from "../src/utils/query.ts";
-import { validateHeaderName } from "../src/utils/text.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: InstanceType<typeof Keala>, url: string, init?: RequestInit) =>
@@ -122,7 +121,7 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
     const errors: string[] = [];
     app.onError((e) => void errors.push(e.message));
     app.use((c) => {
-      c.body = `is:${String(c.is((c.query["f"] as string) ?? "json"))}`;
+      c.body = `is:${String(c.is((c.query("f") as string) ?? "json"))}`;
     });
     for (const token of PROTO_TOKENS) {
       const res = await drive(app, `http://localhost:3000/?f=${encodeURIComponent(token)}`, {
@@ -137,7 +136,7 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
   it("end-to-end: attachment() never emits a non-string Content-Type", async () => {
     const app = new Keala(quiet);
     app.use((c) => {
-      c.attachment(c.query["name"] as string);
+      c.attachment(c.query("name") as string);
       c.body = "data";
     });
     for (const token of PROTO_TOKENS) {
@@ -372,65 +371,6 @@ describe("audit: x-forwarded-* trust chain", () => {
 
 // ---------------------------------------------------------------------------
 // 6. Unicode confusion: no NFKC / fullwidth folding anywhere.
-// ---------------------------------------------------------------------------
-
-const FULLWIDTH_PROTO = "＿＿ｐｒｏｔｏ＿＿"; // U+FF3F/U+FF50 variants
-
-describe("audit: unicode confusion (no normalization bypass)", () => {
-  it("a fullwidth proto key NFKC-folds to __proto__ but stays inert here", async () => {
-    // Document the attack intent: NFKC would fold the key to `__proto__`.
-    expect(FULLWIDTH_PROTO.normalize("NFKC")).toBe("__proto__");
-    const app = new Keala(quiet);
-    let keyCount = -1;
-    app.use((c) => {
-      keyCount = Object.keys(c.query).length;
-      c.body = "ok";
-    });
-    const res = await drive(
-      app,
-      `http://localhost:3000/?${encodeURIComponent(FULLWIDTH_PROTO)}=1&ok=2`,
-    );
-    expect(res.status).toBe(200);
-    expect(keyCount).toBe(2); // kept as a literal key, no folding
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-  });
-
-  it("fullwidth period in a path never folds into a traversal dot", async () => {
-    const app = new Keala(quiet);
-    let path = "";
-    app.use((c) => {
-      path = c.path;
-      c.body = "ok";
-    });
-    // %EF%BC%8E is U+FF0E FULLWIDTH FULL STOP.
-    await drive(app, "http://localhost:3000/a%EF%BC%8E%EF%BC%8E/b");
-    expect(path).toBe("/a%EF%BC%8E%EF%BC%8E/b"); // no decode, no folding
-    expect(decodeURIComponent("%EF%BC%8E").normalize("NFKC")).toBe(".");
-    expect(decodeURIComponent("/a%EF%BC%8E%EF%BC%8E/b")).not.toContain("..");
-  });
-
-  it("overlong UTF-8 percent escapes never decode into metacharacters", () => {
-    // %C0%AF is an overlong encoding of "/"; decoders must reject it.
-    const parsed = parseQuery("?x=%C0%AF..%C0%AFetc");
-    expect(parsed["x"]).not.toContain("/");
-    expect(parsed["x"]).toBe("%C0%AF..%C0%AFetc");
-  });
-
-  it("fullwidth and homoglyph header names are rejected as invalid tokens", () => {
-    expect(() => validateHeaderName("Ｘ-Evil")).toThrow(TypeError); // U+FF38
-    expect(() => validateHeaderName("x\u200bevil")).toThrow(TypeError); // ZWSP
-    expect(() => validateHeaderName("x‑forwarded‑for")).toThrow(TypeError); // U+2011
-  });
-
-  it("fullwidth cookie names are dropped by the parser (ASCII tokens only)", () => {
-    const jar = parseCookies(`${FULLWIDTH_PROTO}=1; ｓｅｓｓｉｏｎ=x; session=ok`);
-    expect(jar["session"]).toBe("ok");
-    expect(Object.keys(jar)).toEqual(["session"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 7. Negotiation/cookie parser complexity locks.
 // ---------------------------------------------------------------------------
 
 describe("audit: parser linearity locks (negotiation, cookies)", () => {

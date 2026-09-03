@@ -115,7 +115,7 @@ describe("R7-URL-1 [LOW] assigning query preserves URL fragments", () => {
     let observed = "";
     app.use((c) => {
       c.url = "/resource?old=1#section";
-      c.query = { page: "2" };
+      c.querystring = "page=2";
       observed = c.url;
       c.body = "ok";
     });

@@ -42,15 +42,13 @@ describe("request facade (flat context)", () => {
 
   it("parses and caches the query", async () => {
     const ctx = await probe({ url: "http://localhost:3000/?tags=a&tags=b", method: "GET" });
-    expect(ctx.query).toEqual({ tags: ["a", "b"] });
-    expect(ctx.query).toBe(ctx.query);
-    // Koa semantics (design contract #8): assigning an object rewrites the
-    // query string and invalidates the parse cache — the next read re-parses
-    // the stringified form (koa's verbatim-stash deviation is gone). The
-    // numeric `page` exercises stringifyQuery's number coercion.
-    ctx.query = { page: 2, tags: ["a", "b"] } as unknown as Record<string, string>;
-    expect(ctx.querystring).toBe("page=2&tags=a&tags=b");
-    expect(ctx.query).toEqual({ page: "2", tags: ["a", "b"] });
+    expect(ctx.query("tags")).toBe("a");
+    expect(ctx.queries("tags")).toEqual(["a", "b"]);
+    // Rewrites go through the raw querystring now; targeted reads reflect
+    // the new string immediately (no map, no cache).
+    ctx.querystring = "page=2&tags=a&tags=b";
+    expect(ctx.query("page")).toBe("2");
+    expect(ctx.queries("tags")).toEqual(["a", "b"]);
   });
 
   it("reads headers case-insensitively", async () => {
@@ -313,7 +311,7 @@ describe("request facade (flat context)", () => {
   it("supports throw and assert helpers", async () => {
     const throwing = new Keala();
     throwing.use(async (c) => {
-      c.assert(c.query["token"] !== undefined, 401, "token required");
+      c.assert(c.query("token") !== undefined, 401, "token required");
       c.throw(418, "teapot");
     });
     const ok = await throwing.handle(new Request("http://localhost:3000/?token=1"));

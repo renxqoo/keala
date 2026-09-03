@@ -265,14 +265,14 @@ describe("R4.3 agent review: concurrency and pooling isolation", () => {
       async () => {
         const app = new Keala({ env: "test", pooling });
         app.all("/x", async (c) => {
-          const depth = Number(c.query["d"] ?? "1");
+          const depth = Number(c.query("d") ?? "1");
           await sleep(Math.min(depth, 5)); // seeded-free, bounded jitter
           if (depth % 2 === 0) c.throw(422, "even", { expose: true });
           throw new Error("odd boom");
         });
         const seen: Array<{ status: number; ctx: Context; rid: number }> = [];
         app.onError(async (error, c) => {
-          const rid = Number(c.query["rid"] ?? "-1");
+          const rid = Number(c.query("rid") ?? "-1");
           seen.push({ status: error.status, ctx: c, rid });
           await Promise.resolve();
           return new Response(`rid-${rid}`, { status: error.status });
@@ -366,7 +366,7 @@ describe("R4.3 agent review: concurrency and pooling isolation", () => {
       });
       const seen: string[] = [];
       app.onError(async (error, c) => {
-        const id = c.query["rid"] as string;
+        const id = c.query("rid") as string;
         seen.push(id as string);
         if (id === "slow") await gate; // slow mapper stays in flight
         return new Response(`r-${id}-${error.status}`, { status: error.status });

@@ -106,10 +106,12 @@ describe("security: prototype pollution vector matrix", () => {
     ["__proto__.polluted", "x"],
     ["__defineGetter__", "x"],
   ])("query key %p never pollutes Object.prototype", async (key, value) => {
-    let queryKeys = 0;
+    let readBack = "unset";
     const app = new Keala(quiet);
     app.use((c) => {
-      queryKeys = Object.keys(c.query).length;
+      // A targeted read of the hostile key is just a string lookup — no
+      // object, no property assignment, pollution structurally impossible.
+      readBack = c.query(key) ?? "absent";
       c.body = "ok";
     });
     const res = await app.handle(
@@ -118,12 +120,12 @@ describe("security: prototype pollution vector matrix", () => {
     expect(res.status).toBe(200);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expect(({} as Record<string, unknown>).x).toBeUndefined();
-    expect(queryKeys).toBeGreaterThanOrEqual(1);
+    expect(readBack).toBe(value);
   });
 
   it("nested JSON-style query keys are kept as literal keys", async () => {
     await attack((c) => {
-      expect(Object.keys(c.query)).toContain("__proto__[polluted]");
+      expect(c.query("__proto__[polluted]")).toBeDefined();
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     });
   });
@@ -296,8 +298,7 @@ describe("security: resource-abuse bounds", () => {
     let values = 0;
     app.use((c) => {
       // Touch the query so the parse actually happens inside the timed window.
-      const parsed = c.query["k"];
-      values = Array.isArray(parsed) ? parsed.length : 1;
+      values = c.queries("k").length;
       return new Response(null, { status: 204 });
     });
     const huge = `?${"k=1&".repeat(16_000)}`;

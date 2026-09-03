@@ -128,7 +128,7 @@ describe("INV-1 never-reject", () => {
             c.path = randPath(rng);
             break;
           case 2:
-            c.query = { k: randString(rng, 5, TOKEN) };
+            c.querystring = `k=${randString(rng, 5, TOKEN)}`;
             break;
           case 3:
             c.querystring = randQueryString(rng);

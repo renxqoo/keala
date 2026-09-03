@@ -230,7 +230,7 @@ describe("R5-5 security: c.redirect() must not emit a cross-origin-resolvable Lo
   const appOf = (): Application => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.redirect(String(c.query.next));
+      c.redirect(String(c.query("next")));
     });
     return app;
   };

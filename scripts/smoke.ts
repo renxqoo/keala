@@ -47,9 +47,7 @@ api.post("/users", (c) => {
   c.set("Location", "/api/users/42");
   c.body = { created: true };
 });
-api.get("/query", (c) =>
-  c.json({ q: c.query["q"] ?? null, n: (c.query["n"] as string[])?.length ?? 0 }),
-);
+api.get("/query", (c) => c.json({ q: c.query("q") ?? null, n: c.queries("n").length }));
 api.get("/teapot", (c) => c.throw(418, "short and stout"));
 
 app.use(async (c, next) => {

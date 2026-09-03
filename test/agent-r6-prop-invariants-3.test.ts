@@ -127,13 +127,12 @@ describe("INV-5 no-prototype-pollution", () => {
   it("random query/cookie/JSON inputs leave Object.prototype and globals untouched", async () => {
     await runProp("no-proto-pollution", 250, async (rng, _seed, ctx) => {
       const app = new Keala({ ...quiet, keys: ["r6-secret"] });
-      let queryProto: unknown = "unset";
       let queryHasProto = true;
       app.on("ALL", "/*", async (c) => {
-        const q = c.query;
-        queryProto = Object.getPrototypeOf(q);
-        queryHasProto = "__proto__" in q || "constructor" in q;
-        for (const k of Object.keys(q)) void q[k];
+        // The map is gone: targeted reads are plain string returns — a
+        // __proto__ QUERY is just a key lookup, inherently pollution-free.
+        void c.query(randString(rng, 4, TOKEN));
+        queryHasProto = c.query("__proto__") === "__proto__";
         void c.cookies.get(rng.pick(COOKIE_NAMES));
         void c.cookies.get("__proto__");
         try {
@@ -165,7 +164,6 @@ describe("INV-5 no-prototype-pollution", () => {
       const res = await app.handle(req);
       expect(res).toBeInstanceOf(Response);
       await res.text();
-      expect(queryProto).toBe(null);
       expect(queryHasProto).toBe(false);
       expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
       expect(Object.getOwnPropertyNames(Object.prototype).sort().join(",")).toBe(protoBefore);

@@ -6,8 +6,6 @@
  * for the request side.
  */
 
-import type { QueryMap } from "../../utils/query.ts";
-import { parseQuery } from "../../utils/query.ts";
 import { charsetFromContentType, normalizeType } from "../../utils/mime.ts";
 import {
   acceptableValues,
@@ -18,6 +16,7 @@ import {
 } from "../../negotiation/accepts.ts";
 import { typeIs } from "../../negotiation/typeis.ts";
 import { getPath, getSearch, parseHostHeader, toURL } from "../../utils/url.ts";
+import { findAllQueryValues, findQueryValue } from "../../utils/query.ts";
 import type { Runtime } from "../../types.ts";
 import type { ContextState } from "./state.ts";
 import {
@@ -46,7 +45,13 @@ export interface RequestApi {
   path: string;
   querystring: string;
   search: string;
-  query: QueryMap;
+  /**
+   * Targeted query read: first value for `name` (decoded; malformed escapes
+   * verbatim), `undefined` when absent. Repeated keys: `queries(name)`.
+   */
+  query(name: string): string | undefined;
+  /** All values for a repeated query key, `[]` when absent. */
+  queries(name: string): string[];
   readonly originalUrl: string;
   readonly URL: URL | null;
   readonly headers: Headers;
@@ -138,21 +143,6 @@ const splitUrl = (
   };
 };
 
-// Koa search-params: only strings and numbers serialize; anything else is "".
-const stringifyQuery = (value: QueryMap): string => {
-  const params = new URLSearchParams();
-  const push = (key: string, item: unknown): void => {
-    if (typeof item === "number" && Number.isFinite(item)) params.append(key, String(item));
-    else params.append(key, typeof item === "string" ? item : "");
-  };
-  for (const key of Object.keys(value)) {
-    const entry = value[key];
-    if (Array.isArray(entry)) for (const item of entry) push(key, item);
-    else push(key, entry);
-  }
-  return params.toString();
-};
-
 export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   get raw(): Request {
     return sourceRequest(this.rawRequest);
@@ -183,7 +173,6 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     this.urlValue = value;
     this.pathValue = null;
     // The parsed query cache is keyed by the URL — a rewrite invalidates it.
-    this.queryValue = null;
   },
   get path(): string {
     return this.pathValue ?? (this.pathValue = getPath(this.url));
@@ -225,26 +214,26 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return qs.length === 0 ? "" : `?${qs}`;
   },
   /**
-   * The parsed query string — a LAZY plain object (`QueryMap`, null
-   * prototype): single values are strings, repeated keys become `string[]`
-   * (`?a=1&a=2&b=3` → `{ a: ["1","2"], b: "3" }`); the pollution keys
-   * `__proto__`/`constructor`/`prototype` are dropped. Materializes on
-   * first touch (DOGFOOD-R1 C3 — the shape is contract, not trivia).
+   * Targeted query read (user adjudication 2026-09-04: the koa-style full
+   * Map is gone — building it cost ~111ns/request while a boundary-matched
+   * scan costs ~2ns; the property form `c.query.name` cannot be made fast
+   * because plain-object property access requires the object to already
+   * exist fully parsed). Returns the FIRST value for `name`, decoded
+   * (`+` → space, `%XX`; malformed escapes pass through verbatim — security
+   * contract #5). `undefined` when absent; a bare trailing key reads as "".
+   * Repeated keys: `queries(name)`. Keys match in raw or canonical
+   * encodeURIComponent form — non-canonical encoding of unreserved chars
+   * (`%5F` for `_`) is not decoded on the match path.
    */
-  get query(): QueryMap {
-    return (this.queryValue ??= parseQuery(this.querystring));
+  query(name: string): string | undefined {
+    return findQueryValue(this.querystring, name);
   },
-  set query(value: QueryMap) {
-    // Koa 3: assigning an object rewrites the query string on the request;
-    // the next read re-parses from the rewritten URL (round-trip semantics).
-    // splitUrl keeps the fragment, exactly like the querystring/search
-    // setters beside this one.
-    const parts = splitUrl(this.url);
-    const serialized = stringifyQuery(value);
-    this.url =
-      serialized.length === 0
-        ? parts.path + parts.hash
-        : `${parts.path}?${serialized}${parts.hash}`;
+  /**
+   * All values for a repeated query key (`?a=1&a=2` → `["1","2"]`), `[]`
+   * when absent. Same decoding and boundary semantics as `query(name)`.
+   */
+  queries(name: string): string[] {
+    return findAllQueryValues(this.querystring, name);
   },
   set querystring(value: string) {
     const parts = splitUrl(this.url);

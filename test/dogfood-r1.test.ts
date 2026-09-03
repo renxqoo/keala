@@ -246,7 +246,7 @@ describe("C2: path-safety primitives re-exported from the root entry", () => {
 describe("C3: c.query shape types are exported", () => {
   it("QueryMap is a Record of string | string[]", async () => {
     const app = new Keala(quiet);
-    app.get("/q", (c) => c.json(c.query));
+    app.get("/q", (c) => c.json({ single: c.query("single"), multi: c.queries("multi") }));
     const res = await app.handle(req("/q?single=1&multi=a&multi=b"));
     expect(await res.json()).toEqual({ single: "1", multi: ["a", "b"] });
 

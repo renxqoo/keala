@@ -258,22 +258,27 @@ Every request allocates exactly one context. Request and response live on the
 same object; everything lazy (`query`, `cookies`, `ip`, `state`) materializes
 on first touch.
 
-| Request side                                  | Response side                                  | Sugar (return style)             |
-| --------------------------------------------- | ---------------------------------------------- | -------------------------------- |
-| `c.raw/method/path/url/query`                 | `c.status/body/message/type/length`            | `c.text(str, status?, headers?)` |
-| `c.get(name)` / `c.header(name)`              | `c.set/append/remove/vary/has/resHeader`       | `c.json(obj, status?, headers?)` |
-| `c.params` `c.query` `c.ip/ips/host/hostname` | `c.etag/lastModified/attachment/redirect/back` | `c.html(str, status?, headers?)` |
-| `c.accepts*/is/fresh/stale/charset`           | `c.cookies` (signed, key rotation)             | `c.throw/assert`                 |
+| Request side                                                          | Response side                                  | Sugar (return style)             |
+| --------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/query`                                         | `c.status/body/message/type/length`            | `c.text(str, status?, headers?)` |
+| `c.get(name)` / `c.header(name)`                                      | `c.set/append/remove/vary/has/resHeader`       | `c.json(obj, status?, headers?)` |
+| `c.params` `c.query(name)` `c.queries(name)` `c.ip/ips/host/hostname` | `c.etag/lastModified/attachment/redirect/back` | `c.html(str, status?, headers?)` |
+| `c.accepts*/is/fresh/stale/charset`                                   | `c.cookies` (signed, key rotation)             | `c.throw/assert`                 |
 
 Dual-mode rules in one line each: **a returned `Response` commits; `c.*`
 writes are staged; the last committer wins; untouched requests hit
 `app.notFound`**. A matched path without the method answers 405 + `Allow`
 (OPTIONS gets 200 + `Allow`, unknown methods 501).
 
-`c.query` is a lazily parsed **plain object** (null prototype): single values
-are strings, repeated keys become `string[]` (`?a=1&a=2&b=3` →
-`{ a: ["1","2"], b: "3" }`); the pollution keys `__proto__` / `constructor`
-/ `prototype` are dropped. Type: the exported `QueryMap`.
+`c.query(name)` is a TARGETED read (0.6.2): it returns the first value for
+`name` (`undefined` when absent; a bare trailing key reads as `""`), decoded
+with `+` → space and `%XX`, malformed escapes verbatim. `c.queries(name)`
+collects every repeat. There is no full map — building one cost ~111ns per
+request while a boundary-matched scan costs ~2ns, and the property form
+`c.query.name` cannot be lazier than the object it reads. Enumeration needs:
+`c.querystring` (the raw string). Keys match in raw or canonical
+encodeURIComponent form; non-canonical encoding of unreserved characters
+(`%5F` for `_`) is not decoded on the match path.
 
 ## Global middleware and routing order — the #1 trap
 
@@ -341,7 +346,7 @@ their object shape on `c.body` reads.
 | `new Hono()`                                       | `new Keala()`                                                                                              |
 | `app.get(path, (c) => c.json(...))`                | the same return style                                                                                      |
 | `c.req.param("id")`                                | `c.params.id`                                                                                              |
-| `c.req.query("q")`                                 | `c.query.q` (plain object; repeated keys are arrays)                                                       |
+| `c.req.query("q")`                                 | `c.query("q")` (identical idiom; `c.queries("q")` for repeats)                                             |
 | `c.req.header("x")`                                | `c.get("x")`                                                                                               |
 | `await c.req.json()`                               | `await c.raw.json()` (zero setup) or the parser plugin's `c.req.json()`                                    |
 | `app.use(mw)`                                      | the same — plus a [dev warning](#global-middleware-and-routing-order--the-1-trap) when it swallows a route |

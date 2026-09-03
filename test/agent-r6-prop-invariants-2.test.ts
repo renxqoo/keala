@@ -304,7 +304,6 @@ describe("INV-11 URL semantics", () => {
         search: string;
         url: string;
         orig: string;
-        queryProto: unknown;
       }
       let captured: UrlProbe | null = null;
       const app = new Keala({ ...quiet });
@@ -315,7 +314,6 @@ describe("INV-11 URL semantics", () => {
           search: c.search,
           url: c.url,
           orig: c.originalUrl,
-          queryProto: Object.getPrototypeOf(c.query),
         };
         return c.text("ok");
       });
@@ -349,7 +347,6 @@ describe("INV-11 URL semantics", () => {
         );
       }
       if (p.url !== p.orig) throw new Error(`url ${p.url} != originalUrl ${p.orig}`);
-      if (p.queryProto !== null) throw new Error("c.query is not null-proto");
     });
   }, 20_000);
 });

@@ -236,22 +236,25 @@ if (isNotModified({ etag, mtimeMs: stat.mtimeMs, ifNoneMatch: c.get("if-none-mat
 每个请求只分配一个 context。请求与响应在同一个对象上；一切惰性属性
 （`query`、`cookies`、`ip`、`state`）在首次访问时才物化。
 
-| 请求侧                                        | 响应侧                                         | 语法糖（return 风格）            |
-| --------------------------------------------- | ---------------------------------------------- | -------------------------------- |
-| `c.raw/method/path/url/query`                 | `c.status/body/message/type/length`            | `c.text(str, status?, headers?)` |
-| `c.get(name)` / `c.header(name)`              | `c.set/append/remove/vary/has/resHeader`       | `c.json(obj, status?, headers?)` |
-| `c.params` `c.query` `c.ip/ips/host/hostname` | `c.etag/lastModified/attachment/redirect/back` | `c.html(str, status?, headers?)` |
-| `c.accepts*/is/fresh/stale/charset`           | `c.cookies`（签名、密钥轮换）                  | `c.throw/assert`                 |
+| 请求侧                                                                | 响应侧                                         | 语法糖（return 风格）            |
+| --------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/query`                                         | `c.status/body/message/type/length`            | `c.text(str, status?, headers?)` |
+| `c.get(name)` / `c.header(name)`                                      | `c.set/append/remove/vary/has/resHeader`       | `c.json(obj, status?, headers?)` |
+| `c.params` `c.query(name)` `c.queries(name)` `c.ip/ips/host/hostname` | `c.etag/lastModified/attachment/redirect/back` | `c.html(str, status?, headers?)` |
+| `c.accepts*/is/fresh/stale/charset`                                   | `c.cookies`（签名、密钥轮换）                  | `c.throw/assert`                 |
 
 双模式规则各一句话：**返回的 `Response` 立即提交；`c.*` 写入先暂存；
 最后一个提交者获胜；未被写过的请求落入 `app.notFound`**。路径命中但
 方法不匹配时回答 405 + `Allow`（OPTIONS 得到 200 + `Allow`，未知方法
 501）。
 
-`c.query` 是懒解析的**普通对象**（null 原型）：单值是字符串，重复键
-变成 `string[]`（`?a=1&a=2&b=3` → `{ a: ["1","2"], b: "3" }`）；
-`__proto__` / `constructor` / `prototype` 这几个污染键会被丢弃。类型：
-已导出的 `QueryMap`。
+`c.query(name)` 是定向读(0.6.2):返回 `name` 的首个值(缺失为
+`undefined`;裸尾键读作 `""`),解码规则 `+` → 空格、`%XX`,非法转义原样
+保留。重复键用 `c.queries(name)` 收集。不再有全量 Map——建表每请求
+~111ns,边界匹配扫描只要 ~2ns,而 `c.query.name` 属性形态无法比它读取的
+对象更懒。需要枚举时用 `c.querystring`(原始串)。键按原文或规范
+encodeURIComponent 形态匹配;非规范编码的非保留字符(`%5F` 代 `_`)不在
+匹配路径上解码。
 
 ## 全局中间件与路由顺序 —— 头号陷阱
 
@@ -315,7 +318,7 @@ pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则�
 | `new Hono()`                                       | `new Keala()`                                                         |
 | `app.get(path, (c) => c.json(...))`                | 相同的 return 风格                                                    |
 | `c.req.param("id")`                                | `c.params.id`                                                         |
-| `c.req.query("q")`                                 | `c.query.q`（普通对象；重复键是数组）                                 |
+| `c.req.query("q")`                                 | `c.query("q")`（同款惯用法；重复键 `c.queries("q")`）                 |
 | `c.req.header("x")`                                | `c.get("x")`                                                          |
 | `await c.req.json()`                               | `await c.raw.json()`（零配置）或解析插件的 `c.req.json()`             |
 | `app.use(mw)`                                      | 相同 —— 但吞掉路由时会给出[开发警告](#全局中间件与路由顺序--头号陷阱) |

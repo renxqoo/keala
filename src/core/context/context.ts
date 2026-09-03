@@ -124,7 +124,6 @@ const CONTEXT_DEFAULTS = {
   pathValue: null,
   urlValue: null,
   originalUrlValue: null,
-  queryValue: null,
   ipValue: null,
   allowedValue: null,
   params: null,

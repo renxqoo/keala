@@ -37,7 +37,7 @@ if (sink === "param") {
 
 app.get("/search/:id", (c) => {
   c.set("X-Query", "hit");
-  return c.text(`${c.params?.["id"]} ${c.query["name"]} ${c.query["page"]}`);
+  return c.text(`${c.params?.["id"]} ${c.query("name")} ${c.query("page")}`);
 });
 
 app.post("/echo-safe", async (c) => c.json(await (c as ContextWithBody).req.json()));

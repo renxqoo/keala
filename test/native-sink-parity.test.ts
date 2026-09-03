@@ -275,3 +275,73 @@ describe("observability: async-error and metricsPage parity", () => {
     expect([snap.requestsTotal, snap.byClass["5xx"] ?? 0, snap.inFlight]).toEqual([1, 1, 0]);
   });
 });
+
+describe("documents intentional divergence: targeted query reads (0.6.2)", () => {
+  it("repeated keys collect via queries(); empty-name keys are dropped", async () => {
+    const app = new Keala(quiet);
+    app.get("/q", (c) => c.json({ a: c.queries("a"), empty: c.query("") }));
+    const res = await app.handle(new Request("http://x/q?a=1&a=2&=x"));
+    // `empty` is undefined and JSON.stringify drops it — the empty-name pair
+    // is invisible to targeted reads by design.
+    expect(await res.text()).toBe('{"a":["1","2"]}');
+  });
+
+  it("unsafe-looking keys are plain string reads — structurally pollution-free", async () => {
+    const app = new Keala(quiet);
+    app.get("/q", (c) => c.json({ proto: c.query("__proto__"), ok: c.query("ok") }));
+    const res = await app.handle(new Request("http://x/q?__proto__=1&constructor=2&ok=3"));
+    expect(await res.text()).toBe('{"proto":"1","ok":"3"}');
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe("query: targeted read semantics (0.6.2)", () => {
+  const app = new Keala(quiet);
+  app.get("/q", (c) =>
+    c.json({
+      first: c.query("a") ?? null,
+      all: c.queries("a"),
+      miss: c.query("missing") ?? null,
+      bare: c.query("bare") ?? null,
+      boundary: c.query("page") ?? null,
+    }),
+  );
+
+  it("first/queries/miss/bare-key/boundary-match all behave", async () => {
+    const res = await app.handle(
+      new Request("http://localhost:3000/q?a=1&a=2&pagesize=9&bare&page=3"),
+    );
+    expect(await res.json()).toEqual({
+      first: "1",
+      all: ["1", "2"],
+      miss: null,
+      bare: "",
+      boundary: "3",
+    });
+  });
+
+  it("decodes escapes and '+', malformed escapes stay verbatim", async () => {
+    const read = async (qs: string) => {
+      const res = await app.handle(new Request(`http://localhost:3000/q${qs}`));
+      return (await res.json()) as { first: string | null };
+    };
+    expect((await read("?a=%C3%A9")).first).toBe("é");
+    expect((await read("?a=b+c")).first).toBe("b c");
+    expect((await read("?a=%2B")).first).toBe("+");
+    expect((await read("?a=%ZZ")).first).toBe("%ZZ");
+  });
+
+  it("canonically encoded keys are findable by their decoded name", async () => {
+    // encodeURIComponent encodes reserved chars (brackets), so the canonical
+    // encoded form of a hostile key round-trips through the fallback.
+    // Non-canonical encoding of UNRESERVED chars (e.g. %5F for _) is not
+    // decoded on the match path — documented boundary; read c.querystring
+    // for that.
+    const probe = new Keala(quiet);
+    probe.get("/p", (c) => c.json({ v: c.query("__proto__[polluted]") ?? null }));
+    const out = await probe.handle(
+      new Request(`http://localhost:3000/p?${encodeURIComponent("__proto__[polluted]")}=1`),
+    );
+    expect(((await out.json()) as { v: string | null }).v).toBe("1");
+  });
+});

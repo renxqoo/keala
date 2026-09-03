@@ -252,22 +252,6 @@ describe("documents intentional divergence: the default not-found body is koa's 
   });
 });
 
-describe("documents intentional divergence: query parsing follows koa's querystring.parse (hono keeps only the FIRST repeat and drops empty names)", () => {
-  it("repeated keys become arrays and empty-name keys survive", async () => {
-    const app = new Keala(quiet);
-    app.get("/q", (c) => c.json({ ...c.query }));
-    const res = await drive(app, new Request("http://x/q?a=1&a=2&=x"));
-    expect(await res.text()).toBe('{"a":["1","2"],"":"x"}');
-  });
-
-  it("unsafe prototype keys are dropped (security contract; hono echoes them)", async () => {
-    const app = new Keala(quiet);
-    app.get("/q", (c) => c.json({ keys: Object.keys(c.query) }));
-    const res = await drive(app, new Request("http://x/q?__proto__=1&constructor=2&ok=3"));
-    expect(await res.text()).toBe('{"keys":["ok"]}');
-  });
-});
-
 describe("documents intentional divergence: a middleware Response returned after await next() REWRITES the response (koa state semantics; hono keeps the first finalized response)", () => {
   it("last committer wins", async () => {
     const app = new Keala(quiet);
@@ -473,7 +457,7 @@ describe("differential locks: sugar responses agree with hono where behavior is 
 
   it("query values decode percent-escapes and '+' like hono", async () => {
     const app = new Keala(quiet);
-    app.get("/q", (c) => c.json({ a: c.query.a }));
+    app.get("/q", (c) => c.json({ a: c.query("a") }));
     for (const [qs, want] of [
       ["?a=%C3%A9", "é"],
       ["?a=b+c", "b c"],

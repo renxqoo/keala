@@ -84,6 +84,17 @@ contract #5); bun#37603 raw-byte matching makes an encoded literal miss the
 native table, which self-heals through `fetch` (final behavior identical,
 mechanism differs). Sunk function handlers and `app.onError()` refuse each
 other in both orders — the mapper contract is context-based.
+0.6.2 targeted query reads (`c.query(name)` / `c.queries(name)`): the koa
+full-map `c.query` is REMOVED — a map build cost ~111ns/request versus ~2ns
+for a boundary-matched scan, and the property form cannot be lazier than its
+object. Semantics carried over: `+` → space, run-wise `%XX` decode with
+malformed escapes verbatim (contract #5), repeated keys via `queries()`.
+Semantics changed: no full enumeration (use `c.querystring`); bare trailing
+keys read as `""` (koa/hono parity); unsafe-looking keys are plain string
+reads — pollution is structurally impossible, so the old `__proto__` key
+DROPPING no longer applies; keys match raw or canonical encodeURIComponent
+form (non-canonical `%5F` for `_` is a documented miss).
+
 Bun 1.4 utility surface deliberately NOT adopted: HTMLRewriter, Glob, Semver,
 TOML/YAML/JSON5 parsers, Image, Color, Secrets — app-level tools with no role
 in the framework core. Bun.Archive evaluated and rejected for 1.4.0: the

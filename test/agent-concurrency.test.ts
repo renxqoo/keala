@@ -37,16 +37,16 @@ describe("same-request interleaving: query cache", () => {
     const observed: unknown[] = [];
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      observed.push({ ...c.query });
+      observed.push(c.query("a"), c.query("b"));
       await next();
-      observed.push({ ...c.query });
+      observed.push(c.query("a"), c.query("b"));
     });
     app.use(async (c) => {
       c.url = "/rewritten?b=2";
       c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/?a=1"));
-    expect(observed).toEqual([{ a: "1" }, { b: "2" }]);
+    expect(observed).toEqual(["1", undefined, undefined, "2"]);
   });
 
   it("语义锁定: a path rewrite keeps the query string values", async () => {
@@ -54,14 +54,14 @@ describe("same-request interleaving: query cache", () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      observed.push(c.path, c.querystring, { ...c.query });
+      observed.push(c.path, c.querystring, c.query("a"));
     });
     app.use(async (c) => {
       c.path = "/moved";
       c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/orig?a=1"));
-    expect(observed).toEqual(["/moved", "a=1", { a: "1" }]);
+    expect(observed).toEqual(["/moved", "a=1", "1"]);
   });
 
   // CONFIRMED-BUG (parity): a path rewrite must keep the CACHED query object.
@@ -82,54 +82,41 @@ describe("same-request interleaving: query cache", () => {
     const app = new Keala(quiet);
     const observed: unknown[] = [];
     app.use(async (c, next) => {
-      const cached = c.query;
-      cached["touched"] = "yes";
+      c.querystring += "&touched=yes";
       await next();
-      observed.push(c.query === cached, c.query["touched"]);
+      observed.push(c.query("touched"));
     });
     app.use(async (c) => {
       c.path = "/moved";
       c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/orig?a=1"));
-    expect(observed).toEqual([true, "yes"]);
+    expect(observed).toEqual(["yes"]);
   });
 
   it("语义锁定: re-reading query after a downstream ctx.search rewrite reflects the new value", async () => {
     const observed: unknown[] = [];
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      observed.push({ ...c.query });
+      observed.push(c.query("a"), c.query("c"));
       await next();
-      observed.push({ ...c.query });
+      observed.push(c.query("a"), c.query("c"));
     });
     app.use(async (c) => {
       c.search = "?c=3";
       c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/?a=1"));
-    expect(observed).toEqual([{ a: "1" }, { c: "3" }]);
+    expect(observed).toEqual(["1", undefined, undefined, "3"]);
   });
 
   // Fixed (was an inherited koa CONFIRMED-BUG): the querystring setter now carries
   // Koa's same-value guard, so the cached query object survives an identical
   // assignment (src/core/context/request.ts set querystring).
-  it("语义锁定: assigning an identical querystring preserves the cached query object", async () => {
-    const app = new Keala(quiet);
-    const observed: unknown[] = [];
-    app.use(async (c, next) => {
-      const cached = c.query;
-      cached["mutated"] = "yes";
-      await next();
-      observed.push(c.query === cached, c.query["mutated"]);
-    });
-    app.use(async (c) => {
-      c.querystring = "a=1"; // identical to the current "?a=1" — Koa no-ops
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/?a=1"));
-    expect(observed).toEqual([true, "yes"]);
-  });
+  // RETIRED with the koa query map (0.6.2): its subject was the query-map
+  // cache identity across an identical querystring assignment. With targeted
+  // reads there is no cached object to preserve; the identical-assignment
+  // no-op guard lives in the querystring setter and is code-path trivial.
 
   // keala follows koa here (design contract #8 lists `query` among the five
   // cache-invalidating url writers): the assignment rewrites the query string
@@ -139,14 +126,12 @@ describe("same-request interleaving: query cache", () => {
     const app = new Keala(quiet);
     const observed: unknown[] = [];
     app.use(async (c) => {
-      // The numeric `page` exercises stringifyQuery's number coercion.
-      c.query = { page: 2, tags: ["a", "b"] } as unknown as Record<string, string>;
-      observed.push(c.querystring, { ...c.query });
+      c.querystring = "page=2&tags=a&tags=b";
+      observed.push(c.querystring, c.query("page"), c.queries("tags"));
       c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/?old=1"));
-    expect(observed).toEqual(["page=2&tags=a&tags=b", { page: "2", tags: ["a", "b"] }]);
-    expect(observed[1]).not.toBe("2");
+    expect(observed).toEqual(["page=2&tags=a&tags=b", "2", ["a", "b"]]);
   });
 });
 
@@ -160,7 +145,7 @@ describe("concurrent isolation", () => {
     router.get("/user/:id", async (c) => {
       await delay(Number(c.params?.["id"]) % 3);
       c.set("X-Path", "param");
-      c.body = `user:${c.params?.["id"]}:${c.query["tag"] ?? "none"}`;
+      c.body = `user:${c.params?.["id"]}:${c.query("tag") ?? "none"}`;
     });
     router.get("/static", (c) => {
       c.type = "json";
@@ -170,10 +155,10 @@ describe("concurrent isolation", () => {
       throw createError(418, "teapot");
     });
     router.get("/redirect", (c) => {
-      c.redirect(`/user/${c.query["to"] ?? "0"}`);
+      c.redirect(`/user/${c.query("to") ?? "0"}`);
     });
     router.get("/cookie", (c) => {
-      c.cookies.set("sid", `s-${c.query["n"] ?? "0"}`, { signed: true });
+      c.cookies.set("sid", `s-${c.query("n") ?? "0"}`, { signed: true });
       c.body = `cookie:${c.cookies.get("sid")}`;
     });
     app.mount("/", router);
@@ -230,7 +215,7 @@ describe("concurrent isolation", () => {
     const app = new Keala(quiet);
     const violations: string[] = [];
     app.use(async (c) => {
-      const mine = c.query["token"] as string;
+      const mine = c.query("token") as string;
       c.state["token"] = mine;
       await delay(Number(mine) % 4);
       if (c.state["token"] !== mine) violations.push(`token:${mine}->${String(c.state["token"])}`);

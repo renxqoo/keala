@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
 import { getPath, getSearch, parseHostHeader, toURL } from "../src/utils/url.ts";
-import { parseQuery, type QueryMap } from "../src/utils/query.ts";
+import { parseQuery } from "../src/utils/query.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const quiet = { env: "test" } as const;
@@ -347,26 +347,20 @@ describe("fresh locks correct behavior (fresh@2 parity)", () => {
 // query setter round-trip — locks correct behavior
 // ---------------------------------------------------------------------------
 
-describe("query setter round-trip locks correct behavior", () => {
-  it("serializes strings/numbers, null→empty string, arrays repeat the key", async () => {
+describe("querystring rewrite + targeted read locks correct behavior", () => {
+  it("a raw querystring rewrite rewrites the url and targeted reads see it", async () => {
     const result = await probe({}, (c) => {
-      // koa's runtime contract accepts numbers/null (stringifyQuery coerces);
-      // the static type is strings-only, hence the widening cast.
-      c.query = { a: "x y", b: 1, c: null, d: [1, 2] } as unknown as QueryMap;
-      return [c.url, c.querystring, c.query];
+      c.querystring = "a=x+y&b=1&d=1&d=2";
+      return [c.url, c.query("a"), c.queries("d")];
     });
-    expect(result).toEqual([
-      "/?a=x+y&b=1&c=&d=1&d=2",
-      "a=x+y&b=1&c=&d=1&d=2",
-      { a: "x y", b: "1", c: "", d: ["1", "2"] },
-    ]);
+    expect(result).toEqual(["/?a=x+y&b=1&d=1&d=2", "x y", ["1", "2"]]);
   });
 
-  it("a literal '+' survives the round trip as %2B", async () => {
+  it("a literal '+' in a raw querystring reads back as space, %2B as literal", async () => {
     const result = await probe({}, (c) => {
-      c.query = { a: "1+2 x" };
-      return [c.querystring, c.query.a];
+      c.querystring = "a=1%2B2+x";
+      return [c.query("a")];
     });
-    expect(result).toEqual(["a=1%2B2+x", "1+2 x"]);
+    expect(result).toEqual(["1+2 x"]);
   });
 });

@@ -362,7 +362,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
       return c.text(out);
     });
     app.get("/q", (c) =>
-      c.json({ polluted: ({} as Record<string, unknown>).polluted === undefined, a: c.query["a"] }),
+      c.json({ polluted: ({} as Record<string, unknown>).polluted === undefined, a: c.query("a") }),
     );
     const res1 = await handleFlat(
       app,

@@ -42,31 +42,31 @@ const probe = async (
 describe("agent audit: request url/query cache chain", () => {
   it("re-assigning url invalidates the parsed query cache", async () => {
     const c = await probe({ url: "http://localhost:3000/old?a=1" });
-    expect(c.query).toEqual({ a: "1" }); // build the cache first
+    expect(c.query("a")).toBe("1"); // read before the rewrite
     c.url = "/new?b=2";
     expect(c.url).toBe("/new?b=2");
     expect(c.querystring).toBe("b=2");
     expect(c.search).toBe("?b=2");
-    expect(c.query).toEqual({ b: "2" });
+    expect(c.query("b")).toBe("2");
     expect(c.originalUrl).toBe("/old?a=1");
   });
 
   it("url rewrites to a query-less target clear the parsed query", async () => {
     const c = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
-    expect(c.query).toEqual({ a: "1", b: "2" });
+    expect([c.query("a"), c.query("b")]).toEqual(["1", "2"]);
     c.url = "/plain";
     expect(c.querystring).toBe("");
-    expect(c.query).toEqual({});
+    expect(c.query("a")).toBeUndefined();
   });
 
   it("path setter rewrites the pathname while keeping the query string", async () => {
     const c = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
-    const before = c.query;
+    const before = c.query("a");
     c.path = "/rewritten";
     expect(c.path).toBe("/rewritten");
     expect(c.url).toBe("/rewritten?a=1&b=2");
     expect(c.querystring).toBe("a=1&b=2");
-    expect(c.query).toEqual(before); // same query, recomputed after the rewrite
+    expect(c.query("a")).toBe(before); // same query, re-read after the rewrite
     expect(c.originalUrl).toBe("/old?a=1&b=2");
   });
 
@@ -254,21 +254,21 @@ describe("agent audit: router mount and trie encoding", () => {
       seen.push(`upstream-after:${c.url}`);
     });
     router.use(async (c, next) => {
-      seen.push(`mounted:${c.url}`, `query:${JSON.stringify(c.query)}`);
+      seen.push(`mounted:${c.url}`, `query:${c.query("page") ?? "-"}`);
       await next();
       // route-table merge semantics: no koa-mount url stripping — the
       // mounted subtree still sees the full url.
       seen.push(`mounted-after:${c.url}`);
     });
     router.get("/users", (c) => {
-      c.body = { page: c.query["page"] };
+      c.body = { page: c.query("page") };
     });
     app.mount("/api", router);
     const res = await app.handle(new Request("http://localhost:3000/api/users?page=2&size=10"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ page: "2" });
     expect(seen[0]).toBe("mounted:/api/users?page=2&size=10");
-    expect(seen[1]).toBe(`query:${JSON.stringify({ page: "2", size: "10" })}`);
+    expect(seen[1]).toBe("query:2");
     expect(seen[2]).toBe("mounted-after:/api/users?page=2&size=10");
     expect(seen[3]).toBe("upstream-after:/api/users?page=2&size=10");
   });

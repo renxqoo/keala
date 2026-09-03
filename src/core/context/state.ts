@@ -6,7 +6,6 @@
  * `ipValue` distinguishes unresolved (`null`) from resolved-empty (`""`).
  */
 
-import type { QueryMap } from "../../utils/query.ts";
 import type { HeaderMap, ResponseBody, Runtime } from "../../types.ts";
 import type { RequestSettings } from "./settings.ts";
 import type { Application } from "../app.ts";
@@ -21,7 +20,6 @@ export interface ContextState {
   pathValue: string | null;
   urlValue: string | null;
   originalUrlValue: string | null;
-  queryValue: QueryMap | null;
   ipValue: string | null;
   allowedValue: Set<string> | null;
   /** Path parameters set by the router; null when unmatched. */

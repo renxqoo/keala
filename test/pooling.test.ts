@@ -37,7 +37,7 @@ const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
   c.cookies.set("sid", "one", { signed: true });
   // Materialize every lazy cache, then rewrite the url (drops them).
   void c.ip;
-  void c.query;
+  void c.query("v");
   void c.originalUrl;
   c.url = "/rewritten?z=9";
   return c;
@@ -69,7 +69,7 @@ describe("resetContext recycling semantics", () => {
     );
     expect(recycled.url).toBe("/b?y=2");
     expect(recycled.path).toBe("/b");
-    expect(recycled.query).toEqual({ y: "2" });
+    expect(recycled.query("y")).toBe("2");
     expect(recycled.status).toBe(404);
     expect(recycled.body).toBe(null);
     expect(recycled.message).toBe("Not Found");
@@ -124,7 +124,7 @@ describe("request isolation (fresh context per request)", () => {
     app.get("/a/:id", (c) => {
       c.state["id"] = c.params?.["id"];
       c.set("X-Run", String(c.state["id"]));
-      c.body = JSON.stringify({ id: c.state["id"], q: c.query["v"] ?? null });
+      c.body = JSON.stringify({ id: c.state["id"], q: c.query("v") ?? null });
     });
     app.get("/b", (c) => {
       // No writes: every field must reflect THIS request, not the previous one.
