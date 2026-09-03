@@ -18,8 +18,8 @@ app.listen(3000, { signals: true });
 // 方式二:手动编排(自定义终止序列)
 const status = await app.close({ drain: 10_000 });
 console.log(status); // { timedOut: false, inFlight: 0 }
-app.isDraining();    // true——readiness 探针应立即翻转为不就绪
-app.inFlight;        // 只读:已准入未结算数
+app.isDraining(); // true——readiness 探针应立即翻转为不就绪
+app.inFlight; // 只读:已准入未结算数
 ```
 
 排空语义:在途响应的 body 送完才算结算;`drain: 0` 立即强停,
@@ -47,15 +47,15 @@ app.get("/readyz", (c) => {
 const app = new Keala({
   env: "production",
   overload: {
-    maxConcurrency: 512,     // 超过即拒(默认 fail-fast 503)
-    maxQueue: 100,           // 0=不排队;排队等待 queueTimeoutMs
+    maxConcurrency: 512, // 超过即拒(默认 fail-fast 503)
+    maxQueue: 100, // 0=不排队;排队等待 queueTimeoutMs
     queueTimeoutMs: 2_000,
-    retryAfterSeconds: 1,    // 0 = 不发 Retry-After
+    retryAfterSeconds: 1, // 0 = 不发 Retry-After
   },
-  requestTimeout: 30_000,    // 期限到点 c.signal abort,504 走错误漏斗
+  requestTimeout: 30_000, // 期限到点 c.signal abort,504 走错误漏斗
 });
 
-app.use(timeout(5_000));     // 单路由链内期限(middleware 级)
+app.use(timeout(5_000)); // 单路由链内期限(middleware 级)
 app.use(bodyLimit(1 << 20)); // 声明式 body 上限(413 先于读取)
 ```
 
@@ -80,9 +80,9 @@ location / {
 ```ts
 const app = new Keala({
   env: "production",
-  proxy: true,               // 信任 X-Forwarded-For / X-Forwarded-Proto
+  proxy: true, // 信任 X-Forwarded-For / X-Forwarded-Proto
   proxyIpHeader: "x-real-ip", // 可选:换用别的头
-  maxIpsCount: 1,            // 从头里取第几跳
+  maxIpsCount: 1, // 从头里取第几跳
   keys: [process.env.COOKIE_KEY!],
 });
 ```
@@ -142,9 +142,10 @@ Restart=on-failure
 
 ```ts
 app.use(requestId());
-app.use(timing());                    // Server-Timing
-app.use(logger());                    // 每请求一行;结构化选项见 README
-app.onError((error, c) => {           // 单槽错误映射(生产 500 页)
+app.use(timing()); // Server-Timing
+app.use(logger()); // 每请求一行;结构化选项见 README
+app.onError((error, c) => {
+  // 单槽错误映射(生产 500 页)
   return c.text("internal error", 500);
 });
 ```

@@ -120,6 +120,7 @@ import {
   logger,
   bodyLimit,
   noOpFor,
+  rateLimit,
   timeout,
   serveStatic,
   validator,
@@ -132,6 +133,12 @@ app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req
 // vector a byte cap alone does not stop).
 app.use(cors({ origin: ["https://app.site"], allowCredentials: true }));
 app.use(secureHeaders());
+
+// Zero-dependency observability: per-key rate limiting and Prometheus metrics
+app.use(rateLimit({ limit: 100, windowMs: 60_000 })); // 429 + Retry-After
+const m = metrics(); // counters by status class, in-flight gauge, duration buckets
+app.use(m.middleware);
+app.get("/metrics", m.page); // Prometheus text exposition
 
 app.post("/users", validator(schema), (c) => c.json(c.valid)); // Standard Schema
 app.get("/feed", (c) =>
@@ -411,7 +418,7 @@ app.onError((error, c) => {
 | `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                 |
 | `app.handle(request, runtime?)`                                                | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                            |
 | `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node` |
-| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`             | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                    |
+| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`  | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                    |
 | `app.onError(mapper)` / `app.notFound(fn)`                                     | Single-slot error mapper (`Response \| void`) and custom 404; `env: "test"` suppresses the default console fallback                                             |
 | `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                              |
 | `app.ws(path, handlers)`                                                       | WebSocket route (Bun only; a duplicate path throws at setup)                                                                                                    |

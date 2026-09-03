@@ -13,7 +13,7 @@ docs/HOTPATH-R4.* 与 docs/bench/*.jsonl 原始数据为准。
 - `listen({ signals: true })` SIGTERM/SIGINT 信号桥:首信号 drain,
   再信号强停(桥为永久监听器)。
 - `new Keala({ overload: { maxConcurrency, maxQueue, queueTimeoutMs,
-  retryAfterSeconds, handler, strategy } })`:过载准入在 Context 创建
+retryAfterSeconds, handler, strategy } })`:过载准入在 Context 创建
   之前拒绝(默认 fail-fast 503);可插拔策略(`failFastAdmission` /
   `queueAdmission`)。
 - `requestTimeout`(期限到点 `c.signal` 以 TimeoutError abort,504 走
@@ -46,6 +46,30 @@ docs/HOTPATH-R4.* 与 docs/bench/*.jsonl 原始数据为准。
   4.2x/2.4x 塌方),但 pooling 仍为一致净退化(−20~−49pp)——维持
   opt-in,面向分配敏感嵌入场景,不作性能特性(见
   docs/HOTPATH-R4-7-POOLING-AB.md)。
+
+### 可观测与限流(1.0 新增)
+
+- `rateLimit()`:固定窗口 per-key 限流(默认按 `c.ip`),429 +
+  Retry-After,可选 RateLimit-* 头与共享 store(多进程部署);
+  与 overload 准入分工——后者保护服务器容量(pre-context),
+  rateLimit 保护路由公平性(洋葱内)。
+- `metrics()`:零依赖请求计数(状态类)+ in-flight gauge + 时延
+  分桶,Prometheus 文本 exposition;同步抛错与异步拒绝都按
+  HttpError 状态归因。
+
+### 生产硬化(1.0 新增)
+
+- `trustedHosts` 白名单(DESIGN §7.2):伪造 Host 在路由前 403,
+  防 origin/href/back 中毒;精确名 + 单标签 `*.suffix` 通配,
+  端口不参与比较。
+- `unknownMethodAs404`(DESIGN §7.3):非 RFC 9110 文法的未知方法
+  从 501 改答 404(opt-in)。
+- listen() 配置加固:未知键大声拒绝、数值范围校验、二次 listen
+  拒绝;`Runtime.env` 死面移除。
+- Node 适配器:onServeError 透出(与 Bun 同契约)、500 类传输/
+  写入失败走 console fallback(test 环境静默)。
+- Node sink 静态镜像快路径:−35.1% → −13.5%(planned 直写);
+  部署文档(docs/DEPLOY.md)与 CI(GitHub Actions)落地。
 
 ### 其余变更
 

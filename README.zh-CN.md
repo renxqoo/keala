@@ -126,6 +126,12 @@ app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN：安装 c.req.
 app.use(cors({ origin: ["https://app.site"], allowCredentials: true }));
 app.use(secureHeaders());
 
+// 零依赖可观测:per-key 限流 + Prometheus 指标
+app.use(rateLimit({ limit: 100, windowMs: 60_000 })); // 429 + Retry-After
+const m = metrics(); // 状态类计数、in-flight、时延分桶
+app.use(m.middleware);
+app.get("/metrics", m.page); // Prometheus 文本
+
 app.post("/users", validator(schema), (c) => c.json(c.valid)); // Standard Schema
 app.get("/feed", (c) =>
   streamSSE(c, async (sse) => {
@@ -151,8 +157,8 @@ app.ws("/chat", {
 // 原生优化 —— Node 上镜像语义相同但更慢，Node 部署不要对热路由下沉。
 app.sink("/health", new Response("ok")); // 静态响应，被原生复用
 app.sink("/users/:id", (request, params) => new Response(`user ${params["id"]}`)); // 函数下沉：
-  // 无中间件/Context/sugar，只收 (request, params) → Response；错误走
-  // 内置 funnel（app.onError() 与函数下沉互斥，双向拒绝）
+// 无中间件/Context/sugar，只收 (request, params) → Response；错误走
+// 内置 funnel（app.onError() 与函数下沉互斥，双向拒绝）
 app.sink("/assets/*", { dir: "./public" }); // 目录树（index/Range）
 app.listen({ port: 3000 }); // 路由表在启动时内嵌
 app.sink("/ping", new Response("pong")); // 后续 sink → server.reload()
@@ -381,7 +387,7 @@ app.onError((error, c) => {
 | `app.param(name, mw)`                                                          | 作用于所有捕获该参数的路由的中间件                                                                                                    |
 | `app.handle(request, runtime?)`                                                | fetch 风格处理器 → `Promise<Response>`，永不 reject；`runtime = { server?, remote?, env? }` 为 `c.ip` 和 websocket 升级提供数据       |
 | `app.listen(port?, host?, cb?)`                                                | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `keala/node` 的 `listen()` |
-| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`             | 把静态路由沉入 Bun 原生路由表；在运行中的服务器上热重载该表                                                                           |
+| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`  | 把静态路由沉入 Bun 原生路由表；在运行中的服务器上热重载该表                                                                           |
 | `app.onError(mapper)` / `app.notFound(fn)`                                     | 单槽错误映射器（`Response \| void`）与自定义 404；`env: "test"` 抑制默认 console 兜底                                                 |
 | `app.decorate(key, value)`                                                     | 扩展每个 context（安装期进行；重复/核心 key 抛错 —— 绝不静默遮蔽）                                                                    |
 | `app.ws(path, handlers)`                                                       | WebSocket 路由（仅 Bun；重复路径在安装时抛错）                                                                                        |
