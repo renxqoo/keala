@@ -83,8 +83,10 @@ describe("coverage: listen argument parsing", () => {
     (globalThis as { Bun?: unknown }).Bun = { serve: impl };
     try {
       app.listen("4321", "example.com");
-      app.listen(4322);
-      app.listen({
+      const second = new Keala(quiet);
+      second.listen(4322);
+      const third = new Keala(quiet);
+      third.listen({
         port: 4323,
         hostname: "h",
         reusePort: true,

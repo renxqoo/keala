@@ -422,6 +422,13 @@ export class Keala implements NativeApplication {
     if (this.#lifecycle.draining) {
       throw new TypeError("app.listen() after app.close() — the app is shutting down");
     }
+    // A second listen used to silently orphan the first server (its handle
+    // kept serving on a lost port). Own exactly one server at a time.
+    if (this.#serverHandle !== null) {
+      throw new TypeError(
+        "app.listen() called twice — call server.stop()/app.close() first or use another app instance",
+      );
+    }
     const { listen, hostname, onListen } = parseListenArgs(args);
     this.#nativeRoutesEnabled = listen.nativeRoutes !== false;
     this.#serverHandle = startBunServer(

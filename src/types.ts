@@ -46,8 +46,6 @@ export interface Runtime {
   readonly server?: unknown;
   /** Literal remote address or a thunk resolving it. */
   readonly remote?: string | (() => string | undefined);
-  /** Bindings surfaced to handlers (defaults to `process.env` on Node-like hosts). */
-  readonly env?: Record<string, string | undefined>;
 }
 
 export interface AppOptions {

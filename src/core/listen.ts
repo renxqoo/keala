@@ -23,6 +23,43 @@ export const parseListenArgs = (args: readonly unknown[]): ParsedListen => {
       else parsed.hostname = arg;
     } else if (typeof arg === "object" && arg !== null) {
       const opts = arg as ListenOptions & { hostname?: string };
+      // Unknown keys refuse loudly: a typo like `idleTimout` used to vanish
+      // silently and the server ran on runtime defaults (audit finding —
+      // config must never be accepted-and-ignored).
+      const known = new Set([
+        "port",
+        "hostname",
+        "reusePort",
+        "idleTimeout",
+        "maxRequestBodySize",
+        "development",
+        "nativeRoutes",
+        "websocket",
+        "onServeError",
+        "signals",
+      ]);
+      for (const key of Object.keys(opts)) {
+        if (!known.has(key)) {
+          throw new TypeError(
+            `listen(): unknown option ${JSON.stringify(key)} — a typo here used to be silently ignored`,
+          );
+        }
+      }
+      if (typeof opts.port === "number" && (!Number.isInteger(opts.port) || opts.port < 0)) {
+        throw new RangeError(`listen(): port must be a non-negative integer, got ${opts.port}`);
+      }
+      if (
+        typeof opts.idleTimeout === "number" &&
+        (!Number.isFinite(opts.idleTimeout) || opts.idleTimeout < 0)
+      ) {
+        throw new RangeError(`listen(): idleTimeout must be a non-negative number of seconds`);
+      }
+      if (
+        typeof opts.maxRequestBodySize === "number" &&
+        (!Number.isFinite(opts.maxRequestBodySize) || opts.maxRequestBodySize < 0)
+      ) {
+        throw new RangeError(`listen(): maxRequestBodySize must be a non-negative byte count`);
+      }
       if (opts.hostname !== undefined) parsed.hostname = opts.hostname;
       if (opts.port !== undefined) parsed.listen.port = opts.port;
       if (opts.reusePort !== undefined) parsed.listen.reusePort = opts.reusePort;
