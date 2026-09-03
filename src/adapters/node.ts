@@ -240,11 +240,9 @@ class NodeRequestSource implements NativeRequestSource {
   }
 }
 
-const writeHeaders = (res: Response, out: ServerResponse): void => {
-  out.statusCode = res.status;
-  if (res.statusText.length > 0) out.statusMessage = res.statusText;
-  const cookies = res.headers.getSetCookie();
-  for (const [name, value] of res.headers) {
+const writeHeaders = (headers: Headers, out: ServerResponse): void => {
+  const cookies = headers.getSetCookie();
+  for (const [name, value] of headers) {
     if (name === "set-cookie") continue;
     out.setHeader(name, value);
   }
@@ -315,14 +313,13 @@ const writeStream = async (
 
 const writeResponse = (res: Response, out: ServerResponse): void | Promise<void> => {
   const facts = responseFactsOf(res);
-  if (facts?.planned === true && facts.native === undefined) {
+  if (facts?.planned === true && facts.native === undefined && facts.headerSnapshot === undefined) {
     const length = directBodyLength(facts.directBody);
     const headers =
       facts.implicitContentType === undefined
         ? { "content-length": length }
         : { "content-type": facts.implicitContentType, "content-length": length };
-    // Only the default init remains unmaterialized; all other status/header
-    // shapes have already been validated by their native Response owner.
+    // The bare default plan needs no header collection or body stream.
     out.writeHead(200, headers);
     endDirectBody(out, facts.directBody);
     return;
@@ -330,7 +327,12 @@ const writeResponse = (res: Response, out: ServerResponse): void | Promise<void>
   if (facts === undefined && (res.bodyUsed || res.body?.locked === true)) {
     throw new TypeError("cannot send a consumed or locked response body");
   }
-  writeHeaders(res, out);
+  out.statusCode = res.status;
+  if (res.statusText.length > 0) out.statusMessage = res.statusText;
+  writeHeaders(facts?.headerSnapshot ?? res.headers, out);
+  // Never emit ambiguous framing, including for a foreign streaming Response.
+  const hasTransferEncoding = out.hasHeader("transfer-encoding");
+  if (hasTransferEncoding) out.removeHeader("content-length");
   if (facts === undefined && res.body === null) {
     out.end();
     return;
@@ -339,7 +341,7 @@ const writeResponse = (res: Response, out: ServerResponse): void | Promise<void>
     // The byte-exact body is already known. A fixed length avoids chunk
     // framing and also replaces an application-supplied stale length, which
     // must never desynchronize a keep-alive connection.
-    if (!out.hasHeader("transfer-encoding")) {
+    if (!hasTransferEncoding) {
       out.setHeader("content-length", directBodyLength(facts.directBody));
     }
     endDirectBody(out, facts.directBody);

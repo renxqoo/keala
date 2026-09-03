@@ -2,6 +2,7 @@
 
 > 状态：复核中（2026-09-03；原核销存在契约与性能证据缺口）
 > 最新裁决：[原生对象契约复核](./HOTPATH-R4-5-CONTRACT-AUDIT.md)；未证明的性能目标不算达标。
+> 带头响应优化：[已验证头快照切片](./HOTPATH-R4-5-VALIDATED-HEADERS.md)，不削减既有安全守卫。
 > 分支：`codex/r4-5-runtime-engine-rewrite`
 > 基线：`c1f2a6a`（R4.4 已核销）
 > 施工图：[HOTPATH-R4-5-RUNTIME-IMPLEMENTATION.md](./HOTPATH-R4-5-RUNTIME-IMPLEMENTATION.md)

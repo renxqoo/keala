@@ -1,6 +1,7 @@
 # HOTPATH-R4.5 — Bun/Node 运行时执行引擎迁移
 
 > 状态：复核中（2026-09-03；[追加审计与修复](./HOTPATH-R4-5-CONTRACT-AUDIT.md)）
+> 后续切片：[已验证头快照](./HOTPATH-R4-5-VALIDATED-HEADERS.md)，外部 API 无迁移。
 > 迁移单元：同一 Keala 应用在 Bun/Node 上以运行时原生路径接收请求并发送响应
 > 旧实现：`src/adapters/*` + Fetch-only Context/Finalizer（相关 13 个源文件、4 组核心测试）
 > 目标：单一 RequestSource/ResponsePlan 语义核心 + Bun/Node 专用终端

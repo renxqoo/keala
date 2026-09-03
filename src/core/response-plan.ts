@@ -15,10 +15,15 @@ export interface ResponseFacts {
   readonly directBody: DirectResponseBody;
   readonly implicitContentType?: string;
   native?: Response;
+  /** Internal, unobserved snapshot; never returned by response.headers. */
+  readonly headerSnapshot?: Headers;
   readonly planned?: true;
 }
 
 const RESPONSE_FACTS = Symbol("keala.responseFacts");
+// Bun defers string MIME inference to its server; Node exposes it in Headers.
+// Resolve this once, without adding a runtime branch to every response.
+const STRING_CONTENT_TYPE = new Response("").headers.get("content-type") ?? undefined;
 
 type ResponseWithFacts = Response & { [RESPONSE_FACTS]?: ResponseFacts };
 
@@ -26,6 +31,7 @@ class PlannedResponse {
   readonly directBody: DirectResponseBody;
   readonly implicitContentType: string | undefined;
   declare native?: Response;
+  declare headerSnapshot?: Headers;
 
   get planned(): true {
     return true;
@@ -33,11 +39,17 @@ class PlannedResponse {
 
   constructor(body: DirectResponseBody, init: ResponseInit = {}, implicitContentType?: string) {
     this.directBody = typeof body === "string" ? body : new Uint8Array(body);
-    this.implicitContentType = implicitContentType;
-    // Non-default init needs the native constructor's eager validation and
-    // snapshot/coercion rules. The untouched default string path stays lazy.
-    if (init.status !== undefined || init.statusText !== undefined || init.headers !== undefined) {
+    this.implicitContentType =
+      implicitContentType ?? (typeof body === "string" ? STRING_CONTENT_TYPE : undefined);
+    // Only exact primitive defaults avoid Response construction. All other
+    // statuses/reasons retain the native constructor's validation/coercion.
+    if (
+      (init.status !== undefined && init.status !== 200) ||
+      (init.statusText !== undefined && init.statusText !== "")
+    ) {
       this.#materialize(init);
+    } else if (init.headers !== undefined) {
+      this.headerSnapshot = this.#headers(init.headers);
     }
   }
 
@@ -109,16 +121,23 @@ class PlannedResponse {
     return "Response";
   }
 
-  #materialize(init?: ResponseInit): Response {
-    if (this.native !== undefined) return this.native;
-    const headers = new Headers(init?.headers as ConstructorParameters<typeof Headers>[0]);
+  #headers(input?: ResponseInit["headers"]): Headers {
+    const headers = new Headers(input as ConstructorParameters<typeof Headers>[0]);
     if (this.implicitContentType !== undefined && !headers.has("content-type")) {
       headers.set("content-type", this.implicitContentType);
     }
+    return headers;
+  }
+
+  #materialize(init?: ResponseInit): Response {
+    if (this.native !== undefined) return this.native;
     const native = new Response(this.directBody, {
       ...init,
-      headers,
+      headers: this.headerSnapshot ?? this.#headers(init?.headers),
     });
+    // The snapshot is never publicly observed. From this point, every API
+    // and the writer use the native Response's live Headers exclusively.
+    delete this.headerSnapshot;
     return (this.native = native);
   }
 }
