@@ -143,7 +143,8 @@ KEALA_BENCH_PROCESSES=4 KEALA_BENCH_OUTPUT=docs/bench/r4-7-slice1-node.jsonl nod
   `/users/:id`）与中间件透明性声明（让 `createBodyParser` 这类自有插件声明
   "对无正文 GET 无效"，使静态路由在带全局中间件的应用里也可下沉）。这是唯一
   能绕开 `new Response` 原生地板（双方各 26-37%）的路径，预期效果远大于噪声。
-  用户已裁决（2026-09-03）：**暂缓**，先完成高分辨力测量；立项时须独立设计
-  文档与镜像语义审计。
+  **完成（2026-09-03，R4.8）**：见 [HOTPATH-R4-8-SINK-EXTENSION](./HOTPATH-R4-8-SINK-EXTENSION.md)。
+  Bun 侧 sunk 场景 K/H +6.8%（fn）/+9.6%（静态），真实增益；Node 镜像大幅
+  劣化（下沉为 Bun 原生优化）；fn 下沉剩余成本印证地板在 Response 构造本身。
 - 测量分辨力：若需验证 <3% 的 Bun 侧效果，下一轮起把轻场景轮数提高到 10+ 并在
   机器空闲窗口执行；本轮已证明 5 轮协议在当前噪声下不足以分辨。

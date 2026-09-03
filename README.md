@@ -152,10 +152,19 @@ app.ws("/chat", {
 ```ts
 // app.sink() — served from Bun's native routing table (zero JS per
 // request), mirrored as ordinary routes so app.handle() works everywhere.
-// Requires an app without global/param middleware (the native table
-// bypasses them — sink() and app.use(fn) enforce that loudly).
+// Param middleware always refuses to sink; global/scoped middleware must be
+// excused with a noOpFor() transparency declaration (sink() and app.use()
+// enforce that loudly). Sinking is a Bun-native optimization — on Node the
+// mirror serves it identically but slower, so Node deployments should not
+// sink hot routes.
 app.sink("/health", new Response("ok")); // static response, reused natively
+app.sink("/users/:id", (request, params) => new Response(`user ${params["id"]}`)); // function sink: no middleware or
+// context — just (request, params) → Response; errors answer through the
+// builtin funnel (app.onError() and function sinks refuse each other)
 app.sink("/assets/*", { dir: "./public" }); // directory tree (index/Range)
+app.use(noOpFor(bodyLimit(1024 * 1024), { bodyless: true })); // declared
+// transparent for GET/HEAD — allowed alongside sinks; the JS mirror
+// still runs it, only the native table skips it
 app.listen({ port: 3000 }); // routes table embedded at boot
 app.sink("/ping", new Response("pong")); // later sink → server.reload()
 app.reloadNativeRoutes(); // or rebuild the table explicitly

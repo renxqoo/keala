@@ -71,6 +71,19 @@ native `{dir}` route adds trailing-slash 301s for subdirectories and Range
 requests the mirror does not implement — `listen({nativeRoutes: false})`
 forces JS-only serving when byte-parity matters more than the fast path
 (and stays sticky across later `sink()` calls / `reloadNativeRoutes()`).
+
+R4.8 function-sink divergence ledger (each row pinned by direction in the
+smoke differential; the mirror is the reference): static `Response` entries
+get Bun's automatic ETag/If-None-Match 304, the mirror does not; a GET
+serving a spec-violating body gets the JS mirror's bodyLimit 413 and 200
+from the native table — and `maxRequestBodySize` does NOT bound table-served
+routes either (probe-verified), so `bodyless` noOpFor declarations carry
+that residual by attestation; malformed percent-escapes in a param decode to
+U+FFFD natively while the trie passes them through verbatim (security
+contract #5); bun#37603 raw-byte matching makes an encoded literal miss the
+native table, which self-heals through `fetch` (final behavior identical,
+mechanism differs). Sunk function handlers and `app.onError()` refuse each
+other in both orders — the mapper contract is context-based.
 Bun 1.4 utility surface deliberately NOT adopted: HTMLRewriter, Glob, Semver,
 TOML/YAML/JSON5 parsers, Image, Color, Secrets — app-level tools with no role
 in the framework core. Bun.Archive evaluated and rejected for 1.4.0: the
