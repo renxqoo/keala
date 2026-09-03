@@ -4,8 +4,9 @@
 import { createBodyParser, Keala, type Context } from "../src/index.ts";
 import { listen } from "../src/adapters/node.ts";
 import type { ContextWithBody } from "../src/plugins/body-parser.ts";
+import { serverMetrics } from "./server-metrics.ts";
 
-const app = new Keala();
+const app = new Keala({ env: "production" });
 
 const pass = (_c: Context, next: () => Promise<void>) => next();
 for (const prefix of ["/v1", "/oauth", "/admin"]) app.use(`${prefix}/*`, pass);
@@ -38,14 +39,7 @@ app.get(
   },
 );
 
-app.get("/debug/memory", (c) =>
-  c.json({
-    rss: process.memoryUsage().rss,
-    heapUsed: process.memoryUsage().heapUsed,
-    heapTotal: process.memoryUsage().heapTotal,
-    external: process.memoryUsage().external,
-  }),
-);
+app.get("/debug/memory", (c) => c.json(serverMetrics(app.env)));
 
 const port = Number(process.argv[2] ?? 4109);
 listen(app, port, "127.0.0.1");

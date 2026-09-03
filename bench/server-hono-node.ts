@@ -3,6 +3,7 @@
 // work under the same runtime, payloads and middleware shape.
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { serverMetrics } from "./server-metrics.ts";
 
 const app = new Hono();
 const decoder = new TextDecoder();
@@ -49,14 +50,7 @@ app.get(
   (c) => c.text("middleware"),
 );
 
-app.get("/debug/memory", (c) =>
-  c.json({
-    rss: process.memoryUsage().rss,
-    heapUsed: process.memoryUsage().heapUsed,
-    heapTotal: process.memoryUsage().heapTotal,
-    external: process.memoryUsage().external,
-  }),
-);
+app.get("/debug/memory", (c) => c.json(serverMetrics(process.env["NODE_ENV"] ?? "unset")));
 
 const port = Number(process.argv[2] ?? 4110);
 serve({ fetch: app.fetch, port, hostname: "127.0.0.1" });

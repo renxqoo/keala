@@ -1,5 +1,6 @@
 // Hono baseline server (Bun runtime) — mirrors the other bench servers.
 import { Hono } from "hono";
+import { serverMetrics } from "./server-metrics.ts";
 
 const app = new Hono();
 const decoder = new TextDecoder();
@@ -42,15 +43,7 @@ app.get(
   (c) => c.text("middleware"),
 );
 
-app.get("/debug/memory", (c) => {
-  const mu = process.memoryUsage();
-  return c.json({
-    rss: mu.rss,
-    heapUsed: mu.heapUsed,
-    heapTotal: mu.heapTotal,
-    external: mu.external,
-  });
-});
+app.get("/debug/memory", (c) => c.json(serverMetrics(process.env["NODE_ENV"] ?? "unset")));
 
 const port = Number(process.argv[2] ?? 4102);
 export default {

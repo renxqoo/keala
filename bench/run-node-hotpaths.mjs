@@ -4,6 +4,7 @@
 // Usage: node bench/run-node-hotpaths.mjs [connections] [duration] [rounds]
 // KEALA_BENCH_BASELINE=/path/to/checkout adds a third, before-change variant.
 // KEALA_BENCH_OUTPUT=/path/to/new.jsonl retains metadata and every raw sample.
+// KEALA_BENCH_PROCESSES=4 splits total connections across independent Node clients.
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -12,17 +13,29 @@ import { createServer } from "node:net";
 import { cpus } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import autocannon from "autocannon";
 import { comparePaired, median, positiveInteger } from "./hotpath-metrics.ts";
+import { cpuDelta, splitConnections } from "./load-metrics.ts";
+import { runLoad } from "./load-pool.ts";
+import { validateServerMetrics } from "./server-metrics.ts";
 
 const connections = positiveInteger(process.argv[2], 200, "connections");
 const duration = positiveInteger(process.argv[3], 5, "duration");
 const rounds = positiveInteger(process.argv[4], 5, "rounds");
+const processes = positiveInteger(
+  process.env["KEALA_BENCH_PROCESSES"],
+  Math.min(4, connections),
+  "processes",
+);
+const clientConnections = splitConnections(connections, processes);
 const scenarioFilter = process.argv[5];
-const runtime = process.env["KEALA_BENCH_RUNTIME"] === "bun" ? "bun" : "node";
+const runtime = process.env["KEALA_BENCH_RUNTIME"] ?? "node";
+if (!["node", "bun"].includes(runtime)) throw new TypeError("runtime must be node or bun");
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const baseline = process.env["KEALA_BENCH_BASELINE"];
 const output = process.env["KEALA_BENCH_OUTPUT"];
+if (process.versions.bun !== undefined)
+  throw new Error("run the orchestrator with Node for both server runtimes");
+const abort = new AbortController();
 const servers =
   runtime === "node"
     ? [
@@ -63,11 +76,25 @@ const emit = (record) => {
   if (output !== undefined) appendFileSync(output, `${line}\n`);
   console.log(line);
 };
+const fingerprint = (cwd, files) => {
+  const hash = createHash("sha256");
+  for (const file of files.toSorted()) hash.update(file).update(readFileSync(resolve(cwd, file)));
+  return hash.digest("hex");
+};
 const identity = (server) => {
   const hash = createHash("sha256");
   for (const file of readdirSync(resolve(server.cwd, "src"), { recursive: true }).toSorted()) {
     if (file.endsWith(".ts"))
       hash.update(file).update(readFileSync(resolve(server.cwd, "src", file)));
+  }
+  let fixtureSha256;
+  try {
+    fixtureSha256 = fingerprint(server.cwd, [server.file, "bench/server-metrics.ts"]);
+  } catch (cause) {
+    throw new Error(
+      `${server.name}: measurement protocol 2 requires current fixtures and bench/server-metrics.ts, including in baseline checkouts`,
+      { cause },
+    );
   }
   return {
     ...server,
@@ -76,9 +103,7 @@ const identity = (server) => {
       encoding: "utf8",
     }).trim(),
     sourceSha256: hash.digest("hex"),
-    harnessSha256: createHash("sha256")
-      .update(readFileSync(resolve(server.cwd, server.file)))
-      .digest("hex"),
+    fixtureSha256,
   };
 };
 const freePort = () =>
@@ -93,11 +118,12 @@ const freePort = () =>
 
 const waitReady = async ({ port }, child) => {
   for (let attempt = 0; attempt < 100; attempt++) {
+    abort.signal.throwIfAborted();
     if (child.exitCode !== null || child.signalCode !== null)
       throw new Error("server exited during startup");
     try {
       const response = await fetch(`http://127.0.0.1:${port}/text`, {
-        signal: AbortSignal.timeout(200),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(200)]),
       });
       await response.arrayBuffer();
       if (response.ok) return;
@@ -111,7 +137,7 @@ const waitReady = async ({ port }, child) => {
 
 const verify = async (server, scenario) => {
   const response = await fetch(`http://127.0.0.1:${server.port}${scenario.path}`, {
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.any([abort.signal, AbortSignal.timeout(3000)]),
     ...(scenario.method === undefined ? {} : { method: scenario.method }),
     ...(scenario.headers === undefined ? {} : { headers: scenario.headers }),
     ...(scenario.body === undefined ? {} : { body: scenario.body }),
@@ -151,7 +177,7 @@ const verify = async (server, scenario) => {
         method: "POST",
         headers: scenario.headers,
         body: payload,
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(3000)]),
       });
       await rejected.arrayBuffer();
       if (rejected.status !== status) throw new Error(`expected ${status}, got ${rejected.status}`);
@@ -159,43 +185,29 @@ const verify = async (server, scenario) => {
   }
 };
 
-const fire = (server, scenario) =>
-  autocannon({
-    url: `http://127.0.0.1:${server.port}${scenario.path}`,
-    connections,
-    duration,
-    pipelining: 1,
-    ...(scenario.body === undefined ? { workers: 4 } : {}),
-    warmup: { connections, duration: 1 },
-    ...(scenario.method === undefined ? {} : { method: scenario.method }),
-    ...(scenario.headers === undefined ? {} : { headers: scenario.headers }),
-    ...(scenario.body === undefined ? {} : { body: scenario.body }),
-  });
-
-const memory = async (server) => {
+const metrics = async (server, pid, signal = abort.signal) => {
   const response = await fetch(`http://127.0.0.1:${server.port}/debug/memory`, {
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]),
   });
-  if (!response.ok) throw new Error("memory endpoint failed");
-  return response.json();
+  if (!response.ok) throw new Error("server metrics endpoint failed");
+  return validateServerMetrics(await response.json(), pid, runtime);
 };
-let active;
 for (const signal of ["SIGINT", "SIGTERM"])
   process.once(signal, () => {
-    active?.kill("SIGTERM");
-    process.exit(1);
+    abort.abort(new Error(`benchmark interrupted by ${signal}`));
   });
 const freshSample = async (server, scenario, round, position) => {
+  abort.signal.throwIfAborted();
   server.port = await freePort();
   const child = spawn(
     runtime === "bun" ? "bun" : process.execPath,
     [server.file, String(server.port)],
     {
       cwd: server.cwd,
+      env: { ...process.env, NODE_ENV: "production" },
       stdio: ["ignore", "ignore", "inherit"],
     },
   );
-  active = child;
   let startupError;
   const exited = new Promise((done) => {
     child.once("exit", done);
@@ -207,11 +219,31 @@ const freshSample = async (server, scenario, round, position) => {
   try {
     await waitReady(server, child);
     if (startupError !== undefined) throw startupError;
+    await metrics(server, child.pid);
     await verify(server, scenario);
-    const beforeMemory = await memory(server);
+    let beforeMetrics;
     const at = new Date().toISOString();
-    const result = await fire(server, scenario);
-    emit({
+    const result = await runLoad(
+      {
+        url: `http://127.0.0.1:${server.port}${scenario.path}`,
+        connections,
+        processes,
+        duration,
+        method: scenario.method,
+        headers: scenario.headers,
+        body: scenario.body,
+      },
+      {
+        signal: abort.signal,
+        beforeMeasurement: async (signal) => {
+          beforeMetrics = await metrics(server, child.pid, signal);
+        },
+      },
+    );
+    const afterMetrics = await metrics(server, child.pid);
+    const serverCpu = cpuDelta(beforeMetrics, afterMetrics, result.total);
+    await verify(server, scenario);
+    const sample = {
       kind: "sample",
       at,
       runtime,
@@ -220,25 +252,18 @@ const freshSample = async (server, scenario, round, position) => {
       round,
       position,
       pid: child.pid,
-      rps: result.requests.average,
-      total: result.requests.total,
-      duration: result.duration,
-      latency: result.latency,
-      errors: result.errors,
-      timeouts: result.timeouts,
-      non2xx: result.non2xx,
-      beforeMemory,
-      afterMemory: await memory(server),
-    });
-    if (
-      result.errors !== 0 ||
-      result.timeouts !== 0 ||
-      result.non2xx !== 0 ||
-      result.requests.average <= 0
-    ) {
-      throw new Error(`${server.name} ${scenario.name}: invalid load result`);
+      ...result,
+      serverCpu,
+      beforeMetrics,
+      afterMetrics,
+    };
+    emit(sample);
+    if (result.clientCapacityConstrained) {
+      console.error(
+        `capacity warning: ${runtime}/${server.name}/${scenario.name} has a client >=90% of one core`,
+      );
     }
-    return result;
+    return sample;
   } finally {
     child.kill("SIGTERM");
     const forced = setTimeout(() => child.kill("SIGKILL"), 2000);
@@ -246,12 +271,12 @@ const freshSample = async (server, scenario, round, position) => {
       await exited;
     } finally {
       clearTimeout(forced);
-      active = undefined;
     }
   }
 };
 const metadata = {
   kind: "run",
+  schemaVersion: 2,
   at: new Date().toISOString(),
   runtime,
   runtimeVersion: execFileSync(runtime === "bun" ? "bun" : process.execPath, ["--version"], {
@@ -259,13 +284,36 @@ const metadata = {
   }).trim(),
   cpu: cpus()[0]?.model,
   loadGenerator: process.version,
-  dependencies: JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")).devDependencies,
+  dependencies: Object.fromEntries(
+    ["autocannon", "hdr-histogram-js", "hono", "@hono/node-server"].map((name) => [
+      name,
+      JSON.parse(readFileSync(resolve(root, "node_modules", name, "package.json"), "utf8")).version,
+    ]),
+  ),
+  harnessSha256: fingerprint(root, [
+    "bench/run-node-hotpaths.mjs",
+    "bench/run-bun-hotpaths.mjs",
+    "bench/hotpath-metrics.ts",
+    "bench/load-pool.ts",
+    "bench/load-worker.mjs",
+    "bench/load-metrics.ts",
+    "bench/server-metrics.ts",
+    "bench/node-runtime.ts",
+  ]),
+  nodeEnv: "production",
   connections,
   duration,
   rounds,
   pipelining: 1,
   warmupSeconds: 1,
-  workers: { get: 4, post: 0 },
+  processes,
+  clientConnections,
+  workersPerProcess: 0,
+  throughputWindow: "sum completed / (latest finish - earliest start); reject start skew >50ms",
+  latency: "merged HDR histograms, milliseconds",
+  cpuMeasurement:
+    "CPU usage deltas after warmup; 100%=one core; server window includes barrier/IPC/cleanup",
+  clientCapacityWarningPercentOfOneCore: 90,
   freshProcessPerSample: true,
   servers: servers.map(identity),
   bodyComparison: "declared JSON byte checks; Hono does not bound chunked buffering",
@@ -273,10 +321,11 @@ const metadata = {
 if (output !== undefined) writeFileSync(output, "", { flag: "wx" });
 emit(metadata);
 
-{
+try {
   for (const scenario of scenarios) {
     const samples = new Map(servers.map((server) => [server.name, []]));
     const tails = new Map(servers.map((server) => [server.name, []]));
+    const raw = new Map(servers.map((server) => [server.name, []]));
     for (let round = 0; round < rounds; round++) {
       const rotated = [
         ...servers.slice(round % servers.length),
@@ -285,8 +334,9 @@ emit(metadata);
       const order = Math.floor(round / servers.length) % 2 === 0 ? rotated : rotated.toReversed();
       for (const [position, server] of order.entries()) {
         const result = await freshSample(server, scenario, round, position);
-        samples.get(server.name).push(result.requests.average);
+        samples.get(server.name).push(result.rps);
         tails.get(server.name).push(result.latency.p99);
+        raw.get(server.name).push(result);
       }
     }
     const keala = median(samples.get("keala"));
@@ -314,6 +364,25 @@ emit(metadata);
         medianP99: median(tails.get("hono-official")),
         samples: samples.get("hono-official"),
       },
+      cpu: Object.fromEntries(
+        servers.map(({ name }) => [
+          name,
+          {
+            serverMedianNsPerRequest: median(raw.get(name).map((r) => r.serverCpu.nsPerRequest)),
+            serverMedianPercentOfOneCore: median(
+              raw.get(name).map((r) => r.serverCpu.percentOfOneCore),
+            ),
+            clientMaxPercentOfOneCore: Math.max(
+              ...raw.get(name).flatMap((r) => r.clients.map((c) => c.cpu.percentOfOneCore)),
+            ),
+            clientConstrainedSamples: raw.get(name).filter((r) => r.clientCapacityConstrained)
+              .length,
+          },
+        ]),
+      ),
     });
   }
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
 }
