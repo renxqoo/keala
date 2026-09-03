@@ -6,12 +6,13 @@
  * side-effect free. The serve implementation is injectable for unit tests.
  */
 
+import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
 import type { Application, WebSocketHandlers } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
 import { buildNativeRoutes } from "../core/sink.ts";
 import { consoleFallback } from "../core/error-response.ts";
 import { toHttpError } from "../http/errors.ts";
-import type { ListenOptions } from "../types.ts";
+import type { ListenOptions, Runtime } from "../types.ts";
 
 /** Minimal structural type of the Bun server handle we expose to users. */
 export interface ServerHandle {
@@ -65,9 +66,20 @@ export const startBunServer = (
   }
 
   // The server handle rides the runtime channel: `c.ip` resolves through
-  // `requestIP` without any Bun-specific code in the core.
-  const fetch = (request: Request, server: RequestIPHost): Promise<Response> =>
-    app.handle(request, { server });
+  // `requestIP` without any Bun-specific code in the core. Bun passes the
+  // SAME Server object to every fetch call, so the { server } carrier is
+  // captured once instead of allocated per request; an identity change
+  // (test doubles) re-captures transparently.
+  let runtime: Runtime | undefined;
+  // Dispatch through the internal entry so synchronous chains stay
+  // synchronous: Bun.serve accepts a bare Response, while the public
+  // handle() would add a Promise wrap per request. The Node adapter
+  // dispatches through the same symbol.
+  const nativeApp = app as NativeApplication;
+  const fetch = (request: Request, server: RequestIPHost): Response | Promise<Response> => {
+    if (runtime === undefined || runtime.server !== server) runtime = { server };
+    return nativeApp[HANDLE_REQUEST_SOURCE](request, runtime);
+  };
 
   const serveOptions: Record<string, unknown> = {
     port: options.port ?? 3000,

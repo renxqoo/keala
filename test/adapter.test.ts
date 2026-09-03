@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 // real-runtime equivalents live in scripts/smoke.ts).
 const REAL_BUN = typeof Bun !== "undefined";
 
-import { Keala, startBunServer, type ServeImplementation } from "../src/index.ts";
+import { Keala, startBunServer, type Application, type ServeImplementation } from "../src/index.ts";
+import { HANDLE_REQUEST_SOURCE } from "../src/core/application.ts";
 
 // Bun's real server handle shape: `reload` is the actual hot-reload API (the
 // old `update()` was fictional and has been removed from ServerHandle).
@@ -207,6 +208,48 @@ describe("startBunServer", () => {
         new Error("x"),
       ),
     ).not.toThrow();
+  });
+
+  it("returns the settled Response synchronously for synchronous chains", async () => {
+    const app = new Keala();
+    app.get("/hello", (c) => c.text("hi"));
+    const { impl, options } = fakeServe();
+    startBunServer(app, {}, undefined, impl);
+    const fetch = options()["fetch"] as (
+      request: Request,
+      server: { requestIP(request: Request): { address: string } | null },
+    ) => Response | Promise<Response>;
+    // Bun.serve accepts a bare Response: a chain that settles without
+    // awaiting must not pay the public handle()'s Promise wrap.
+    const res = fetch(new Request("http://localhost/hello"), { requestIP: () => null });
+    expect(res).toBeInstanceOf(Response);
+    expect(await (res as Response).text()).toBe("hi");
+  });
+
+  it("captures the { server } runtime carrier once per server identity", () => {
+    const seen: unknown[] = [];
+    const fakeApp = {
+      nativeSinks: new Map(),
+      wsRoutes: new Map(),
+      [HANDLE_REQUEST_SOURCE](_request: unknown, runtime?: unknown): Response {
+        seen.push(runtime);
+        return new Response("ok");
+      },
+    };
+    const { impl, options } = fakeServe();
+    startBunServer(fakeApp as unknown as Application, {}, undefined, impl);
+    const fetch = options()["fetch"] as (request: Request, server: unknown) => Response;
+    const serverA = { requestIP: () => null };
+    const serverB = { requestIP: () => null };
+    fetch(new Request("http://localhost/a"), serverA);
+    fetch(new Request("http://localhost/b"), serverA);
+    // Same server identity reuses the SAME carrier (no per-request alloc).
+    expect(seen[0]).toBe(seen[1]);
+    expect((seen[0] as { server: unknown }).server).toBe(serverA);
+    // An identity change re-captures instead of serving a stale handle.
+    fetch(new Request("http://localhost/c"), serverB);
+    expect(seen[2]).not.toBe(seen[0]);
+    expect((seen[2] as { server: unknown }).server).toBe(serverB);
   });
 });
 
