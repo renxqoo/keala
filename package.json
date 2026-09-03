@@ -1,7 +1,7 @@
 {
   "name": "keala",
   "version": "0.6.1",
-  "description": "keala — Koa's ergonomics at Hono's speed: dual-mode onion framework for Bun 1.4+ (runs under Node too). Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets.",
+  "description": "keala \u2014 Koa's ergonomics at Hono's speed: dual-mode onion framework for Bun 1.4+ (runs under Node too). Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets.",
   "keywords": [
     "bun",
     "fetch",
@@ -62,7 +62,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc --noEmit && rm -rf dist && tsc -p tsconfig.build.json && find dist \\( -name '*.js' -o -name '*.d.ts' \\) -exec sed -i '' 's/\\.ts\\\"/.js\\\"/g' {} +",
+    "build": "tsc --noEmit && rm -rf dist && tsc -p tsconfig.build.json && node scripts/rewrite-imports.mjs",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
@@ -76,7 +76,7 @@
     "bench": "node bench/run.mjs",
     "smoke": "bun scripts/smoke.ts",
     "drain-verify": "npm run build && bun scripts/drain-verify.ts",
-    "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage && npm run drain-verify",
+    "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage && bun scripts/smoke.ts && bun scripts/example-check.ts",
     "soak": "bun scripts/soak.ts",
     "example:check": "bun scripts/example-check.ts",
     "process:check": "node scripts/process-check.mjs"
@@ -97,6 +97,7 @@
     "vitest": "4.1.11"
   },
   "engines": {
+    "node": ">=20",
     "bun": ">=1.4.0"
   },
   "publint": {

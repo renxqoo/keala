@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      # Format + lint + types + full Node suite with coverage thresholds.
+      - run: bunx oxfmt --check
+      - run: bunx oxlint
+      - run: bunx tsc --noEmit
+      - run: bunx vitest run --coverage
+      # The full suite under the real Bun runtime.
+      - run: bun --bun x vitest run
+      # Published-artifact sanity: portable build (no BSD sed), then boot the
+      # compiled dist under both runtimes and run the smoke matrix.
+      - run: bun run build
+      - run: bun scripts/smoke.ts
+      - run: bun scripts/example-check.ts
+      - run: bun scripts/soak.ts
+      - run: node scripts/process-check.mjs
