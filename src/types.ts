@@ -72,7 +72,11 @@ export interface AppOptions {
   /**
    * Recycle the per-request contexts (opt-in, GUARDED): a settled context is
    * prototype-swapped so any late write throws instead of corrupting the
-   * next request that reuses it.
+   * next request that reuses it. Measured cost on the hot-path matrix: the
+   * guard and recycle machinery (~2μs/req) exceeds the allocation it saves —
+   * a net throughput loss on both runtimes
+   * (docs/HOTPATH-R4-7-POOLING-AB.md §3). For allocation-sensitive embedding
+   * scenarios, not speed.
    */
   pooling?: boolean;
 }
