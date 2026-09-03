@@ -45,4 +45,17 @@ describe("R4.6 server measurement protocol", () => {
     delete legacy["pooling"];
     expect(validateServerMetrics(legacy, process.pid, pooled.runtime)).toBe(legacy);
   });
+
+  it("reports the sink fixture switch and tolerates its absence in older payloads", () => {
+    expect(serverMetrics("production").sink).toBe(false);
+    expect(serverMetrics("production", { sink: "param" }).sink).toBe("param");
+    const sunk = { ...serverMetrics("production", { sink: "text" }), env: "production" };
+    expect(validateServerMetrics(sunk, process.pid, sunk.runtime)).toBe(sunk);
+    expect(() => validateServerMetrics({ ...sunk, sink: 7 }, process.pid, sunk.runtime)).toThrow(
+      "config",
+    );
+    const legacy: Record<string, unknown> = { ...sunk };
+    delete legacy["sink"];
+    expect(validateServerMetrics(legacy, process.pid, sunk.runtime)).toBe(legacy);
+  });
 });

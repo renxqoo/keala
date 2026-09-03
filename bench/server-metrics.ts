@@ -1,13 +1,18 @@
 /** Cold diagnostic endpoint only; no hooks in timed request handlers. */
-export const serverMetrics = (applicationEnv: string, config?: { pooling?: boolean }) => ({
+export const serverMetrics = (
+  applicationEnv: string,
+  config?: { pooling?: boolean; sink?: string | false },
+) => ({
   protocol: 2,
   pid: process.pid,
   env: process.env["NODE_ENV"],
   applicationEnv,
-  // Fixture config evidence (e.g. KEALA_POOLING=1): every recorded sample
-  // carries which optional fast path was enabled. Optional in validation so
-  // protocol-2 baseline fixtures predating this field keep passing.
+  // Fixture config evidence (e.g. KEALA_POOLING=1, KEALA_SINK=param): every
+  // recorded sample carries which optional fast path was enabled. Optional in
+  // validation so protocol-2 baseline fixtures predating these fields keep
+  // passing.
   pooling: config?.pooling === true,
+  sink: config?.sink ?? false,
   runtime: typeof Bun === "undefined" ? "node" : "bun",
   runtimeVersion: typeof Bun === "undefined" ? process.version : Bun.version,
   cpu: process.cpuUsage(),
@@ -55,6 +60,9 @@ export const validateServerMetrics = (
   }
   const raw = value as Record<string, unknown>;
   if (raw["pooling"] !== undefined && typeof raw["pooling"] !== "boolean") {
+    throw new Error("invalid server config snapshot");
+  }
+  if (raw["sink"] !== undefined && raw["sink"] !== false && typeof raw["sink"] !== "string") {
     throw new Error("invalid server config snapshot");
   }
   return snapshot;
