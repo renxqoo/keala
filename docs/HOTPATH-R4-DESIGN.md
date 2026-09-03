@@ -190,7 +190,8 @@ R4 按可独立回滚的纵向单元推进：
 5. **R4.5 Bun/Node 运行时执行引擎**：删除通用 Node bridge，以 RequestSource、
    ResponsePlan 和运行时专用终端实现双运行时真实 HTTP 超越 Hono；详见
    [HOTPATH-R4-5-RUNTIME-DESIGN.md](./HOTPATH-R4-5-RUNTIME-DESIGN.md)；
-6. **R4.6 生命周期与过载控制**：drain、in-flight、accept/reject、deadline 分开定约；
+6. **R4.6 生命周期与过载控制**：drain、in-flight、accept/reject、deadline 分开定约；详见
+   [HOTPATH-R4-6-LIFECYCLE-DESIGN.md](./HOTPATH-R4-6-LIFECYCLE-DESIGN.md)；
 7. **R4.7 可观测性低税接口**：仅在订阅时付费，默认热路径零分配。
 
 每一项都必须先形成自己的 MIGRATION 文档，上一项核销不自动授权下一项编码。

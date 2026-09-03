@@ -34,6 +34,7 @@ export const parseListenArgs = (args: readonly unknown[]): ParsedListen => {
       if (opts.nativeRoutes !== undefined) parsed.listen.nativeRoutes = opts.nativeRoutes;
       if (opts.websocket !== undefined) parsed.listen.websocket = opts.websocket;
       if (opts.onServeError !== undefined) parsed.listen.onServeError = opts.onServeError;
+      if (opts.signals !== undefined) parsed.listen.signals = opts.signals;
     }
   }
   return parsed;

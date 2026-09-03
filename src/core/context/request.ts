@@ -27,11 +27,20 @@ import {
   sourceHeaders,
   sourceMethod,
   sourceRequest,
+  sourceSignal,
   sourceUrl,
 } from "../request-source.ts";
+import { DEADLINE_REASON, FLAG_DEADLINE_FIRED } from "./state.ts";
 
 export interface RequestApi {
   readonly raw: Request;
+  /**
+   * Cooperative cancellation (R4.6, lazy): aborts when the client
+   * disconnects OR the request deadline fires — first one wins, the reason
+   * distinguishes them (AbortError vs TimeoutError). Untouched requests
+   * never materialize a controller.
+   */
+  readonly signal: AbortSignal;
   readonly method: string;
   url: string;
   path: string;
@@ -141,6 +150,21 @@ const stringifyQuery = (value: QueryMap): string => {
 export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   get raw(): Request {
     return sourceRequest(this.rawRequest);
+  },
+  get signal(): AbortSignal {
+    const existing = this.abortValue;
+    if (existing !== undefined) return existing.signal;
+    // Lazy composition: the client's disconnect (a fetch Request aborts
+    // natively under Bun; the Node adapter drives the native source's lazy
+    // channel) plus the request deadline. Listeners die with the request.
+    const controller = new AbortController();
+    this.abortValue = controller;
+    const raw = sourceSignal(this.rawRequest);
+    if (raw.aborted) controller.abort(raw.reason);
+    else raw.addEventListener("abort", () => controller.abort(raw.reason), { once: true });
+    // A deadline that fired before first read still yields an aborted signal.
+    if ((this.flags & FLAG_DEADLINE_FIRED) !== 0) controller.abort(DEADLINE_REASON);
+    return controller.signal;
   },
   get method(): string {
     return sourceMethod(this.rawRequest);

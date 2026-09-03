@@ -18,24 +18,33 @@ import { createDecorators, type Decorators } from "./context/decorate.ts";
 import {
   createMiddlewareStack,
   middlewareForRoute as middlewareForRegisteredRoute,
-  rebaseMountedMiddleware,
   registerMiddleware,
   type MiddlewareStack,
 } from "./middleware-stack.ts";
+import { dispatchRequest, settleNativeHandle } from "./dispatch.ts";
 import {
-  dispatchRequest,
-  mergeMountedWs,
+  mountInto,
   pluginInstallerOf,
   registerRedirect,
+  registerWsRoute,
   routeShortcut,
-  settleNativeHandle,
-  wsUpgradeHandler,
-} from "./dispatch.ts";
+} from "./registration.ts";
+import {
+  closeApp,
+  createLifecycle,
+  installSignalBridge,
+  normalizeRequestTimeout,
+  settleRequest,
+  type LifecycleState,
+} from "./lifecycle.ts";
+import { raceDeadline } from "./lifecycle-deadline.ts";
+import { admitRequest } from "./lifecycle-admission.ts";
+import { serverOf } from "./server-slot.ts";
+import type { CloseOptions, CloseStatus } from "../types.ts";
 import {
   createRouterState,
   rebuildChains,
   registerDef,
-  normalizePrefix,
   urlFor,
   routePathOf,
   type RouteDef,
@@ -45,7 +54,6 @@ import {
 import { isRouter } from "../router/group.ts";
 import type { Router } from "../router/group.ts";
 import { parseListenArgs } from "./listen.ts";
-import { compilePattern } from "../router/pattern.ts";
 import { startBunServer, type ServerHandle } from "../adapters/bun.ts";
 import {
   buildNativeRoutes,
@@ -74,9 +82,6 @@ export type {
 
 const defaultNotFound: NotFoundHandler = () => undefined;
 
-/** Routers carry no ws registrations — mount() reads an empty map for them. */
-const NO_WS_HANDLERS: ReadonlyMap<string, WebSocketHandlers> = new Map();
-
 export { isRouter };
 
 export class Keala implements NativeApplication {
@@ -104,6 +109,13 @@ export class Keala implements NativeApplication {
   // swap; late writes throw instead of corrupting the next request.
   #poolingEnabled: boolean;
   #pool: ContextPool | null = null;
+  // R4.6 lifecycle: the admission gate's state — one in-flight counter for
+  // overload capacity, drain completion and `app.inFlight`. The stable
+  // per-app settle callback releases it with zero per-request allocation.
+  #lifecycle: LifecycleState;
+  #settle: (value: Response) => Response;
+  // R4.6 request deadline in ms (0 = off; see lifecycle-deadline.ts).
+  #requestTimeout: number;
 
   constructor(options: AppOptions = {}) {
     this.env = options.env ?? process.env["NODE_ENV"] ?? "development";
@@ -125,6 +137,9 @@ export class Keala implements NativeApplication {
     this.#decorators = createDecorators(this.#contextProto);
     this.#errorMapper = undefined;
     this.#poolingEnabled = options.pooling === true;
+    this.#lifecycle = createLifecycle(options.overload);
+    this.#settle = (value: Response): Response => settleRequest(this.#lifecycle, value);
+    this.#requestTimeout = normalizeRequestTimeout(options.requestTimeout);
     // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
     // so dispatch can warn when global middleware swallows a matched route.
     this.router.devTrace = this.env === "development";
@@ -278,36 +293,14 @@ export class Keala implements NativeApplication {
   }
 
   ws(path: string, handlers: WebSocketHandlers): Application {
-    if (this.#poolingEnabled) {
-      // Sockets keep this request's context alive for the connection
-      // lifetime; pooling would recycle it under the next request.
-      throw new TypeError(
-        "app.ws() cannot run with pooling: true — sockets retain contexts beyond the request lifetime",
-      );
-    }
-    const routeKey = normalizePrefix(path) || "/";
-    // A duplicate would silently shadow the first handlers — refuse it.
-    if (this.wsRoutes.has(routeKey)) {
-      throw new TypeError(
-        `app.ws(${JSON.stringify(routeKey)}) is already registered — a duplicate would shadow it`,
-      );
-    }
-    // The upgrade happens on ANY method hit; register ALL so method-based
-    // 405s never interfere. The def carries the ws key so mount() can
-    // re-key the registration under its prefix. Registration FIRST — a
-    // throwing registerDef (sunk overlap, bad pattern) must not strand the
-    // wsRoutes key: the HTTP route would not exist while the key stays
-    // occupied, bricking every later registration under it.
-    const def = registerDef(
+    registerWsRoute(
+      this.wsRoutes,
       this.router,
-      "ALL",
-      routeKey,
-      [wsUpgradeHandler(routeKey)],
-      undefined,
       this.#middleware,
+      this.#poolingEnabled,
+      path,
+      handlers,
     );
-    this.wsRoutes.set(routeKey, handlers);
-    def.wsKey = routeKey;
     return this;
   }
 
@@ -330,76 +323,16 @@ export class Keala implements NativeApplication {
   }
 
   mount(prefix: string, sub: Router | Application): Application {
-    if (sub === this) {
-      throw new TypeError("app.mount() cannot mount an app into itself");
-    }
-    // "/" (and "") mount at the root without doubling slashes.
-    const base =
-      prefix === "/" || prefix === ""
-        ? ""
-        : prefix.endsWith("/") && prefix.length > 1
-          ? prefix.slice(0, -1)
-          : prefix;
-    const mountOffset = compilePattern(base || "/").segments.length;
-    // Snapshot: registering into this app must not alias the live array
-    // being iterated (self-referential mounts would otherwise grow forever).
-    const defs = [...(isRouter(sub) ? sub.defs : sub.router.defs)];
-    const paramMiddlewares = isRouter(sub) ? sub.paramMiddlewares : sub.router.paramMiddlewares;
-    if (this.nativeSinks.size > 0 && paramMiddlewares.size > 0) {
-      throw new TypeError(
-        "app.mount() cannot introduce param middleware alongside sunk routes — the native routing table bypasses it",
-      );
-    }
-    // A mounted app (or router) carries its own middleware ahead of its routes.
-    let mergedParams = false;
-    for (const [name, handler] of paramMiddlewares) {
-      if (!this.router.paramMiddlewares.has(name)) {
-        this.router.paramMiddlewares.set(name, handler);
-        mergedParams = true;
-      }
-    }
-    // Same contract as app.param(): newly merged param middleware must reach
-    // routes registered BEFORE the mount, not only later ones — one rebuild.
-    if (mergedParams) rebuildChains(this.router, this.#middleware);
-    for (const def of defs) {
-      const path = `${base}${def.path}` || "/";
-      const subMiddleware = isRouter(sub)
-        ? sub.middleware
-        : sub.middlewareForRoute(def.path, mountOffset);
-      const mountedMiddleware = [
-        ...rebaseMountedMiddleware(def.prefixMiddleware ?? [], mountOffset),
-        ...subMiddleware,
-      ];
-      // ws registrations re-key under the mount (see mergeMountedWs — an
-      // empty source map makes its own guard throw for router-typed subs).
-      if (def.wsKey !== undefined) {
-        // The app.ws() pooling guard, enforced on the mount path too: the
-        // socket keeps this request's context alive for the connection
-        // lifetime, which pooling would recycle under the next request.
-        if (this.#poolingEnabled) {
-          throw new TypeError(
-            "app.mount() cannot introduce ws routes into a pooling: true app — sockets retain contexts beyond the request lifetime",
-          );
-        }
-        mergeMountedWs(
-          this.wsRoutes,
-          this.router,
-          path,
-          mountedMiddleware,
-          def,
-          this.#middleware,
-          isRouter(sub) ? NO_WS_HANDLERS : sub.wsRoutes,
-        );
-        continue;
-      }
-      // The def's OWN prefix middleware (baked when the sub-app itself
-      // mounted a router) runs INSIDE this app's mounted middleware — dropping
-      // here silently stripped every inner router's use() middleware on a
-      // nested remount. Inner first, wrapping mounted middleware after.
-      registerDef(this.router, def.method, path, def.handlers, def.name, this.#middleware, [
-        ...mountedMiddleware,
-      ]);
-    }
+    mountInto(
+      this,
+      this.wsRoutes,
+      this.router,
+      this.#middleware,
+      this.#poolingEnabled,
+      this.nativeSinks.size,
+      prefix,
+      sub,
+    );
     return this;
   }
 
@@ -436,6 +369,26 @@ export class Keala implements NativeApplication {
   }
 
   [HANDLE_REQUEST_SOURCE](request: RequestSource, runtime?: Runtime): Response | Promise<Response> {
+    // R4.6 admission slot, fast path inlined: an unconfigured, non-draining
+    // app pays two field loads, one branch and the increment. Anything else
+    // (overload arithmetic, queueing, drain refusals) takes the full gate.
+    const lc = this.#lifecycle;
+    if (!lc.draining && lc.overload === null) {
+      lc.inFlight++;
+      return this.#serve(request, runtime);
+    }
+    const admission = admitRequest(lc, request);
+    if (admission !== null) {
+      // Queued admission resolves null once a slot transfers in.
+      return admission instanceof Response
+        ? admission
+        : admission.then((wake) => (wake === null ? this.#serve(request, runtime) : wake));
+    }
+    return this.#serve(request, runtime);
+  }
+
+  /** Post-admission request pipeline: context, dispatch, settle, deadline. */
+  #serve(request: RequestSource, runtime: Runtime | undefined): Response | Promise<Response> {
     const recycled = this.#pool?.acquire();
     const c =
       recycled === undefined
@@ -444,7 +397,21 @@ export class Keala implements NativeApplication {
 
     const settled = dispatchRequest(this, c, this.router, this.#middleware, request);
     if (this.#poolingEnabled) this.#pool ??= createPool(this, this.#contextProto);
-    return settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled);
+    // Deadline-configured apps pay ONE guarded settle per request (the U2
+    // once guard — where r4-4 allocated a settleOnce/releaseOnce pair) plus
+    // the race; unconfigured apps (the default) pass the stable callback.
+    if (this.#requestTimeout > 0) {
+      const settle = (value: Response): Response =>
+        c.deadlineAnswered === true ? value : this.#settle(value);
+      return raceDeadline(
+        this,
+        this.#lifecycle,
+        c,
+        settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled, settle),
+        this.#requestTimeout,
+      );
+    }
+    return settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled, this.#settle);
   }
 
   callback(): (request: Request, runtime?: Runtime) => Promise<Response> {
@@ -452,6 +419,9 @@ export class Keala implements NativeApplication {
   }
 
   listen(...args: Parameters<Application["listen"]>): ServerHandle {
+    if (this.#lifecycle.draining) {
+      throw new TypeError("app.listen() after app.close() — the app is shutting down");
+    }
     const { listen, hostname, onListen } = parseListenArgs(args);
     this.#nativeRoutesEnabled = listen.nativeRoutes !== false;
     this.#serverHandle = startBunServer(
@@ -459,7 +429,29 @@ export class Keala implements NativeApplication {
       { ...listen, ...(hostname !== undefined ? { hostname } : {}) },
       onListen,
     );
+    if (listen.signals === true) installSignalBridge(this);
     return this.#serverHandle;
+  }
+
+  /**
+   * Graceful stop (R4.6): refuse new requests (503 + `connection: close`),
+   * stop accepting connections, wait up to `drain` ms for in-flight
+   * requests — including draining streams — then force-close. Idempotent;
+   * the same promise is returned on repeat calls; a repeat call with
+   * `drain: 0` escalates a running close to force.
+   */
+  close(options?: CloseOptions): Promise<CloseStatus> {
+    return closeApp(this.#lifecycle, serverOf(this), options);
+  }
+
+  /** Readiness for LB health endpoints: true once close() has begun. */
+  isDraining(): boolean {
+    return this.#lifecycle.draining;
+  }
+
+  /** Admitted-and-unsettled requests (overload capacity view). */
+  get inFlight(): number {
+    return this.#lifecycle.inFlight;
   }
 
   toJSON(): { env: string; proxy: boolean } {

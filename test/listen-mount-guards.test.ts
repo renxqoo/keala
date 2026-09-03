@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { mergeMountedWs } from "../src/core/dispatch.ts";
+import { mergeMountedWs } from "../src/core/registration.ts";
 import { parseListenArgs } from "../src/core/listen.ts";
 import { createRouterState, registerDef } from "../src/router/router.ts";
 import { EMPTY_MIDDLEWARE_STACK } from "../src/core/middleware-stack.ts";

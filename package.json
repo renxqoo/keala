@@ -75,7 +75,8 @@
     "coverage": "vitest run --coverage",
     "bench": "node bench/run.mjs",
     "smoke": "bun scripts/smoke.ts",
-    "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage",
+    "drain-verify": "npm run build && bun scripts/drain-verify.ts",
+    "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage && npm run drain-verify",
     "soak": "bun scripts/soak.ts",
     "example:check": "bun scripts/example-check.ts",
     "process:check": "node scripts/process-check.mjs"

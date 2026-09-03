@@ -6,19 +6,14 @@
  * backpressure/cancellation. Websockets remain Bun-only and answer 501.
  */
 
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerOptions,
-  type ServerResponse,
-} from "node:http";
-import { Readable } from "node:stream";
+import { createServer, type Server, type ServerOptions, type ServerResponse } from "node:http";
 import type { Application } from "../core/app.ts";
 import { responseFactsOf } from "../core/response-plan.ts";
 import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
-import { NATIVE_REQUEST_SOURCE, type NativeRequestSource } from "../core/request-source.ts";
-import { createError } from "../http/errors.ts";
+import type { GracefulStopOptions } from "../core/lifecycle.ts";
+import { installSignalBridge } from "../core/lifecycle.ts";
+import { attachServer } from "../core/server-slot.ts";
+import { InvalidRequestTargetError, mayCarryBody, NodeRequestSource } from "./node-source.ts";
 
 export interface NodeServerHandle {
   readonly port: number;
@@ -28,6 +23,9 @@ export interface NodeServerHandle {
   fetch(request: Request): Promise<Response>;
   /** Resolves once the socket is bound (Node binds asynchronously). */
   ready(): Promise<NodeServerHandle>;
+  /** R4.6 graceful stop: stop accepting, close idle sockets, wait for the
+   * wire's last response to finish (Node's exact truth) or the app counter. */
+  stopGraceful(options: GracefulStopOptions): Promise<{ timedOut: boolean }>;
 }
 
 export interface NodeListenOptions {
@@ -37,207 +35,11 @@ export interface NodeListenOptions {
   hostname?: string;
   /** Pass-through for node:http ServerOptions (highWaterMark, keepAlive…). */
   http?: ServerOptions;
-}
-
-/** Methods whose Request body must stay undefined (the constructor rejects it). */
-const mayCarryBody = (method: string): boolean => method !== "GET" && method !== "HEAD";
-
-/** `host:port` authority with IPv6 addresses bracketed (`[::1]:3000`). */
-const authorityOf = (host: string, port: number): string =>
-  host.includes(":") && !host.startsWith("[") ? `[${host}]:${port}` : `${host}:${port}`;
-
-class InvalidRequestTargetError extends Error {}
-
-class NodeRequestSource implements NativeRequestSource {
-  readonly [NATIVE_REQUEST_SOURCE] = true as const;
-  readonly method: string;
-  readonly url: string;
-  readonly incoming: IncomingMessage;
-  readonly server: NodeServerHandle;
-  // Cold transport state is added only when an API consumes it. `declare`
-  // emits no class fields, keeping GET/probe sources at four own slots.
-  declare _body?: ReadableStream<Uint8Array> | null;
-  declare _bodySet?: true;
-  declare _request?: Request;
-  declare _bytes?: Promise<Uint8Array>;
-  declare _bodyOwned?: true;
-
-  get remote(): string | undefined {
-    return this.incoming.socket.remoteAddress;
-  }
-
-  constructor(incoming: IncomingMessage, server: NodeServerHandle) {
-    this.incoming = incoming;
-    this.server = server;
-    this.method = incoming.method ?? "GET";
-    // Origin-form is prefixed with the request Host (or bound address), while
-    // proxy absolute-form stays verbatim. OPTIONS * addresses the server root.
-    const target = incoming.url ?? "/";
-    const requestTarget = target === "*" ? "/" : target;
-    if (requestTarget.charCodeAt(0) === 47 /* "/" */) {
-      this.url = requestTarget;
-    } else if (requestTarget.startsWith("http://") || requestTarget.startsWith("https://")) {
-      this.url = requestTarget;
-    } else {
-      throw new InvalidRequestTargetError("unsupported HTTP request-target");
-    }
-  }
-
-  absoluteUrl(): string {
-    if (this.url.charCodeAt(0) !== 47 /* "/" */) return this.url;
-    const fallbackHost = authorityOf(this.server.hostname, this.server.port);
-    return `http://${this.incoming.headers.host ?? fallbackHost}${this.url}`;
-  }
-
-  header(name: string): string | null {
-    if (this._request !== undefined) return this._request.headers.get(name);
-    const value = this.incoming.headers[name.toLowerCase()];
-    if (value === undefined) return null;
-    return Array.isArray(value) ? value.join(", ") : value;
-  }
-
-  headers(): Headers {
-    return this.request().headers;
-  }
-
-  body(): ReadableStream<Uint8Array> | null {
-    if (this._bodySet === true) return this._body as ReadableStream<Uint8Array> | null;
-    this._bodySet = true;
-    const declared = this.incoming.headers["content-length"];
-    const chunked = this.incoming.headers["transfer-encoding"] !== undefined;
-    if (!mayCarryBody(this.method) || (declared === undefined && !chunked) || declared === "0") {
-      return (this._body = null);
-    }
-    this._bodyOwned = true;
-    return (this._body = Readable.toWeb(this.incoming) as ReadableStream<Uint8Array>);
-  }
-
-  request(): Request {
-    if (this._request !== undefined) return this._request;
-    const headers = new Headers();
-    for (const [name, value] of Object.entries(this.incoming.headers)) {
-      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
-    }
-    if (this._bytes !== undefined && mayCarryBody(this.method)) {
-      // The native source already owns/consumed the IncomingMessage. Expose a
-      // standards-shaped consumed Request: bodyUsed is true and every second
-      // reader rejects, matching Request.bytes() ownership semantics without
-      // re-wrapping or copying the original payload.
-      const consumed = new Request(this.absoluteUrl(), {
-        method: this.method,
-        headers,
-        body: new Uint8Array(0),
-        duplex: "half",
-      });
-      void consumed.arrayBuffer().catch(() => undefined);
-      return (this._request = consumed);
-    }
-    const body = this.body();
-    return (this._request = new Request(this.absoluteUrl(), {
-      method: this.method,
-      headers,
-      ...(body === null ? {} : { body, duplex: "half" }),
-    }));
-  }
-
-  bytes(limit = Number.MAX_SAFE_INTEGER): Promise<Uint8Array> {
-    if (this._bytes !== undefined) return this._bytes;
-    this._bodyOwned = true;
-    if (this._request !== undefined || this._bodySet === true) {
-      const body = this.request().body;
-      if (body === null) return (this._bytes = Promise.resolve(new Uint8Array(0)));
-      return (this._bytes = this.#readWebBody(body, limit));
-    }
-    const declared = this.incoming.headers["content-length"];
-    const chunked = this.incoming.headers["transfer-encoding"] !== undefined;
-    if (!mayCarryBody(this.method) || (declared === undefined && !chunked) || declared === "0") {
-      return (this._bytes = Promise.resolve(new Uint8Array(0)));
-    }
-    return (this._bytes = this.#readIncoming(limit));
-  }
-
-  /** Drain an unread request so the keep-alive connection can parse its next message. */
-  cleanupUnread(): void {
-    if (this._bodyOwned === true || this.incoming.readableEnded || this.incoming.destroyed) return;
-    this.incoming.resume();
-  }
-
-  #tooLarge(limit: number): Error {
-    return createError(413, `request body exceeds the ${limit} byte limit`, {
-      expose: true,
-      code: "payload_too_large",
-    });
-  }
-
-  #readIncoming(limit: number): Promise<Uint8Array> {
-    return new Promise((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      let total = 0;
-      let settled = false;
-      const cleanup = (): void => {
-        this.incoming.off("data", onData);
-        this.incoming.off("end", onEnd);
-        this.incoming.off("aborted", onAborted);
-        this.incoming.off("error", onError);
-      };
-      const fail = (error: Error): void => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(error);
-      };
-      const onData = (chunk: Buffer): void => {
-        total += chunk.byteLength;
-        if (total > limit) {
-          fail(this.#tooLarge(limit));
-          // Keep consuming without buffering so Node can safely reuse the
-          // connection after the early 413 response.
-          this.incoming.resume();
-          return;
-        }
-        chunks.push(chunk);
-      };
-      const onEnd = (): void => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        if (chunks.length === 0) resolve(new Uint8Array(0));
-        else if (chunks.length === 1) resolve(chunks[0] as Buffer);
-        else resolve(Buffer.concat(chunks, total));
-      };
-      const onAborted = (): void => fail(new Error("client disconnected while reading request"));
-      const onError = (error: Error): void => fail(error);
-      this.incoming.on("data", onData);
-      this.incoming.once("end", onEnd);
-      this.incoming.once("aborted", onAborted);
-      this.incoming.once("error", onError);
-    });
-  }
-
-  async #readWebBody(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > limit) {
-        await reader.cancel().catch(() => undefined);
-        throw this.#tooLarge(limit);
-      }
-      chunks.push(value);
-    }
-    if (chunks.length === 0) return new Uint8Array(0);
-    if (chunks.length === 1) return chunks[0] as Uint8Array;
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return out;
-  }
+  /**
+   * R4.6 signal bridge (opt-in): SIGTERM/SIGINT drain the server via
+   * `app.close()`; a second signal force-closes.
+   */
+  signals?: boolean;
 }
 
 const writeHeaders = (headers: Headers, out: ServerResponse): void => {
@@ -311,25 +113,56 @@ const writeStream = async (
   }
 };
 
-const writeResponse = (res: Response, out: ServerResponse): void | Promise<void> => {
+// Responses this adapter has already put on a wire once. Re-sending one is
+// the overload refusal-handler pattern (a cached Response reused across
+// refusals): its body is one-shot and gone after the first send, so the
+// re-send degrades to the original status/headers with the body-describing
+// headers stripped and an empty body — coherently framed, never a desync.
+// A response that arrives ALREADY consumed or locked without ever having
+// been sent here stays a loud adapter error (R4.5 B45-18: the handler handed
+// us a corpse with someone else's framing headers on it).
+const sentResponses = new WeakSet<Response>();
+
+const writeResponse = (
+  res: Response,
+  out: ServerResponse,
+  closeAfter: boolean,
+): void | Promise<void> => {
   const facts = responseFactsOf(res);
   if (facts?.planned === true && facts.native === undefined && facts.headerSnapshot === undefined) {
     const length = directBodyLength(facts.directBody);
-    const headers =
+    const headers: Record<string, string | number> =
       facts.implicitContentType === undefined
         ? { "content-length": length }
         : { "content-type": facts.implicitContentType, "content-length": length };
-    // The bare default plan needs no header collection or body stream.
+    // An unmaterialized plan is by construction the default status pair, and
+    // the bare default plan needs no header collection or body stream.
+    // During drain every response orders its connection closed: keep-alive
+    // reuse would keep sockets warm past server.close() and stretch drains.
+    if (closeAfter) headers["connection"] = "close";
     out.writeHead(200, headers);
     endDirectBody(out, facts.directBody);
     return;
   }
   if (facts === undefined && (res.bodyUsed || res.body?.locked === true)) {
-    throw new TypeError("cannot send a consumed or locked response body");
+    if (!sentResponses.has(res)) {
+      throw new TypeError("cannot send a consumed or locked response body");
+    }
+    out.statusCode = res.status;
+    if (res.statusText.length > 0) out.statusMessage = res.statusText;
+    writeHeaders(res.headers, out);
+    if (closeAfter) out.setHeader("connection", "close");
+    out.removeHeader("content-length");
+    out.removeHeader("transfer-encoding");
+    out.removeHeader("content-encoding");
+    out.end();
+    return;
   }
+  if (facts === undefined) sentResponses.add(res);
   out.statusCode = res.status;
   if (res.statusText.length > 0) out.statusMessage = res.statusText;
   writeHeaders(facts?.headerSnapshot ?? res.headers, out);
+  if (closeAfter) out.setHeader("connection", "close");
   // Never emit ambiguous framing, including for a foreign streaming Response.
   const hasTransferEncoding = out.hasHeader("transfer-encoding");
   if (hasTransferEncoding) out.removeHeader("content-length");
@@ -373,6 +206,13 @@ export const startNodeServer = (
   });
   failedBind.catch(() => undefined);
 
+  // R4.6 shutdown state: `draining` orders `connection: close` on responses;
+  // `wireInFlight` counts responses not yet finished ON THE SOCKET (Node's
+  // exact truth — settle-time lies about streams still flushing).
+  let draining = false;
+  let wireInFlight = 0;
+  const wireWaiters: Array<() => void> = [];
+
   const handle: NodeServerHandle = {
     get port(): number {
       // The requested port until the socket is bound — `ready()` is the
@@ -391,8 +231,88 @@ export const startNodeServer = (
       await Promise.race([bound, failedBind]);
       return handle;
     },
+    stopGraceful(grace: GracefulStopOptions): Promise<{ timedOut: boolean }> {
+      return new Promise((resolve) => {
+        draining = true;
+        // Stop accepting; idle keep-alives go first so the drain window only
+        // covers real work (draining responses carry `connection: close`, so
+        // their sockets end themselves).
+        server.close();
+        server.closeIdleConnections();
+        let done = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let appSettled = false;
+        const finish = (timedOut: boolean): void => {
+          if (done) return;
+          done = true;
+          // The waiters live for the whole close (zero-crossings re-run
+          // trySettle until both conditions align — see onWireDone); retire
+          // them here so a later stopGraceful starts clean.
+          wireWaiters.length = 0;
+          if (timer !== undefined) clearTimeout(timer);
+          if (timedOut) server.closeAllConnections();
+          else server.closeIdleConnections();
+          resolve({ timedOut });
+        };
+        const trySettle = (): void => {
+          if (wireInFlight === 0 && appSettled) finish(false);
+        };
+        // Operator escalation (second SIGTERM): kill sockets AND this wait.
+        grace.registerForce?.(() => finish(true));
+        // Arm the timer BEFORE the settled checks (FINDING-6): a finish on
+        // the already-settled path must be able to clear it. Infinity never
+        // arms (setTimeout clamps it to ~1ms — FINDING-3).
+        if (grace.drain !== Number.POSITIVE_INFINITY) {
+          timer = setTimeout(() => finish(true), grace.drain);
+        }
+        if (
+          grace.onSettled(() => {
+            appSettled = true;
+            trySettle();
+          })
+        ) {
+          appSettled = true;
+        }
+        // Subscribe to the wire's last response finishing; onWireDone wakes all
+        // waiters the moment wireInFlight reaches zero.
+        if (wireInFlight > 0) wireWaiters.push(trySettle);
+        trySettle();
+      });
+    },
   };
   const server: Server = createServer(options.http ?? {}, (incoming, out) => {
+    wireInFlight++;
+    // Wire truth + client-disconnect bridge, one handler registered twice.
+    // res 'close' fires for every STARTED response — completed OR terminated
+    // prematurely — so a separate 'finish' listener is redundant, and 'close'
+    // is the more honest settle point (last byte flushed, not handed to the
+    // kernel). A pipelined response that never started writing gets no res
+    // 'close' on socket death at all (REVIEW-SEC-17), so the SOCKET's own
+    // close settles the wire count too. Idempotent through `wireDone`; the
+    // socket registration is detached on first settle — a keep-alive socket
+    // must not accumulate per-request listeners.
+    const socket = incoming.socket;
+    let source: NodeRequestSource | null = null;
+    let wireDone = false;
+    const onWireDone = (): void => {
+      if (wireDone) return;
+      wireDone = true;
+      wireInFlight--;
+      socket.removeListener("close", onWireDone);
+      if (!out.writableEnded && source !== null) {
+        source.disconnect(new DOMException("client disconnected", "AbortError"));
+      }
+      if (wireInFlight === 0 && wireWaiters.length > 0) {
+        // Waiters stay registered (cleared only when a close finishes): a
+        // zero-crossing can be unproductive — the app counter may settle
+        // later, and a LATE keep-alive request can dip the wire to zero
+        // again (REVIEW-BUG-9). Every zero-crossing re-runs trySettle;
+        // the done-guard makes repeats free.
+        for (const wake of wireWaiters) wake();
+      }
+    };
+    out.on("close", onWireDone);
+    socket.on("close", onWireDone);
     const fail = (error: unknown): void => {
       // app dispatch itself never rejects — failures here are native source
       // validation, socket teardown or response writer failures.
@@ -410,11 +330,10 @@ export const startNodeServer = (
         out.destroy();
       }
     };
-    let source: NodeRequestSource | null = null;
     const answer = (response: Response): void => {
       if (source !== null && mayCarryBody(source.method)) source.cleanupUnread();
       try {
-        const writing = writeResponse(response, out);
+        const writing = writeResponse(response, out, draining);
         if (writing instanceof Promise) void writing.catch(fail);
       } catch (error) {
         fail(error);
@@ -455,13 +374,24 @@ export const startNodeServer = (
   });
 
   server.listen(options.port ?? 3000, options.hostname);
+  // Register on the app's server slot so app.close() reaches this server no
+  // matter how it was started (listen() or a direct startNodeServer).
+  attachServer(app, handle);
+  if (options.signals === true) installSignalBridge(app);
   return handle;
 };
 
-/** `app.listen(port)`-style sugar for Node: `listen(app, 3000, "127.0.0.1")`. */
+/** `app.listen(port)`-style sugar for Node: `listen(app, 3000, "127.0.0.1")`
+ * or `listen(app, { port: 3000, hostname: "127.0.0.1", signals: true })`. */
 export const listen = (
   app: Application,
-  port?: number,
+  portOrOptions?: number | NodeListenOptions,
   hostname?: string,
   onListen?: () => void,
-): NodeServerHandle => startNodeServer(app, { port, hostname }, onListen);
+): NodeServerHandle => {
+  const options: NodeListenOptions =
+    typeof portOrOptions === "object" && portOrOptions !== null
+      ? { hostname, ...portOrOptions }
+      : { port: portOrOptions, hostname };
+  return startNodeServer(app, options, onListen);
+};

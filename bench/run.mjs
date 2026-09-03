@@ -6,7 +6,7 @@
 // measurement (the previous methodology) showed order bias of up to ±25% on
 // per-scenario ratios — see bench/analysis.md.
 //
-// Usage: node bench/run.mjs [connections] [durationSeconds]
+// Usage: node bench/run.mjs [connections] [durationSeconds] [rounds]
 import { execSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -20,7 +20,7 @@ const BUN_LABEL = `bun ${execSync("bun --version", { encoding: "utf8" }).trim()}
 
 const CONNECTIONS = Number(process.argv[2] ?? 200);
 const DURATION = Number(process.argv[3] ?? 8);
-const ROUNDS = 4;
+const ROUNDS = Number(process.argv[4] ?? 4);
 
 // Go baseline (stdlib net/http): built on demand when a toolchain exists;
 // silently skipped otherwise so the harness stays runnable everywhere.

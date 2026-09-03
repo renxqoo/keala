@@ -66,6 +66,8 @@ export { weakEtag, isNotModified, type FreshnessInput } from "./http/conditional
 export { resolveRelativeSegments, isWithinRoot, findSymlink } from "./utils/path-safety.ts";
 export type { QueryMap, QueryValue } from "./utils/query.ts";
 export { startBunServer, type ServerHandle, type ServeImplementation } from "./adapters/bun.ts";
+export { failFastAdmission, queueAdmission } from "./core/lifecycle-admission.ts";
+export type { AdmissionStrategy } from "./types.ts";
 export { compilePattern, type CompiledSegment, type PatternIR } from "./router/pattern.ts";
 export type {
   AppOptions,

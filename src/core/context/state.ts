@@ -54,6 +54,8 @@ export interface ContextState {
    * 4096 = committed Response Headers were mutated successfully (mutable),
    * 8192 = their guard rejected mutation (immutable). Neither bit means the
    * concrete Response has not been probed. A newer commit clears both.
+   * 16384 = the request deadline fired (R4.6): late `c.signal` readers see
+   * an aborted signal even after the error funnel reset the flags.
    * The post-commit flags are the ONLY rebuild inputs — anything staged
    * before the commit was already superseded by the committed Response.
    */
@@ -83,6 +85,19 @@ export interface ContextState {
   // previous request's body across users is a CRITICAL disclosure.
   bodyCache?: unknown;
   validValue?: unknown;
+  // R4.6 lifecycle cold slots: materialized only when cancellation or a
+  // request deadline is actually in play. Undefined/false prototype
+  // defaults keep the request hot path free of own-field writes.
+  /** Lazy AbortController behind `c.signal` (disconnect ∨ deadline). */
+  abortValue?: AbortController;
+  /**
+   * True once the deadline race answered 504: the zombie handler's late
+   * settle must neither release capacity again nor retire the context
+   * (the live handler still holds it — it goes to GC, never the pool).
+   * A boolean SLOT, not a flag: the error funnel resets flags and must
+   * not erase this verdict.
+   */
+  deadlineAnswered?: boolean;
 }
 
 /** Flag 256 — dev route tracing (see `flags`). Shared by the router's chain
@@ -105,3 +120,16 @@ export const FLAG_COMMITTED_HEADERS_MUTABLE = 4096;
 export const FLAG_COMMITTED_HEADERS_IMMUTABLE = 8192;
 export const FLAG_COMMITTED_HEADERS_CAPABILITY =
   FLAG_COMMITTED_HEADERS_MUTABLE | FLAG_COMMITTED_HEADERS_IMMUTABLE;
+
+/** Flag 16384 — the request deadline fired (see `flags`). */
+export const FLAG_DEADLINE_FIRED = 16384;
+
+/**
+ * The abort reason `c.signal` carries when the request deadline wins the
+ * race — a TimeoutError DOMException, distinguishable from client
+ * disconnects (AbortError).
+ */
+export const DEADLINE_REASON: DOMException = new DOMException(
+  "request deadline exceeded",
+  "TimeoutError",
+);

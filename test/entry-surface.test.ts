@@ -35,6 +35,9 @@ const ROOT_EXPORTS = new Set([
   "statusMessage",
   "startBunServer",
   "compilePattern",
+  // R4.6 lifecycle admission strategies (U1)
+  "failFastAdmission",
+  "queueAdmission",
   // HTTP/fs safety primitives (DOGFOOD-R1 C2 — consumers build file-backed
   // tiers without re-implementing serveStatic's inline semantics)
   "weakEtag",

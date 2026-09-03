@@ -138,6 +138,7 @@ describe("R4.5 internal lifecycle contracts", () => {
       request: () => nativeRequest,
       body: () => nativeBody,
       bytes: async () => new TextEncoder().encode("native-body"),
+      clientAbort: () => new AbortController(),
     };
     expect(sourceHeader(native, "x-source")).toBe("native");
     expect(sourceAbsoluteUrl(native)).toBe(nativeRequest.url);

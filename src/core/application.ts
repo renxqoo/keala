@@ -7,14 +7,20 @@
  * reviewable public surface to `implements` against.
  */
 
-import type { AppOptions } from "../types.ts";
+import type {
+  AppOptions,
+  CloseOptions,
+  CloseStatus,
+  ListenOptions,
+  Plugin as AppOptionsPlugin,
+  Runtime,
+} from "../types.ts";
 import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import type { Context } from "./context/context.ts";
 import type { RouteDef, RouteHandler, RouterState } from "../router/router.ts";
 import type { HttpError } from "../http/errors.ts";
 import type { Router } from "../router/group.ts";
-import type { ListenOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
 import type { ServerHandle } from "../adapters/bun.ts";
 import type { NativeSinkEntry, SunkHandler } from "./sink.ts";
 import type { RequestSource } from "./request-source.ts";
@@ -124,6 +130,17 @@ export interface Application {
     hostname?: string | (() => void),
     onListen?: () => void,
   ): ServerHandle;
+  /**
+   * Graceful stop (R4.6): refuse new requests, stop accepting, wait up to
+   * `options.drain` ms (default 30_000; 0 = immediate force; Infinity waits
+   * indefinitely) for in-flight requests — bodied responses hold their
+   * slot until the consumer finishes — then force-close. Idempotent.
+   */
+  close(options?: CloseOptions): Promise<CloseStatus>;
+  /** Readiness for LB health endpoints: true once close() has begun (one-way). */
+  isDraining(): boolean;
+  /** Admitted-and-unsettled requests (overload capacity view). */
+  readonly inFlight: number;
   /** Serialized app summary. */
   toJSON(): { env: string; proxy: boolean };
   /** Effective not-found handler used by the finalizer. */

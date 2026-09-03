@@ -141,6 +141,8 @@ const CONTEXT_DEFAULTS = {
   cookiesValue: null,
   bodyCache: undefined,
   validValue: undefined,
+  abortValue: undefined,
+  deadlineAnswered: false,
 } satisfies Partial<ContextState>;
 
 /** The base prototype shared by every app (before `decorate` extensions). */
