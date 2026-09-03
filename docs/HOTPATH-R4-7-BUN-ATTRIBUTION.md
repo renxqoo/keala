@@ -95,7 +95,42 @@ echo-safe 的 1024 字节上限短路 413 / 坏 JSON 400）；冷端点复用 `s
 见 `docs/bench/r4-7-paired-{bun,node}.jsonl`（keala / keala-baseline / hono-official
 三方同轮轮转，baseline 为 db403e5 worktree）。
 
-## 5. 复现
+## 5. Hono 4.13.5 源码级对比（.parity/hono）
+
+针对「Bun 上为何不能大幅领先 Hono」做了逐模块算法对比。结论：**Hono 的热路径算法
+没有一处值得 Keala 采用**；Keala 在全部可测轴上持平或更优，且第 1 节已证明简单场景
+贴近裸运行时地板，剩余差距由地板封顶。
+
+| 轴           | Hono 实现                                                                                                | Keala 实现                                                                   | 裁决与证据                                                            |
+| ------------ | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 中间件组合   | `compose()` 每请求创建组合闭包，每层 `async dispatch(i)` + `await`，每层一个 `() => dispatch(i+1)` 闭包  | 注册期编译为嵌套层级；同步链全程同步，零 per-request 组合分配                | **Keala 优**。mw-3 比率 Bun 1.06-1.09 / Node 1.65-1.69                |
+| Context 构造 | `new Context(req, {options 对象})` 类实例 + 选项分配；`HonoRequest` 惰性但 `c.req` 一触即分配            | 单个 `Object.create(proto)` 平面对象 + 原型哨兵，惰性 facade                 | **Keala 优**。简单场景 Keala−Hono ≈ −65 ~ −163ns                      |
+| 路由匹配     | RegExpRouter：静态哈希 + 全部动态路由合并为单个大正则 `path.match(re)`；SmartRouter 首请求回放后猴子补丁 | 静态哈希（原始/去尾斜杠/解码三形态）+ 单参 fast matcher + 首段桶 + trie 兜底 | **Keala 优**（param 1.011-1.020）；大正则对单参路径劣于定点切分       |
+| 文本响应     | 惰形路径单次 `new Response(text)`                                                                        | PlannedResponse 延迟构造（服务 Node 直写）                                   | **打平**。Bun 上计划由 Bun.serve 物化，text 场景 Keala 仍 −26ns vs 裸 |
+| JSON 响应    | `JSON.stringify` + 小记录 init `new Response`                                                            | `JSON.stringify` + 计划构造                                                  | **Keala 优**（json 1.032-1.038）                                      |
+| 请求 body    | `bodyCache` 每请求对象；形态间转换经 `new Response(body)[key]()` 往返                                    | body-parser 一次有界读取 + 备忘                                              | **Keala 优**（json-body-safe 1.028-1.053）                            |
+| 分发边界     | 单 handler 同步直返 `Response`（无 Promise 包装）                                                        | `handle()` 恒定 `Promise.resolve` 包装；Node 适配器已直连内部源              | **Hono 形式略优，实测无效**（见 §6）                                  |
+| 路径提取     | `getPath` 手写 charCode 扫描                                                                             | `getPath` 手写 charCode 扫描                                                 | **打平**                                                              |
+
+## 6. 同步直返边界的配对否决
+
+§5 中唯一 Hono 有而 Keala（Bun 适配器）没有的结构：同步链不经 Promise 直返
+`Response`（Hono 的 `#dispatch` 单 handler 路径如此；Keala 的 Node 适配器
+`node.ts:427` 亦已直连 `[HANDLE_REQUEST_SOURCE]`，仅 Bun 适配器走公共
+`handle()` 包装）。已实现该改动（Bun 适配器 fetch 直连内部源，公共契约不变）并配对复测：
+
+- 全矩阵 5 轮：同步四场景全正（text +3.9%、probe +0.8%、json +0.7%、param +0.5%），
+  异步两场景恰好不动（mw-3 0.996、json-body-safe 1.003）——差异分布与机制吻合。
+- 但 text 单场景 10 轮收紧后：**median 1.0038 [0.979, 1.043]**，+3.9% 塌缩为 +0.4%，
+  5 轮高读数确认为噪声。
+
+**裁决：+0.4~0.8% 低于主张门槛，回退。** Bun.serve 对已解析 Promise 的调度足够便宜，
+单跳 promise 不构成可主张的成本；用户早前的隔离实验（三轮涨跌不定）在新装置下得到
+确认。至此「Bun 未大幅领先 Hono」的解释完整：Keala 已在裸运行时地板上领先全部六场景
+（−65 ~ −566ns），幅度被 4.4µs 的运行时 HTTP 栈封顶；唯一剩余的 Hono 结构差异
+经 15 轮配对测量证明无可主张收益。
+
+## 7. 复现
 
 ```sh
 # 裸对照矩阵（开销归因）
@@ -114,4 +149,6 @@ KEALA_BENCH_PROCESSES=4 KEALA_BENCH_BASELINE=/tmp/keala-baseline \
 
 已归档：`docs/bench/r4-7-controls-{bun,node}.jsonl`（含 bare 的完整矩阵）、
 `docs/bench/r4-7-capacity-{bun,node}-1proc.jsonl`（单进程容量对照）、
-`docs/bench/r4-7-paired-{bun,node}.jsonl`（候选优化的配对否决数据）。
+`docs/bench/r4-7-paired-{bun,node}.jsonl`（候选优化的配对否决数据）、
+`docs/bench/r4-7-sync-boundary-{bun,text10-bun}.jsonl`（同步边界否决：5 轮全矩阵 +
+10 轮 text 单场景）。
