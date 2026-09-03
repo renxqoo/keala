@@ -14,6 +14,8 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/index.ts";
+import { rateLimit } from "../src/middleware/rate-limit.ts";
+import { metrics } from "../src/middleware/metrics.ts";
 import { createError } from "../src/http/errors.ts";
 import type { SunkHandler } from "../src/index.ts";
 
@@ -210,5 +212,66 @@ describe("production hardening: trustedHosts and unknownMethodAs404", () => {
       405,
       ["GET", "HEAD"],
     ]);
+  });
+});
+
+describe("observability: rateLimit and metrics", () => {
+  it("rateLimit enforces a fixed window per key with 429 + Retry-After", async () => {
+    const app = new Keala(quiet);
+    app.use(rateLimit({ limit: 2, windowMs: 1000, retryAfterSeconds: 2, headers: true }));
+    app.get("/x", (c) => c.text("ok"));
+    const request = () => app.handle(new Request("http://127.0.0.1:3000/x"));
+    const first = await request();
+    const second = await request();
+    const third = await request();
+    expect([first.status, second.status, third.status]).toEqual([200, 200, 429]);
+    expect(third.headers.get("retry-after")).toBe("2");
+    expect(third.headers.get("rate-limit-remaining")).toBe("0");
+    expect(await third.text()).toBe("Too Many Requests");
+  });
+
+  it("rateLimit resets after the window passes", async () => {
+    const app = new Keala(quiet);
+    app.use(rateLimit({ limit: 1, windowMs: 40 }));
+    app.get("/x", (c) => c.text("ok"));
+    const hit = () => app.handle(new Request("http://127.0.0.1:3000/x"));
+    expect((await hit()).status).toBe(200);
+    expect((await hit()).status).toBe(429);
+    await new Promise((r) => setTimeout(r, 60));
+    expect((await hit()).status).toBe(200);
+  });
+
+  it("metrics counts requests by status class and renders Prometheus text", async () => {
+    const app = new Keala(quiet);
+    const m = metrics();
+    app.use(m.middleware);
+    app.get("/ok", (c) => c.text("fine"));
+    app.get("/teapot", (c) => c.throw(418, "short and stout"));
+    app.get("/metrics", m.page);
+    const ok = await app.handle(new Request("http://127.0.0.1:3000/ok"));
+    const teapot = await app.handle(new Request("http://127.0.0.1:3000/teapot"));
+    expect([ok.status, teapot.status]).toEqual([200, 418]);
+    const page = await app.handle(new Request("http://127.0.0.1:3000/metrics"));
+    const body = await page.text();
+    expect(page.headers.get("content-type")).toContain("text/plain");
+    expect(body).toContain("keala_requests_total 2");
+    expect(body).toContain('keala_requests_total{status="4xx"} 1');
+    expect(body).toContain("keala_request_duration_ms_bucket");
+    expect(m.registry.snapshot().inFlight).toBe(0);
+  });
+});
+
+describe("observability: async-error and metricsPage parity", () => {
+  it("metrics observes async rejections with the thrown status", async () => {
+    const app = new Keala(quiet);
+    const m = metrics();
+    app.use(m.middleware);
+    app.get("/late", async () => {
+      throw (await Promise.resolve(), new Error("async boom"));
+    });
+    const res = await app.handle(new Request("http://127.0.0.1:3000/late"));
+    expect(res.status).toBe(500);
+    const snap = m.registry.snapshot();
+    expect([snap.requestsTotal, snap.byClass["5xx"] ?? 0, snap.inFlight]).toEqual([1, 1, 0]);
   });
 });

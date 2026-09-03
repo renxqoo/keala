@@ -34,3 +34,5 @@ export {
 export { bodyLimit, timeout } from "./limits.ts";
 export { serveStatic, type ServeStaticOptions } from "./serve-static.ts";
 export { validator, type StandardSchema } from "./validator.ts";
+export { rateLimit, type RateLimitOptions } from "./rate-limit.ts";
+export { metrics, type Metrics, type MetricsRegistry, type MetricsSnapshot } from "./metrics.ts";
