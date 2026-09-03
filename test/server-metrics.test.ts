@@ -32,4 +32,17 @@ describe("R4.6 server measurement protocol", () => {
       ).toThrow("snapshot");
     }
   });
+
+  it("reports the pooling fixture switch and tolerates its absence in older payloads", () => {
+    expect(serverMetrics("production").pooling).toBe(false);
+    expect(serverMetrics("production", { pooling: true }).pooling).toBe(true);
+    const pooled = { ...serverMetrics("production", { pooling: true }), env: "production" };
+    expect(validateServerMetrics(pooled, process.pid, pooled.runtime)).toBe(pooled);
+    expect(() =>
+      validateServerMetrics({ ...pooled, pooling: "yes" }, process.pid, pooled.runtime),
+    ).toThrow("config");
+    const legacy: Record<string, unknown> = { ...pooled };
+    delete legacy["pooling"];
+    expect(validateServerMetrics(legacy, process.pid, pooled.runtime)).toBe(legacy);
+  });
 });

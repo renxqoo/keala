@@ -6,7 +6,10 @@ import { listen } from "../src/adapters/node.ts";
 import type { ContextWithBody } from "../src/plugins/body-parser.ts";
 import { serverMetrics } from "./server-metrics.ts";
 
-const app = new Keala({ env: "production" });
+// KEALA_POOLING=1 runs the pooled leg of the matrix (opt-in guarded context
+// pool); the metrics endpoint reports it, so every sample carries proof.
+const pooling = process.env["KEALA_POOLING"] === "1";
+const app = new Keala({ env: "production", pooling });
 
 const pass = (_c: Context, next: () => Promise<void>) => next();
 for (const prefix of ["/v1", "/oauth", "/admin"]) app.use(`${prefix}/*`, pass);
@@ -39,7 +42,7 @@ app.get(
   },
 );
 
-app.get("/debug/memory", (c) => c.json(serverMetrics(app.env)));
+app.get("/debug/memory", (c) => c.json(serverMetrics(app.env, { pooling })));
 
 const port = Number(process.argv[2] ?? 4109);
 listen(app, port, "127.0.0.1");

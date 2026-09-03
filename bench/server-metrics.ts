@@ -1,9 +1,13 @@
 /** Cold diagnostic endpoint only; no hooks in timed request handlers. */
-export const serverMetrics = (applicationEnv: string) => ({
+export const serverMetrics = (applicationEnv: string, config?: { pooling?: boolean }) => ({
   protocol: 2,
   pid: process.pid,
   env: process.env["NODE_ENV"],
   applicationEnv,
+  // Fixture config evidence (e.g. KEALA_POOLING=1): every recorded sample
+  // carries which optional fast path was enabled. Optional in validation so
+  // protocol-2 baseline fixtures predating this field keep passing.
+  pooling: config?.pooling === true,
   runtime: typeof Bun === "undefined" ? "node" : "bun",
   runtimeVersion: typeof Bun === "undefined" ? process.version : Bun.version,
   cpu: process.cpuUsage(),
@@ -48,6 +52,10 @@ export const validateServerMetrics = (
   ]) {
     if (!Number.isSafeInteger(number) || number < 0)
       throw new Error("invalid server CPU/memory snapshot");
+  }
+  const raw = value as Record<string, unknown>;
+  if (raw["pooling"] !== undefined && typeof raw["pooling"] !== "boolean") {
+    throw new Error("invalid server config snapshot");
   }
   return snapshot;
 };
