@@ -163,6 +163,46 @@ if (typeof Bun !== "undefined") {
   const file = await fetch(`${nb}/n/smoke.ts`);
   check("native {dir} serves files", file.status === 200 && (await file.text()).includes("SMOKE"));
   nativeServer.stop(true);
+
+  // Guarded pooling over a REAL Bun.serve: snapshot-body responses retire
+  // unwrapped, so Bun's serve-time string MIME inference must survive —
+  // the first pooling A/B matrix shipped pooled /text with NO content-type.
+  // Second pass rides a recycled context.
+  const pooledApp = new Keala({ env: "production", pooling: true });
+  pooledApp.get("/t", (c) => c.text("hello world"));
+  pooledApp.get("/j", (c) => c.json({ hello: "world" }));
+  pooledApp.get("/s", (c) => {
+    c.type = "text/plain";
+    c.body = "state";
+  });
+  const pooledServer = pooledApp.listen({ port: 0, hostname: "127.0.0.1" });
+  const pb = `http://127.0.0.1:${pooledServer.port}`;
+  for (let pass = 0; pass < 2; pass++) {
+    const text = await fetch(`${pb}/t`);
+    const textCt = text.headers.get("content-type") ?? "";
+    check(
+      `pooled text content-type (pass ${pass})`,
+      text.status === 200 &&
+        (await text.text()) === "hello world" &&
+        textCt.startsWith("text/plain"),
+      `${text.status} ${textCt}`,
+    );
+    const json = await fetch(`${pb}/j`);
+    const jsonCt = json.headers.get("content-type") ?? "";
+    check(
+      `pooled json content-type (pass ${pass})`,
+      json.status === 200 && jsonCt.startsWith("application/json"),
+      `${json.status} ${jsonCt}`,
+    );
+    const state = await fetch(`${pb}/s`);
+    const stateCt = state.headers.get("content-type") ?? "";
+    check(
+      `pooled state-mode content-type (pass ${pass})`,
+      state.status === 200 && (await state.text()) === "state" && stateCt.startsWith("text/plain"),
+      `${state.status} ${stateCt}`,
+    );
+  }
+  pooledServer.stop(true);
 }
 
 server.stop(true);

@@ -42,9 +42,11 @@ describe("guarded pooling", () => {
       return next();
     });
     app.get("/x", (c) => c.text("ok"));
-    // Consume the bodies: retirement happens once the response body is
-    // consumed (streams outlive settle — the retire-on-settle race leaked
-    // request data into in-flight bodies; see test/agent3-lifecycle.test.ts).
+    // Consume the bodies to keep the assertion order stable. Snapshot bodies
+    // (this c.text string) retire AT SETTLE — an immutable snapshot cannot
+    // reference the context, so the retire fast path releases immediately;
+    // only stream-bodied responses wait for consumption (see
+    // test/agent3-lifecycle.test.ts and the pooling wire suite).
     await (await app.handle(new Request("http://localhost:3000/x"))).text();
     // A second request retires the first context into the pool.
     await (await app.handle(new Request("http://localhost:3000/x"))).text();

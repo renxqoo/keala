@@ -23,17 +23,30 @@ import { isNativeRequestSource, sourceMethod } from "../request-source.ts";
 export const TEXT_PLAIN = "text/plain; charset=utf-8";
 export const TEXT_HTML = "text/html; charset=utf-8";
 
+/**
+ * Mark a sugar-built Response as pooling-retirable: its body is an immutable
+ * snapshot (string/bytes/JSON text) that cannot reference the context, so
+ * retireWithBody skips the consumption-tracking wrapper for it. Without the
+ * mark, pooling would wrap every bodied response in a ReadableStream —
+ * destroying Bun's serve-time string MIME inference (pooled text answers
+ * carried NO content-type) and both adapters' direct-write fast paths.
+ */
+const directResponse = (c: ContextState, response: Response): Response => {
+  c.directBodyResponseValue = response;
+  return response;
+};
+
 export const isImplicitTextResponse = (c: ContextState, response: Response): boolean =>
   c.implicitTextResponseValue === response ||
   responseFactsOf(response)?.implicitContentType === TEXT_PLAIN;
 
 const textResponse = (c: ContextState, body: string, init?: ResponseInit): Response => {
   if (isNativeRequestSource(c.rawRequest)) {
-    return createPlannedResponse(body, init, TEXT_PLAIN);
+    return directResponse(c, createPlannedResponse(body, init, TEXT_PLAIN));
   }
   const response = new Response(body, init);
   c.implicitTextResponseValue = response;
-  return response;
+  return directResponse(c, response);
 };
 
 /** Latin-1-safe statusText candidate from a staged c.message. */
@@ -201,9 +214,12 @@ export const sugarText = (
     ...(statusText !== undefined ? { statusText } : {}),
     headers: headersInitOf(merged),
   };
-  return isNativeRequestSource(c.rawRequest)
-    ? createPlannedResponse(body, init)
-    : new Response(body, init);
+  return directResponse(
+    c,
+    isNativeRequestSource(c.rawRequest)
+      ? createPlannedResponse(body, init)
+      : new Response(body, init),
+  );
 };
 
 export const sugarJson = (
@@ -238,38 +254,47 @@ export const sugarJson = (
   if (isNativeRequestSource(c.rawRequest)) {
     const bodyText = JSON.stringify(payload) ?? "null";
     if (merged === undefined) {
-      return createPlannedResponse(
-        bodyText,
-        {
-          ...(st !== undefined ? { status: st } : {}),
-          ...(statusText !== undefined ? { statusText } : {}),
-        },
-        "application/json",
+      return directResponse(
+        c,
+        createPlannedResponse(
+          bodyText,
+          {
+            ...(st !== undefined ? { status: st } : {}),
+            ...(statusText !== undefined ? { statusText } : {}),
+          },
+          "application/json",
+        ),
       );
     }
     const initHeaders = merged;
     if (initHeaders["content-type"] === undefined) {
       initHeaders["content-type"] = "application/json";
     }
-    return createPlannedResponse(bodyText, {
-      ...(st !== undefined ? { status: st } : {}),
-      ...(statusText !== undefined ? { statusText } : {}),
-      headers: headersInitOf(initHeaders),
-    });
+    return directResponse(
+      c,
+      createPlannedResponse(bodyText, {
+        ...(st !== undefined ? { status: st } : {}),
+        ...(statusText !== undefined ? { statusText } : {}),
+        headers: headersInitOf(initHeaders),
+      }),
+    );
   }
   if (merged === undefined && status === undefined && staged === undefined) {
-    if (statusText === undefined) return Response.json(payload);
-    return Response.json(payload, { statusText });
+    if (statusText === undefined) return directResponse(c, Response.json(payload));
+    return directResponse(c, Response.json(payload, { statusText }));
   }
-  return Response.json(
-    payload,
-    merged === undefined
-      ? { status: st, ...(statusText !== undefined ? { statusText } : {}) }
-      : {
-          status: st,
-          ...(statusText !== undefined ? { statusText } : {}),
-          headers: headersInitOf(merged),
-        },
+  return directResponse(
+    c,
+    Response.json(
+      payload,
+      merged === undefined
+        ? { status: st, ...(statusText !== undefined ? { statusText } : {}) }
+        : {
+            status: st,
+            ...(statusText !== undefined ? { statusText } : {}),
+            headers: headersInitOf(merged),
+          },
+    ),
   );
 };
 
@@ -317,12 +342,18 @@ export const sugarHtml = (
   }
   if (st === undefined && statusText === undefined) {
     const init = { headers: headersInitOf(withType) };
-    return isNativeRequestSource(c.rawRequest)
-      ? createPlannedResponse(body, init)
-      : new Response(body, init);
+    return directResponse(
+      c,
+      isNativeRequestSource(c.rawRequest)
+        ? createPlannedResponse(body, init)
+        : new Response(body, init),
+    );
   }
   const init = { ...statusInit, headers: headersInitOf(withType) };
-  return isNativeRequestSource(c.rawRequest)
-    ? createPlannedResponse(body, init)
-    : new Response(body, init);
+  return directResponse(
+    c,
+    isNativeRequestSource(c.rawRequest)
+      ? createPlannedResponse(body, init)
+      : new Response(body, init),
+  );
 };

@@ -119,14 +119,28 @@ export const createPool = (app: Application, liveProto: object): ContextPool => 
 
 /**
  * Retire `c` into the pool as soon as its response is SAFE to recycle.
- * Null-body responses retire at once; bodied ones only once the consumer
- * finishes (or cancels): the body is consumed AFTER handle() returns, and
- * anything it captured (stream callbacks, onStreamError) must keep reading
- * THIS request's context — recycling earlier leaks the next request's data
- * into in-flight bodies. Registered floating branches hold off the final
+ *
+ * Three body kinds, three retire times. Null bodies retire at once.
+ * Framework-built snapshot bodies (string/bytes/JSON text/Blob — the
+ * `directBodyResponseValue` identity) retire at once too, UNWRAPPED: an
+ * immutable snapshot cannot reference this context, and passing it through
+ * the wrapper below would both destroy Bun's serve-time string MIME
+ * inference (the client gets no content-type) and force both adapters off
+ * their direct-write paths. Everything else — stream bodies, user-built
+ * Responses of unknown body kind — retires only once the consumer finishes
+ * or cancels: the body is consumed AFTER handle() returns, and anything it
+ * captured (stream callbacks, onStreamError) must keep reading THIS
+ * request's context — recycling earlier leaks the next request's data into
+ * in-flight bodies. Registered floating branches hold off the final
  * release until they settle. The wrapper observes completion pull-based, so
  * backpressure passes through and nothing is buffered; a consumer that
  * abandons the body without cancelling simply never returns the context.
+ *
+ * Consequence of the unknown-kind bucket: a user's bare
+ * `new Response(string)` (committed, return-style, or from a notFound
+ * handler) is wrapped under pooling, and on Bun that costs its implicit
+ * text/plain — the same documented limitation `rebuildCommitted` carries.
+ * Set an explicit content-type or use the sugar helpers.
  */
 export const retireWithBody = (pool: ContextPool, c: Context, value: Response): Response => {
   let retired = false;
@@ -139,6 +153,18 @@ export const retireWithBody = (pool: ContextPool, c: Context, value: Response): 
     if (drain === null) pool.release(c);
     else void drain.then(() => pool.release(c));
   };
+  // Snapshot-body fast path: the response was framework-built from a
+  // string/bytes/JSON text/Blob that cannot reference this context, so it
+  // retires NOW, unwrapped. The identity check deliberately precedes any
+  // `.body` access — reading a real Bun Response's body destroys the
+  // serve-time string MIME inference this path exists to preserve, and the
+  // wrapper it would trigger costs every direct-write fast path the adapters
+  // have (the first pooling A/B matrix measured 4.2x Bun / 2.4x Node
+  // regressions from wrapping alone).
+  if (c.directBodyResponseValue === value) {
+    retire();
+    return value;
+  }
   const body = value.body;
   if (body === null) {
     retire();

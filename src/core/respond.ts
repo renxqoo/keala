@@ -74,26 +74,23 @@ const methodNotAllowed = (c: Context): Response | null => {
   const allowHeader = ALLOW_ORDER.filter((m) => allowed.has(m)).join(", ");
   const method = c.method.toUpperCase();
   const headers: HeaderMap = { allow: allowHeader };
-  // koa parity: the synthesized 405/501 answers carry the status-message body
-  // (koa's respond() fills a null body with ctx.message on error statuses) —
-  // HEAD stays bodiless (RFC 9110 §9.3.2).
+  // koa parity: 405/501 carry the status-message body (HEAD stays bodiless).
+  const bodied = (status: number, fallback: string): Response =>
+    (c.directBodyResponseValue = new Response(statusMessage(status) || fallback, {
+      status,
+      headers: { ...headers, "content-type": "text/plain; charset=utf-8" },
+    }));
   if (!KNOWN_METHODS.has(method)) {
-    return new Response(method === "HEAD" ? null : statusMessage(501) || "Not Implemented", {
-      status: 501,
-      headers:
-        method === "HEAD" ? headers : { ...headers, "content-type": "text/plain; charset=utf-8" },
-    });
+    if (method === "HEAD") return new Response(null, { status: 501, headers });
+    return bodied(501, "Not Implemented");
   }
   if (method === "OPTIONS") {
     // koa-router: OPTIONS answers 200 with an empty body and Allow.
     return new Response(null, { status: 200, headers });
   }
   if (!allowed.has(method)) {
-    return new Response(method === "HEAD" ? null : statusMessage(405) || "Method Not Allowed", {
-      status: 405,
-      headers:
-        method === "HEAD" ? headers : { ...headers, "content-type": "text/plain; charset=utf-8" },
-    });
+    if (method === "HEAD") return new Response(null, { status: 405, headers });
+    return bodied(405, "Method Not Allowed");
   }
   return null;
 };
@@ -186,6 +183,10 @@ const rebuildCommitted = (c: Context, res: Response): Response => {
     return new Response(null, { status, statusText, headers });
   }
   const rebuilt = new Response(body, { status, statusText, headers });
+  if ((c.flags & 128) !== 0 && !isContextBoundBody(c.bodyValue)) {
+    c.directBodyResponseValue = rebuilt;
+    return rebuilt;
+  }
   return (c.flags & 128) === 0 ? inheritResponseFacts(rebuilt, res) : rebuilt;
 };
 
@@ -285,7 +286,10 @@ const observedStream = (
   });
 };
 
-const fromState = (c: Context, head: boolean): Response => {
+const isContextBoundBody = (body: Context["bodyValue"]): boolean =>
+  body instanceof ReadableStream || body instanceof Response;
+
+const buildFromState = (c: Context, head: boolean): Response => {
   const status = c.statusValue;
   const custom = c.messageValue;
   let body: Context["bodyValue"] = c.bodyValue;
@@ -414,6 +418,12 @@ const fromState = (c: Context, head: boolean): Response => {
     );
   }
   return new Response(bodyInitOf(body), { status, statusText: reason, headers });
+};
+
+const fromState = (c: Context, head: boolean): Response => {
+  const response = buildFromState(c, head);
+  if (!isContextBoundBody(c.bodyValue)) c.directBodyResponseValue = response;
+  return response;
 };
 
 /**

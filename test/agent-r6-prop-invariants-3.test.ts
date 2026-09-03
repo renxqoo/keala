@@ -14,6 +14,7 @@ import {
   randQueryString,
   randString,
 } from "./agent-r6-prop-rig.mts";
+import { CONTEXT_SLOT_KEYS } from "../src/core/context/context.ts";
 import { runProp } from "./agent-r6-prop-ops.mts";
 import { Keala } from "../src/index.ts";
 
@@ -187,7 +188,13 @@ describe("INV-6 pooling isolation", () => {
           baseline = [...keys];
         } else {
           const base = baseline as (string | symbol)[];
-          const extra = keys.filter((k) => !base.includes(k));
+          // Internal slots may appear as own keys on a RECYCLED context —
+          // assign-clearing restores their CONTEXT_DEFAULTS sentinels, so
+          // they carry no prior-request data (the value assertions below
+          // hold the leak contract). Anything else is foreign.
+          const extra = keys.filter(
+            (k) => !base.includes(k) && !CONTEXT_SLOT_KEYS.includes(k as string),
+          );
           if (extra.length > 0) {
             problems.push(`req#${id}: foreign own keys survived: ${extra.map(String).join(",")}`);
           }

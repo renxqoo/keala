@@ -64,6 +64,16 @@ export interface ContextState {
   _res: Response | undefined;
   /** Bun c.text() identity used only if a later committed-header write rebuilds it. */
   implicitTextResponseValue: Response | undefined;
+  /**
+   * The response built this request whose body is a known context-independent
+   * snapshot (string/bytes/JSON text/Blob). Pooling retires it at once,
+   * unwrapped, so Bun's serve-time string MIME inference and both adapters'
+   * direct-write paths survive; the consumption-tracking wrapper stays for
+   * stream-bodied and user-built Responses, whose producers may still be
+   * reading this context. Identity-only: retireWithBody compares, never
+   * probes `.body` (reading it would destroy Bun's inference).
+   */
+  directBodyResponseValue: Response | undefined;
   // lazy facades
   stateValue: Record<string, unknown> | null;
   cookiesValue: unknown;

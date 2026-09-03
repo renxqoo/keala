@@ -136,6 +136,7 @@ const CONTEXT_DEFAULTS = {
   removedValue: null,
   _res: undefined,
   implicitTextResponseValue: undefined,
+  directBodyResponseValue: undefined,
   stateValue: null,
   cookiesValue: null,
   bodyCache: undefined,
@@ -148,7 +149,14 @@ export const baseContextProto = Object.assign(
   CONTEXT_DEFAULTS,
 );
 
-const CONTEXT_SLOT_KEYS = Object.keys(CONTEXT_DEFAULTS);
+/**
+ * The internal slot names, exported for the pooling property fence: a
+ * recycled context keeps these as own properties (assign-cleared to their
+ * CONTEXT_DEFAULTS sentinels — shape-stable recycling; deletes would push
+ * the object into dictionary mode and cost ~1.3μs/req), so the fence
+ * whitelists them while still flagging every ad-hoc key as foreign.
+ */
+export const CONTEXT_SLOT_KEYS = Object.keys(CONTEXT_DEFAULTS);
 
 /**
  * Own keys a healthy context may carry: every assignSlots slot (probed from a
@@ -181,10 +189,18 @@ const sweepForeignKeys = (c: Context): void => {
   }
 };
 
-/** Drop prior-generation state so prototype sentinels become visible again. */
+/**
+ * Drop prior-generation state so the next request reads fresh sentinels.
+ * Slots are REASSIGNED their CONTEXT_DEFAULTS instead of deleted: deleting
+ * an own property transitions the recycled object into dictionary mode,
+ * which measurably slowed every subsequent slot access (~1.3μs/req on the
+ * Bun hot path) — assignment restores byte-identical sentinel values while
+ * keeping the object's shape stable.
+ */
 const clearRequestSlots = (c: Context): void => {
   const own = c as unknown as Record<string, unknown>;
-  for (const key of CONTEXT_SLOT_KEYS) delete own[key];
+  const defaults = CONTEXT_DEFAULTS as Record<string, unknown>;
+  for (const key of CONTEXT_SLOT_KEYS) own[key] = defaults[key];
   clearBranches(c);
 };
 
