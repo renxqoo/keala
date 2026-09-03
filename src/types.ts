@@ -89,6 +89,20 @@ export interface AppOptions {
    * when set.
    */
   requestTimeout?: number;
+  /**
+   * Host whitelist (DESIGN §7.2, Host-poisoning defense): when set, a
+   * request whose Host authority is not in the list is refused with an
+   * exposed 403 before routing — a forged Host can otherwise poison
+   * `c.origin`/`c.href`/`c.redirect(back)` and password-reset style flows.
+   * Exact names and `*.example.com` suffix wildcards; port-insensitive;
+   * empty list refuses nothing.
+   */
+  trustedHosts?: string[];
+  /**
+   * Answer unknown HTTP methods (not in RFC 9110's method grammar) with
+   * 404 instead of 501. Default 501 (koa-router semantics).
+   */
+  unknownMethodAs404?: boolean;
 }
 
 /** Why the admission gate refused a request (see `OverloadOptions.handler`). */

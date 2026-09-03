@@ -163,3 +163,52 @@ describe("sink parity: the JS mirror matches the ordinary router", () => {
     expect(seen).toBe(null);
   });
 });
+
+describe("production hardening: trustedHosts and unknownMethodAs404", () => {
+  it("trustedHosts refuses forged Host authorities before routing", async () => {
+    const app = new Keala({ env: "test", trustedHosts: ["example.com", "*.subs.example.com"] });
+    app.get("/x", (c) => c.text("reached"));
+    const ok = await app.handle(new Request("http://example.com/x"));
+    expect([ok.status, await ok.text()]).toEqual([200, "reached"]);
+    const wildcard = await app.handle(new Request("http://a.subs.example.com/x"));
+    expect(wildcard.status).toBe(200);
+    // A port never participates in the authority comparison.
+    const withPort = await app.handle(new Request("http://example.com:3000/x"));
+    expect(withPort.status).toBe(200);
+    const forged = await app.handle(
+      new Request("http://evil.com/x", { headers: { host: "evil.com" } }),
+    );
+    expect([forged.status, await forged.text()]).toEqual([403, "Forbidden Host"]);
+    // `deep.subs.example.com` must NOT match `*.subs.example.com` (single label).
+    const deep = await app.handle(new Request("http://deep.a.subs.example.com/x"));
+    expect(deep.status).toBe(403);
+  });
+
+  it("an unset or empty trustedHosts list admits everything", async () => {
+    for (const options of [{}, { trustedHosts: [] as string[] }]) {
+      const app = new Keala({ env: "test", ...options });
+      app.get("/x", (c) => c.text("any"));
+      const res = await app.handle(new Request("http://anything.example/x"));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("unknownMethodAs404 answers 404 instead of 501 for non-grammar methods", async () => {
+    const app = new Keala({ env: "test", unknownMethodAs404: true });
+    app.get("/x", (c) => c.text("ok"));
+    // Bun's Request constructor silently coerces unknown methods to GET, so
+    // the non-grammar leg only runs where Request keeps the method.
+    if (typeof Bun === "undefined") {
+      const unknown = await app.handle(
+        new Request("http://localhost:3000/x", { method: "FROBNICATE" }),
+      );
+      expect(unknown.status).toBe(404);
+    }
+    // A KNOWN but unregistered method still gets 405 + Allow.
+    const known = await app.handle(new Request("http://localhost:3000/x", { method: "POST" }));
+    expect([known.status, known.headers.get("allow")?.split(", ").sort()]).toEqual([
+      405,
+      ["GET", "HEAD"],
+    ]);
+  });
+});

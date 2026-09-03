@@ -398,7 +398,12 @@ describe("R4.6 seam red tests: S2 drain × node transport, S3 hold × committed 
       liveServers.push(server);
       const base = `http://127.0.0.1:${server.port}`;
 
-      const inflight = fetch(`${base}/stuck`);
+      const inflight = fetch(`${base}/stuck`).catch((error) => {
+        // The parked request dies with the force-closed socket — observe it
+        // here so the rejection never escapes as an unhandled error.
+        void error;
+        return new Response("died", { status: 503 });
+      });
       await wait(30);
       const closed = app.close({ drain: 60 }); // window expires → force
       const status = await closed;
@@ -412,7 +417,7 @@ describe("R4.6 seam red tests: S2 drain × node transport, S3 hold × committed 
         refused = true;
       }
       expect(refused).toBe(true);
-      await inflight.catch(() => undefined); // the parked request dies with the socket
+      await inflight; // already observed — dies with the force-closed socket
       gate.resolve();
     },
   );

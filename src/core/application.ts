@@ -145,6 +145,8 @@ export interface Application {
   toJSON(): { env: string; proxy: boolean };
   /** Effective not-found handler used by the finalizer. */
   readonly notFoundHandler: NotFoundHandler;
+  /** Whether unknown (non-RFC-9110-grammar) methods answer 404 instead of 501. */
+  readonly unknownMethodAs404: boolean;
   /** Registered route definitions (inspection/tests). */
   readonly stack: readonly RouteDef[];
   /** Global middleware stack, exposed for inspection and mount compatibility. */

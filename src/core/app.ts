@@ -1,7 +1,6 @@
 /**
- * The `new Keala()` shell. Routing selects a precompiled chain before the
- * onion runs; dispatch/finalization remain in the functional core. `handle`
- * is a fetch handler for Bun and Node, while Application is its public type.
+ * The `new Keala()` shell: routing selects a precompiled chain before the
+ * onion runs; `handle` is the fetch handler for Bun and Node.
  */
 
 import type { AppOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
@@ -71,6 +70,7 @@ import {
   HANDLE_REQUEST_SOURCE,
 } from "./application.ts";
 import type { RequestSource } from "./request-source.ts";
+import { compileTrustedHosts, hostRefused } from "./trusted-hosts.ts";
 import { FLAG_DEV_CHAIN } from "./context/state.ts";
 
 export type {
@@ -81,7 +81,6 @@ export type {
 } from "./application.ts";
 
 const defaultNotFound: NotFoundHandler = () => undefined;
-
 export { isRouter };
 
 export class Keala implements NativeApplication {
@@ -94,7 +93,7 @@ export class Keala implements NativeApplication {
   readonly wsRoutes: Map<string, WebSocketHandlers> = new Map();
   readonly nativeSinks: Map<string, NativeSinkEntry> = new Map();
 
-  // Per-app prototype: decorators never leak into another application.
+  // Per-app prototype; decorators never leak across applications.
   #contextProto: object;
   #decorators: Decorators;
   // R4.3: single error-mapper slot — a second onError registration throws.
@@ -114,8 +113,12 @@ export class Keala implements NativeApplication {
   // per-app settle callback releases it with zero per-request allocation.
   #lifecycle: LifecycleState;
   #settle: (value: Response) => Response;
-  // R4.6 request deadline in ms (0 = off; see lifecycle-deadline.ts).
+  // R4.6 request deadline in ms (0 = off).
   #requestTimeout: number;
+  // Host whitelist predicate (null = admit all; see trusted-hosts.ts).
+  #trustedHosts: ReturnType<typeof compileTrustedHosts>;
+  /** Unknown (non-RFC-9110) methods answer 404 instead of 501 when set. */
+  readonly unknownMethodAs404: boolean;
 
   constructor(options: AppOptions = {}) {
     this.env = options.env ?? process.env["NODE_ENV"] ?? "development";
@@ -140,6 +143,8 @@ export class Keala implements NativeApplication {
     this.#lifecycle = createLifecycle(options.overload);
     this.#settle = (value: Response): Response => settleRequest(this.#lifecycle, value);
     this.#requestTimeout = normalizeRequestTimeout(options.requestTimeout);
+    this.#trustedHosts = compileTrustedHosts(options.trustedHosts);
+    this.unknownMethodAs404 = options.unknownMethodAs404 === true;
     // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
     // so dispatch can warn when global middleware swallows a matched route.
     this.router.devTrace = this.env === "development";
@@ -168,8 +173,7 @@ export class Keala implements NativeApplication {
       pluginInstallerOf,
       this,
     );
-    // Late middleware re-composes every route chain — O(routes), a
-    // documented setup-time cost.
+    // Late middleware re-composes every route chain (O(routes), setup-time).
     if (changed) rebuildChains(this.router, this.#middleware);
     return this;
   }
@@ -369,9 +373,8 @@ export class Keala implements NativeApplication {
   }
 
   [HANDLE_REQUEST_SOURCE](request: RequestSource, runtime?: Runtime): Response | Promise<Response> {
-    // R4.6 admission slot, fast path inlined: an unconfigured, non-draining
-    // app pays two field loads, one branch and the increment. Anything else
-    // (overload arithmetic, queueing, drain refusals) takes the full gate.
+    // R4.6 admission slot: unconfigured+non-draining pays two loads, one
+    // branch, one increment; anything else takes the full gate.
     const lc = this.#lifecycle;
     if (!lc.draining && lc.overload === null) {
       lc.inFlight++;
@@ -389,6 +392,10 @@ export class Keala implements NativeApplication {
 
   /** Post-admission request pipeline: context, dispatch, settle, deadline. */
   #serve(request: RequestSource, runtime: Runtime | undefined): Response | Promise<Response> {
+    // Host whitelist (opt-in): refuse before routing (Host-poisoning defense).
+    if (this.#trustedHosts !== null && !this.#trustedHosts(request)) {
+      return this.#settle(hostRefused());
+    }
     const recycled = this.#pool?.acquire();
     const c =
       recycled === undefined
@@ -397,9 +404,8 @@ export class Keala implements NativeApplication {
 
     const settled = dispatchRequest(this, c, this.router, this.#middleware, request);
     if (this.#poolingEnabled) this.#pool ??= createPool(this, this.#contextProto);
-    // Deadline-configured apps pay ONE guarded settle per request (the U2
-    // once guard — where r4-4 allocated a settleOnce/releaseOnce pair) plus
-    // the race; unconfigured apps (the default) pass the stable callback.
+    // Deadline apps pay one guarded settle (U2 once-guard) plus the race;
+    // unconfigured apps pass the stable callback.
     if (this.#requestTimeout > 0) {
       const settle = (value: Response): Response =>
         c.deadlineAnswered === true ? value : this.#settle(value);
@@ -422,12 +428,9 @@ export class Keala implements NativeApplication {
     if (this.#lifecycle.draining) {
       throw new TypeError("app.listen() after app.close() — the app is shutting down");
     }
-    // A second listen used to silently orphan the first server (its handle
-    // kept serving on a lost port). Own exactly one server at a time.
+    // A second listen used to silently orphan the first server.
     if (this.#serverHandle !== null) {
-      throw new TypeError(
-        "app.listen() called twice — call server.stop()/app.close() first or use another app instance",
-      );
+      throw new TypeError("app.listen() called twice — stop()/close() the first server");
     }
     const { listen, hostname, onListen } = parseListenArgs(args);
     this.#nativeRoutesEnabled = listen.nativeRoutes !== false;

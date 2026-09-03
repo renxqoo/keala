@@ -2,14 +2,10 @@
  * Finalizer: turns the context's accumulated state into a web `Response`,
  * exactly once, after the handler chain settles.
  *
- * Fast paths, in order of cheapness:
- *  - committed Response (dual-mode return style) returned as-is
- *  - bare `new Response(body)` — no init object at all (hono-consistent
- *    content-type behavior; the runtime adds `text/plain` / handles binary)
- *  - `Response.json(body)` for plain-object bodies (native serialization +
- *    `application/json`)
- *  - init with a `Headers` instance (measurably cheaper than a record init)
- *  - flattened [name, value] pairs when multi-value headers exist
+ * Fast paths, in order of cheapness: committed Response returned as-is; bare
+ * `new Response(body)` (hono-consistent content-type behavior); `Response.json`
+ * for objects; init with a `Headers` instance (cheaper than a record); flattened
+ * [name, value] pairs when multi-value headers exist.
  *
  * Inherited response contracts (docs/MIGRATION.md §3): empty-status header
  * cleanup, HEAD Content-Length for state-mode bodies and sugar HEAD returns
@@ -81,8 +77,11 @@ const methodNotAllowed = (c: Context): Response | null => {
       headers: { ...headers, "content-type": "text/plain; charset=utf-8" },
     }));
   if (!KNOWN_METHODS.has(method)) {
-    if (method === "HEAD") return new Response(null, { status: 501, headers });
-    return bodied(501, "Not Implemented");
+    // koa-router answers 501; unknownMethodAs404 opts into 404 instead.
+    if (c.appValue.unknownMethodAs404) return null;
+    return method === "HEAD"
+      ? new Response(null, { status: 501, headers })
+      : bodied(501, "Not Implemented");
   }
   if (method === "OPTIONS") {
     // koa-router: OPTIONS answers 200 with an empty body and Allow.
