@@ -1,6 +1,6 @@
 # HOTPATH-R4.5 — 运行时执行引擎施工图
 
-> 状态：已核销（2026-09-02）
+> 状态：复核中（2026-09-03；[追加审计与修复](./HOTPATH-R4-5-CONTRACT-AUDIT.md)）
 > 设计基线：[HOTPATH-R4-5-RUNTIME-DESIGN.md](./HOTPATH-R4-5-RUNTIME-DESIGN.md)
 > 迁移单元：[HOTPATH-R4-5-MIGRATION-RUNTIME-ENGINE.md](./HOTPATH-R4-5-MIGRATION-RUNTIME-ENGINE.md)
 
@@ -148,26 +148,27 @@ body/status/header facts；Bun 在 Fetch 边界使用标准 Response，Node 对�
 直接 `writeHead/end`，对未知流使用有背压、断连取消的单 writer。Node source 的常见 probe
 只有 incoming/server/method/url 四个 own slots，Headers、Request、body、absolute URL 均按需。
 
-真实 HTTP 使用 Hono 4.13.5 官方 Node adapter，200 connections、pipeline 1、交错 5 轮；
-主统计量是同轮配对 Keala/Hono 比率中位数。代表性结果：
+以下仅保存 2026-09-02 的历史摘要，非本次验收证据。该轮使用 Hono 4.13.5 官方 Node
+adapter、200 connections、pipeline 1；未逐样本重启，且 middleware/JSON body 的独立
+中位数之比被误标为配对中位数。当前统计与原始证据见追加审计。
 
-| Runtime | 场景                    | Keala 相对 Hono（配对中位数） | p99        |
-| ------- | ----------------------- | ----------------------------: | ---------- |
-| Node 22 | probe                   |                         +7.1% | 2ms vs 3ms |
-| Node 22 | JSON 小响应             |                         +4.6% | 3ms vs 3ms |
-| Node 22 | param                   |                         +4.2% | 3ms vs 3ms |
-| Node 22 | 3 层 middleware         |                        +61.0% | 不劣       |
-| Node 22 | 同实际字节复核安全 JSON |                        +11.2% | 不劣       |
-| Bun 1.4 | probe                   |                         +7.7% | 2ms vs 3ms |
-| Bun 1.4 | param（5 秒样本）       |                         +6.2% | 2ms vs 2ms |
-| Bun 1.4 | JSON（5 秒样本）        |                        +11.9% | 3ms vs 3ms |
+| Runtime | 场景                    | 历史报告值（混合口径） | p99        |
+| ------- | ----------------------- | ---------------------: | ---------- |
+| Node 22 | probe                   |                  +7.1% | 2ms vs 3ms |
+| Node 22 | JSON 小响应             |                  +4.6% | 3ms vs 3ms |
+| Node 22 | param                   |                  +4.2% | 3ms vs 3ms |
+| Node 22 | 3 层 middleware         |                 +61.0% | 不劣       |
+| Node 22 | 同实际字节复核安全 JSON |                 +11.2% | 不劣       |
+| Bun 1.4 | probe                   |                  +7.7% | 2ms vs 3ms |
+| Bun 1.4 | param（5 秒样本）       |                  +6.2% | 2ms vs 2ms |
+| Bun 1.4 | JSON（5 秒样本）        |                 +11.9% | 3ms vs 3ms |
 
-Node probe 从 R4.4 的约 28.35k RPS 提升到约 133k RPS，约 4.7 倍，并超过本机同口径 Hono。
-所有记录场景 error/timeout 为 0。统一 `+10%` 是 stretch goal，middleware/安全 JSON 达到，
-最窄 probe/json/param 未达到；生产验收采用更严格、也更诚实的结论：本版本与同语义矩阵下
-两运行时所有主场景配对中位数均领先，不声称跨硬件或未来 Hono 的数学永久最优。
+28.35k RPS 使用 100 connections/pipeline 10，133k 使用 200 connections/pipeline 1，
+不能据此主张同负载提升 4.7 倍。原定 `+10%` 目标未被这些历史数据充分证明；Hono body
+对照仅复核 declared/实际总字节，不具备 Keala 的 chunked 缓冲上限，不能称为完全同安全语义。
 
 质量门：Node 2008 pass/8 skip，Bun 1979 pass/37 skip，coverage
 `97.32/92.07/96.29/98.69%`，构建、smoke、example、soak、四象限进程检查全绿；Tillgate
 5 个直接消费者以本地构建产物验证 718 tests，原仓库未修改。旧 requestOf、pipeline、
-WebStream 小响应桥、兼容开关和双 writer 均不存在，无待办占位或已知正确性挂账。
+WebStream 小响应桥、兼容开关和双 writer 均不存在。追加审计确认了 B45-14～17，原先
+“无已知正确性挂账”的判断不再有效，修复和核验结果集中于追加审计。

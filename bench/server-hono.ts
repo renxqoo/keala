@@ -28,16 +28,19 @@ app.post("/echo-safe", async (c) => {
   }
 });
 
-app.use("/mw", async (c, next) => {
-  c.header("X-Step", "1");
-  await next();
-  c.header("X-Step-3", "3");
-});
-app.use("/mw", async (c, next) => {
-  c.header("X-Step-2", "2");
-  await next();
-});
-app.get("/mw", (c) => c.text("middleware"));
+app.get(
+  "/mw",
+  async (c, next) => {
+    c.header("X-Step", "1");
+    await next();
+    c.header("X-Step-3", "3");
+  },
+  async (c, next) => {
+    c.header("X-Step-2", "2");
+    await next();
+  },
+  (c) => c.text("middleware"),
+);
 
 app.get("/debug/memory", (c) => {
   const mu = process.memoryUsage();

@@ -1,6 +1,6 @@
 # HOTPATH-R4.5 — Bun/Node 运行时执行引擎迁移
 
-> 状态：已核销（2026-09-02）
+> 状态：复核中（2026-09-03；[追加审计与修复](./HOTPATH-R4-5-CONTRACT-AUDIT.md)）
 > 迁移单元：同一 Keala 应用在 Bun/Node 上以运行时原生路径接收请求并发送响应
 > 旧实现：`src/adapters/*` + Fetch-only Context/Finalizer（相关 13 个源文件、4 组核心测试）
 > 目标：单一 RequestSource/ResponsePlan 语义核心 + Bun/Node 专用终端
@@ -67,25 +67,23 @@ source、body source 三阶段不能半开 feature flag：回滚整个阶段提�
 ## 7. 验收清单
 
 - [x] 旧 Node requestOf/pipeline 与兼容开关不存在
-- [x] RequestSource/ResponsePlan 单一实现通过行为矩阵
+- [x] RequestSource/ResponsePlan 单一实现通过新增契约复核及完整行为矩阵
 - [x] Node direct body、stream 背压、request cleanup 跨进程通过
 - [x] Bun 真运行时与 Node 源码/构建产物双形态冒烟通过
 - [x] fmt / lint 0 error / typecheck / build / Node test / Bun test 全绿
 - [x] coverage 四项不低于 R4.4 `97.24/92.04/96.19/98.58%`
 - [x] smoke / example / soak 全绿
 - [x] Tillgate 只读测试、typecheck 全绿且工作树 clean
-- [x] Bun/Node 同语义 fresh-process 和真实 HTTP 的配对中位数均超过 Hono
-- [x] 文档记录所有样本、提交、bug、修法和显式未迁项
+- [ ] Bun/Node 同语义 fresh-process 和真实 HTTP 达到原性能预算（历史证据不足）
+- [x] 追加复核记录所有样本、提交、bug、修法和验收缺口
 
 ## 8. 实施记录
 
-文档定稿并于 2026-09-02 核销。最终门禁：Node/Vitest 107 文件、2008 pass/8 skip；
+以下为 2026-09-02 历史记录，核销已在追加审计中重开。原门禁：Node/Vitest 107 文件、2008 pass/8 skip；
 Bun 1979 pass/37 skip；coverage `97.32/92.07/96.29/98.69%`；build、smoke、example、
 24×20,000 soak、Bun/Node × source/dist 进程矩阵全绿。Tillgate 临时 `file:` 替换验证
 5 个直接消费者，typecheck 17/17 tasks、test 17/17 tasks（718 tests）；原仓库零修改。
 
-性能采用同轮 Keala/Hono 比率的中位数，避免机器漂移污染。Node probe/json/param 的配对
-中位数约为 `+7.1%/+4.6%/+4.2%`，middleware 与同安全 JSON 超过 `+10%`；Bun
-probe/param/长采样 JSON 约为 `+7.7%/+6.2%/+11.9%`。所有被测主路径均超过 Hono，
-但最窄小响应没有达到原先统一 `+10%` 的 stretch goal；这项事实不伪装成“所有硬件、
-所有负载永久领先”。当前没有兼容旧引擎、待办占位或已知正确性挂账。
+历史性能摘要混用了配对中位数与独立中位数，也未逐样本重启服务；不能由这些数字证明
+所有主路径稳定领先或原 `+10%` 目标达成。最新可复核结果与缺陷记录以
+[追加审计](./HOTPATH-R4-5-CONTRACT-AUDIT.md) 为准。不保留旧引擎兼容分支。

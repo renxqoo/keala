@@ -1,6 +1,7 @@
 # HOTPATH-R4.5 — Bun/Node 运行时执行引擎设计基线
 
-> 状态：已核销（设计预算按 §6 配对统计修正）
+> 状态：复核中（2026-09-03；原核销存在契约与性能证据缺口）
+> 最新裁决：[原生对象契约复核](./HOTPATH-R4-5-CONTRACT-AUDIT.md)；未证明的性能目标不算达标。
 > 分支：`codex/r4-5-runtime-engine-rewrite`
 > 基线：`c1f2a6a`（R4.4 已核销）
 > 施工图：[HOTPATH-R4-5-RUNTIME-IMPLEMENTATION.md](./HOTPATH-R4-5-RUNTIME-IMPLEMENTATION.md)
@@ -76,6 +77,8 @@ body = empty | text | bytes | stream | foreign-response
 - foreign Response 归一进同一计划，不能证明 body 表示时归为 stream；
 - late header/status/body 修改发生在计划或已提交 Response 的唯一语义合并器上。
 
+Node 默认计划仅持有 body 快照与隐式类型；非默认 init 立即交给原生 Response 验证。
+headers/body/clone 首次观察后共用同一原生所有者，status/statusText 不保存第二份状态。
 公开的 sugar Response 携带模块私有 body 元数据。该元数据是该 Response 的真实构造事实，
 不是按 handler 猜测的缓存；body 已使用或锁定时禁止直接写元数据，仍按标准错误语义处理。
 
@@ -86,8 +89,8 @@ Context 持有一个运行时 `RequestSource`，而不是强制持有已物化�
 - Fetch/Bun source 包装已有 Request；
 - Node source 直接持有 IncomingMessage、method、target、authority 和 socket；
 - router 从 source 的 path/method 匹配；
-- `c.get()` 优先从原生头表读取；`c.headers` 首次访问时物化 Headers；
-- `c.raw` 首次访问时物化标准 Request；
+- `c.get()` 在未物化时从原生头表读取；首次 `c.headers` 或 `c.raw` 物化唯一标准 Request；
+- 此后 `c.get()`、`c.headers`、`c.raw.headers` 共用该 Request 的可修改 Headers；
 - body ownership 只能由 source 内一个状态机取得，raw/body parser 不得双读。
 
 ### 3.3 Node body 引擎
@@ -125,17 +128,17 @@ Node 有界 body 直接读取 IncomingMessage Buffer：
 
 违反以下任一项视为缺陷：
 
-- text/json/bytes Node wire：零 WebStream bridge、零 pipeline、零 body copy（string UTF-8
-  编码由 Node writer 完成；Uint8Array 只建立共享 Buffer view）；
+- text/json/bytes Node wire：零 WebStream bridge、零 pipeline；默认 string 不额外复制。
+  Uint8Array 必须在构造时取得 O(n) 快照，writer 只建立共享 Buffer view；观察原生 API 时
+  遵守原生复制语义。原“零 body copy”对可修改输入违反 Response 契约，不能作为优化目标；
 - Node GET probe：未访问 `c.raw/c.headers` 时不得创建 Request、Headers、ReadableStream；
 - body 算法 O(n)，有限额时内存 O(limit)，多 chunk 最多一次合并；
 - stream 全程有背压，未消费请求不得导致连接永久挂起；
 - 不新增全局无界 Map/WeakMap；响应私有元数据随 Response 生命周期回收；
 - Bun probe/body/bare text 相对 R4.4 不得稳定回退超过 3%；
-- Node 真实 probe 必须相对 R4.4 提升至少 3 倍；同轮配对中位数必须超过 Hono，`+10%`
-  作为 stretch goal；
-- Bun 真实 probe、global middleware 和安全 JSON 的同语义配对中位数必须超过 Hono，
-  `+10%` 作为 stretch goal；
+- Node 真实 probe 必须相对 R4.4 提升至少 3 倍；最终目标为同轮配对中位数超过 Hono 至少 10%；
+- Bun 真实 probe、global middleware 和安全 JSON 的同语义配对中位数目标超过 Hono 至少 10%；
+- 恢复 `09792a5` 原定目标，不沿用实现后将 `+10%` 降为 stretch 的核销方式；
 - p99 不得用吞吐交换，错误/timeout 必须为 0；RSS/GC 不得显著恶化。
 
 ## 6. 基准统计纪律
@@ -152,5 +155,5 @@ Node 有界 body 直接读取 IncomingMessage Buffer：
 
 响应、请求、body 三个旧执行路径均已替换；旧 `requestOf`、`Readable.fromWeb`、`pipeline`
 和兼容开关不存在；测试矩阵、双形态进程冒烟、Node/Bun 全量、coverage、fmt/lint/
-typecheck/build、smoke/example/soak、Tillgate 只读消费验证全部通过；性能按配对统计超过
-Hono 并记录 stretch goal 的达成/未达成后，本单元才可标记“已核销”。
+typecheck/build、smoke/example/soak、Tillgate 只读消费验证全部通过；性能预算按配对统计
+达标并记录原始证据后，本单元才可标记“已核销”。

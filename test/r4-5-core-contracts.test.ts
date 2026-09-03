@@ -21,6 +21,58 @@ import { createPlannedResponse } from "../src/core/response-plan.ts";
 import { createRouterState, registerDef } from "../src/router/router.ts";
 
 describe("R4.5 internal lifecycle contracts", () => {
+  it("rejects invalid direct return values instead of treating them as response bodies", async () => {
+    for (const value of [0, false, "body", {}]) {
+      const app = new Keala({ env: "test" });
+      const errors: string[] = [];
+      app.onError((error) => {
+        errors.push(error.message);
+      });
+      app.get("/invalid", () => value as never);
+      const response = await app.handle(new Request("http://localhost/invalid"));
+      expect(response.status).toBe(500);
+      expect(errors).toEqual([
+        `handler returned ${typeof value}; only Response, undefined or null are valid`,
+      ]);
+      expect(await response.text()).toBe("Internal Server Error");
+    }
+  });
+  it("rejects a non-Promise thenable from a direct handler through the same error funnel", async () => {
+    const app = new Keala({ env: "test" });
+    const errors: string[] = [];
+    app.onError((error) => {
+      errors.push(error.message);
+    });
+    // Deliberately malformed handler result: exercise the rejection guard.
+    // oxlint-disable-next-line unicorn/no-thenable
+    app.get("/thenable", () => ({ then: () => undefined }) as never);
+    const response = await app.handle(new Request("http://localhost/thenable"));
+    expect(response.status).toBe(500);
+    expect(errors).toEqual(["handler returned a promise — await it inside the handler instead"]);
+    expect(await response.text()).toBe("Internal Server Error");
+  });
+  it("B45-15: async direct response inspection failures never reject handle", async () => {
+    const app = new Keala({ env: "test" });
+    const seen: string[] = [];
+    app.onError((error) => {
+      seen.push(error.message);
+    });
+    app.get(
+      "/getter",
+      async () =>
+        new Proxy(new Response("body"), {
+          get(target, key) {
+            if (key === "status") throw new Error("response getter failed");
+            return Reflect.get(target, key, target) as unknown;
+          },
+        }),
+    );
+    const result = await app.handle(new Request("http://localhost/getter"));
+    expect(result.status).toBe(500);
+    expect(seen).toEqual(["response getter failed"]);
+    expect(await result.text()).not.toContain("response getter failed");
+  });
+
   it("keeps the exported direct chain async commit behavior", async () => {
     const context: MiddlewareContext = { state: Object.create(null), _res: undefined };
     const chain = direct(async () => new Response("async"));

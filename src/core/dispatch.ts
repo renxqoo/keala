@@ -314,32 +314,36 @@ const dispatchDirect = (
   method: string,
 ): Response | Promise<Response> => {
   const finish = (result: HandlerResult): Response | Promise<Response> => {
-    if (result === undefined || result === null) return finalizeGuarded(app, c);
-    if (!(result instanceof Response)) {
-      if (typeof (result as PromiseLike<unknown>).then === "function") {
+    try {
+      if (result === undefined || result === null) return finalizeGuarded(app, c);
+      if (!(result instanceof Response)) {
+        if (typeof (result as PromiseLike<unknown>).then === "function") {
+          return errorResponse(
+            app,
+            c,
+            new TypeError("handler returned a promise — await it inside the handler instead"),
+          );
+        }
         return errorResponse(
           app,
           c,
-          new TypeError("handler returned a promise — await it inside the handler instead"),
+          new TypeError(
+            `handler returned ${typeof result}; only Response, undefined or null are valid`,
+          ),
         );
       }
-      return errorResponse(
-        app,
-        c,
-        new TypeError(
-          `handler returned ${typeof result}; only Response, undefined or null are valid`,
-        ),
-      );
+      if (
+        c.headersRecord === null &&
+        method !== "HEAD" &&
+        !(isEmptyStatus(result.status) && result.body !== null)
+      ) {
+        return result;
+      }
+      c._res = result;
+      return finalizeGuarded(app, c);
+    } catch (error) {
+      return errorResponse(app, c, error);
     }
-    if (
-      c.headersRecord === null &&
-      method !== "HEAD" &&
-      !(isEmptyStatus(result.status) && result.body !== null)
-    ) {
-      return result;
-    }
-    c._res = result;
-    return finalizeGuarded(app, c);
   };
   try {
     const result = handler(c, NOOP_TAIL);

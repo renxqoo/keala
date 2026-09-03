@@ -10,15 +10,10 @@
  */
 
 export type DirectResponseBody = string | Uint8Array;
-export type ResponseHeadersInit = unknown;
 
 export interface ResponseFacts {
   readonly directBody: DirectResponseBody;
   readonly implicitContentType?: string;
-  readonly responseStatus?: number;
-  readonly responseStatusText?: string;
-  headersInit?: ResponseHeadersInit;
-  headersResolved?: true;
   native?: Response;
   readonly planned?: true;
 }
@@ -29,11 +24,7 @@ type ResponseWithFacts = Response & { [RESPONSE_FACTS]?: ResponseFacts };
 
 class PlannedResponse {
   readonly directBody: DirectResponseBody;
-  readonly responseStatus: number;
-  readonly responseStatusText: string;
   readonly implicitContentType: string | undefined;
-  headersInit: ResponseHeadersInit;
-  declare headersResolved?: true;
   declare native?: Response;
 
   get planned(): true {
@@ -41,19 +32,21 @@ class PlannedResponse {
   }
 
   constructor(body: DirectResponseBody, init: ResponseInit = {}, implicitContentType?: string) {
-    this.directBody = body;
-    this.responseStatus = init.status ?? 200;
-    this.responseStatusText = init.statusText ?? "";
+    this.directBody = typeof body === "string" ? body : new Uint8Array(body);
     this.implicitContentType = implicitContentType;
-    this.headersInit = init.headers;
+    // Non-default init needs the native constructor's eager validation and
+    // snapshot/coercion rules. The untouched default string path stays lazy.
+    if (init.status !== undefined || init.statusText !== undefined || init.headers !== undefined) {
+      this.#materialize(init);
+    }
   }
 
   get status(): number {
-    return this.responseStatus;
+    return this.native?.status ?? 200;
   }
 
   get statusText(): string {
-    return this.responseStatusText;
+    return this.native?.statusText ?? "";
   }
 
   get redirected(): boolean {
@@ -73,14 +66,7 @@ class PlannedResponse {
   }
 
   get headers(): Headers {
-    if (this.headersResolved === true) return this.headersInit as Headers;
-    const headers = new Headers(this.headersInit as ConstructorParameters<typeof Headers>[0]);
-    if (this.implicitContentType !== undefined && !headers.has("content-type")) {
-      headers.set("content-type", this.implicitContentType);
-    }
-    this.headersInit = headers;
-    this.headersResolved = true;
-    return headers;
+    return this.#materialize().headers;
   }
 
   get body(): ReadableStream<Uint8Array> | null {
@@ -104,16 +90,7 @@ class PlannedResponse {
   }
 
   clone(): Response {
-    if (this.bodyUsed) throw new TypeError("Body is unusable");
-    return createPlannedResponse(
-      this.directBody,
-      {
-        status: this.status,
-        statusText: this.statusText,
-        headers: this.headers,
-      },
-      this.implicitContentType,
-    );
+    return this.#materialize().clone() as Response;
   }
 
   formData(): Promise<FormData> {
@@ -132,13 +109,17 @@ class PlannedResponse {
     return "Response";
   }
 
-  #materialize(): Response {
+  #materialize(init?: ResponseInit): Response {
     if (this.native !== undefined) return this.native;
-    return (this.native = new Response(this.directBody, {
-      status: this.status,
-      statusText: this.statusText,
-      headers: this.headers,
-    }));
+    const headers = new Headers(init?.headers as ConstructorParameters<typeof Headers>[0]);
+    if (this.implicitContentType !== undefined && !headers.has("content-type")) {
+      headers.set("content-type", this.implicitContentType);
+    }
+    const native = new Response(this.directBody, {
+      ...init,
+      headers,
+    });
+    return (this.native = native);
   }
 }
 

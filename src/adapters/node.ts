@@ -15,7 +15,7 @@ import {
 } from "node:http";
 import { Readable } from "node:stream";
 import type { Application } from "../core/app.ts";
-import { responseFactsOf, type ResponseHeadersInit } from "../core/response-plan.ts";
+import { responseFactsOf } from "../core/response-plan.ts";
 import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
 import { NATIVE_REQUEST_SOURCE, type NativeRequestSource } from "../core/request-source.ts";
 import { createError } from "../http/errors.ts";
@@ -56,7 +56,6 @@ class NodeRequestSource implements NativeRequestSource {
   readonly server: NodeServerHandle;
   // Cold transport state is added only when an API consumes it. `declare`
   // emits no class fields, keeping GET/probe sources at four own slots.
-  declare _headers?: Headers;
   declare _body?: ReadableStream<Uint8Array> | null;
   declare _bodySet?: true;
   declare _request?: Request;
@@ -91,18 +90,14 @@ class NodeRequestSource implements NativeRequestSource {
   }
 
   header(name: string): string | null {
+    if (this._request !== undefined) return this._request.headers.get(name);
     const value = this.incoming.headers[name.toLowerCase()];
     if (value === undefined) return null;
     return Array.isArray(value) ? value.join(", ") : value;
   }
 
   headers(): Headers {
-    if (this._headers !== undefined) return this._headers;
-    const headers = new Headers();
-    for (const [name, value] of Object.entries(this.incoming.headers)) {
-      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
-    }
-    return (this._headers = headers);
+    return this.request().headers;
   }
 
   body(): ReadableStream<Uint8Array> | null {
@@ -119,6 +114,10 @@ class NodeRequestSource implements NativeRequestSource {
 
   request(): Request {
     if (this._request !== undefined) return this._request;
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(this.incoming.headers)) {
+      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+    }
     if (this._bytes !== undefined && mayCarryBody(this.method)) {
       // The native source already owns/consumed the IncomingMessage. Expose a
       // standards-shaped consumed Request: bodyUsed is true and every second
@@ -126,7 +125,7 @@ class NodeRequestSource implements NativeRequestSource {
       // re-wrapping or copying the original payload.
       const consumed = new Request(this.absoluteUrl(), {
         method: this.method,
-        headers: this.headers(),
+        headers,
         body: new Uint8Array(0),
         duplex: "half",
       });
@@ -136,7 +135,7 @@ class NodeRequestSource implements NativeRequestSource {
     const body = this.body();
     return (this._request = new Request(this.absoluteUrl(), {
       method: this.method,
-      headers: this.headers(),
+      headers,
       ...(body === null ? {} : { body, duplex: "half" }),
     }));
   }
@@ -241,33 +240,9 @@ class NodeRequestSource implements NativeRequestSource {
   }
 }
 
-const writeHeaderInit = (headers: ResponseHeadersInit, out: ServerResponse): void => {
-  if (headers instanceof Headers) {
-    const cookies = headers.getSetCookie();
-    for (const [name, value] of headers) {
-      if (name !== "set-cookie") out.setHeader(name, value);
-    }
-    if (cookies.length > 0) out.setHeader("set-cookie", cookies);
-    return;
-  }
-  if (Array.isArray(headers)) {
-    for (const entry of headers as [string, string][]) {
-      out.appendHeader(entry[0], entry[1]);
-    }
-    return;
-  }
-  for (const [name, value] of Object.entries(headers as Record<string, unknown>)) {
-    out.setHeader(name, value as string | readonly string[]);
-  }
-};
-
-const writeHeaders = (res: Response, out: ServerResponse, facts = responseFactsOf(res)): void => {
+const writeHeaders = (res: Response, out: ServerResponse): void => {
   out.statusCode = res.status;
   if (res.statusText.length > 0) out.statusMessage = res.statusText;
-  if (facts?.planned === true) {
-    if (facts.headersInit !== undefined) writeHeaderInit(facts.headersInit, out);
-    return;
-  }
   const cookies = res.headers.getSetCookie();
   for (const [name, value] of res.headers) {
     if (name === "set-cookie") continue;
@@ -340,36 +315,27 @@ const writeStream = async (
 
 const writeResponse = (res: Response, out: ServerResponse): void | Promise<void> => {
   const facts = responseFactsOf(res);
-  if (
-    facts?.planned === true &&
-    facts.headersInit === undefined &&
-    facts.headersResolved !== true
-  ) {
+  if (facts?.planned === true && facts.native === undefined) {
     const length = directBodyLength(facts.directBody);
     const headers =
       facts.implicitContentType === undefined
         ? { "content-length": length }
         : { "content-type": facts.implicitContentType, "content-length": length };
-    const status = facts.responseStatus as number;
-    const statusText = facts.responseStatusText as string;
-    if (statusText.length === 0) out.writeHead(status, headers);
-    else out.writeHead(status, statusText, headers);
+    // Only the default init remains unmaterialized; all other status/header
+    // shapes have already been validated by their native Response owner.
+    out.writeHead(200, headers);
     endDirectBody(out, facts.directBody);
     return;
   }
-  writeHeaders(res, out, facts);
+  if (facts === undefined && (res.bodyUsed || res.body?.locked === true)) {
+    throw new TypeError("cannot send a consumed or locked response body");
+  }
+  writeHeaders(res, out);
   if (facts === undefined && res.body === null) {
     out.end();
     return;
   }
   if (facts !== undefined) {
-    if (
-      facts.headersResolved !== true &&
-      !out.hasHeader("content-type") &&
-      facts.implicitContentType !== undefined
-    ) {
-      out.setHeader("content-type", facts.implicitContentType);
-    }
     // The byte-exact body is already known. A fixed length avoids chunk
     // framing and also replaces an application-supplied stale length, which
     // must never desynchronize a keep-alive connection.
@@ -429,11 +395,15 @@ export const startNodeServer = (
       // app dispatch itself never rejects — failures here are native source
       // validation, socket teardown or response writer failures.
       if (!out.headersSent) {
+        // A failed writer may already have staged another body's framing,
+        // encoding, cookies and reason phrase. None describes this envelope.
+        for (const name of out.getHeaderNames()) out.removeHeader(name);
         out.statusCode = error instanceof InvalidRequestTargetError ? 400 : 500;
+        out.statusMessage =
+          error instanceof InvalidRequestTargetError ? "Bad Request" : "Internal Server Error";
         out.setHeader("content-type", "text/plain; charset=utf-8");
-        out.end(
-          error instanceof InvalidRequestTargetError ? "Bad Request" : "Internal Server Error",
-        );
+        out.setHeader("content-length", Buffer.byteLength(out.statusMessage));
+        out.end(out.statusMessage);
       } else {
         out.destroy();
       }
