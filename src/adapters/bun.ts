@@ -220,10 +220,32 @@ export const startBunServer = (
       server.stop();
       let done = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
+      // A ws upgrade admitted BEFORE the drain sweep can still be parking on
+      // an await (auth middleware, body read) — its socket only enters
+      // openSockets when Bun fires `open` synchronously inside server.upgrade(),
+      // long after the sweep above ran. Sweep again at finish() on BOTH paths:
+      // finish(false) fires only once inFlight reaches zero, and an upgrade's
+      // `open` precedes its settle, so this catches every late socket
+      // deterministically — without it the process outlived close() and
+      // ignored SIGTERM (R4.10 child-process repro: 3x SIGTERM no-op).
+      const sweepLateSockets = (): void => {
+        for (const ws of openSockets) {
+          try {
+            (ws as { close(code?: number, reason?: string): void }).close(
+              1001,
+              "server shutting down",
+            );
+          } catch {
+            // A dead socket refusing a courtesy close is not worth stopping for.
+          }
+        }
+        openSockets.clear();
+      };
       const finish = (timedOut: boolean): void => {
         if (done) return;
         done = true;
         if (timer !== undefined) clearTimeout(timer);
+        sweepLateSockets();
         if (timedOut) server.stop(true);
         resolve({ timedOut });
       };

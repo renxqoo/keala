@@ -33,6 +33,7 @@ import {
   createLifecycle,
   installSignalBridge,
   normalizeRequestTimeout,
+  registerShutdownHandler,
   settleRequest,
   type LifecycleState,
 } from "./lifecycle.ts";
@@ -469,6 +470,21 @@ export class Keala implements NativeApplication {
 
   get errorMapper(): ErrorMapper | undefined {
     return this.#errorMapper;
+  }
+
+  /**
+   * Post-drain shutdown hook (R4.10): handlers run once, in registration
+   * order, after in-flight work settles and BEFORE close() resolves —
+   * flush logs/metrics, close DB pools. Failures are contained and logged;
+   * a thenable return is awaited. Handlers registered after a completed
+   * close never run (the shutdown already happened).
+   */
+  onShutdown(handler: () => unknown): Application {
+    if (typeof handler !== "function") {
+      throw new TypeError("app.onShutdown() requires a function");
+    }
+    registerShutdownHandler(this.#lifecycle, handler);
+    return this;
   }
 
   onError(mapper: ErrorMapper): Application {

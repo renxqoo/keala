@@ -118,10 +118,14 @@ describe("audit NA-P2: options surface and listener hygiene", () => {
 
   it("Bun-only keys fail with their migration story, not a bare unknown-option", () => {
     const app = new Keala(quiet);
-    expect(() => startNodeServer(app, { port: 0, reusePort: true })).toThrow(/cluster/);
-    expect(() => startNodeServer(app, { port: 0, nativeRoutes: false })).toThrow(/native routing/);
-    expect(() => startNodeServer(app, { port: 0, websocket: {} })).toThrow(/Bun-only/);
-    expect(() => startNodeServer(app, { port: 0, idleTimout: 1 })).toThrow(/unknown option/);
+    expect(() => startNodeServer(app, { port: 0, reusePort: true } as never)).toThrow(/cluster/);
+    expect(() => startNodeServer(app, { port: 0, nativeRoutes: false } as never)).toThrow(
+      /native routing/,
+    );
+    expect(() => startNodeServer(app, { port: 0, websocket: {} } as never)).toThrow(/Bun-only/);
+    expect(() => startNodeServer(app, { port: 0, idleTimout: 1 } as never)).toThrow(
+      /unknown option/,
+    );
   });
 
   it("pipelining many concurrent responses on one socket never warns about listeners", async () => {

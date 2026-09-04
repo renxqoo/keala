@@ -57,6 +57,7 @@ export interface Application {
    * Unregistered + 5xx + non-test env keeps the framework console fallback.
    */
   onError(mapper: ErrorMapper): Application;
+  onShutdown(handler: () => unknown): Application;
   /** The registered error mapper, or undefined when the built-in owns errors. */
   readonly errorMapper: ErrorMapper | undefined;
   /** Register global middleware or a plugin (compiled into every route chain). */

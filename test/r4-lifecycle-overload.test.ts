@@ -370,7 +370,7 @@ describe("R4.6 upgrade U1: AdmissionStrategy injection", () => {
     expect(seen).toEqual(["1:http://x/work", "2:http://x/work"]);
   });
 
-  it("an async strategy is awaited; a null resolution holds a real slot", async () => {
+  it("an async null admits on real capacity and respects the hard ceiling", async () => {
     const app = new Keala({
       env: "test",
       overload: {
@@ -396,14 +396,18 @@ describe("R4.6 upgrade U1: AdmissionStrategy injection", () => {
     const first = app.handle(new Request("http://x/work"));
     await wait(10);
     const second = app.handle(new Request("http://x/wait"));
-    await wait(20); // the strategy's own wait resolves, then the gate admits
-    expect(app.inFlight).toBe(2); // BOTH hold real slots — no phantom release
+    await wait(20); // the strategy's own wait resolves, then the gate decides
+    // R4.10 hard ceiling: the late null lands while the FIRST request still
+    // holds the only slot, so it is REFUSED (503) instead of admitted over
+    // maxConcurrency — the operator's capacity contract is absolute. When
+    // capacity is genuinely free at resolution time the null still admits
+    // and holds a real slot (locked in test/audit-r410-lifecycle.test.ts).
+    expect(app.inFlight).toBe(1);
     gateA.resolve();
     gateB.resolve();
     expect((await first).status).toBe(200);
-    expect((await second).status).toBe(200);
+    expect((await second).status).toBe(503);
     expect(await (await first).text()).toBe("a");
-    expect(await (await second).text()).toBe("b");
   });
 
   it("implicit selection stays r4-4-equal: maxQueue picks queue, otherwise fail-fast", () => {

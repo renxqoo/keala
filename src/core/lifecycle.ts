@@ -10,6 +10,7 @@
  */
 
 import type { Application } from "./app.ts";
+import { serverOf } from "./server-slot.ts";
 import type { CloseOptions, CloseStatus, OverloadOptions } from "../types.ts";
 import { normalizeOverload } from "./lifecycle-admission.ts";
 import type { LifecycleOverload, WaiterSlot } from "./lifecycle-admission.ts";
@@ -36,6 +37,14 @@ export interface LifecycleState {
   waiterPool: WaiterSlot[];
   closeWaiters: (() => void)[];
   closePromise: Promise<CloseStatus> | null;
+  /**
+   * app.onShutdown() handlers: run once, in registration order, after the
+   * drain settles and before close() resolves (flush logs/metrics, close
+   * pools). Failures are contained and logged — one bad hook must not
+   * block the rest of the shutdown or hang close().
+   */
+  shutdownHandlers: Array<() => unknown>;
+  shutdownRan: boolean;
   /**
    * Force the in-flight close (set by closeApp): a repeat close with
    * drain 0 escalates — adapter force routines run, then {timedOut:true}.
@@ -67,6 +76,8 @@ export interface StoppableHandle {
 }
 
 export const createLifecycle = (overload: OverloadOptions | undefined): LifecycleState => ({
+  shutdownHandlers: [],
+  shutdownRan: false,
   overload: overload === undefined ? null : normalizeOverload(overload),
   draining: false,
   inFlight: 0,
@@ -182,6 +193,35 @@ export const subscribeSettled = (lc: LifecycleState, callback: () => void): bool
   return false;
 };
 
+/** Run the registered shutdown handlers exactly once, contained. */
+const runShutdownHandlers = (lc: LifecycleState): Promise<void> => {
+  if (lc.shutdownRan) return Promise.resolve();
+  lc.shutdownRan = true;
+  const handlers = lc.shutdownHandlers.splice(0);
+  if (handlers.length === 0) return Promise.resolve();
+  // Registration ORDER, sequentially: a pool-closing hook must not race
+  // the flush that logs the stats it produced.
+  return (async (): Promise<void> => {
+    for (let index = 0; index < handlers.length; index++) {
+      const handler = handlers[index];
+      if (handler === undefined) continue;
+      try {
+        await handler();
+      } catch (reason) {
+        console.error(
+          `\n  keala: onShutdown handler #${index + 1} failed\n  `,
+          reason instanceof Error ? (reason.stack ?? reason.message) : reason,
+        );
+      }
+    }
+  })();
+};
+
+/** Register an app.onShutdown() handler (validated at the app boundary). */
+export const registerShutdownHandler = (lc: LifecycleState, handler: () => unknown): void => {
+  lc.shutdownHandlers.push(handler);
+};
+
 const DEFAULT_DRAIN_MS = 30_000;
 
 /**
@@ -225,14 +265,17 @@ export const closeApp = (
       lc.escalate = null;
       if (timer !== undefined) clearTimeout(timer);
       if (timedOut) handle?.stop(true);
-      resolve({ timedOut, inFlight: lc.inFlight });
+      // onShutdown hooks run after the drain, before close() resolves.
+      void runShutdownHandlers(lc).then(() => resolve({ timedOut, inFlight: lc.inFlight }));
     };
     if (drain === 0) {
       // Immediate force (CT-9): the listener ALWAYS dies here — an idle
       // server must not keep answering 503s with the port still bound.
       handle?.stop(true);
       done = true;
-      resolve({ timedOut: lc.inFlight > 0, inFlight: lc.inFlight });
+      void runShutdownHandlers(lc).then(() =>
+        resolve({ timedOut: lc.inFlight > 0, inFlight: lc.inFlight }),
+      );
       return;
     }
     if (handle?.stopGraceful !== undefined) {
@@ -293,8 +336,18 @@ export const closeApp = (
 export const installSignalBridge = (app: Application): void => {
   let fired = false;
   const onSignal = (): void => {
-    void (fired ? app.close({ drain: 0 }) : app.close());
-    fired = true;
+    if (!fired) {
+      fired = true;
+      void app.close();
+      return;
+    }
+    // Escalation. A RUNNING close force-closes through its escalate hook.
+    // A COMPLETED close has none left — and its promise resolves without
+    // touching the server again, so a process whose event loop is held by
+    // user resources (DB pool keepalive, a late websocket) would ignore
+    // every further stop signal and need SIGKILL (R4.10 repro: 3x SIGTERM
+    // no-op). Hard-stop the server directly instead.
+    void app.close({ drain: 0 }).then(() => serverOf(app)?.stop(true));
   };
   process.on("SIGTERM", onSignal);
   process.on("SIGINT", onSignal);

@@ -11,6 +11,7 @@
 
 import type { AdmissionStrategy, OverloadOptions, OverloadReason } from "../types.ts";
 import type { LifecycleState, QueueWaiter } from "./lifecycle.ts";
+import { releaseInFlight } from "./lifecycle.ts";
 import type { RequestSource } from "./request-source.ts";
 import { sourceRequest, sourceSignal } from "./request-source.ts";
 
@@ -75,6 +76,18 @@ export const admitRequest = (
     taken = true;
     lc.inFlight++;
   };
+  // Every REFUSAL exits through here (R4.10): a strategy may have called
+  // admit() before deciding to refuse (or throwing, or returning garbage) —
+  // the taken slot must return to the pool or it is gone forever: capacity
+  // permanently shrinks by one and close() burns its whole drain window on
+  // an idle app. releaseInFlight also refills the queue, which is correct —
+  // the slot is genuinely free again.
+  const refuse = (response: Response): Response => {
+    if (!taken) return response;
+    taken = false;
+    releaseInFlight(lc);
+    return response;
+  };
   // Strategies speak the same fetch-Request contract as overload.handler —
   // a native source is materialized (saturation is the cold path). The RAW
   // source rides along as the last argument: eviction signals (the client's
@@ -89,18 +102,18 @@ export const admitRequest = (
     decision = overload.strategy.onSaturated(lc, sourceRequest(request), admit, request);
   } catch (error) {
     // A throwing strategy must not escape app.handle (REVIEW-CT-34).
-    return fallback(error);
+    return refuse(fallback(error));
   }
   if (decision === null) {
     if (!taken) admit();
     return null;
   }
-  if (decision instanceof Response) return decision;
+  if (decision instanceof Response) return refuse(decision);
   if (typeof (decision as { then?: unknown }).then !== "function") {
     // Garbage returns (strings, numbers, objects) are strategy bugs, not
     // responses (REVIEW-SEC-3).
-    return fallback(
-      new TypeError("onSaturated returned a non-Response, non-null, non-thenable value"),
+    return refuse(
+      fallback(new TypeError("onSaturated returned a non-Response, non-null, non-thenable value")),
     );
   }
   return decision.then(
@@ -110,17 +123,24 @@ export const admitRequest = (
         // (admitted in-flight); an untaken admission into a draining app
         // is refused — the gate never admits new work during shutdown.
         if (taken) return null;
-        if (lc.draining) return rejectResponse(lc, request, "draining");
+        if (lc.draining) return refuse(rejectResponse(lc, request, "draining"));
+        // A slow async strategy resolving null after capacity refilled and
+        // was re-taken by others must not oversubscribe (R4.10): the
+        // admission contract caps inFlight at maxConcurrency, so the late
+        // null is refused instead of pushed over the ceiling.
+        if (lc.inFlight >= overload.maxConcurrency) {
+          return refuse(rejectResponse(lc, request, "concurrency"));
+        }
         admit();
         return null;
       }
-      if (wake instanceof Response) return wake;
+      if (wake instanceof Response) return refuse(wake);
       // Undefined et al. from an async strategy is the same bug class as
       // garbage sync returns (REVIEW-SEC-4).
-      return fallback(new TypeError("onSaturated resolved a non-Response, non-null value"));
+      return refuse(fallback(new TypeError("onSaturated resolved a non-Response, non-null value")));
     },
     (error: unknown) => {
-      return fallback(error);
+      return refuse(fallback(error));
     },
   );
 };
