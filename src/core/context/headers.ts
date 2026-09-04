@@ -61,8 +61,7 @@ export const setResponseHeader = (
     setResponseHeader(c, field, String(value));
     return;
   }
-  const name = field.toLowerCase();
-  if (!isSingleton(name)) validateHeaderName(name);
+  const name = validateHeaderName(field);
   if (typeof value === "string") {
     validateHeaderValue(name, value);
     const res = c._res;
@@ -99,8 +98,7 @@ export const setResponseHeader = (
 };
 
 export const appendResponseHeader = (c: ContextState, field: string, value: HeaderValue): void => {
-  const name = field.toLowerCase();
-  if (!isSingleton(name)) validateHeaderName(name);
+  const name = validateHeaderName(field);
   const next = typeof value === "string" ? [value] : [...value];
   for (const entry of next) validateHeaderValue(name, entry);
   const singleton = isSingleton(name);

@@ -96,20 +96,41 @@ const headersInitOf = (merged: Record<string, HeaderValue>): Headers => {
   return headers;
 };
 
-/** Consume the staging record into the sugar Response's own init. */
+/**
+ * Consume the staging record into the sugar Response's own init. With
+ * per-call headers a lowercase-merged COPY is built and the record is
+ * cleared up front (the old path). Without them — the common staged-only
+ * shape — the LIVE record is returned as scratch: callers may write
+ * content-type defaults into it, and `clearStagedInPlace` runs on every
+ * exit, keeping the in-place clearing contract the memoized cookies facade
+ * depends on. One spread allocation per sugar call disappears.
+ */
 const consumeStaged = (
   c: ContextState,
   headers: Record<string, HeaderValue> | undefined,
 ): Record<string, HeaderValue> | undefined => {
   const merged = mergedHeadersOf(c, headers);
   if (merged !== undefined && c.headersRecord !== null) {
-    // Clear IN PLACE, never swap the slot: the memoized cookies facade (and
-    // any other holder) keeps referencing THIS record object — a slot swap
-    // would detach them and silently drop every later c.cookies.set() into
-    // the orphaned record.
     for (const key of Object.keys(c.headersRecord)) delete c.headersRecord[key];
   }
   return merged;
+};
+
+/** The staged-only fast path: the live record (undefined when nothing staged). */
+const liveStaged = (c: ContextState): Record<string, HeaderValue> | undefined =>
+  c.headersRecord ?? undefined;
+
+/**
+ * Clear the staged record IN PLACE, never swap the slot: the memoized
+ * cookies facade (and any other holder) keeps referencing THIS record
+ * object — a slot swap would detach them and silently drop every later
+ * c.cookies.set() into the orphaned record.
+ */
+const clearStagedInPlace = (c: ContextState): void => {
+  const record = c.headersRecord;
+  if (record !== null) {
+    for (const key of Object.keys(record)) delete record[key];
+  }
 };
 
 /** The empty-status Response shared by every sugar helper. */
@@ -155,28 +176,30 @@ export const sugarText = (
   status?: number,
   headers?: Record<string, HeaderValue>,
 ): Response => {
-  const merged = consumeStaged(c, headers);
+  const live = headers === undefined;
+  const merged = live ? liveStaged(c) : consumeStaged(c, headers);
   // An explicitly staged c.status wins over the default (hono parity).
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
   const st = status ?? staged;
+  let response: Response;
   if (st !== undefined && isEmptyStatus(st)) {
-    return emptyStatusResponse(st, dropContentHeaders(merged));
+    response = emptyStatusResponse(st, dropContentHeaders(merged));
+  } else if (sourceMethod(c.rawRequest) === "HEAD") {
+    response = sugarHead(merged, TEXT_PLAIN, payloadLength(body as string | Uint8Array), st);
+  } else if (merged === undefined) {
+    response = st === undefined ? textResponse(c, body) : textResponse(c, body, { status: st });
+  } else {
+    if (merged["content-type"] === undefined) merged["content-type"] = TEXT_PLAIN;
+    const init = { status: st as number, headers: headersInitOf(merged) };
+    response = directResponse(
+      c,
+      isNativeRequestSource(c.rawRequest)
+        ? createPlannedResponse(body, init)
+        : new Response(body, init),
+    );
   }
-  if (sourceMethod(c.rawRequest) === "HEAD") {
-    return sugarHead(merged, TEXT_PLAIN, payloadLength(body as string | Uint8Array), st);
-  }
-  if (merged === undefined) {
-    if (st === undefined) return textResponse(c, body);
-    return textResponse(c, body, { status: st });
-  }
-  if (merged["content-type"] === undefined) merged["content-type"] = TEXT_PLAIN;
-  const init = { status: st as number, headers: headersInitOf(merged) };
-  return directResponse(
-    c,
-    isNativeRequestSource(c.rawRequest)
-      ? createPlannedResponse(body, init)
-      : new Response(body, init),
-  );
+  if (live) clearStagedInPlace(c);
+  return response;
 };
 
 export const sugarJson = (
@@ -189,58 +212,60 @@ export const sugarJson = (
   // TypeError → 500). A handler doing c.json(findUser()) on a miss gets
   // the same graceful "null" JSON.stringify produces for absent values.
   const payload = body === undefined ? null : body;
-  const merged = consumeStaged(c, headers);
+  const live = headers === undefined;
+  const merged = live ? liveStaged(c) : consumeStaged(c, headers);
   // Response.json sets `application/json` and serializes natively — 74ns
   // cheaper than stringify + record init (see docs/AUDIT.md).
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
   const st = status ?? staged;
+  let response: Response;
   if (st !== undefined && isEmptyStatus(st)) {
-    return emptyStatusResponse(st, dropContentHeaders(merged));
-  }
-  if (sourceMethod(c.rawRequest) === "HEAD") {
+    response = emptyStatusResponse(st, dropContentHeaders(merged));
+  } else if (sourceMethod(c.rawRequest) === "HEAD") {
     // The HEAD view serializes once, here — Response.json would attach a body.
-    return sugarHead(
+    response = sugarHead(
       merged,
       "application/json",
       byteLengthOf(JSON.stringify(payload) ?? "null"),
       st,
     );
-  }
-  if (isNativeRequestSource(c.rawRequest)) {
+  } else if (isNativeRequestSource(c.rawRequest)) {
     const bodyText = JSON.stringify(payload) ?? "null";
     if (merged === undefined) {
-      return directResponse(
+      response = directResponse(
         c,
         createPlannedResponse(bodyText, st === undefined ? {} : { status: st }, "application/json"),
       );
+    } else {
+      if (merged["content-type"] === undefined) {
+        merged["content-type"] = "application/json";
+      }
+      response = directResponse(
+        c,
+        createPlannedResponse(bodyText, {
+          ...(st !== undefined ? { status: st } : {}),
+          headers: headersInitOf(merged),
+        }),
+      );
     }
-    const initHeaders = merged;
-    if (initHeaders["content-type"] === undefined) {
-      initHeaders["content-type"] = "application/json";
-    }
-    return directResponse(
+  } else if (merged === undefined && status === undefined && staged === undefined) {
+    response = directResponse(c, Response.json(payload));
+  } else {
+    response = directResponse(
       c,
-      createPlannedResponse(bodyText, {
-        ...(st !== undefined ? { status: st } : {}),
-        headers: headersInitOf(initHeaders),
-      }),
+      Response.json(
+        payload,
+        merged === undefined
+          ? { status: st }
+          : {
+              status: st,
+              headers: headersInitOf(merged),
+            },
+      ),
     );
   }
-  if (merged === undefined && status === undefined && staged === undefined) {
-    return directResponse(c, Response.json(payload));
-  }
-  return directResponse(
-    c,
-    Response.json(
-      payload,
-      merged === undefined
-        ? { status: st }
-        : {
-            status: st,
-            headers: headersInitOf(merged),
-          },
-    ),
-  );
+  if (live) clearStagedInPlace(c);
+  return response;
 };
 
 export const sugarHtml = (
@@ -249,36 +274,39 @@ export const sugarHtml = (
   status?: number,
   headers?: Record<string, HeaderValue>,
 ): Response => {
-  const merged = consumeStaged(c, headers);
+  const live = headers === undefined;
+  const merged = live ? liveStaged(c) : consumeStaged(c, headers);
   // text/html is the DEFAULT, not an override — the caller's explicit
-  // content-type wins (hono's setDefaultContentType order). The merged record
-  // is already normalized to lowercase keys.
+  // content-type wins (hono's setDefaultContentType order). The merged map
+  // is already normalized to lowercase keys; the live record is written
+  // directly (it is cleared right after the Response is built).
   const withType =
     merged === undefined
       ? { "content-type": TEXT_HTML }
-      : merged["content-type"] === undefined
-        ? { ...merged, "content-type": TEXT_HTML }
-        : merged;
+      : ((merged["content-type"] ??= TEXT_HTML), merged);
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
   const st = status ?? staged;
+  let response: Response;
   // Null-body statuses never carry the html content-type (see sugarText).
   if (st !== undefined && isEmptyStatus(st)) {
-    return new Response(null, {
-      ...(st !== undefined ? { status: st } : {}),
+    response = new Response(null, {
+      status: st,
       headers: headersInitOf(dropContentHeaders(withType) ?? {}),
     });
+  } else if (sourceMethod(c.rawRequest) === "HEAD") {
+    response = sugarHead(withType, undefined, payloadLength(body as string | Uint8Array), st);
+  } else {
+    const init =
+      st === undefined
+        ? { headers: headersInitOf(withType) }
+        : { status: st, headers: headersInitOf(withType) };
+    response = directResponse(
+      c,
+      isNativeRequestSource(c.rawRequest)
+        ? createPlannedResponse(body, init)
+        : new Response(body, init),
+    );
   }
-  if (sourceMethod(c.rawRequest) === "HEAD") {
-    return sugarHead(withType, undefined, payloadLength(body as string | Uint8Array), st);
-  }
-  const init =
-    st === undefined
-      ? { headers: headersInitOf(withType) }
-      : { status: st, headers: headersInitOf(withType) };
-  return directResponse(
-    c,
-    isNativeRequestSource(c.rawRequest)
-      ? createPlannedResponse(body, init)
-      : new Response(body, init),
-  );
+  if (live) clearStagedInPlace(c);
+  return response;
 };

@@ -60,14 +60,14 @@ message bodies and the redirect body. `c.set` was renamed `c.setHeader`.
 
 Still-open divergence: none in routing — `[T2]` is FIXED (trie positions keep
 same-name pattern variants; the skip in `test/agent-redteam.test.ts` is
-un-skipped). The remaining honest performance divergence is Node/V8-only:
-in-process param routes run ~7.5% behind hono under Node (3670 vs 3414ns;
-text routes tie at 3203/3221ns). Isolated attribution: our matcher costs
-66ns vs hono's 23.5ns (V8 native single-regex advantage) and the
-`Object.create(null)` params record costs 19ns create+read vs 4ns for a
-literal on V8 — but JSC reverses both (null-proto 2.96ns is fastest, literal
-8.5ns), so the shapes stay optimized for the primary runtime. HTTP-level
-Node numbers remain within noise of hono.
+un-skipped). Performance standing after 0.7 + R4.9 (docs/HOTPATH-R4-9-QUERY-
+CLOSING.md): 7/7 scenarios at-or-ahead of hono on Node except query, and
+6/7 on Bun (query 0.977). The query residual decomposes into an in-process
+framework gap of ~5% (no single attributable frame — profile-verified) plus
+the official fixture's global body-parser layer on keala's side (hono runs
+zero middleware on the measured paths). Param/text/middleware/json are at
+parity or ahead on both runtimes; the old V8-only matcher/params-record
+attribution is superseded (both fell out of the profile top after 0.7).
 
 Native-sink notes: native entries are emitted as `{ GET: value }` — a bare
 key answers POST/DELETE/… with the sunk response on Bun 1.4 (verified by

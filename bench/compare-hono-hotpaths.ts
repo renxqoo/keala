@@ -26,6 +26,7 @@ type CaseName =
   | "body-safe"
   | "body-raw-safe"
   | "text"
+  | "query"
   | "text-dirty"
   | "text-dirty-correct"
   | "text-dirty-fallback"
@@ -59,6 +60,7 @@ if (
       "body-safe",
       "body-raw-safe",
       "text",
+      "query",
       "text-dirty",
       "text-dirty-correct",
       "text-dirty-fallback",
@@ -124,6 +126,11 @@ if (framework === "keala") {
     });
     app.get("/boom", () => {
       throw new Error("boom");
+    });
+  } else if (caseName === "query") {
+    app.get("/search/:id", (c) => {
+      c.setHeader("X-Query", "hit");
+      return c.text(`${c.params?.["id"]} ${c.query("name")} ${c.query("page")}`);
     });
   } else {
     if (
@@ -198,6 +205,14 @@ if (framework === "keala") {
     app.get("/boom", () => {
       throw new Error("boom");
     });
+  } else if (caseName === "query") {
+    app.get("/search/:id", (c) => {
+      const id = c.req.param("id");
+      const name = c.req.query("name");
+      const page = c.req.query("page");
+      c.header("x-query", "hit");
+      return c.text(`${id} ${name} ${page}`);
+    });
   } else {
     if (
       caseName === "text-dirty" ||
@@ -238,7 +253,11 @@ if (
   const shared = new Request("http://localhost/boom");
   makeRequest = () => shared;
 } else {
-  const path = caseName.startsWith("probe") ? "/livez" : "/text";
+  const path = caseName.startsWith("probe")
+    ? "/livez"
+    : caseName === "query"
+      ? "/search/12345?name=keala&page=3"
+      : "/text";
   const shared = new Request(`http://localhost${path}`);
   makeRequest = () => shared;
 }
@@ -267,6 +286,10 @@ const runOne = async (index: number): Promise<void> => {
     throw new Error("bad echo body");
   }
   if (caseName.startsWith("text") && body !== "hello") throw new Error("bad text body");
+  if (caseName === "query" && body !== "12345 keala 3") throw new Error("bad query body");
+  if (caseName === "query" && response.headers.get("x-query") !== "hit") {
+    throw new Error("query header missing");
+  }
   if (isErrorCase && body !== '{"error":{"code":"internal"}}') {
     throw new Error("bad error envelope");
   }

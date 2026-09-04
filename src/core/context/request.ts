@@ -153,28 +153,22 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return this.pathValue ?? (this.pathValue = getPath(this.url));
   },
   get querystring(): string {
-    // Single scan of the raw request target: touching only the query must
+    // Native scans of the raw request target: touching only the query must
     // not materialize the joined path+search string. Equivalent to
     // getSearch(url).slice(1): the first "#" ends the search (even before
-    // any "?"), the first "?" starts the query. Cached in a slot: the
-    // targeted readers call this per key. The request is immutable (0.7),
-    // so the memo can never go stale.
+    // any "?"), the first "?" starts the query — a fragment-embedded "?" is
+    // therefore NOT a query start. indexOf runs in native code, several
+    // times faster than a per-charCode loop. Cached in a slot: the targeted
+    // readers call this per key. The request is immutable (0.7), so the
+    // memo can never go stale.
     const cached = this.querystringValue;
     if (cached !== null) return cached;
     const url = this.urlValue ?? sourceUrl(this.rawRequest);
-    let query = -1;
-    let limit = -1;
-    for (let i = 0; i < url.length; i++) {
-      const code = url.charCodeAt(i);
-      if (code === 63 /* "?" */) {
-        if (query === -1) query = i;
-      } else if (code === 35 /* "#" */) {
-        limit = i;
-        break;
-      }
-    }
-    if (query === -1 || (limit !== -1 && query > limit)) return (this.querystringValue = "");
-    return (this.querystringValue = url.slice(query + 1, limit === -1 ? url.length : limit));
+    const query = url.indexOf("?");
+    if (query === -1) return (this.querystringValue = "");
+    const hash = url.indexOf("#");
+    if (hash !== -1 && hash < query) return (this.querystringValue = "");
+    return (this.querystringValue = url.slice(query + 1, hash === -1 ? url.length : hash));
   },
   get search(): string {
     const qs = this.querystring;

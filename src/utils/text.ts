@@ -52,11 +52,25 @@ const FORBIDDEN_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 /** RFC 7230 `token` characters as one precompiled class (fast path). */
 const TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
-/** Validate a header field name per RFC 7230 `token` rules. */
-export const validateHeaderName = (name: string): void => {
+/**
+ * Memoized RFC 7230 `token` validation: returns the LOWERCASE field name,
+ * throwing on invalid input. Header names repeat per route on the hot path
+ * (every staged write validates), so a Map hit replaces the toLowerCase +
+ * forbidden-set + regex chain entirely. The memo is capped — dynamic name
+ * sprawl falls back to the validating path without unbounded growth.
+ */
+const VALIDATED_NAMES = new Map<string, string>();
+const VALIDATED_NAMES_MAX = 512;
+
+export const validateHeaderName = (name: string): string => {
+  const memo = VALIDATED_NAMES.get(name);
+  if (memo !== undefined) return memo;
   if (name.length === 0 || FORBIDDEN_NAMES.has(name) || !TOKEN_RE.test(name)) {
     throw new TypeError(`Invalid header field name: ${JSON.stringify(name)}`);
   }
+  const lower = name.toLowerCase();
+  if (VALIDATED_NAMES.size < VALIDATED_NAMES_MAX) VALIDATED_NAMES.set(name, lower);
+  return lower;
 };
 
 /**
