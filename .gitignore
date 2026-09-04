@@ -7,3 +7,6 @@ coverage/
 bench/server-go/server-go
 bench/route-shootout/server-go/server-shootout-go
 bench/route-shootout/diag/*.cpuprofile
+.claude/
+bench/route-shootout/diag/CPU.*.md
+bench/route-shootout/diag/CPU.*.cpuprofile
