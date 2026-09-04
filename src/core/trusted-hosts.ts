@@ -8,14 +8,32 @@
 import { sourceHeader, sourceUrl } from "./request-source.ts";
 import type { RequestSource } from "./request-source.ts";
 
-/** Lowercased Host authority without its port (bracketed IPv6 aware). */
+/**
+ * Lowercased Host authority without its port (bracketed IPv6 aware).
+ *
+ * Sibling of `parseHostHeader` (utils/url.ts) and `stripPort`
+ * (core/context/request.ts): three shapes, three call sites. This one is
+ * deliberately allocation-free (no {hostname, port} object) — it runs per
+ * request when the host whitelist is on. Keep the bracket/colon handling in
+ * sync when touching any of the three.
+ */
 const stripHostPort = (host: string): string => {
   if (host.startsWith("[")) return host.slice(0, host.indexOf("]") + 1) || host;
   const colon = host.lastIndexOf(":");
   return colon === -1 ? host : host.slice(0, colon);
 };
 
-/** URL authority (host[:port]) for requests without a Host header. */
+/**
+ * URL authority (host[:port]) for requests without a Host header.
+ *
+ * Deliberately NOT shared with `authorityOf` (core/context/request.ts):
+ * that one feeds `c.host` from trusted Bun/Node URLs and locates userinfo
+ * with lastIndexOf("@"), this one parses possibly-hostile absolute-form
+ * request targets and uses first-"@"-before-path plus a `[/?#]` terminator
+ * (path/query/fragment cannot leak into the authority). The divergence is
+ * the security boundary — do not unify without revisiting both threat
+ * models (review DEAD-27).
+ */
 const urlAuthority = (url: string): string => {
   const scheme = url.indexOf("://");
   if (scheme === -1) return "";

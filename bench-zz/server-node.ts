@@ -1,5 +1,4 @@
 // Node legs. Usage: node bench-zz/server-node.ts <mode> <port>
-import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { Keala, type Context } from "../src/index.ts";
 
@@ -9,7 +8,10 @@ const port = Number(process.argv[3]);
 if (mode === "raw") {
   const body = "hello world";
   const server = createServer((req, res) => {
-    res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "content-length": body.length });
+    res.writeHead(200, {
+      "content-type": "text/plain; charset=utf-8",
+      "content-length": body.length,
+    });
     res.end(body);
   });
   server.listen(port, "127.0.0.1");

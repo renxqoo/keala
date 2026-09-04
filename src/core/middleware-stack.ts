@@ -10,6 +10,8 @@
 
 import { compose, type Composed, type Handler } from "./compose.ts";
 import type { Application } from "./application.ts";
+import { normalizePath } from "../router/pattern.ts";
+import { startsWithSegments } from "../router/router.ts";
 import type { Context } from "./context/context.ts";
 import { compilePattern, decodeSegment, type CompiledSegment } from "../router/pattern.ts";
 
@@ -59,16 +61,13 @@ export const EMPTY_MIDDLEWARE_STACK: MiddlewareStack = createMiddlewareStack();
 const keyOf = (segments: readonly string[]): string =>
   segments.map((segment) => `${segment.length}:${segment}`).join("");
 
-const startsWithSegments = (prefix: readonly string[], full: readonly string[]): boolean =>
-  prefix.length <= full.length && prefix.every((segment, index) => segment === full[index]);
-
 const scopeMatchesSegments = (scope: MiddlewareScope, segments: readonly string[]): boolean =>
   scope.prefix
     ? startsWithSegments(scope.segments, segments)
     : scope.segments.length === segments.length && startsWithSegments(scope.segments, segments);
 
 const pathSegments = (path: string): string[] => {
-  const normalized = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  const normalized = normalizePath(path);
   const parts = normalized.split("/");
   parts.shift();
   if (parts.length === 1 && parts[0] === "") return [];

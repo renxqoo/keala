@@ -95,7 +95,13 @@ const flatten = (args: readonly (string | string[])[]): string[] => {
   return out;
 };
 
-/** Authority (host[:port]) carved out of an absolute URL, "" when not absolute. */
+/**
+ * Authority (host[:port]) carved out of an absolute URL, "" when not absolute.
+ *
+ * The trusted-URL twin of `urlAuthority` (core/trusted-hosts.ts) — that one
+ * parses possibly-hostile request targets and terminates the authority at
+ * `[/?#]`; see its comment before unifying (review DEAD-27).
+ */
 const authorityOf = (url: string): string => {
   const scheme = url.indexOf("://");
   if (scheme === -1) return "";

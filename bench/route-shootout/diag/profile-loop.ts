@@ -15,10 +15,10 @@ const TABLE: [string, string][] = [
   ["GET", "/very/deeply/nested/route/hello/there"],
   ["GET", "/static/*"],
 ];
-for (const [m, p] of TABLE)
-  m === "GET"
-    ? app.get(p, (c) => c.text(c.params["id"] ?? "x"))
-    : app.post(p, (c) => c.text(`${c.params["id"] ?? ""} comment`));
+for (const [m, p] of TABLE) {
+  if (m === "GET") app.get(p, (c) => c.text(c.params["id"] ?? "x"));
+  else app.post(p, (c) => c.text(`${c.params["id"] ?? ""} comment`));
+}
 const req = new Request("http://x/event/abcd1234/comments");
 const t0 = performance.now();
 let n = 0;

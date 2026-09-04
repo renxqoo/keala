@@ -28,7 +28,13 @@ import {
   type MiddlewareStack,
 } from "../core/middleware-stack.ts";
 import type { CompiledSegment, PatternIR } from "./pattern.ts";
-import { compilePattern, decodeSegment, paramNamesOf, patternsOverlap } from "./pattern.ts";
+import {
+  compilePattern,
+  decodeSegment,
+  normalizePath,
+  paramNamesOf,
+  patternsOverlap,
+} from "./pattern.ts";
 import { canonicalKey, type FastMatcher } from "./match.ts";
 import { isRegexEligible, type EligiblePattern, type RegexBucket } from "./bucket-regex.ts";
 import {
@@ -374,9 +380,6 @@ export const registerDef = (
   return def;
 };
 
-const normalizePath = (path: string): string =>
-  path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
-
 /**
  * Canonical segment list for overlap checks: decode each RAW segment, then
  * re-split its content — an escaped separator ("%2F") becomes a REAL segment
@@ -394,7 +397,9 @@ const canonicalSegments = (path: string): string[] => {
   return parts;
 };
 
-const startsWithSegments = (prefix: readonly string[], full: readonly string[]): boolean =>
+/** Shared by the middleware-scope matcher (core/middleware-stack.ts) —
+ * keep the two callers on one definition. */
+export const startsWithSegments = (prefix: readonly string[], full: readonly string[]): boolean =>
   prefix.length <= full.length && prefix.every((segment, i) => segment === full[i]);
 
 /**

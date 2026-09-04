@@ -21,7 +21,7 @@
  */
 
 import type { CompiledSegment } from "./pattern.ts";
-import { decodeSegment } from "./pattern.ts";
+import { decodeSegment, normalizePath } from "./pattern.ts";
 
 export interface RouteTarget {
   /** method (uppercase) or "ALL" -> compiled handler chain */
@@ -242,14 +242,11 @@ const recordOf = (link: ParamLink | null): Record<string, string> => {
 
 /** Split an already-normalized path into segments (no trailing slash). */
 export const splitSegments = (path: string): string[] => {
-  const parts = normalizeInPlace(path).split("/");
+  const parts = normalizePath(path).split("/");
   parts.shift(); // drop the leading "" before "/"
   if (parts.length === 1 && (parts[0] ?? "") === "") parts.length = 0;
   return parts;
 };
-
-const normalizeInPlace = (path: string): string =>
-  path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 
 /** Same matcher identity: both patterns absent, or identical sources. */
 const samePattern = (a: RegExp | null, b: RegExp | null): boolean =>
