@@ -697,11 +697,12 @@ describe("REVIEW-SEC-14: cached custom rejection Response reused across refusals
   // ATTACK: an overload.handler that returns ONE cached Response object for
   // every refusal (a natural "constant" optimization). Response bodies are
   // one-shot: after the first wire refusal consumed it, later refusals hand
-  // out a disturbed body. EXPECTATION: every refusal still answers a cleanly
-  // framed 503 on the wire (status and headers intact, no desync, no 500, no
-  // destroyed connection mid-flood). Note: the configured BODY silently
-  // degrades to empty on reuse — recorded in the review report as a
-  // degradation (platform one-shot semantics), not asserted here.
+  // out a disturbed body. EXPECTATION (R4.10 unified-loud contract): the
+  // FIRST refusal answers the configured 503 cleanly framed; every REUSE
+  // fails loudly through the serve-error path with a framed 500 — exactly
+  // what the Bun adapter does. The old Node-only degrade branch answered an
+  // UNFRAMED bodiless response that killed the keep-alive socket (R4.10
+  // wire capture); build a fresh Response per call.
   it.skipIf(typeof Bun !== "undefined")(
     "REVIEW-SEC-14: a reused handler Response stays a cleanly framed 503 on every refusal",
     { timeout: 15_000 },
@@ -737,10 +738,13 @@ describe("REVIEW-SEC-14: cached custom rejection Response reused across refusals
           },
           400,
         );
-        expect(second.startsWith("HTTP/1.1 503")).toBe(true); // never a 500
-        expect(second.toLowerCase()).toContain("content-type: text/plain"); // headers intact
+        // Unified-loud: the disturbed reuse answers a FRAMED 500 through the
+        // serve-error path — byte-identical story on Bun, never an unframed
+        // bodiless 503 that kills the keep-alive socket.
+        expect(second.startsWith("HTTP/1.1 500")).toBe(true);
+        expect(second.toLowerCase()).toContain("content-type: text/plain"); // framed envelope
         expect(statusLines(second)).toHaveLength(1); // single, complete response
-        expect(headerValues(second, "connection")).toHaveLength(1); // framing coherent
+        expect(second.toLowerCase()).toContain("content-length:"); // delimiter present
       } finally {
         gate.resolve();
         await holder;

@@ -38,12 +38,19 @@ export class NodeRequestSource implements NativeRequestSource {
   // anyone subscribed is remembered and replayed on first materialization.
   declare _abort?: AbortController;
   declare _disconnected?: unknown;
+  /** Transport-level body ceiling (listen({ maxRequestBodySize })), a hard cap. */
+  #bodyCap: number;
 
   get remote(): string | undefined {
     return this.incoming.socket.remoteAddress;
   }
 
-  constructor(incoming: IncomingMessage, server: NodeServerHandle) {
+  constructor(
+    incoming: IncomingMessage,
+    server: NodeServerHandle,
+    bodyCap = Number.MAX_SAFE_INTEGER,
+  ) {
+    this.#bodyCap = bodyCap;
     this.incoming = incoming;
     this.server = server;
     this.method = incoming.method ?? "GET";
@@ -150,6 +157,10 @@ export class NodeRequestSource implements NativeRequestSource {
   }
 
   bytes(limit = Number.MAX_SAFE_INTEGER): Promise<Uint8Array> {
+    // The transport-level cap (listen({ maxRequestBodySize })) is a HARD
+    // ceiling: a plugin passing a looser limit cannot reopen the surface
+    // the server operator closed.
+    limit = Math.min(limit, this.#bodyCap);
     if (this._bytes !== undefined) return this._bytes;
     this._bodyOwned = true;
     if (this._request !== undefined || this._bodySet === true) {

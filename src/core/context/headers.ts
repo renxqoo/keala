@@ -145,7 +145,9 @@ export const appendResponseHeader = (c: ContextState, field: string, value: Head
     const staged = record?.[name];
     if (staged !== undefined && name !== "set-cookie") {
       c.flags |= 4;
-      (record as HeaderMap)[name] = Array.isArray(staged) ? [...staged, ...next] : [staged, ...next];
+      (record as HeaderMap)[name] = Array.isArray(staged)
+        ? [...staged, ...next]
+        : [staged, ...next];
     }
     return;
   }

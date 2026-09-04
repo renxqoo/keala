@@ -71,16 +71,12 @@ describe("audit DP-P1: binary committed bodies never corrupt", () => {
   it("a committed body without a textual content-type is declined, replays recompute", async () => {
     const app = new Keala(quiet);
     let runs = 0;
-    app.get(
-      "/bytes",
-      cache(),
-      () => {
-        runs++;
-        const bytes = new Uint8Array(256);
-        for (let i = 0; i < 256; i++) bytes[i] = i;
-        return new Response(bytes);
-      },
-    );
+    app.get("/bytes", cache(), () => {
+      runs++;
+      const bytes = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) bytes[i] = i;
+      return new Response(bytes);
+    });
     const first = await app.handle(request("/bytes"));
     expect(new Uint8Array(await first.arrayBuffer())[128]).toBe(128);
     const second = await app.handle(request("/bytes"));
@@ -125,14 +121,10 @@ describe("audit DP-P1: the store is byte-budgeted", () => {
   it("a single entry larger than maxEntryBytes is declined outright", async () => {
     const app = new Keala(quiet);
     let runs = 0;
-    app.get(
-      "/big",
-      cache({ maxEntryBytes: 1024 }),
-      (c) => {
-        runs++;
-        return c.text("x".repeat(4096));
-      },
-    );
+    app.get("/big", cache({ maxEntryBytes: 1024 }), (c) => {
+      runs++;
+      return c.text("x".repeat(4096));
+    });
     await app.handle(request("/big"));
     const second = await app.handle(request("/big"));
     expect(second.headers.get("x-cache")).toBeNull();

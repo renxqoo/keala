@@ -16,6 +16,7 @@ import type { GracefulStopOptions } from "../core/lifecycle.ts";
 import { installSignalBridge } from "../core/lifecycle.ts";
 import { attachServer } from "../core/server-slot.ts";
 import { InvalidRequestTargetError, mayCarryBody, NodeRequestSource } from "./node-source.ts";
+import { registerSocketClose, unregisterSocketClose } from "./node-socket-fanout.ts";
 
 export interface NodeServerHandle {
   readonly port: number;
@@ -30,7 +31,15 @@ export interface NodeServerHandle {
   stopGraceful(options: GracefulStopOptions): Promise<{ timedOut: boolean }>;
 }
 
-const NODE_LISTEN_KEYS = new Set(["port", "hostname", "http", "signals", "onServeError"]);
+const NODE_LISTEN_KEYS = new Set([
+  "port",
+  "hostname",
+  "http",
+  "signals",
+  "onServeError",
+  "idleTimeout",
+  "maxRequestBodySize",
+]);
 
 export interface NodeListenOptions {
   /** Listen port. Default 3000 (0 picks a free port). */
@@ -39,6 +48,22 @@ export interface NodeListenOptions {
   hostname?: string;
   /** Pass-through for node:http ServerOptions (highWaterMark, keepAlive…). */
   http?: ServerOptions;
+  /**
+   * Keep-alive idle timeout in SECONDS (Bun parity: the same unit
+   * `listen({ idleTimeout })` uses there). Maps onto Node's
+   * `keepAliveTimeout` (milliseconds); an explicit `http.keepAliveTimeout`
+   * wins. Node's default is 5s, Bun's 10s — a shared config object should
+   * mean the same thing on both runtimes.
+   */
+  idleTimeout?: number;
+  /**
+   * Transport-level request-body cap in bytes (Bun parity): every body
+   * read through the native source (`c.req.bytes/json/…`) refuses beyond
+   * it with 413, regardless of plugin limits. Without it the Node side
+   * had NO transport cap (reads defaulted to MAX_SAFE_INTEGER — an
+   * unbounded buffering surface Bun's `maxRequestBodySize` closed).
+   */
+  maxRequestBodySize?: number;
   /**
    * R4.6 signal bridge (opt-in): SIGTERM/SIGINT drain the server via
    * `app.close()`; a second signal force-closes.
@@ -54,12 +79,22 @@ export interface NodeListenOptions {
 }
 
 const writeHeaders = (headers: Headers, out: ServerResponse): void => {
-  const cookies = headers.getSetCookie();
-  for (const [name, value] of headers) {
-    if (name === "set-cookie") continue;
+  // forEach: the for...of iterator allocates a [name, value] pair per
+  // header and undici's getSetCookie() allocates+sorts even when empty —
+  // both were visible self-time on the hot path. A folded set-cookie visit
+  // only gates the distinct-list call.
+  let sawSetCookie = false;
+  headers.forEach((value, name) => {
+    if (name === "set-cookie") {
+      sawSetCookie = true;
+      return;
+    }
     out.setHeader(name, value);
+  });
+  if (sawSetCookie) {
+    const cookies = headers.getSetCookie();
+    if (cookies.length > 0) out.setHeader("set-cookie", cookies);
   }
-  if (cookies.length > 0) out.setHeader("set-cookie", cookies);
 };
 
 const directBodyLength = (body: string | Uint8Array): number =>
@@ -124,15 +159,11 @@ const writeStream = async (
   }
 };
 
-// Responses this adapter has already put on a wire once. Re-sending one is
-// the overload refusal-handler pattern (a cached Response reused across
-// refusals): its body is one-shot and gone after the first send, so the
-// re-send degrades to the original status/headers with the body-describing
-// headers stripped and an empty body — coherently framed, never a desync.
-// A response that arrives ALREADY consumed or locked without ever having
-// been sent here stays a loud adapter error (R4.5 B45-18: the handler handed
-// us a corpse with someone else's framing headers on it).
-const sentResponses = new WeakSet<Response>();
+// A consumed or locked body is ALWAYS a loud adapter error (R4.5 B45-18):
+// arriving consumed, or consumed by an earlier send on this adapter (a
+// cached module-level Response reused across refusals). The old re-send
+// degrade branch answered an UNFRAMED bodiless response that killed the
+// keep-alive socket (R4.10 wire capture); failing loudly matches Bun.
 
 const writeResponse = (
   res: Response,
@@ -156,20 +187,10 @@ const writeResponse = (
     return;
   }
   if (facts === undefined && (res.bodyUsed || res.body?.locked === true)) {
-    if (!sentResponses.has(res)) {
-      throw new TypeError("cannot send a consumed or locked response body");
-    }
-    out.statusCode = res.status;
-    if (res.statusText.length > 0) out.statusMessage = res.statusText;
-    writeHeaders(res.headers, out);
-    if (closeAfter) out.setHeader("connection", "close");
-    out.removeHeader("content-length");
-    out.removeHeader("transfer-encoding");
-    out.removeHeader("content-encoding");
-    out.end();
-    return;
+    throw new TypeError(
+      "cannot send a consumed or locked response body — build a fresh Response per call",
+    );
   }
-  if (facts === undefined) sentResponses.add(res);
   out.statusCode = res.status;
   if (res.statusText.length > 0) out.statusMessage = res.statusText;
   writeHeaders(facts?.headerSnapshot ?? res.headers, out);
@@ -213,13 +234,33 @@ export const startNodeServer = (
   onListen?: () => void,
 ): NodeServerHandle => {
   for (const key of Object.keys(options)) {
-    if (!NODE_LISTEN_KEYS.has(key)) {
-      // The Bun-side listen() already refuses typos like `idleTimout`; the
-      // Node surface gets the same guard.
-      throw new TypeError(
+    if (NODE_LISTEN_KEYS.has(key)) continue;
+    // Known Bun-only keys get their migration story instead of a bare
+    // "unknown option" — a dual-runtime config object should fail with the
+    // reason, not a puzzle.
+    const bunOnly: Record<string, string> = {
+      reusePort: "reusePort is Bun-only (SO_REUSEPORT); under Node scale with the cluster module",
+      nativeRoutes:
+        "nativeRoutes sinks into Bun's native routing table; the Node adapter always serves from JS",
+      websocket: "websockets are Bun-only; the Node adapter answers upgrades with 501",
+      development: "development mode is a Bun.serve option with no node:http equivalent",
+    };
+    throw new TypeError(
+      bunOnly[key] ??
         `startNodeServer(): unknown option ${JSON.stringify(key)} — a typo here is silently ignored`,
-      );
-    }
+    );
+  }
+  if (
+    options.idleTimeout !== undefined &&
+    (!Number.isFinite(options.idleTimeout) || options.idleTimeout < 0)
+  ) {
+    throw new RangeError("idleTimeout must be a non-negative number of seconds");
+  }
+  if (
+    options.maxRequestBodySize !== undefined &&
+    (!Number.isFinite(options.maxRequestBodySize) || options.maxRequestBodySize < 0)
+  ) {
+    throw new RangeError("maxRequestBodySize must be a non-negative byte count");
   }
   let address: { port: number; address: string } | null = null;
   let settled: (() => void) | null = null;
@@ -309,7 +350,14 @@ export const startNodeServer = (
       });
     },
   };
-  const server: Server = createServer(options.http ?? {}, (incoming, out) => {
+  // idleTimeout is SECONDS (Bun's unit); keepAliveTimeout is milliseconds.
+  // An explicit http.keepAliveTimeout wins — the passthrough stays the
+  // escape hatch for every other node:http knob.
+  const httpOptions: ServerOptions = { ...options.http };
+  if (options.idleTimeout !== undefined && httpOptions.keepAliveTimeout === undefined) {
+    httpOptions.keepAliveTimeout = options.idleTimeout * 1000;
+  }
+  const server: Server = createServer(httpOptions, (incoming, out) => {
     wireInFlight++;
     // Wire truth + client-disconnect bridge, one handler registered twice.
     // res 'close' fires for every STARTED response — completed OR terminated
@@ -323,11 +371,12 @@ export const startNodeServer = (
     const socket = incoming.socket;
     let source: NodeRequestSource | null = null;
     let wireDone = false;
+    let fanout: ReturnType<typeof registerSocketClose> | undefined;
     const onWireDone = (): void => {
       if (wireDone) return;
       wireDone = true;
       wireInFlight--;
-      socket.removeListener("close", onWireDone);
+      if (fanout !== undefined) unregisterSocketClose(fanout);
       if (!out.writableEnded && source !== null) {
         source.disconnect(new DOMException("client disconnected", "AbortError"));
       }
@@ -341,7 +390,7 @@ export const startNodeServer = (
       }
     };
     out.on("close", onWireDone);
-    socket.on("close", onWireDone);
+    fanout = registerSocketClose(socket, onWireDone);
     const fail = (error: unknown): void => {
       // app dispatch itself never rejects — failures here are native source
       // validation, socket teardown or response writer failures.
@@ -385,7 +434,7 @@ export const startNodeServer = (
       }
     };
     try {
-      source = new NodeRequestSource(incoming, handle);
+      source = new NodeRequestSource(incoming, handle, options.maxRequestBodySize);
       // The native source is also the Runtime view (`server` + `remote`), so
       // the adapter does not allocate a second request-local carrier object.
       const result = (app as NativeApplication)[HANDLE_REQUEST_SOURCE](source);

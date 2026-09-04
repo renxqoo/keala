@@ -238,8 +238,7 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     if (c.directBodyResponseValue !== res) return;
     const body = await captureBody(res);
     if (body === null || body.length === 0) return;
-    const sizeBytes =
-      typeof body === "string" ? encoder.encode(body).byteLength : body.byteLength;
+    const sizeBytes = typeof body === "string" ? encoder.encode(body).byteLength : body.byteLength;
     if (sizeBytes > maxEntryBytes) return;
 
     const headers: [string, string][] = [];
