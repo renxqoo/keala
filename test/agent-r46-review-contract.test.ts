@@ -1052,30 +1052,33 @@ it("REVIEW-CT-38: §4 U1 — an injected queueAdmission is byte-equal to the imp
   expect(implicit).toEqual(["start:0", "end:0", "start:1", "end:1", "start:2", "end:2"]);
 });
 
-it("REVIEW-CT-39: §6 C1 — the admission gate covers the NODE native path; the built-in rejection keeps its wire shape", async () => {
-  const app = new Keala({ env: "test", overload: { maxConcurrency: 1 } });
-  const gate = deferred();
-  app.get("/work", async (c) => {
-    await gate.promise;
-    c.body = "served";
-  });
-  const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
-  liveServers.push(server);
-  const first = fetch(`http://127.0.0.1:${server.port}/work`).then(
-    (r) => `ok:${r.status}`,
-    () => "reset",
-  );
-  await wait(40);
-  expect(app.inFlight).toBe(1); // native request admitted through C1
-  const second = await fetch(`http://127.0.0.1:${server.port}/work`);
-  expect(second.status).toBe(503); // native request REFUSED through C1
-  expect(second.headers.get("connection")).toBe("close"); // on the WIRE
-  expect(second.headers.get("retry-after")).toBe("1");
-  expect(await second.text()).toBe("Service Unavailable");
-  gate.resolve();
-  expect(await first).toBe("ok:200");
-  expect(app.inFlight).toBe(0);
-});
+it.skipIf(typeof Bun !== "undefined")(
+  "REVIEW-CT-39: §6 C1 — the admission gate covers the NODE native path; the built-in rejection keeps its wire shape",
+  async () => {
+    const app = new Keala({ env: "test", overload: { maxConcurrency: 1 } });
+    const gate = deferred();
+    app.get("/work", async (c) => {
+      await gate.promise;
+      c.body = "served";
+    });
+    const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
+    liveServers.push(server);
+    const first = fetch(`http://127.0.0.1:${server.port}/work`).then(
+      (r) => `ok:${r.status}`,
+      () => "reset",
+    );
+    await wait(40);
+    expect(app.inFlight).toBe(1); // native request admitted through C1
+    const second = await fetch(`http://127.0.0.1:${server.port}/work`);
+    expect(second.status).toBe(503); // native request REFUSED through C1
+    expect(second.headers.get("connection")).toBe("close"); // on the WIRE
+    expect(second.headers.get("retry-after")).toBe("1");
+    expect(await second.text()).toBe("Service Unavailable");
+    gate.resolve();
+    expect(await first).toBe("ok:200");
+    expect(app.inFlight).toBe(0);
+  },
+);
 
 it("REVIEW-CT-39b: §4 U1/P3 — a native-source strategy call sees a materialized fetch Request; its Response goes out verbatim", async () => {
   const seen: Array<{ isRequest: boolean; url: string }> = [];

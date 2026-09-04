@@ -191,7 +191,7 @@ new Keala({ env, keys, proxy, pooling, overload, requestTimeout, trustedHosts })
 app.get/post/put/patch/delete/head/options/on/all/use/ws/sink/mount
 app.listen(port, { signals, nativeRoutes, idleTimeout, … })
 app.close({ drain })  app.isDraining()  app.inFlight
-app.onError(fn)  app.notFound(fn)  app.decorate(k, v)
+app.onError(fn)  app.onShutdown(fn)  app.notFound(fn)  app.decorate(k, v)
 ```
 
 ## 9. 性能预期(诚实口径)——已实测定论(2026-09-04)

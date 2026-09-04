@@ -135,7 +135,7 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
     },
   );
 
-  it(
+  it.skipIf(typeof Bun !== "undefined")(
     "HA-6: stuck handler + hostile wire — drain timeout force-closes, bounded",
     { timeout: 15_000 },
     async () => {

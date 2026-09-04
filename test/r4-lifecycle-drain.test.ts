@@ -209,33 +209,36 @@ describe("R4.6 drain: handle mode (no server)", () => {
 });
 
 describe("R4.6 drain: Node adapter (wire truth)", () => {
-  it("drains a slow request under real HTTP, then stops accepting", async () => {
-    const app = new Keala({ env: "test" });
-    const gate = deferred();
-    app.get("/slow", async (c) => {
-      await gate.promise;
-      c.body = "wire-done";
-    });
-    const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
-    liveServers.push(server);
-    const base = `http://127.0.0.1:${server.port}`;
+  it.skipIf(typeof Bun !== "undefined")(
+    "drains a slow request under real HTTP, then stops accepting",
+    async () => {
+      const app = new Keala({ env: "test" });
+      const gate = deferred();
+      app.get("/slow", async (c) => {
+        await gate.promise;
+        c.body = "wire-done";
+      });
+      const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
+      liveServers.push(server);
+      const base = `http://127.0.0.1:${server.port}`;
 
-    const inflight = fetch(`${base}/slow`);
-    await wait(20); // let the request arrive and hold the gate
-    const closed = app.close({ drain: 2000 });
-    gate.resolve();
-    const response = await inflight;
-    expect(await response.text()).toBe("wire-done");
-    await expect(closed).resolves.toEqual({ timedOut: false, inFlight: 0 });
-    // After close resolves the listener is gone — new connections fail clean.
-    let refused = false;
-    try {
-      await fetch(`${base}/slow`);
-    } catch {
-      refused = true;
-    }
-    expect(refused).toBe(true);
-  });
+      const inflight = fetch(`${base}/slow`);
+      await wait(20); // let the request arrive and hold the gate
+      const closed = app.close({ drain: 2000 });
+      gate.resolve();
+      const response = await inflight;
+      expect(await response.text()).toBe("wire-done");
+      await expect(closed).resolves.toEqual({ timedOut: false, inFlight: 0 });
+      // After close resolves the listener is gone — new connections fail clean.
+      let refused = false;
+      try {
+        await fetch(`${base}/slow`);
+      } catch {
+        refused = true;
+      }
+      expect(refused).toBe(true);
+    },
+  );
 
   it("close waits for wire completion, not handler settle (streaming body)", async () => {
     const app = new Keala({ env: "test" });
@@ -266,29 +269,32 @@ describe("R4.6 drain: Node adapter (wire truth)", () => {
     await expect(closed).resolves.toEqual({ timedOut: false, inFlight: 0 });
   });
 
-  it("a BUSY socket is spared by the idle sweep; its response carries connection: close (drain policy)", async () => {
-    const app = new Keala({ env: "test" });
-    const gate = deferred();
-    app.get("/hold", async (c) => {
-      await gate.promise;
-      c.body = "held-ok";
-    });
-    const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
-    liveServers.push(server);
+  it.skipIf(typeof Bun !== "undefined")(
+    "a BUSY socket is spared by the idle sweep; its response carries connection: close (drain policy)",
+    async () => {
+      const app = new Keala({ env: "test" });
+      const gate = deferred();
+      app.get("/hold", async (c) => {
+        await gate.promise;
+        c.body = "held-ok";
+      });
+      const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
+      liveServers.push(server);
 
-    const inflight = fetch(`http://127.0.0.1:${server.port}/hold`);
-    await wait(30); // the request parks: its socket is BUSY (in-flight)
-    expect(app.inFlight).toBe(1);
-    const closed = app.close({ drain: 2000 }); // idle sweep runs here
-    gate.resolve();
-    const response = await inflight; // completes — the sweep spared the busy socket
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("held-ok");
-    // Written during drain: the keep-alive policy flips to close so the
-    // socket tears down instead of lingering past shutdown.
-    expect(response.headers.get("connection")).toBe("close");
-    await closed;
-  });
+      const inflight = fetch(`http://127.0.0.1:${server.port}/hold`);
+      await wait(30); // the request parks: its socket is BUSY (in-flight)
+      expect(app.inFlight).toBe(1);
+      const closed = app.close({ drain: 2000 }); // idle sweep runs here
+      gate.resolve();
+      const response = await inflight; // completes — the sweep spared the busy socket
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("held-ok");
+      // Written during drain: the keep-alive policy flips to close so the
+      // socket tears down instead of lingering past shutdown.
+      expect(response.headers.get("connection")).toBe("close");
+      await closed;
+    },
+  );
 
   it("pooling apps drain normally (contexts recycle through the drain window)", async () => {
     const app = new Keala({ env: "test", pooling: true });

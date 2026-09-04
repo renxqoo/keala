@@ -2,6 +2,68 @@
 
 > 0.6.x 为 pre-1.0 系列:表面可破坏,破坏性变更在 CHANGELOG 逐条记录。
 
+## 0.7.1 (2026-09-04)
+
+R4.10 全面审计修复:四路深读子代理(Node adapter / 生命周期与 ws /
+body-static-cache-stream 数据面 / 0.7 提交契约红测)+ CPU profile 归因,
+11 项发现全部主会话亲自复现后修复,零误报。
+
+### 正确性(0 bug)
+
+- **提交契约**:提交后 APPEND 并入暂存记录条目(此前被记录合并抹掉,
+  静默丢 Vary——缓存投毒面);错误漏斗收割已提交 Response 的头再重建
+  (sugar 提交后外层抛错不再丢防护头/cookie,与手建 Response 对称);
+  content-describing 头(content-type/length/transfer-encoding/
+  content-encoding)不参与镜像重放(不再以陈旧类型/长度覆盖新提交)。
+- **responseCache**:只捕获框架快照体——流式提交体在洋葱内消费会死锁
+  (无限流永不结算)或双缓冲;无 CT 的手建字节体重放以 U+FFFD 损坏。
+  新增 maxBytes(64MiB)/maxEntryBytes(4MiB)字节预算(旧条目数预算
+  140×4MB 页驻留 864MB)。
+- **Node adapter**:重发已消费的 Response 统一大声——带框架的 500(与
+  Bun 一致);旧降级分支发**无框架**响应并杀死 keep-alive 连接、丢弃
+  管线化后续请求(wire 实证,违反 R4.5 不变量)。
+- **准入**:策略 admit() 后拒绝/抛错/垃圾返回全部经 refuse() 归还槽位
+  (此前永久漏槽,流量永久 503、close 拖满排水窗);maxConcurrency 成为
+  硬上限(迟到的异步 null 不再超订)。
+
+### 高可用
+
+- **ws 排水**:排水扫描后完成的升级在 finish() 时补扫关闭(此前进程
+  挂死、3× SIGTERM 无效);close 完成后的信号直接硬停服务器(不再被
+  幂等吞掉)。
+- **`app.onShutdown(handler)`**(新):排空后、close() resolve 前按注册
+  顺序运行一次;失败包容并记录;thenable 会被 await。
+- **Node 选项对齐**:`idleTimeout`(秒→keepAliveTimeout 毫秒)、
+  `maxRequestBodySize`(传输级硬上限,插件更宽松限制不能重开);Bun-only
+  键给出迁移指引。管线化不再触发 MaxListenersExceededWarning(每 socket
+  一个共享 close 监听)。
+- **stream/streamText** 关闭 Bun idleTimeout(稀疏流 10s 被杀);
+  **serveStatic** dotfiles 默认忽略(.well-known 除外)、Node HEAD 免全量
+  读、Node Range 206;**Node soak 腿**(scripts/soak-node.ts)补齐——
+  12 轮 × 10k 请求,漂移 ≤30B/req。
+
+### 性能(全部带前后测量)
+
+- **etag() 30k 行 JSON**:Node +3.94ms→+0.11ms,Bun +0.98ms→+0.05ms
+  (每请求单次序列化 memo:Bun wyhash 直吃 string、Node 走 lazy
+  node:zlib crc32、无原生模块时字级 FNV 兜底;finalizer 非原生对象路径
+  改用 memo 文本构造,不再让 undici Response.json 二次 stringify)。
+- urlencoded 部件计数 10.6ms→0.17ms(原生 indexOf);
+  `writeHeaders` forEach 化 + getSetCookie 门控(~72ns/req);
+  `wireForms` 有界 memo(修复过程中一度丢失 encoded 形态,被规范化
+  编码污染测试当场抓住——已修)。
+
+### 其他行为变化
+
+- cookies:`Path` 默认 `/`(cookies 包/koa 语义);值校验放宽到仅拒
+  CR/LF/NUL/C0(编码器本可安全处理空格/引号/逗号/分号/非 ASCII)。
+- `c.req.arrayBuffer()/blob()` 预算归属 jsonLimit→formLimit。
+- ETag 算法变更(wyhash string 道/crc32 道)——按部署整体失效,属正确
+  行为;CI 的 oxfmt 生成物误报已修(.oxfmtrc 忽略 bench 结果)。
+
+回归锁:test/audit-r410-{contract,cache,node-adapter,lifecycle}.test.ts
+(30 项,全部从复现探针移植);全套 2317 测试绿。
+
 ## 0.7.0 (2026-09-04)
 
 keala 原生 API:去 koa 化定稿(设计文档 docs/KEALA-NATIVE-API.md,

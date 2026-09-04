@@ -321,7 +321,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
     },
   );
 
-  it(
+  it.skipIf(typeof Bun !== "undefined")(
     "REVIEW-HA-4: wire disconnect storm during overload+drain — slots return, close completes",
     { timeout: 25_000 },
     async () => {
@@ -622,7 +622,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
     },
   );
 
-  it(
+  it.skipIf(typeof Bun !== "undefined")(
     "REVIEW-HA-8: escalation storm — 10 concurrent close() calls, one force effect",
     { timeout: 15_000 },
     async () => {

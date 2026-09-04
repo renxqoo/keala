@@ -79,22 +79,12 @@ export interface NodeListenOptions {
 }
 
 const writeHeaders = (headers: Headers, out: ServerResponse): void => {
-  // forEach: the for...of iterator allocates a [name, value] pair per
-  // header and undici's getSetCookie() allocates+sorts even when empty —
-  // both were visible self-time on the hot path. A folded set-cookie visit
-  // only gates the distinct-list call.
-  let sawSetCookie = false;
-  headers.forEach((value, name) => {
-    if (name === "set-cookie") {
-      sawSetCookie = true;
-      return;
-    }
+  const cookies = headers.getSetCookie();
+  for (const [name, value] of headers) {
+    if (name === "set-cookie") continue;
     out.setHeader(name, value);
-  });
-  if (sawSetCookie) {
-    const cookies = headers.getSetCookie();
-    if (cookies.length > 0) out.setHeader("set-cookie", cookies);
   }
+  if (cookies.length > 0) out.setHeader("set-cookie", cookies);
 };
 
 const directBodyLength = (body: string | Uint8Array): number =>

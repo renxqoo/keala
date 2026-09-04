@@ -1,6 +1,6 @@
 {
   "name": "keala",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "keala — Koa's ergonomics at Hono's speed: dual-mode onion framework for Bun 1.4+ (runs under Node too). Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets.",
   "keywords": [
     "bun",
@@ -79,7 +79,8 @@
     "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage && bun scripts/smoke.ts && bun scripts/example-check.ts",
     "soak": "bun scripts/soak.ts",
     "example:check": "bun scripts/example-check.ts",
-    "process:check": "node scripts/process-check.mjs"
+    "process:check": "node scripts/process-check.mjs",
+    "soak:node": "node --experimental-strip-types --expose-gc scripts/soak-node.ts"
   },
   "devDependencies": {
     "@hono/node-server": "2.1.1",

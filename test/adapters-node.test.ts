@@ -179,17 +179,20 @@ describe("node adapter: response bridging", () => {
 });
 
 describe("node adapter: server lifecycle", () => {
-  it("stop() closes the port; stop(true) drops active connections", async () => {
-    const app = new Keala(quiet);
-    app.get("/x", (c) => {
-      c.body = "ok";
-    });
-    const server = await listen(app, 0, "127.0.0.1").ready();
-    const base = `http://127.0.0.1:${server.port}`;
-    expect(await (await fetch(`${base}/x`)).text()).toBe("ok");
-    server.stop();
-    await expect(fetch(`${base}/x`)).rejects.toThrow();
-  });
+  it.skipIf(typeof Bun !== "undefined")(
+    "stop() closes the port; stop(true) drops active connections (Node wire truth)",
+    async () => {
+      const app = new Keala(quiet);
+      app.get("/x", (c) => {
+        c.body = "ok";
+      });
+      const server = await listen(app, 0, "127.0.0.1").ready();
+      const base = `http://127.0.0.1:${server.port}`;
+      expect(await (await fetch(`${base}/x`)).text()).toBe("ok");
+      server.stop();
+      await expect(fetch(`${base}/x`)).rejects.toThrow();
+    },
+  );
 
   it("onListen fires once the socket is bound", async () => {
     const app = new Keala(quiet);

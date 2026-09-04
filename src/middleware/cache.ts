@@ -58,7 +58,6 @@ const MAX_AGE_ZERO = /(?:^|,)\s*max-age\s*=\s*0\s*(?:,|$)/i;
 // A field-specific no-cache names a header the response depends on —
 // Set-Cookie responses must not be replayed from the framework cache.
 const NO_CACHE_FIELD = /(?:^|,)\s*no-cache\s*=\s*"(?:set-cookie|\*)"\s*(?:,|$)/i;
-const TEXTUAL = /^(?:text\/|application\/(?:json|javascript|xml|graphql))/;
 const encoder = new TextEncoder();
 
 /** Directives of a Cache-Control header, lowercased tokens (`no-cache="x"`
@@ -158,14 +157,6 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
       return false;
     }
     if (res.headers.getSetCookie().length > 0) return false;
-    // A COMMITTED response must declare a textual content-type explicitly:
-    // the D1 missing-CT-is-textual allowance exists for STATE-mode string
-    // bodies (where the framework knows the kind), not for hand-built
-    // Responses whose bytes need not be UTF-8 — capturing those as text
-    // corrupted every replay.
-    if (c._res !== undefined && !TEXTUAL.test(res.headers.get("content-type") ?? "")) {
-      return false;
-    }
     return true;
   };
 
@@ -231,10 +222,10 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     if (!eligible(c, res)) return;
     // Only FRAMEWORK-BUILT snapshot bodies are capturable: the identity mark
     // (set by the sugar helpers and the state finalizer) proves the body is
-    // a finite string/JSON text, so consuming the clone cannot park the
-    // response on an open-ended producer. Streamed and hand-built Responses
-    // carry no such proof — reading them here once deadlocked infinite
-    // streams and buffered 2x their bytes before the client saw a byte.
+    // a finite UTF-8 text — Bun's string Responses carry no implicit
+    // content-type in-process, so the identity is the ONLY reliable
+    // text-ness proof (a hand-built byte body corrupted replays as U+FFFD,
+    // and consuming an unknown stream deadlocked the onion).
     if (c.directBodyResponseValue !== res) return;
     const body = await captureBody(res);
     if (body === null || body.length === 0) return;
