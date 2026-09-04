@@ -11,7 +11,7 @@ import type { Context } from "./context/context.ts";
 import { finalize, flattenHeaders, sanitizeEmptyStatus, stripBody } from "./respond.ts";
 import { normalizeError, toHttpError, type HttpError } from "../http/errors.ts";
 import { isEmptyStatus, statusMessage } from "../http/status.ts";
-import type { HeaderMap } from "../types.ts";
+import type { HeaderMap, HeaderValue } from "../types.ts";
 
 /**
  * Console fallback for UNOBSERVED server faults (R4.3 rule 6): request-path
@@ -138,11 +138,12 @@ const finalizeTakeoverResponse = (c: Context, res: Response, error: HttpError): 
   }
   // Common envelope fast path: no transformation or inherited headers are
   // required. Returning here avoids the larger merge routine entirely.
+  const sources = reconciledHeaderSources(c, c.headersRecord);
   if (
     c.method !== "HEAD" &&
     !isEmptyStatus(res.status) &&
     error.headers === undefined &&
-    c.headersRecord === null
+    sources === null
   ) {
     return res;
   }
@@ -151,7 +152,7 @@ const finalizeTakeoverResponse = (c: Context, res: Response, error: HttpError): 
   // the committed-Response path (Bun constructs it, undici refuses).
   if (isEmptyStatus(res.status) && res.body !== null) out = sanitizeEmptyStatus(res);
   if (c.method === "HEAD" && out.body !== null) out = stripBody(out);
-  return mergeAbsentHeaders(out, error, c.headersRecord);
+  return mergeAbsentHeaders(out, error, sources);
 };
 
 /**
@@ -256,6 +257,46 @@ const mutableHeaderCopy = (source: Headers): Headers => {
   return headers;
 };
 
+/**
+ * The header state an error rebuild must carry: the STAGED RECORD (the
+ * user's latest intent) reconciled over everything the discarded committed
+ * Response had baked in. A sugar commit consumes the record INTO the
+ * Response and clears it — the record alone then under-reports what the
+ * developer staged, and the rebuilt error page would silently drop
+ * security headers and cookies. The committed Response is the complete
+ * picture for those, so harvest it before the reset; the record still
+ * wins per name (later writes), and set-cookie JOINS (both sides are
+ * cookies the error page should carry). Content-describing names are
+ * pruned downstream by isMergeForbidden, exactly as for the record.
+ */
+const reconciledHeaderSources = (c: Context, record: HeaderMap | null): HeaderMap | null => {
+  const committed = c._res;
+  if (committed === undefined) return record;
+  let out: HeaderMap | null = null;
+  for (const [name, value] of committed.headers.entries()) {
+    if (name === "set-cookie") continue; // joined below, order matters
+    if (record?.[name] !== undefined) continue; // the record is the later intent
+    (out ??= Object.create(null) as HeaderMap)[name] = value;
+  }
+  const committedCookies = committed.headers.getSetCookie();
+  const recordCookies = record?.["set-cookie"];
+  if (committedCookies.length > 0 || recordCookies !== undefined) {
+    const joined = [...committedCookies];
+    if (recordCookies !== undefined) {
+      joined.push(...(Array.isArray(recordCookies) ? recordCookies : [recordCookies]));
+    }
+    (out ??= Object.create(null) as HeaderMap)["set-cookie"] = joined;
+  }
+  if (out === null) return record;
+  if (record !== null) {
+    for (const name of Object.keys(record)) {
+      if (name === "set-cookie") continue; // already joined
+      out[name] = record[name] as HeaderValue;
+    }
+  }
+  return out;
+};
+
 const mergeAbsentHeaders = (
   res: Response,
   error: HttpError,
@@ -285,14 +326,31 @@ const builtinErrorResponse = (
   // constructs FROM this state, so reset it here. Headers the chain staged
   // ride along (koa parity — security headers must still cover error
   // pages); only content-DESCRIBING headers drop (they describe the body
-  // that failed to ship). The takeover path skips this entirely.
-  c._res = undefined;
+  // that failed to ship). The staged record is reconciled with everything
+  // the discarded Response baked in (see reconciledHeaderSources) so a
+  // sugar commit's consumed headers survive the rebuild too. The takeover
+  // path skips the reset but applies the same reconciliation.
   const record = c.headersRecord;
-  if (record !== null) {
-    delete record["content-type"];
-    delete record["content-length"];
-    delete record["transfer-encoding"];
-    delete record["content-encoding"];
+  const sources = reconciledHeaderSources(c, record);
+  c._res = undefined;
+  let carriesHeaders = false;
+  if (sources !== null) {
+    // The rebuild below re-stages through the context and finalizes, so
+    // land the reconciled sources in the LIVE record — finalize then
+    // carries them (the record object identity is what the memoized
+    // cookies facade holds; never swap it).
+    const target = record ?? (c.headersRecord = Object.create(null) as HeaderMap);
+    if (sources !== target) {
+      for (const name of Object.keys(sources)) target[name] = sources[name] as HeaderValue;
+    }
+    delete target["content-type"];
+    delete target["content-length"];
+    delete target["transfer-encoding"];
+    delete target["content-encoding"];
+    for (const _ in target) {
+      carriesHeaders = true;
+      break;
+    }
   }
   c.bodyValue = null;
   c.flags = 0;
@@ -301,7 +359,7 @@ const builtinErrorResponse = (
   // machinery + finalize walk entirely (the default app's every error page).
   // Byte-equivalence with the staged path is locked by the R4.3 tests.
   if (
-    c.headersRecord === null &&
+    !carriesHeaders &&
     error.headers === undefined &&
     c.method !== "HEAD" &&
     !isEmptyStatus(error.status)

@@ -9,21 +9,21 @@
 进程内(工装 `bench/compare-hono-hotpaths.ts`,新增对称 `query` 用例,
 fresh-process A-B-B-A ×3,取中位):
 
-| 场景 | 运行时 | 0.7.0 K/H(进程内) | 结论 |
-| --- | --- | --- | --- |
-| text | Bun | **1.010** | 框架层持平 → wire −2.8% 在 serve/adapter 侧,非框架 |
-| text | Node | 0.999 | 持平 |
-| query | Bun | 0.864(keala 823ns vs 711ns) | 框架侧真实 +112ns |
-| query | Node | **0.803**(4186ns vs 3362ns) | 框架侧 +824ns |
+| 场景  | 运行时 | 0.7.0 K/H(进程内)           | 结论                                               |
+| ----- | ------ | --------------------------- | -------------------------------------------------- |
+| text  | Bun    | **1.010**                   | 框架层持平 → wire −2.8% 在 serve/adapter 侧,非框架 |
+| text  | Node   | 0.999                       | 持平                                               |
+| query | Bun    | 0.864(keala 823ns vs 711ns) | 框架侧真实 +112ns                                  |
+| query | Node   | **0.803**(4186ns vs 3362ns) | 框架侧 +824ns                                      |
 
 Node CPU profile(--cpu-prof,165k 请求)每请求自耗时 top:
 
-| 帧 | ns/req | 判定 |
-| --- | --- | --- |
-| `setResponseHeader` | ~326 | 一个暂存头走完整校验链(正则+分支+null-proto 建) |
-| `mergedHeadersOf`(sugar) | ~250 | 无 per-call 头时仍做 spread 拷贝 |
-| `get querystring` | ~121 | JS 逐字符 charCodeAt 扫描 |
-| `headersInitOf` | ~98 | undici Headers.set(webidl)地板,Hono 同付 |
+| 帧                       | ns/req | 判定                                            |
+| ------------------------ | ------ | ----------------------------------------------- |
+| `setResponseHeader`      | ~326   | 一个暂存头走完整校验链(正则+分支+null-proto 建) |
+| `mergedHeadersOf`(sugar) | ~250   | 无 per-call 头时仍做 spread 拷贝                |
+| `get querystring`        | ~121   | JS 逐字符 charCodeAt 扫描                       |
+| `headersInitOf`          | ~98    | undici Headers.set(webidl)地板,Hono 同付        |
 
 三者合计 ≈730ns,对上 824ns 差距主体。**params 记录(null-proto)与
 createContext 不在 top-22——计划中的两项修复被证据否决,未实施。**
@@ -46,20 +46,20 @@ createContext 不在 top-22——计划中的两项修复被证据否决,未实�
 
 进程内(Bun/Node):
 
-| 场景 | 0.7.0 | 修复后 | Δ |
-| --- | --- | --- | --- |
-| query Bun | 0.864(823ns) | **0.933**(760ns) | −63ns |
-| query Node | 0.803(4186ns) | **0.946**(3540ns) | **−646ns** |
-| text Bun/Node | 1.010/0.999 | 1.023/1.032 | 不回吐 |
+| 场景          | 0.7.0         | 修复后            | Δ          |
+| ------------- | ------------- | ----------------- | ---------- |
+| query Bun     | 0.864(823ns)  | **0.933**(760ns)  | −63ns      |
+| query Node    | 0.803(4186ns) | **0.946**(3540ns) | **−646ns** |
+| text Bun/Node | 1.010/0.999   | 1.023/1.032       | 不回吐     |
 
 wire(R4.6 协议,200conn×4s×4 轮,vs 0.7.0 配对):
 
-| 场景 | 运行时 | K/H | vs 0.7.0 | vs 0.6.2 累计 |
-| --- | --- | --- | --- | --- |
-| query | Bun | **0.977** | +5.5%(min +2.6%) | +~7% |
-| query | Node | **0.891** | **+10.3%**(min +9.4%) | +~11% |
-| text | Bun | **1.000** | +0.9% | 回到平 |
-| text | Node | 1.053 | +0.8% | +5% |
+| 场景  | 运行时 | K/H       | vs 0.7.0              | vs 0.6.2 累计 |
+| ----- | ------ | --------- | --------------------- | ------------- |
+| query | Bun    | **0.977** | +5.5%(min +2.6%)      | +~7%          |
+| query | Node   | **0.891** | **+10.3%**(min +9.4%) | +~11%         |
+| text  | Bun    | **1.000** | +0.9%                 | 回到平        |
+| text  | Node   | 1.053     | +0.8%                 | +5%           |
 
 **text-Bun 的 −2% 消失且无 text 专项改动**——与"代码布局/环境敏感带"
 归因一致(布局随本次改动移位)。
