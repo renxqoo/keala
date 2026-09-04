@@ -70,6 +70,13 @@ export interface ContextState {
   // previous request's body across users is a CRITICAL disclosure.
   bodyCache?: unknown;
   validValue?: unknown;
+  /**
+   * Serialized JSON text of an object bodyValue — memoized by whichever
+   * consumer serializes first (etag() hashing, the finalizer, sugar). The
+   * second serializer reuses it instead of re-running JSON.stringify on
+   * multi-megabyte payloads (R4.10: etag() alone doubled JSON cost).
+   */
+  bodySerializedValue?: string;
   // R4.6 lifecycle cold slots: materialized only when cancellation or a
   // request deadline is actually in play. Undefined/false prototype
   // defaults keep the request hot path free of own-field writes.

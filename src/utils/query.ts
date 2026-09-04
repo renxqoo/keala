@@ -148,13 +148,32 @@ const findQueryEntry = (
  * encoded retry only runs after a raw miss, so the plain hot path never
  * pays the encode.
  */
+/**
+ * The wire forms of a query key, memoized (bounded): hot routes read the
+ * same handful of keys every request, and the encode+split work was
+ * measurable self-time on the query scenario. Beyond the cap, dynamic key
+ * sprawl falls back to computing per call.
+ */
+const WIRE_FORMS_MAX = 256;
+const wireFormsCache = new Map<string, string[]>();
+
 const wireForms = (name: string): string[] => {
+  const memo = wireFormsCache.get(name);
+  if (memo !== undefined) return memo;
   const encoded = encodeURIComponent(name);
   // `+` is the form-encoding of a space IN KEYS as well: `?user+name=1` is
   // exactly what a browser sends for a field named "user name".
   const plus = name.includes(" ") ? name.replaceAll(" ", "+") : null;
-  if (encoded === name) return plus === null ? [name] : [name, plus];
-  return plus === null ? [name, encoded] : [name, encoded, plus];
+  const forms =
+    encoded === name
+      ? plus === null
+        ? [name]
+        : [name, plus]
+      : plus === null
+        ? [name, encoded]
+        : [name, encoded, plus];
+  if (wireFormsCache.size < WIRE_FORMS_MAX) wireFormsCache.set(name, forms);
+  return forms;
 };
 
 /** Decode one targeted value (the shared `decode` early-outs on plain runs). */

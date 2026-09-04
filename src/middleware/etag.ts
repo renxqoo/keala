@@ -8,38 +8,114 @@
  */
 
 import type { RouteHandler } from "../router/router.ts";
+import type { Context } from "../core/context/context.ts";
+import { nodeZlib } from "../utils/node-lazy.ts";
 import { parsePreferenceEntries } from "../negotiation/accepts.ts";
 import { etagMatches } from "../http/conditional.ts";
 
-const wyhashOf = (bytes: Uint8Array): string | null => {
-  const hash = (
-    globalThis as unknown as { Bun?: { hash?: { wyhash?: (input: Uint8Array) => string } } }
-  ).Bun?.hash?.wyhash;
-  if (typeof hash !== "function") return null;
-  return hash(bytes);
+const wyhash = (
+  globalThis as unknown as {
+    Bun?: { hash?: { wyhash?: (input: string | Uint8Array) => bigint } };
+  }
+).Bun?.hash?.wyhash;
+
+/** wyhash over bytes (string inputs hash identically to their UTF-8 form). */
+const wyhashOf = (bytes: Uint8Array): string | null =>
+  typeof wyhash === "function" ? wyhash(bytes).toString(16) : null;
+
+/** wyhash over the STRING itself — no TextEncoder pass, no byte copy. */
+const wyhashTextOf = (text: string): string | null =>
+  typeof wyhash === "function" ? wyhash(text).toString(16) : null;
+
+/**
+ * Node fallback: `zlib.crc32` over the UTF-8 bytes through the lazy bridge —
+ * ~0.12ms per 3MB (the pure-JS per-byte FNV cost ~1ms/MB, and the string-
+ * lane variant was no better under V8). Load-bearing laziness: importing
+ * the framework pulls no native bridge until an etag actually hashes.
+ */
+const crc32Of = (bytes: Uint8Array): string | null => {
+  const crc32 =
+    (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node ===
+    undefined
+      ? undefined
+      : nodeZlib().crc32;
+  return typeof crc32 === "function" ? (crc32(bytes) >>> 0).toString(16) : null;
 };
 
-const fnv1a = (bytes: Uint8Array): string => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < bytes.byteLength; i++) {
-    h ^= bytes[i] as number;
+const encoder = new TextEncoder();
+
+const tagOf = (c: Context, body: unknown): string | null => {
+  // String-shaped bodies (and object bodies through the memoized JSON text)
+  // hash natively without a byte copy where the runtime allows it (Bun's
+  // wyhash takes strings; Node's crc32 takes the UTF-8 bytes). The
+  // finalizer and sugar read the same serialization memo (R4.10: hashing a
+  // 3MB JSON body used to double its stringify+encode cost).
+  if (typeof body === "string") return textTagOf(body);
+  if (body instanceof Uint8Array) return bytesTagOf(body);
+  if (body !== null && typeof body === "object" && !(body instanceof ReadableStream)) {
+    return textTagOf(
+      c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(body) ?? "null"),
+    );
+  }
+  return null;
+};
+
+const textTagOf = (text: string): string => {
+  const native = wyhashTextOf(text);
+  if (native !== null) return `W/"${native}"`;
+  const crc = crc32Of(encoder.encode(text));
+  if (crc !== null) return `W/"${crc}"`;
+  return `W/"${text.length.toString(16)}${fnv1aText(text)}"`;
+};
+
+const bytesTagOf = (bytes: Uint8Array): string => {
+  const native = wyhashOf(bytes);
+  if (native !== null) return `W/"${native}"`;
+  const crc = crc32Of(bytes);
+  if (crc !== null) return `W/"${crc}"`;
+  return `W/"${bytes.byteLength.toString(16)}${fnv1aBytes(bytes)}"`;
+};
+
+/** FNV-1a over char codes, two per round — the no-native-module lane. */
+const fnv1aText = (text: string): string => {
+  const n = text.length;
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  let i = 0;
+  const limit = n - (n % 2);
+  for (; i < limit; i += 2) {
+    a = Math.imul(a ^ text.charCodeAt(i), 0x01000193) >>> 0;
+    b = Math.imul(b ^ text.charCodeAt(i + 1), 0x01000193) >>> 0;
+  }
+  let h = (a ^ b) >>> 0;
+  if (i < n) {
+    h ^= text.charCodeAt(i);
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return h.toString(16);
 };
 
-const encoder = new TextEncoder();
-
-const tagOf = (body: unknown): string | null => {
-  let bytes: Uint8Array;
-  if (typeof body === "string") bytes = encoder.encode(body);
-  else if (body instanceof Uint8Array) bytes = body;
-  else if (body !== null && typeof body === "object" && !(body instanceof ReadableStream)) {
-    bytes = encoder.encode(JSON.stringify(body) ?? "null");
-  } else {
-    return null;
+/** FNV-1a over bytes for the Uint8Array body lane, four lanes per round. */
+const fnv1aBytes = (bytes: Uint8Array): string => {
+  const n = bytes.byteLength;
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  let c = 0x811c9dc5;
+  let d = 0x01000193;
+  let i = 0;
+  const limit = n - (n % 4);
+  for (; i < limit; i += 4) {
+    a = Math.imul(a ^ (bytes[i] as number), 0x01000193) >>> 0;
+    b = Math.imul(b ^ (bytes[i + 1] as number), 0x01000193) >>> 0;
+    c = Math.imul(c ^ (bytes[i + 2] as number), 0x01000193) >>> 0;
+    d = Math.imul(d ^ (bytes[i + 3] as number), 0x01000193) >>> 0;
   }
-  return `W/"${wyhashOf(bytes) ?? `${bytes.byteLength.toString(16)}${fnv1a(bytes)}`}"`;
+  let h = (a ^ b ^ c ^ d) >>> 0;
+  for (; i < n; i++) {
+    h ^= bytes[i] as number;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16);
 };
 
 export const etag = (): RouteHandler => {
@@ -52,7 +128,7 @@ export const etag = (): RouteHandler => {
     const status = c.statusValue;
     if (status !== 200 && status !== 201) return;
     if (c.has("etag")) return;
-    const tag = tagOf(c.bodyValue);
+    const tag = tagOf(c, c.bodyValue);
     if (tag === null) return;
     const noneMatch = c.get("if-none-match");
     if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {

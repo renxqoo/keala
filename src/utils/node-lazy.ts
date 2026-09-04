@@ -26,3 +26,5 @@ export const nodeCrypto = lazyModule<typeof import("node:crypto")>("node:crypto"
 export const nodeFsPromises = lazyModule<typeof import("node:fs/promises")>("node:fs/promises");
 /** node:path — loaded by the first serveStatic request. */
 export const nodePath = lazyModule<typeof import("node:path")>("node:path");
+/** node:zlib — loaded by the first Node-side etag() hash (crc32). */
+export const nodeZlib = lazyModule<typeof import("node:zlib")>("node:zlib");

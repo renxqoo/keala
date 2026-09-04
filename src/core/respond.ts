@@ -187,12 +187,6 @@ const bodyInitOf = (body: Context["bodyValue"]): BodyData => {
   return JSON.stringify(body) ?? "null";
 };
 
-/** Response construction that needs the JSON static (objects + init). */
-const jsonInit = (body: object, init: ResponseInit): Response =>
-  "headers" in init || init.status !== undefined || init.statusText !== undefined
-    ? (Response.json(body, init) as Response)
-    : Response.json(body);
-
 /** Build the Response from response state (`head` backfills CL, drops body). */
 /**
  * Opt-in stream error observation: re-pump the body through a guard so a
@@ -244,6 +238,10 @@ const observedStream = (
   });
 };
 
+/** JSON text of an object body, memoized on the context (one stringify). */
+const jsonTextOf = (c: Context, body: unknown): string =>
+  c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(body) ?? "null");
+
 const isContextBoundBody = (body: Context["bodyValue"]): boolean => body instanceof ReadableStream;
 
 const buildFromState = (c: Context, head: boolean): Response => {
@@ -278,7 +276,7 @@ const buildFromState = (c: Context, head: boolean): Response => {
       if (typeof body === "string") length = byteLengthOf(body);
       else if (body instanceof Uint8Array) length = body.byteLength;
       else if (body !== null && typeof body === "object" && !isStreaming(body)) {
-        length = byteLengthOf(JSON.stringify(body) ?? "null");
+        length = byteLengthOf(jsonTextOf(c, body));
       }
       if (length !== undefined) {
         record ??= c.headersRecord = {};
@@ -303,10 +301,15 @@ const buildFromState = (c: Context, head: boolean): Response => {
   if (!multiValue && !hasRecord && status === 200) {
     if (isObject && !isStreaming(body)) {
       if (isNativeRequestSource(c.rawRequest)) {
-        const json = JSON.stringify(body) ?? "null";
+        const json = jsonTextOf(c, body);
         return createPlannedResponse(json, {}, "application/json");
       }
-      return Response.json(body);
+      // Memo-text construction: undici's Response.json would re-stringify
+      // the object the etag middleware (or the HEAD backfill) already
+      // serialized — the memo is the single stringify for the request.
+      return new Response(jsonTextOf(c, body), {
+        headers: { "content-type": "application/json" },
+      });
     }
     if (
       isNativeRequestSource(c.rawRequest) &&
@@ -325,10 +328,13 @@ const buildFromState = (c: Context, head: boolean): Response => {
     // Status-only — the cheap init shape.
     if (isObject && !isStreaming(body)) {
       if (isNativeRequestSource(c.rawRequest)) {
-        const json = JSON.stringify(body) ?? "null";
+        const json = jsonTextOf(c, body);
         return createPlannedResponse(json, { status }, "application/json");
       }
-      return jsonInit(body as object, { status });
+      return new Response(jsonTextOf(c, body), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
     }
     if (
       isNativeRequestSource(c.rawRequest) &&
@@ -355,11 +361,12 @@ const buildFromState = (c: Context, head: boolean): Response => {
   }
   if (isObject && !isStreaming(body)) {
     if (isNativeRequestSource(c.rawRequest)) {
-      const json = JSON.stringify(body) ?? "null";
+      const json = jsonTextOf(c, body);
       if (!headers.has("content-type")) headers.set("content-type", "application/json");
       return createPlannedResponse(json, { status, headers });
     }
-    return jsonInit(body as object, { status, headers });
+    if (!headers.has("content-type")) headers.set("content-type", "application/json");
+    return new Response(jsonTextOf(c, body), { status, headers });
   }
   if (
     isNativeRequestSource(c.rawRequest) &&

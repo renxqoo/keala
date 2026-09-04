@@ -230,7 +230,10 @@ export const sugarJson = (
       st,
     );
   } else if (isNativeRequestSource(c.rawRequest)) {
-    const bodyText = JSON.stringify(payload) ?? "null";
+    const bodyText =
+      typeof payload === "object" && payload !== null
+        ? (c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(payload) ?? "null"))
+        : (JSON.stringify(payload) ?? "null");
     if (merged === undefined) {
       response = directResponse(
         c,
