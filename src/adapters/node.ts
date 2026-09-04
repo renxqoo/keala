@@ -14,7 +14,7 @@ import { toHttpError } from "../http/errors.ts";
 import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
 import type { GracefulStopOptions } from "../core/lifecycle.ts";
 import { installSignalBridge } from "../core/lifecycle.ts";
-import { attachServer } from "../core/server-slot.ts";
+import { attachServer, serverOf } from "../core/server-slot.ts";
 import { InvalidRequestTargetError, mayCarryBody, NodeRequestSource } from "./node-source.ts";
 import { registerSocketClose, unregisterSocketClose } from "./node-socket-fanout.ts";
 
@@ -52,16 +52,14 @@ export interface NodeListenOptions {
    * Keep-alive idle timeout in SECONDS (Bun parity: the same unit
    * `listen({ idleTimeout })` uses there). Maps onto Node's
    * `keepAliveTimeout` (milliseconds); an explicit `http.keepAliveTimeout`
-   * wins. Node's default is 5s, Bun's 10s — a shared config object should
-   * mean the same thing on both runtimes.
+   * wins — a shared config object should mean the same thing on both
+   * runtimes (Node default 5s, Bun 10s).
    */
   idleTimeout?: number;
   /**
    * Transport-level request-body cap in bytes (Bun parity): every body
-   * read through the native source (`c.req.bytes/json/…`) refuses beyond
-   * it with 413, regardless of plugin limits. Without it the Node side
-   * had NO transport cap (reads defaulted to MAX_SAFE_INTEGER — an
-   * unbounded buffering surface Bun's `maxRequestBodySize` closed).
+   * read through the native source refuses beyond it with 413, regardless
+   * of plugin limits — without it the Node side has NO transport cap.
    */
   maxRequestBodySize?: number;
   /**
@@ -72,8 +70,7 @@ export interface NodeListenOptions {
   /**
    * Server-level error handler, mirroring the Bun adapter's option: when a
    * transport/write failure happens before any byte was sent, its Response
-   * replaces the plain envelope. 500-class failures also log through the
-   * app error hook's console fallback (silenced under env:"test").
+   * replaces the plain envelope (500s also log via the error-hook fallback).
    */
   onServeError?: (error: Error) => Response;
 }
@@ -223,11 +220,15 @@ export const startNodeServer = (
   options: NodeListenOptions = {},
   onListen?: () => void,
 ): NodeServerHandle => {
+  // HA-3: double-start guard (app.listen() parity) — a second server used
+  // to overwrite the slot, orphaning the first on a bound port, 503s forever.
+  if (serverOf(app) !== undefined) {
+    throw new TypeError("app.listen() called twice — stop()/close() the first server");
+  }
   for (const key of Object.keys(options)) {
     if (NODE_LISTEN_KEYS.has(key)) continue;
-    // Known Bun-only keys get their migration story instead of a bare
-    // "unknown option" — a dual-runtime config object should fail with the
-    // reason, not a puzzle.
+    // Known Bun-only keys get their migration story, not a bare "unknown
+    // option" — a dual-runtime config object should fail with the reason.
     const bunOnly: Record<string, string> = {
       reusePort: "reusePort is Bun-only (SO_REUSEPORT); under Node scale with the cluster module",
       nativeRoutes:
@@ -352,12 +353,11 @@ export const startNodeServer = (
     // Wire truth + client-disconnect bridge, one handler registered twice.
     // res 'close' fires for every STARTED response — completed OR terminated
     // prematurely — so a separate 'finish' listener is redundant, and 'close'
-    // is the more honest settle point (last byte flushed, not handed to the
-    // kernel). A pipelined response that never started writing gets no res
-    // 'close' on socket death at all (REVIEW-SEC-17), so the SOCKET's own
-    // close settles the wire count too. Idempotent through `wireDone`; the
-    // socket registration is detached on first settle — a keep-alive socket
-    // must not accumulate per-request listeners.
+    // is the more honest settle point. A pipelined response that never
+    // started writing gets no res 'close' on socket death (REVIEW-SEC-17),
+    // so the SOCKET's own close settles the wire count too. Idempotent
+    // through `wireDone`; the socket registration is detached on first
+    // settle — a keep-alive socket must not accumulate per-request listeners.
     const socket = incoming.socket;
     let source: NodeRequestSource | null = null;
     let wireDone = false;
@@ -385,13 +385,12 @@ export const startNodeServer = (
       // app dispatch itself never rejects — failures here are native source
       // validation, socket teardown or response writer failures.
       if (!out.headersSent) {
-        // A failed writer may already have staged another body's framing,
-        // encoding, cookies and reason phrase. None describes this envelope.
+        // A failed writer may have staged another body's framing — none of it describes this envelope.
         for (const name of out.getHeaderNames()) out.removeHeader(name);
         if (!(error instanceof InvalidRequestTargetError)) {
-          // 500-class transport/writer failures surface through the app error
-          // hook's console fallback (silenced under env:"test"), mirroring the
-          // Bun adapter's serve-error path — Node used to fail silently.
+          // 500-class transport/writer failures surface through the app
+          // error hook's console fallback (silenced under env:"test") —
+          // Node used to fail silently where Bun logs.
           consoleFallback(app, undefined, toHttpError(error));
           if (options.onServeError !== undefined) {
             try {
@@ -415,10 +414,22 @@ export const startNodeServer = (
       }
     };
     const answer = (response: Response): void => {
+      // HA-2: answering with an OWNED body read still pending must not leave
+      // that read absorbing/retaining the rest of the body — the slot is free
+      // (inFlight 0) and the connection is unreusable. Close it and kill the
+      // socket after the flush (disconnect fails #readIncoming out).
+      const abandonedRead = source !== null && source.hasPendingOwnedRead();
       if (source !== null && mayCarryBody(source.method)) source.cleanupUnread();
       try {
-        const writing = writeResponse(response, out, draining);
+        const writing = writeResponse(response, out, draining || abandonedRead);
         if (writing instanceof Promise) void writing.catch(fail);
+        if (abandonedRead) {
+          out.once("close", () => {
+            // Flushed or already dead; idempotent vs onWireDone's disconnect.
+            source?.disconnect(new DOMException("early answer abandoned the body", "AbortError"));
+            socket.destroy();
+          });
+        }
       } catch (error) {
         fail(error);
       }
@@ -454,13 +465,13 @@ export const startNodeServer = (
   server.on("error", (error: Error) => {
     failed?.(error);
   });
-  // Malformed HTTP: answer 400 and drop the connection (Node's default would
-  // just destroy the socket). `end` flushes the reply before closing.
+  // Malformed HTTP: answer 400 and drop the connection (Node's default
+  // would just destroy the socket); `end` flushes the reply first.
   server.on("clientError", (_err, socket) => {
     socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
   });
-  // With an 'upgrade' listener present, upgrades never reach 'request' —
-  // websockets are Bun-only, so answer the wire-level refusal here.
+  // With an 'upgrade' listener present, upgrades never reach 'request';
+  // websockets are Bun-only — answer the wire-level refusal here.
   server.on("upgrade", (_req, socket) => {
     socket.end("HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n");
   });

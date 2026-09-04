@@ -193,20 +193,70 @@ export const subscribeSettled = (lc: LifecycleState, callback: () => void): bool
   return false;
 };
 
+/**
+ * Run one handler under the shutdown cap (HA-4): a hook that never settles
+ * must not hang close() forever. The timer resolves the wrapper with
+ * undefined on expiry — the loop logs and moves to the NEXT handler — while
+ * the handler's own (late) settlement is observed here so it can never
+ * surface as an unhandled rejection.
+ */
+const awaitWithShutdownTimeout = (
+  handler: () => unknown,
+  timeoutMs: number,
+  label: string,
+): Promise<unknown> =>
+  new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      console.error(
+        `\n  keala: ${label} did not settle within ${timeoutMs}ms — continuing shutdown\n`,
+      );
+      resolve(undefined);
+    }, timeoutMs);
+    timer.unref?.();
+    Promise.resolve(handler()).then(
+      (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (reason) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        // Assimilate the rejection into the wrapper so the caller's own
+        // try/catch (the contained-failure log) still observes it.
+        resolve(Promise.reject(reason));
+      },
+    );
+  });
+
 /** Run the registered shutdown handlers exactly once, contained. */
-const runShutdownHandlers = (lc: LifecycleState): Promise<void> => {
+const runShutdownHandlers = (lc: LifecycleState, shutdownTimeoutMs: number): Promise<void> => {
   if (lc.shutdownRan) return Promise.resolve();
   lc.shutdownRan = true;
   const handlers = lc.shutdownHandlers.splice(0);
   if (handlers.length === 0) return Promise.resolve();
   // Registration ORDER, sequentially: a pool-closing hook must not race
-  // the flush that logs the stats it produced.
+  // the flush that logs the stats it produced. Each hook is capped at
+  // `shutdownTimeoutMs` (0 = wait indefinitely, the pre-HA-4 contract).
   return (async (): Promise<void> => {
     for (let index = 0; index < handlers.length; index++) {
       const handler = handlers[index];
       if (handler === undefined) continue;
       try {
-        await handler();
+        if (shutdownTimeoutMs > 0) {
+          await awaitWithShutdownTimeout(
+            handler,
+            shutdownTimeoutMs,
+            `onShutdown handler #${index + 1}`,
+          );
+        } else {
+          await handler();
+        }
       } catch (reason) {
         console.error(
           `\n  keala: onShutdown handler #${index + 1} failed\n  `,
@@ -225,6 +275,14 @@ export const registerShutdownHandler = (lc: LifecycleState, handler: () => unkno
 const DEFAULT_DRAIN_MS = 30_000;
 
 /**
+ * HA-4: per-hook shutdown cap, in milliseconds (10s by default, 0 = wait
+ * indefinitely). The public `CloseOptions.shutdownTimeout` field in types.ts
+ * carries the type; the default lives here next to the drain default.
+ */
+
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+
+/**
  * Graceful close, application side: flip draining (the gate starts
  * refusing), reject queued waiters, then let the adapter own socket truth
  * (stopGraceful) or wait on the counter directly in embedded (server-less)
@@ -241,13 +299,19 @@ export const closeApp = (
     // SIGTERM must not be swallowed by idempotency. A COMPLETED close
     // escalates nothing (REVIEW-BUG-11: third-party force routines must
     // observe "running" only).
-    if (options?.drain === 0 && lc.escalate !== null) lc.escalate?.();
+    if (options?.drain === 0) lc.escalate?.();
     return lc.closePromise;
   }
   const drain = options?.drain ?? DEFAULT_DRAIN_MS;
   if (drain !== Number.POSITIVE_INFINITY && (!Number.isFinite(drain) || drain < 0)) {
     throw new TypeError(
       "close() drain requires a non-negative number of milliseconds (or Infinity)",
+    );
+  }
+  const shutdownTimeout = options?.shutdownTimeout ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
+  if (!Number.isFinite(shutdownTimeout) || shutdownTimeout < 0) {
+    throw new TypeError(
+      "close() shutdownTimeout requires a non-negative finite number of milliseconds (0 waits indefinitely)",
     );
   }
   lc.draining = true;
@@ -266,14 +330,16 @@ export const closeApp = (
       if (timer !== undefined) clearTimeout(timer);
       if (timedOut) handle?.stop(true);
       // onShutdown hooks run after the drain, before close() resolves.
-      void runShutdownHandlers(lc).then(() => resolve({ timedOut, inFlight: lc.inFlight }));
+      void runShutdownHandlers(lc, shutdownTimeout).then(() =>
+        resolve({ timedOut, inFlight: lc.inFlight }),
+      );
     };
     if (drain === 0) {
       // Immediate force (CT-9): the listener ALWAYS dies here — an idle
       // server must not keep answering 503s with the port still bound.
       handle?.stop(true);
       done = true;
-      void runShutdownHandlers(lc).then(() =>
+      void runShutdownHandlers(lc, shutdownTimeout).then(() =>
         resolve({ timedOut: lc.inFlight > 0, inFlight: lc.inFlight }),
       );
       return;

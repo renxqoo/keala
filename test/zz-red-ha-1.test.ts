@@ -1,8 +1,7 @@
 /**
- * HA residual review red tests (zz-red-ha-1) — current tree @ aacc945.
- *
- * Three CONFIRMED residual findings, each asserted as the CORRECT behavior
- * (fails against the implementation):
+ * HA residual review red tests (zz-red-ha-1) — written red against tree
+ * @ aacc945; FIXED in the 0.6.2 review round, where this file now runs
+ * GREEN as the regression lock for:
  *  HA-1  Node adapter double-start: listen(app, …) twice silently orphans the
  *        first server; app.close() can never reach it (server slot was
  *        overwritten) and the orphan serves 503 forever with the port bound.
@@ -22,11 +21,21 @@ import net from "node:net";
 
 import { Keala } from "../src/core/app.ts";
 import { startNodeServer, listen, type NodeServerHandle } from "../src/adapters/node.ts";
-import { createBodyParser } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { streamSSE } from "../src/helpers/streams.ts";
+import type { CloseOptions } from "../src/types.ts";
 
 const quiet = { env: "test" } as const;
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Externally resolvable void promise (hung-hook and pump coordination). */
+const deferred = (): { promise: Promise<void>; release: () => void } => {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+};
 
 const liveServers: NodeServerHandle[] = [];
 const liveSockets: net.Socket[] = [];
@@ -108,11 +117,11 @@ describe("HA-1: Node adapter double-start orphans the first server", () => {
     const first = listen(app, 8903, "127.0.0.1");
     liveServers.push(first);
     await first.ready();
-    const second = listen(app, 8904, "127.0.0.1"); // no guard on the Node path
-    liveServers.push(second);
-    await second.ready();
+    // The guard makes the orphan impossible: a second listen for the same
+    // app refuses instead of overwriting the server slot.
+    expect(() => listen(app, 8904, "127.0.0.1")).toThrow(TypeError);
 
-    await app.close({ drain: 100 }); // reaches only the SECOND handle
+    await app.close({ drain: 100 }); // reaches the one registered handle
 
     let orphanServing = false;
     try {
@@ -133,24 +142,22 @@ describe("HA-2: a hung onShutdown() handler hangs close() with no escalation", (
     liveServers.push(server);
     await server.ready();
 
-    let release = (): void => {};
-    app.onShutdown(
-      () =>
-        new Promise<void>((resolve) => {
-          release = resolve;
-        }),
-    );
+    const hung = deferred();
+    app.onShutdown(() => hung.promise);
     let secondRan = false;
     app.onShutdown(() => {
       secondRan = true;
     });
 
-    const closed = app.close({ drain: 50 });
+    // shutdownTimeout caps each hook (default 10s; shortened here for test
+    // speed — the assertion is that the close resolves at all, well past
+    // the 50ms drain window, with the later handler still running).
+    const closed = app.close({ drain: 50, shutdownTimeout: 60 } as CloseOptions);
     let state = "pending";
     void closed.then(() => {
       state = "resolved";
     });
-    await wait(300); // >> the 50ms drain window
+    await wait(300); // >> the 50ms drain window and the 60ms hook cap
     expect(state).toBe("resolved"); // FAILS today: handler hang = close() hang
     expect(secondRan).toBe(true);
 
@@ -159,7 +166,7 @@ describe("HA-2: a hung onShutdown() handler hangs close() with no escalation", (
     await wait(50);
     expect(state).toBe("resolved");
 
-    release(); // cleanup so the worker can exit
+    hung.release(); // cleanup so the worker can exit
     await closed;
   });
 });
@@ -169,7 +176,7 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
     const app = new Keala({ ...quiet, requestTimeout: 100 });
     app.use(createBodyParser());
     app.post("/slow", async (c) => {
-      const bytes = await c.req.arrayBuffer();
+      const bytes = await bodyOf(c).arrayBuffer();
       c.text(`body:${bytes.byteLength}`);
     });
     const server = startNodeServer(app, { port: 8906, hostname: "127.0.0.1" });
@@ -188,10 +195,7 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
     const chunk = Buffer.alloc(64 * 1024, 0x61);
     let sent = 0;
     const target = 6 * 1024 * 1024;
-    let done: () => void = () => {};
-    const pumped = new Promise<void>((resolve) => {
-      done = resolve;
-    });
+    const { promise: pumped, release: pumpDone } = deferred();
     const pump = (): void => {
       while (sent < target) {
         sent += chunk.length;
@@ -200,8 +204,13 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
           return;
         }
       }
-      done();
+      pumpDone();
     };
+    // Correct behavior closes the socket on the early answer, so the pump
+    // ends on the connection teardown (EPIPE/close) rather than on `drain`
+    // — a dead connection never ACKs the remaining bytes.
+    sock.once("error", pumpDone);
+    sock.once("close", pumpDone);
     pump();
     await pumped;
     await wait(300); // let the data land in the server's read closure
@@ -209,7 +218,7 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
     const rssAfter = Math.round(process.memoryUsage().rss / 1024 / 1024);
     // Correct behavior: the adapter closes the socket on the early answer (or
     // otherwise stops retaining) — retained delta must be far below `sent`.
-    expect(rssAfter - rssBefore).toBeLessThan(2 * 1024 / 1024); // < 2MB
+    expect(rssAfter - rssBefore).toBeLessThan((2 * 1024) / 1024); // < 2MB
     expect(app.inFlight).toBe(0);
   }, 8000);
 });
@@ -217,17 +226,15 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
 describe("HA residual: verified-clean behaviors (documentation probes)", () => {
   it("SSE heartbeat interval is cleared on abrupt client disconnect (real socket)", async () => {
     const app = new Keala(quiet);
-    app.get(
-      "/events",
-      (c) =>
-        streamSSE(
-          c,
-          async (sse) => {
-            sse.send({ data: "hello" });
-            await new Promise(() => {});
-          },
-          { heartbeat: 40 },
-        ),
+    app.get("/events", (c) =>
+      streamSSE(
+        c,
+        async (sse) => {
+          sse.send({ data: "hello" });
+          await new Promise(() => {});
+        },
+        { heartbeat: 40 },
+      ),
     );
     const server = startNodeServer(app, { port: 8907, hostname: "127.0.0.1" });
     liveServers.push(server);

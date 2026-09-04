@@ -15,8 +15,28 @@
  * indistinguishable from the new owner's own writes; only a per-request proxy
  * could separate them, and that would cost more than pooling saves. The
  * framework covers what it CAN observe: registered floating `next()` branches
- * (see core/branches.ts) hold off recycling until they settle. Retaining a
- * context past its request's lifetime is unsupported on every path.
+ * (see core/branches.ts) hold off recycling until they settle — compose
+ * registers BOTH floating shapes (sync return-after-next and an async
+ * handler settling before its floated next(), HA-1). Retaining a context
+ * past its request's lifetime through any other escape hatch (a raw timer
+ * capture that never touched next()) is still unsupported.
+ *
+ * PERF-1 cost profile (measured @ review-0.6.2, bench-zz paired medians,
+ * 64 conns / 5s / 5 rounds): the recycle surcharge on the plain /text hot
+ * path is ~11.7% median (unpooled 191,603 rps vs pooled 171,533 rps; raw
+ * user-built Responses are 3.1x off — but that leg is dominated by the
+ * consumption-tracking body wrapper, not by the slots below). Components:
+ * sweepForeignKeys' full Reflect.ownKeys scan (~641ns), the two
+ * setPrototypeOf swaps release/acquire perform (~422ns) and
+ * clearRequestSlots' 30 sentinel re-assignments (~398ns). The sweep cannot
+ * be safely skipped: a handler's plain `c.x = 1` write on a live-proto
+ * context is un-interceptable, so any "no foreign keys seen" flag would be
+ * a guess — only a per-request proxy could observe those writes, and that
+ * costs more than pooling saves. The prototype swaps ARE the write guard;
+ * removing either opens the retirement window. Applicability: pooling is
+ * for allocation-heavy/streaming workloads where GC pressure dominates —
+ * on the steady /text shape the recycle bookkeeping costs more than the
+ * allocation it saves. release() early-exits a full pool before swapping.
  */
 
 import type { Application } from "../app.ts";
@@ -89,6 +109,10 @@ export interface ContextPool {
 }
 
 export const createPool = (app: Application, liveProto: object): ContextPool => {
+  // DEAD-12: `app` stays in the exported signature for future cross-app
+  // assertions; pooling is per-app by construction (each app builds its own
+  // pool). Reference it so the parameter is not dead weight.
+  void app;
   const pool: Context[] = [];
   const deadProto: object = deadProtoFor(liveProto);
   return {
@@ -106,8 +130,6 @@ export const createPool = (app: Application, liveProto: object): ContextPool => 
     get size(): number {
       return pool.length;
     },
-    // app is captured for future cross-app assertions; pooling is per-app.
-    ...(app ? {} : {}),
   } as ContextPool;
 };
 

@@ -39,16 +39,26 @@ const defaultServeImplementation = (): ServeImplementation | undefined =>
     ? (Bun.serve as unknown as ServeImplementation)
     : undefined;
 
+/**
+ * DEAD-23: the plain serve-error 500 envelope, shared by both Bun-adapter
+ * sites (the default handler and the hook-failure fallback). Byte-equal to
+ * the core funnel's static envelope in error-response.ts, which is not
+ * exported for adapter reuse — one local const keeps the two adapter sites
+ * from drifting without inverting the core/adapters dependency.
+ */
+const internalServerErrorEnvelope = (): Response =>
+  new Response("Internal Server Error", {
+    status: 500,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+
 const defaultServeError =
   (app: Application) =>
   (error: Error): Response => {
     // A serve error is a server fault, not a request-path error: it has no
     // context, so the mapper contract does not apply — console fallback only.
     consoleFallback(app, undefined, toHttpError(error));
-    return new Response("Internal Server Error", {
-      status: 500,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
+    return internalServerErrorEnvelope();
   };
 
 /**
@@ -102,10 +112,7 @@ export const startBunServer = (
         return handler(error);
       } catch (hookError) {
         consoleFallback(app, undefined, toHttpError(hookError));
-        return new Response("Internal Server Error", {
-          status: 500,
-          headers: { "content-type": "text/plain; charset=utf-8" },
-        });
+        return internalServerErrorEnvelope();
       }
     }) as (error: Error) => Response,
   };
@@ -206,28 +213,17 @@ export const startBunServer = (
   // settle an HTTP request.
   const stopGraceful = (grace: GracefulStopOptions): Promise<{ timedOut: boolean }> =>
     new Promise((resolve) => {
-      for (const ws of openSockets) {
-        try {
-          (ws as { close(code?: number, reason?: string): void }).close(
-            1001,
-            "server shutting down",
-          );
-        } catch {
-          // A dead socket refusing a courtesy close is not worth stopping for.
-        }
-      }
-      openSockets.clear();
-      server.stop();
-      let done = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      // A ws upgrade admitted BEFORE the drain sweep can still be parking on
-      // an await (auth middleware, body read) — its socket only enters
-      // openSockets when Bun fires `open` synchronously inside server.upgrade(),
-      // long after the sweep above ran. Sweep again at finish() on BOTH paths:
-      // finish(false) fires only once inFlight reaches zero, and an upgrade's
-      // `open` precedes its settle, so this catches every late socket
-      // deterministically — without it the process outlived close() and
-      // ignored SIGTERM (R4.10 child-process repro: 3x SIGTERM no-op).
+      // DEAD-22: the courtesy-1001 sweep, hoisted so the first pass and the
+      // finish() re-sweep share one implementation instead of a duplicated
+      // inline loop. A ws upgrade admitted BEFORE the drain sweep can still
+      // be parking on an await (auth middleware, body read) — its socket
+      // only enters openSockets when Bun fires `open` synchronously inside
+      // server.upgrade(), long after this first sweep ran. Sweep again at
+      // finish() on BOTH paths: finish(false) fires only once inFlight
+      // reaches zero, and an upgrade's `open` precedes its settle, so this
+      // catches every late socket deterministically — without it the process
+      // outlived close() and ignored SIGTERM (R4.10 child-process repro: 3x
+      // SIGTERM no-op).
       const sweepLateSockets = (): void => {
         for (const ws of openSockets) {
           try {
@@ -241,6 +237,10 @@ export const startBunServer = (
         }
         openSockets.clear();
       };
+      sweepLateSockets();
+      server.stop();
+      let done = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const finish = (timedOut: boolean): void => {
         if (done) return;
         done = true;

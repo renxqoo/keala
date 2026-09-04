@@ -32,6 +32,13 @@ export class NodeRequestSource implements NativeRequestSource {
   declare _request?: Request;
   declare _bytes?: Promise<Uint8Array>;
   declare _bodyOwned?: true;
+  /**
+   * HA-2: live while an owned #readIncoming is parked on the socket — the
+   * adapter's early-answer teardown fails it through disconnect() so its
+   * listeners detach instead of absorbing (and retaining) the rest of the
+   * body after the response already shipped.
+   */
+  declare _pendingRead?: { fail: (error: Error) => void };
   // S4 lazy client-disconnect channel: the adapter's socket-close detection
   // drives `disconnect()`; consumers (the admission queue, `c.signal`)
   // materialize the controller on demand. A disconnect that lands before
@@ -93,7 +100,28 @@ export class NodeRequestSource implements NativeRequestSource {
   disconnect(reason: unknown): void {
     if (this._disconnected !== undefined) return;
     this._disconnected = reason;
+    // HA-2: an owned read parked on this source must fail OUT now — its
+    // listeners detach (the closure stops retaining chunks) and the zombie
+    // consumer observes the rejection. Observed, never unhandled: the chain's
+    // floated-branch containment and the deadline race both swallow it.
+    this._pendingRead?.fail(reason instanceof Error ? reason : new Error("request body abandoned"));
     this._abort?.abort(reason);
+  }
+
+  /**
+   * HA-2: true when a claimed-body read is ACTUALLY IN FLIGHT —
+   * `#readIncoming` published its fail hook and is still waiting on the
+   * socket. Answering in this state means the rest of the body may never
+   * arrive (a client dripping bytes past a 504), so the adapter closes the
+   * connection instead of letting the read absorb and retain it. A merely
+   * MATERIALIZED body (`void c.raw`, `_bodyOwned` with no reader) is NOT
+   * pending: the R4.5 keep-alive contract drains it and serves the next
+   * request on the same connection.
+   */
+  hasPendingOwnedRead(): boolean {
+    return (
+      this._pendingRead !== undefined && !this.incoming.readableEnded && !this.incoming.destroyed
+    );
   }
 
   absoluteUrl(): string {
@@ -195,6 +223,7 @@ export class NodeRequestSource implements NativeRequestSource {
       let total = 0;
       let settled = false;
       const cleanup = (): void => {
+        this._pendingRead = undefined;
         this.incoming.off("data", onData);
         this.incoming.off("end", onEnd);
         this.incoming.off("aborted", onAborted);
@@ -227,6 +256,9 @@ export class NodeRequestSource implements NativeRequestSource {
       };
       const onAborted = (): void => fail(new Error("client disconnected while reading request"));
       const onError = (error: Error): void => fail(error);
+      // HA-2: publish the fail hook so disconnect() (early answer, socket
+      // teardown) can settle this read and detach its listeners.
+      this._pendingRead = { fail };
       this.incoming.on("data", onData);
       this.incoming.once("end", onEnd);
       this.incoming.once("aborted", onAborted);

@@ -41,7 +41,14 @@ export const raceDeadline = (
   const settledPromise: Promise<Response> =
     settled instanceof Promise ? settled : Promise.resolve(settled);
   settledPromise.then((value: Response) => {
-    if (once.done) return;
+    if (once.done) {
+      // PERF-7: the deadline already answered — the zombie's late Response
+      // is dropped, but its body must not be dropped UNCONSUMED: an
+      // untouched stream pins its buffers until GC (Node/undici keep the
+      // whole receive window resident). Cancel cheaply and move on.
+      void value.body?.cancel().catch(ignore);
+      return;
+    }
     once.done = true;
     if (once.timer !== undefined) clearTimeout(once.timer);
     resolve(value);

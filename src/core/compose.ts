@@ -95,6 +95,12 @@ const makeLevel = <C extends MiddlewareContext>(
   return (c, tail) => {
     let advanced = false;
     let floated: Promise<void> | undefined;
+    // True from next() until the floated branch settles. A branch that has
+    // ALREADY settled cannot outlive this level, so it must not hold pool
+    // retirement either — the idiomatic `return next()` shape (the level
+    // returns the downstream promise itself) used to defer every release by
+    // a turn and lose the retire-before-close race (REVIEW-HA-7 soak).
+    let branchLive = false;
     const result = handler(c, () => {
       if (advanced) {
         throw new Error("next() called multiple times in the same middleware");
@@ -104,23 +110,43 @@ const makeLevel = <C extends MiddlewareContext>(
       if (downstreamResult !== undefined && typeof downstreamResult.then === "function") {
         // A handler that returns WITHOUT awaiting its next() leaves this
         // promise floating; a late rejection there would otherwise surface as
-        // a process-level unhandledRejection under Bun.serve. Observe it
-        // silently — the response has already been committed by design.
-        // (Synchronous chains return undefined here and pay nothing.)
-        void (downstreamResult as Promise<void>).catch(() => undefined);
-        floated = downstreamResult as Promise<void>;
+        // a process-level unhandledRejection under Bun.serve. Observe it —
+        // the response has already been committed by design. The same single
+        // reaction flips `branchLive` off, so liveness tracking costs no
+        // extra allocation. (Synchronous chains return undefined here and
+        // pay nothing.)
+        const branch = downstreamResult as Promise<void>;
+        void branch.then(
+          () => {
+            branchLive = false;
+          },
+          () => {
+            branchLive = false;
+          },
+        );
+        floated = branch;
+        branchLive = true;
       }
       return downstreamResult as Promise<void>;
     });
     if (result instanceof Promise) {
       return result.then((settled) => {
+        // HA-1: an ASYNC handler that settles while its floated next() is
+        // still running is the same hazard as the sync shape below — the
+        // branch outlives this level while the chain (and the pool's
+        // retirement decision) moves on. Register it, or a pooled context
+        // is recycled under a live branch and its late writes land on the
+        // next request. (`return next()` settles its branch first and pays
+        // nothing here.)
+        if (branchLive && floated !== undefined) registerBranch(c, floated);
         commit(c, settled as HandlerResult);
         markStalled(c, advanced, hasDownstream, settled as HandlerResult | undefined);
       });
     }
-    // Sync return AFTER calling next(): the only statically detectable
-    // floating branch. Register it so a pooled context is never recycled
-    // while this branch can still mutate it (see core/branches.ts).
+    // Sync return AFTER calling next(): the statically-detectable floating
+    // branch (the async twin is registered in the Promise branch above).
+    // Register it so a pooled context is never recycled while this branch
+    // can still mutate it (see core/branches.ts).
     if (floated !== undefined) registerBranch(c, floated);
     commit(c, result);
     markStalled(c, advanced, hasDownstream, result);
@@ -153,11 +179,29 @@ export const NOOP_TAIL: Next = async () => {};
 
 /**
  * Wrap a single handler (no stack) as a uniform chain callable — the fast
- * path for routes with one handler and no middleware. Zero guard closures.
+ * path for routes with one handler and no middleware.
+ *
+ * BUG-4: the direct chain used to pass `tail` through bare, so a handler
+ * calling next() twice ran the tail twice silently while a composed chain
+ * threw. The guard matches makeLevel's semantics; the once-closure is
+ * allocated ONLY when the handler actually calls next() — single-handler
+ * routes without next() (the dominant shape) pay one wrapper call and
+ * nothing else. The wrapper is also the DIRECT_HANDLER dispatch installs,
+ * so the dispatchDirect fast path is guarded identically.
  */
 export const direct = <C extends MiddlewareContext>(handler: Handler<C>): Composed<C> => {
+  const guarded: Handler<C> = (c, tail) => {
+    let advanced = false;
+    return handler(c, () => {
+      if (advanced) {
+        throw new Error("next() called multiple times in the same middleware");
+      }
+      advanced = true;
+      return tail();
+    });
+  };
   const chain: Composed<C> = (c, tail) => {
-    const result = handler(c, tail);
+    const result = guarded(c, tail);
     if (result instanceof Promise) {
       return result.then((settled) => {
         commit(c, settled as HandlerResult);
@@ -166,6 +210,6 @@ export const direct = <C extends MiddlewareContext>(handler: Handler<C>): Compos
     commit(c, result);
     return undefined;
   };
-  Object.defineProperty(chain, DIRECT_HANDLER, { value: handler });
+  Object.defineProperty(chain, DIRECT_HANDLER, { value: guarded });
   return chain;
 };

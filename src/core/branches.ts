@@ -6,10 +6,11 @@
  * branch running past its own return. The branch still holds the request's
  * context, so a pooled context must not be recycled (handed to the next
  * request) while any observed branch can still mutate it. Registration is
- * deliberately cheap and rare: compose registers a branch ONLY on the
- * detectable floating shape (a level returning synchronously after calling
- * next); a branch floated inside an async handler that settles first is
- * beyond static detection and stays the caller's responsibility.
+ * deliberately cheap and rare: compose registers a branch whenever its level
+ * settled while the downstream promise was still floating — both the sync
+ * return-after-next shape and the async handler that settles before its
+ * floated next() (HA-1; the registration itself lives in the level's settle
+ * tail, so chains that properly await never build a list at all).
  */
 
 const BRANCHES = Symbol("keala.branches");

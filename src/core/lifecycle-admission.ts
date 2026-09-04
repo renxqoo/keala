@@ -323,15 +323,17 @@ const OVERLOAD_KEYS = new Set([
 ]);
 
 export const normalizeOverload = (options: OverloadOptions): LifecycleOverload => {
+  // DEAD-14: the object check must precede Object.keys — null/undefined
+  // deserve the friendly TypeError, not a native throw.
+  if (typeof options !== "object" || options === null) {
+    throw new TypeError("overload requires an options object");
+  }
   for (const key of Object.keys(options)) {
     if (!OVERLOAD_KEYS.has(key)) {
       // `maxConcurreny: 1` used to vanish silently — disarming capacity
       // protection entirely. Refuse loudly instead.
       throw new TypeError(`overload.${key} is not an overload option (typo?)`);
     }
-  }
-  if (typeof options !== "object" || options === null) {
-    throw new TypeError("overload requires an options object");
   }
   const maxConcurrency =
     options.maxConcurrency === undefined

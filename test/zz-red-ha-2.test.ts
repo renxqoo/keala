@@ -71,14 +71,10 @@ describe("HA-4: async-floated next() + pooling — cross-request corruption", ()
       c.body = "in";
     });
     let seen: unknown = "unset";
-    app.get(
-      "/who",
-      holdMid,
-      async (c) => {
-        seen = (c.state as Record<string, unknown>)["user"];
-        c.body = "who";
-      },
-    );
+    app.get("/who", holdMid, async (c) => {
+      seen = (c.state as Record<string, unknown>)["user"];
+      c.body = "who";
+    });
 
     const r1 = app.handle(new Request("http://x/login"));
     await sleep(15);
