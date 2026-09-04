@@ -132,14 +132,16 @@ export const csrfToken = (options: CsrfTokenOptions): CsrfTokenService => {
       if (token.includes("\0")) return false;
       const parts = token.split(".");
       if (parts.length !== 5 || parts[0] !== "t1") return false;
-      const [tag, nonce, issuedAtText, ttlText, macText] = parts as [
+      // parts[0] is already gate-checked above; only the field shapes and
+      // the MAC remain.
+      const [, nonce, issuedAtText, ttlText, macText] = parts as [
         string,
         string,
         string,
         string,
         string,
       ];
-      if (tag !== "t1" || !/^\d+$/.test(issuedAtText) || !/^\d+$/.test(ttlText)) return false;
+      if (!/^\d+$/.test(issuedAtText) || !/^\d+$/.test(ttlText)) return false;
       const issuedAt = Number(issuedAtText);
       const tokenTtl = Number(ttlText);
       if (!Number.isSafeInteger(issuedAt) || !Number.isSafeInteger(tokenTtl)) return false;

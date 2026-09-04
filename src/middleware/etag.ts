@@ -10,7 +10,7 @@
 import type { RouteHandler } from "../router/router.ts";
 import type { Context } from "../core/context/context.ts";
 import { nodeZlib } from "../utils/node-lazy.ts";
-import { parsePreferenceEntries } from "../negotiation/accepts.ts";
+import { acceptsGzip } from "../negotiation/accepts.ts";
 import { etagMatches } from "../http/conditional.ts";
 
 const wyhash = (
@@ -193,19 +193,24 @@ const webGzip = async (input: Uint8Array): Promise<Uint8Array> => {
  */
 
 /**
- * q-aware gzip acceptance (RFC 9110 §12.5.3): an EXPLICIT `gzip;q=0` is a
- * refusal no wildcard can override (the named entry outranks `*`), `*;q>0`
- * accepts anything, and `gzip;q=0` alone refuses.
+ * q-aware gzip acceptance lives in negotiation/accepts.ts (acceptsGzip):
+ * it carries the lone-token and memoized fast lanes that keep compress()'s
+ * per-request gate off the full preference parse on the decline path.
  */
-const acceptsGzip = (header: string): boolean => {
-  let explicit: number | null = null;
-  let wildcard: number | null = null;
-  for (const pref of parsePreferenceEntries(header)) {
-    if (pref.value === "gzip" && explicit === null) explicit = pref.q;
-    else if (pref.value === "*" && wildcard === null) wildcard = pref.q;
-  }
-  const quality = explicit ?? wildcard;
-  return quality !== null && quality > 0;
+
+const VARY_ACCEPT_ENCODING = "Accept-Encoding";
+
+/**
+ * Stage `Vary: Accept-Encoding` without append's allocation tax: when
+ * nothing else has claimed Vary yet (the overwhelmingly common case) a
+ * plain SET is observably identical — append with no existing value stages
+ * the same single string, just through an extra array. A response that
+ * already varies (handler or another middleware) keeps the append join so
+ * their tokens survive.
+ */
+const varyAcceptEncoding = (c: Context): void => {
+  if (c.has("vary")) c.append("Vary", VARY_ACCEPT_ENCODING);
+  else c.setHeader("Vary", VARY_ACCEPT_ENCODING);
 };
 
 /**
@@ -224,11 +229,11 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
     const encoding = c.header("accept-encoding");
     if (!acceptsGzip(encoding)) {
       await next();
-      c.append("Vary", "Accept-Encoding");
+      varyAcceptEncoding(c);
       return;
     }
     await next();
-    c.append("Vary", "Accept-Encoding");
+    varyAcceptEncoding(c);
     if (c._res !== undefined) return;
     if (c.has("content-encoding")) return;
     // no-transform is the origin's explicit instruction to intermediaries.

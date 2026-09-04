@@ -26,6 +26,10 @@ export interface Preference {
 
 /** Split a (possibly multi-line joined) header on commas, trimming segments. */
 const splitHeader = (header: string): string[] => {
+  // Comma-free fast path: quoting only matters for comma detection, so a
+  // header without one is a single part whatever it quotes — skip the
+  // per-character scan entirely.
+  if (header.indexOf(",") === -1) return [header];
   const parts: string[] = [];
   let current = "";
   let quoted = false;
@@ -266,13 +270,109 @@ const isIdentityRefused = (header: string): boolean => {
   return false;
 };
 
-/** Charset negotiation: `ctx.acceptsCharsets(['utf-8'])`. */
+/**
+ * q-aware gzip acceptance (RFC 9110 §12.5.3), the gate compress() runs on
+ * EVERY request: an EXPLICIT `gzip;q=0` is a refusal no wildcard can
+ * override (the named entry outranks `*`), `*;q>0` accepts anything, and
+ * `gzip;q=0` alone refuses. Reference semantics:
+ *
+ *     explicit = q of the FIRST `gzip` entry, wildcard = q of the FIRST `*`
+ *     entry; accept iff (explicit ?? wildcard) exists and is > 0.
+ *
+ * Two fast lanes answer the common shapes without touching the parser (the
+ * parse was ~330ns per request on the decline path):
+ *  - a LONE token ("gzip", "identity", "br" — no `,`/`;`/quote, ASCII token
+ *    characters only) is decided by a charCode compare, zero allocation.
+ *    Anything outside the token alphabet defers (JS `trim()` also strips
+ *    U+00A0-class spaces a charCode scan would leave behind);
+ *  - a bounded memo over the verbatim header string (the wireFormsCache
+ *    pattern): browsers repeat the same Accept-Encoding spelling on every
+ *    request, so the parse runs once per distinct header, then never again.
+ *    Beyond the cap, hostile header sprawl falls back to parsing per call.
+ */
+const GZIP_MEMO_MAX = 64;
+const gzipMemo = new Map<string, boolean>();
+
+const isTokenChar = (code: number): boolean =>
+  (code >= 97 && code <= 122) || // a-z
+  (code >= 65 && code <= 90) || // A-Z
+  (code >= 48 && code <= 57) || // 0-9
+  (code >= 33 && code <= 46) || // !#$%&'*+,-. ("," and '"' were handled above)
+  code === 94 || // ^
+  code === 95 || // _
+  code === 96 || // `
+  code === 124 || // |
+  code === 126; // ~
+
+const lowerCode = (code: number): number => (code >= 65 && code <= 90 ? code + 32 : code);
+
+/**
+ * Verdict for a header that is exactly one token, or null when this lane
+ * cannot decide (multi-entry, weighted, quoted, or non-token characters).
+ * With no `;` every entry's q is the default 1, so acceptance reduces to:
+ * the token IS gzip, or IS the wildcard.
+ */
+const loneTokenVerdict = (header: string): boolean | null => {
+  let start = -1;
+  let end = -1; // exclusive
+  for (let i = 0; i < header.length; i++) {
+    const code = header.charCodeAt(i);
+    if (code === 44 || code === 59 || code === 34) return null; // , ; "
+    if (code === 32 || code === 9) continue; // OWS around the token
+    if (!isTokenChar(code)) return null;
+    if (start === -1) start = i;
+    end = i + 1;
+  }
+  if (start === -1) return false; // empty / all-OWS: no entry, no acceptance
+  const len = end - start;
+  if (len === 1) return header.charCodeAt(start) === 42; // "*"
+  if (len !== 4) return false;
+  return (
+    lowerCode(header.charCodeAt(start)) === 103 /* g */ &&
+    lowerCode(header.charCodeAt(start + 1)) === 122 /* z */ &&
+    lowerCode(header.charCodeAt(start + 2)) === 105 /* i */ &&
+    lowerCode(header.charCodeAt(start + 3)) === 112 /* p */
+  );
+};
+
+/** The parser-backed reference verdict (also the memo-lane miss path). */
+const parseGzipVerdict = (header: string): boolean => {
+  let explicit: number | null = null;
+  let wildcard: number | null = null;
+  for (const pref of parsePreferenceEntries(header)) {
+    if (pref.value === "gzip" && explicit === null) explicit = pref.q;
+    else if (pref.value === "*" && wildcard === null) wildcard = pref.q;
+  }
+  const quality = explicit ?? wildcard;
+  return quality !== null && quality > 0;
+};
+
+export const acceptsGzip = (header: string): boolean => {
+  const lone = loneTokenVerdict(header);
+  if (lone !== null) return lone;
+  const memo = gzipMemo.get(header);
+  if (memo !== undefined) return memo;
+  const verdict = parseGzipVerdict(header);
+  if (gzipMemo.size < GZIP_MEMO_MAX) gzipMemo.set(header, verdict);
+  return verdict;
+};
+
+/**
+ * Charset negotiation over an `Accept-Charset` header. Standalone helper by
+ * design: koa's `c.acceptsCharsets()` accessor left the 0.7 context surface
+ * (docs/KEALA-NATIVE-API.md §10) — read `c.header("accept-charset")` and
+ * call this with the list you serve.
+ */
 export const acceptsCharset = (
   header: string | null,
   provided: readonly string[],
 ): string | false => pickPreference({ header, provided, normalize: identity, score: tokenScore });
 
-/** Language negotiation with prefix matching: `ctx.acceptsLanguages(['en', 'zh'])`. */
+/**
+ * Language negotiation with prefix matching over an `Accept-Language`
+ * header. Standalone helper, like acceptsCharset above: koa's
+ * `c.acceptsLanguages()` is off the 0.7 context surface.
+ */
 export const acceptsLanguage = (
   header: string | null,
   provided: readonly string[],

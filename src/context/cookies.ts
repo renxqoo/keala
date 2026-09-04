@@ -62,7 +62,25 @@ export const unsign = (signed: string, keys: SigningKeys): string | false => {
  * U+00A0 and other Unicode spaces — that collapsed `\u00a0dummy=evil` onto
  * `dummy` before name validation could reject it (silent cookie override).
  */
-const trimHeaderWs = (value: string): string => value.replace(/^[\t\r\n ]+|[\t\r\n ]+$/g, "");
+/**
+ * charCode scissors, not two regex passes: this runs per cookie pair and
+ * most pairs carry no OWS at all (early identity return, no slice).
+ */
+const trimHeaderWs = (value: string): string => {
+  let start = 0;
+  let end = value.length;
+  while (start < end) {
+    const code = value.charCodeAt(start);
+    if (code !== 32 && code !== 9 && code !== 13 && code !== 10) break;
+    start++;
+  }
+  while (end > start) {
+    const code = value.charCodeAt(end - 1);
+    if (code !== 32 && code !== 9 && code !== 13 && code !== 10) break;
+    end--;
+  }
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+};
 
 /** Parse a `Cookie` request header into a null-prototype map. */
 export const parseCookies = (header: string | null): Record<string, string> => {
@@ -83,6 +101,9 @@ export const parseCookies = (header: string | null): Record<string, string> => {
 };
 
 const tryDecode = (input: string): string => {
+  // Escape-free values are identity — skip the engine decoder entirely
+  // (the same early-out as decodeSegment; plain values are the wire norm).
+  if (input.indexOf("%") === -1) return input;
   try {
     return decodeURIComponent(input);
   } catch {

@@ -66,19 +66,17 @@ export const rateLimit = (options: RateLimitOptions = {}): RouteHandler => {
     throw new TypeError("rateLimit() requires a positive maxKeys");
   }
   const takeSlot = (): void => {
-    // Map iteration is insertion order: the OLDEST entries sit in front,
-    // so a single pass evicts them first. Live (unexpired) entries near
-    // the bound are evicted oldest-first too — a flood cannot buy more
-    // memory than `maxKeys` entries.
+    // Map iteration is insertion order: the OLDEST entries sit in front, so
+    // one pass evicts them first. Expiry is deliberately NOT consulted —
+    // the bound is a memory guarantee and must hold even when every
+    // retained entry is still live (an expired bucket is simply re-created
+    // on its next touch). A flood cannot buy more than `maxKeys` entries.
     if (buckets.size <= maxKeys) return;
-    const now = Date.now();
     let toDrop = buckets.size - maxKeys;
-    for (const [k, bucket] of buckets) {
+    for (const key of buckets.keys()) {
       if (toDrop <= 0) break;
-      if (bucket.resetAt <= now || toDrop > 0) {
-        buckets.delete(k);
-        toDrop--;
-      }
+      buckets.delete(key);
+      toDrop--;
     }
   };
   return (c, next) => {
