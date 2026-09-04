@@ -2,6 +2,54 @@
 
 > 0.6.x 为 pre-1.0 系列:表面可破坏,破坏性变更在 CHANGELOG 逐条记录。
 
+## 0.7.3 (2026-09-05)
+
+R413 动态路由快速层(route-shootout 诊断 → 修复,docs/R412-SHOOTOUT-DIFF-DIAGNOSIS.md
+的候选 1+3 实施)。
+
+### 性能
+
+- **bucket-regex 快速层**(`src/router/bucket-regex.ts` + `match.ts`):
+  共享基数的多路由桶(`/event/:id` ×3)与参数后静态尾
+  (`/map/:x/events`)此前必然落到全 trie 走访(106-130ns/匹配,
+  4-5 个临时对象);现在按首段桶把全部合格模式(首段静态 + 纯静态/
+  必选无约束参数段)编译成**按段数分组**的锚定 alternation——数斜杠
+  选组、单次小 regex 执行、命名组直取,零 splitSegments/Frame/
+  ParamLink 分配。trie 仍是语义参照与兜底(转义路径、可选参数、
+  正则约束、通配、参数开头),差分测试逐路径锁死两层恒等。
+- **URL 预填单趟化**:`splitPathSearch` 一趟产出 path+search
+  (原 getPath+getSearch 两趟)。
+- 实测(route-shootout 诊断口径,Bun):
+  - 路由器隔离:动态形状 106-130ns → 92-104ns(hono regex 40-51ns);
+  - **进程内全管线:动态形状 1.49-1.79x 慢 → 1.09-1.14x 快**(静态
+    0.95x)——路由差距被吸收后,keala 的 context/dispatch 机器反而
+    快 ~50ns/请求;
+  - HTTP 层(autocannon ABAB 安静窗口):mixed 0.97→**1.00x**、
+    4-seg 0.98→**1.01x**,且 keala 轮间方差显著收紧(首枪凹陷基本
+    消失——每请求分配消失的 GC 红利)。
+- CPU 归位:mixed 场景路由自耗时 54%(splitSegments 20%)→ 41%,
+  Response 构造成为第一大头(26%)。
+
+### 正确性(快速层三个边界,全部由测试锁死)
+
+- 通配段不得进 regex 层(wildcard 的 optional:false/pattern:null 会
+  滑过字段检查,被编译成单段捕获并抢优先——红队随机表差分当场抓获);
+- 纯静态模式空泛合格(零捕获组的 groupStart 指向邻路由的组,命中
+  扫描错认——同一次红队差分抓获);
+- alternation 排序:首分歧静态优先(= trie DFS 序)+ 静态字面量多者
+  先的 fail-fast 次级键(后缀差异对永不共匹配,语义不变)。
+
+### 内部
+
+- router.ts 拆出 `match.ts`(请求侧匹配器,行数预算);
+- RouterState 新增 regexIndex/mutations(注册期收集合格模式 + 失效
+  纪元),编译产物 memo 在 Bucket 对象上(免二次 Map 查找);
+- matchRoute 的 `%` 扫描从两次并为一次。
+
+回归锁:test/router-bucket-regex.test.ts(7 项:差分/覆盖/优先级/
+迟到注册/routePath 交互/转义旁路/405)+ 既有 300×200 红队随机表
+差分继续全绿。
+
 ## 0.7.2 (2026-09-05)
 
 R411 API 人体工学四项(docs/R411-API-ERGONOMICS-PLAN.md v2,含 Hono

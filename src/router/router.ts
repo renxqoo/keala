@@ -4,11 +4,14 @@
  *
  * Matching order per request:
  *   1. staticMap — O(1) exact hit (plus the trailing-slash retry)
- *   2. bucket fast matcher — only when the bucket holds exactly ONE dynamic
+ *   2. bucket fast matcher — when the bucket holds exactly ONE dynamic
  *      pattern of "simple shape" (static head + plain params), where the
  *      matcher is provably equivalent to the trie walk
- *   3. trie — handles every other shape (optionals, custom patterns,
- *      wildcards, param-first routes, multi-pattern buckets); its O(segments)
+ *   3. bucket regex (R413) — multi-route buckets and static tails after
+ *      params (`/event/:id/comments`): every eligible pattern compiled into
+ *      ONE anchored alternation, one regex exec per request
+ *   4. trie — handles every other shape (optionals, custom patterns,
+ *      wildcards, param-first routes, escaped paths); its O(segments)
  *      walk is what keeps 1000-route tables fast where regex scans collapse.
  *
  * Registration is incremental and validates eagerly (conflicting parameter
@@ -26,11 +29,12 @@ import {
 } from "../core/middleware-stack.ts";
 import type { CompiledSegment, PatternIR } from "./pattern.ts";
 import { compilePattern, decodeSegment, paramNamesOf, patternsOverlap } from "./pattern.ts";
+import { canonicalKey, type FastMatcher } from "./match.ts";
+import { isRegexEligible, type EligiblePattern, type RegexBucket } from "./bucket-regex.ts";
 import {
   createNode,
   createTarget,
   insertPattern,
-  matchPattern,
   type RouteTarget,
   type TrieNode,
 } from "./trie.ts";
@@ -74,18 +78,15 @@ export const ALLOW_ORDER = KNOWN_METHOD_LIST;
 const ALL = "ALL";
 export const EMPTY_PARAMS: Record<string, string> = Object.freeze(Object.create(null));
 
-/** A fast matcher for a bucket with exactly one simple-shape pattern. */
-interface FastMatcher {
-  /** The pattern's full static head ("/v1/users") skipped before captures. */
-  prefix: string;
-  names: readonly string[];
-  target: RouteTarget;
-}
-
-interface Bucket {
+export interface Bucket {
+  /** The first-segment key this bucket is indexed under (self-reference:
+   * the regex memo hangs on the bucket itself, no second map lookup). */
+  first: string;
   fast: FastMatcher | null;
   /** Dynamic patterns in this bucket (always present in the trie as well). */
   count: number;
+  /** Memoized R413 compilation, valid for the recorded mutation epoch. */
+  regex?: { mutations: number; compiled: RegexBucket | null };
 }
 
 export interface RouterState {
@@ -100,6 +101,14 @@ export interface RouterState {
   trieRoot: TrieNode;
   hasDynamic: boolean;
   prefix: string;
+  /**
+   * R413 fast layer: eligible patterns by path (maintained by bindDef) and
+   * the per-bucket compiled regexes memoized against `mutations`, which
+   * every bind/reset bumps — a late registration retires the epoch and the
+   * next touch of a bucket recompiles from regexIndex.
+   */
+  regexIndex: Map<string, EligiblePattern>;
+  mutations: number;
   /** Paths sunk into the native routing table — later JS registrations
    * overlapping them throw (the native table would silently shadow them). */
   sunkPaths: Set<string>;
@@ -123,6 +132,8 @@ export const createRouterState = (prefix = ""): RouterState => ({
   trieRoot: createNode(),
   hasDynamic: false,
   prefix: normalizePrefix(prefix),
+  regexIndex: new Map(),
+  mutations: 0,
   sunkPaths: new Set(),
   devTrace: false,
 });
@@ -171,7 +182,7 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
   if (first.kind !== "static") return targets;
   let bucket = state.buckets.get(first.value);
   if (bucket === undefined) {
-    bucket = { fast: null, count: 0 };
+    bucket = { first: first.value, fast: null, count: 0 };
     state.buckets.set(first.value, bucket);
   }
   bucket.count++;
@@ -250,6 +261,13 @@ const chainOf = (
 const bindDef = (state: RouterState, def: RouteDef, middleware: MiddlewareStack): void => {
   const ir = compilePattern(def.path);
   const targets = indexPattern(state, ir, def.path);
+  // R413: remember eligible patterns for the bucket-regex fast layer. An
+  // eligible pattern owns exactly one terminal target (terminal sharing only
+  // happens through optional variants, which eligibility excludes).
+  state.mutations++;
+  if (isRegexEligible(ir.segments)) {
+    state.regexIndex.set(def.path, { segments: ir.segments, target: targets[0] as RouteTarget });
+  }
   const appMiddleware = middlewareForRoute(middleware, def.path);
   // Koa order along the chain: the sub-router's use() middleware (if this
   // def came through mount()) runs BEFORE param middleware, the handler last.
@@ -284,6 +302,8 @@ const resetIndex = (state: RouterState): void => {
   state.dynamicDefCount = 0;
   state.trieRoot = createNode();
   state.hasDynamic = false;
+  state.regexIndex = new Map();
+  state.mutations++;
 };
 
 /** Full re-index + recompose (middleware stack or param middleware changed). */
@@ -399,94 +419,6 @@ export interface RouteMatch {
   params: Record<string, string> | null;
 }
 
-/**
- * Canonical static-route key: decode each RAW segment independently (an
- * escaped `%2F` never becomes a separator — the trie contract), then
- * re-escape "%" and "/" inside the decoded value. The re-escaping keeps the
- * key injective, so two paths land on the same key EXACTLY when their
- * decoded segments are equal — i.e. precisely when the trie's per-segment
- * static walk would reach the same node.
- */
-const canonicalKey = (path: string): string =>
-  path
-    .split("/")
-    .map((segment) => decodeSegment(segment).replace(/%/g, "%25").replace(/\//g, "%2F"))
-    .join("/");
-
-/** Try the fast matcher for a bucket; provably equivalent to the trie walk. */
-const fastMatch = (fast: FastMatcher | null, path: string): RouteMatch | null => {
-  if (fast === null) return null;
-  const prefix = fast.prefix;
-  // The static head must match exactly AND on a segment boundary — otherwise
-  // fall through to the trie (which resolves the rest of the shapes).
-  if (!path.startsWith(prefix)) return null;
-  const rest = path.slice(prefix.length);
-  if (rest.charCodeAt(0) !== 47 /* "/" */) return null;
-  const names = fast.names;
-  // Single-param specialization: exactly one capture means the remainder is
-  // one non-empty, slash-free segment — no split allocation needed.
-  if (names.length === 1) {
-    if (rest.length <= 1) return null;
-    const value = rest.slice(1);
-    if (value.indexOf("/") !== -1) return null;
-    const params: Record<string, string> = Object.create(null);
-    // matchRoute only enters a fast matcher after proving the whole path has
-    // no "%". The trie owns escaped-path decoding; scanning this capture a
-    // second time would be redundant fixed work on every plain param route.
-    params[names[0] as string] = value;
-    return { target: fast.target, params };
-  }
-  if (rest.length <= 1) return null;
-  const parts = rest.slice(1).split("/");
-  if (parts.length !== names.length) return null;
-  const params: Record<string, string> = Object.create(null);
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i] as string;
-    if (part.length === 0) return null;
-    params[names[i] as string] = part;
-  }
-  return { target: fast.target, params };
-};
-
-export const matchRoute = (state: RouterState, path: string): RouteMatch | null => {
-  // Static candidates mirror the trie exactly: raw, trailing-slash-stripped,
-  // then the decoded variants of both (%2F stays one segment per decode).
-  let target = state.staticMap.get(path);
-  const stripped = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
-  if (target === undefined && stripped !== path) {
-    target = state.staticMap.get(stripped);
-  }
-  if (target === undefined && path.indexOf("%") !== -1) {
-    const decoded = canonicalKey(path);
-    target = state.staticMap.get(decoded);
-    if (target === undefined && stripped !== path) {
-      target = state.staticMap.get(canonicalKey(stripped));
-    }
-  }
-  if (target !== undefined) return target.staticMatch as RouteMatch;
-  if (!state.hasDynamic) return null;
-
-  if (state.fastDynamic !== null && path.indexOf("%") === -1) {
-    const matched = fastMatch(state.fastDynamic, path);
-    if (matched !== null) return matched;
-  }
-
-  // Bucket by first segment. The fast matcher's prefix is a DECODED pattern
-  // value — a request path carrying escapes compares in a different key
-  // space, so those go straight to the trie (whose static children do the
-  // decoded comparison canonically).
-  const firstEnd = path.indexOf("/", 1);
-  const first = firstEnd === -1 ? path.slice(1) : path.slice(1, firstEnd);
-  if (first.length > 0 && path.indexOf("%") === -1) {
-    const bucket = state.buckets.get(first);
-    if (bucket !== undefined) {
-      const fast = fastMatch(bucket.fast, path);
-      if (fast !== null) return fast;
-    }
-  }
-  return matchPattern(state.trieRoot, path);
-};
-
 // URL building for named routes lives in ./url.ts, re-exported here — the
 // router module is the public face of the routing surface.
 export {
@@ -496,3 +428,7 @@ export {
   urlFor,
   routePathOf,
 } from "./url.ts";
+// The request-side matcher (R413: staticMap → fastDynamic → bucket fast →
+// bucket regex → trie) lives in ./match.ts; re-exported here so the router
+// module stays the public face of the routing surface.
+export { matchRoute } from "./match.ts";

@@ -6,7 +6,7 @@
 import type { Application } from "./app.ts";
 import type { Chain, RouteHandler, RouterState } from "../router/router.ts";
 import { EMPTY_PARAMS, matchRoute } from "../router/router.ts";
-import { getPath, getSearch } from "../utils/url.ts";
+import { splitPathSearch } from "../utils/url.ts";
 import { isEmptyStatus } from "../http/status.ts";
 import { DIRECT_HANDLER, NOOP_TAIL, type HandlerResult } from "./compose.ts";
 import type { Context } from "./context/context.ts";
@@ -300,13 +300,12 @@ export const dispatchRequest = (
   request: RequestSource,
 ): Response | Promise<Response> => {
   const rawUrl = sourceUrl(request);
-  const path = getPath(rawUrl);
-  // The path is already computed for matching — hand it to the context so
-  // c.path/c.url first-touch is a memo read (77-79ns recompute vs ~0; koa
-  // hands the same string down, hono's c.req.path is 1.2ns for this reason).
-  // url gets the full path+search view; a later rewrite invalidates both.
+  // One pass yields both the match path and the context's path+search view
+  // (R413: getPath + getSearch paid two scans). First-touch c.path/c.url
+  // reads stay memo reads; a later rewrite invalidates both.
+  const [path, search] = splitPathSearch(rawUrl);
   c.pathValue = path;
-  c.urlValue = `${path}${getSearch(rawUrl)}`;
+  c.urlValue = search.length === 0 ? path : path + search;
   const match = matchRoute(router, path);
   if (match !== null) {
     c.params = match.params ?? EMPTY_PARAMS;

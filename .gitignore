@@ -5,3 +5,5 @@ coverage/
 .DS_Store
 .parity/
 bench/server-go/server-go
+bench/route-shootout/server-go/server-shootout-go
+bench/route-shootout/diag/*.cpuprofile

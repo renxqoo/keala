@@ -37,6 +37,40 @@ export const getSearch = (url: string): string => {
   return url.slice(query, limit);
 };
 
+/**
+ * Path + search in ONE pass (R413): dispatch needs both for the context
+ * prefill and paid two full scans. Semantics are exactly getPath ⊕ getSearch
+ * — the first "?" or "#" ends the path; a search only starts at a "?" that
+ * precedes any "#", and then runs to that "#".
+ */
+export const splitPathSearch = (url: string): readonly [path: string, search: string] => {
+  let start = 0;
+  if (url.charCodeAt(0) !== 47 /* "/" */) {
+    const scheme = url.indexOf("://");
+    start = scheme === -1 ? 0 : url.indexOf("/", scheme + 3);
+    if (start === -1) return ["/", ""];
+  }
+  let end = -1;
+  let sawQuery = false;
+  for (let i = start; i < url.length; i++) {
+    const code = url.charCodeAt(i);
+    if (code === 63 /* "?" */ || code === 35 /* "#" */) {
+      end = i;
+      sawQuery = code === 63;
+      break;
+    }
+  }
+  if (end === -1) {
+    const whole = url.slice(start);
+    return [whole.length === 0 ? "/" : whole, ""];
+  }
+  const path = url.slice(start, end);
+  if (!sawQuery) return [path.length === 0 ? "/" : path, ""];
+  // A "?" ended the path: the search runs to the next "#" (if any).
+  const hash = url.indexOf("#", end + 1);
+  return [path.length === 0 ? "/" : path, url.slice(end, hash === -1 ? url.length : hash)];
+};
+
 /** Lazily build (and cache) a full URL object; only used by rarely-hit getters. */
 export const toURL = (absolute: string): URL | null => {
   try {
