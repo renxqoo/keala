@@ -136,8 +136,8 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     // request Cookie header (a handler personalizing on the raw header —
     // never touching the c.cookies facade — would otherwise be replayed to
     // every other user of the same URL).
-    if (c.get("authorization").length > 0) return false;
-    if (c.get("cookie").length > 0) return false;
+    if (c.header("authorization").length > 0) return false;
+    if (c.header("cookie").length > 0) return false;
     if (c.cookiesValue !== null) return false; // handler touched cookies
     const control = res.headers.get("cache-control") ?? "";
     if (NO_REVALIDATE.test(control) || MAX_AGE_ZERO.test(control)) return false;
@@ -189,7 +189,7 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     // Request-side directives (RFC 9111 §5.2.1.4/§5.2.1.5): a no-cache
     // request must not be served from storage (this cache has no validators
     // to revalidate with); a no-store request must not seed one either.
-    const requestDirectives = cacheControlTokens(c.get("cache-control"));
+    const requestDirectives = cacheControlTokens(c.header("cache-control"));
     const bypassStored = requestDirectives.has("no-cache");
     const mayStore = !requestDirectives.has("no-store");
     const key = keyOf(c);

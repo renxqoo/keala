@@ -17,7 +17,7 @@ import net from "node:net";
 
 import { Keala } from "../src/index.ts";
 import { startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 
 const quiet = { env: "test" } as const;
 const servers: NodeServerHandle[] = [];
@@ -103,7 +103,7 @@ describe("audit NA-P2: options surface and listener hygiene", () => {
   it("maxRequestBodySize is a HARD transport cap — looser plugin limits cannot reopen it", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 1024 * 1024 }));
-    app.post("/", async (c) => c.text(`len:${(await (c as ContextWithBody).req.text()).length}`));
+    app.post("/", async (c) => c.text(`len:${(await bodyOf(c).text()).length}`));
     const server = startNodeServer(app, { port: 0, maxRequestBodySize: 64 });
     servers.push(server);
     await server.ready();

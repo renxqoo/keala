@@ -89,9 +89,11 @@ export type {
 export { noOpFor, type NoOpDeclaration } from "./core/middleware-stack.ts";
 export {
   createBodyParser,
+  bodyOf,
   readBodyLimited,
   type BodyParserOptions,
   type RequestBodyFacade,
+  type ContextWithBody,
 } from "./plugins/body-parser.ts";
 export {
   stream,

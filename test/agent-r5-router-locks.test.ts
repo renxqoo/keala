@@ -36,7 +36,7 @@ describe("locks correct: percent-encoding consistency", () => {
 
   it("malformed and hostile escapes never 500 (pass through or miss)", async () => {
     const app = new Keala(quiet);
-    app.get("/a%25b/:x", (c) => c.text(`x:${c.params?.["x"]}`));
+    app.get("/a%25b/:x", (c) => c.text(`x:${c.params["x"]}`));
     for (const p of ["/a%b/1", "/a%ZZ/1", "/a%/1", "/a%2/1", "/a%00b/1"]) {
       const res = await app.handle(req(p));
       expect(res.status).toBeLessThan(500);
@@ -50,7 +50,7 @@ describe("locks correct: percent-encoding consistency", () => {
 
   it("an encoded request path decodes once (params and statics, non-BMP included)", async () => {
     const app = new Keala(quiet);
-    app.get("/users/:name", (c) => c.text(`n:${c.params?.["name"]}`));
+    app.get("/users/:name", (c) => c.text(`n:${c.params["name"]}`));
     const r1 = await app.handle(req("/users/%E4%B8%AD"));
     expect(await r1.text()).toBe("n:中");
     const r2 = await app.handle(req("/users/😀"));
@@ -63,7 +63,7 @@ describe("locks correct: percent-encoding consistency", () => {
   it("an encoded FIRST segment still reaches static and dynamic routes (bucket bypass)", async () => {
     const app = new Keala(quiet);
     app.get("/admin", (c) => c.text("static-admin"));
-    app.get("/users/:id", (c) => c.text(`u:${c.params?.["id"]}`));
+    app.get("/users/:id", (c) => c.text(`u:${c.params["id"]}`));
     expect((await app.handle(req("/%61dmin"))).status).toBe(200);
     expect(await (await app.handle(req("/%75sers/42"))).text()).toBe("u:42");
   });
@@ -71,14 +71,14 @@ describe("locks correct: percent-encoding consistency", () => {
   it("static priority survives encoding: the canonical static beats the dynamic twin", async () => {
     const app = new Keala(quiet);
     app.get("/foo/a%20b", (c) => c.text("static"));
-    app.get("/foo/:x", (c) => c.text(`dyn:${c.params?.["x"]}`));
+    app.get("/foo/:x", (c) => c.text(`dyn:${c.params["x"]}`));
     expect(await (await app.handle(req("/foo/a%20b"))).text()).toBe("static");
     expect(await (await app.handle(req("/foo/other"))).text()).toBe("dyn:other");
   });
 
   it("encoded-twin dynamic routes share one bucket and both forms match", async () => {
     const app = new Keala(quiet);
-    app.get("/a%20b/:x", (c) => c.text(`one:${c.params?.["x"]}`));
+    app.get("/a%20b/:x", (c) => c.text(`one:${c.params["x"]}`));
     const r1 = await app.handle(req("/a%20b/1"));
     expect([r1.status, await r1.text()]).toEqual([200, "one:1"]);
     const r2 = await app.handle(req("/a b/2"));
@@ -97,7 +97,7 @@ describe("locks correct: percent-encoding consistency", () => {
 describe("locks correct: fast matcher / trie equivalence", () => {
   it("multi-slash and overlong paths fall back to the trie and miss cleanly", async () => {
     const app = new Keala(quiet);
-    app.get("/a/:x/:y", (c) => c.text(`${c.params?.["x"]}/${c.params?.["y"]}`));
+    app.get("/a/:x/:y", (c) => c.text(`${c.params["x"]}/${c.params["y"]}`));
     const ok = await app.handle(req("/a/1/2"));
     expect(await ok.text()).toBe("1/2");
     // trailing slash: fast matcher bails, trie strips and matches
@@ -111,15 +111,15 @@ describe("locks correct: fast matcher / trie equivalence", () => {
 
   it("a single-param fast matcher does not answer the bare prefix", async () => {
     const app = new Keala(quiet);
-    app.get("/users/:id", (c) => c.text(`u:${c.params?.["id"]}`));
+    app.get("/users/:id", (c) => c.text(`u:${c.params["id"]}`));
     expect((await app.handle(req("/users"))).status).toBe(404);
     expect((await app.handle(req("/users/"))).status).toBe(404);
   });
 
   it("static-over-param priority holds when the fast pattern is registered first", async () => {
     const app = new Keala(quiet);
-    app.get("/a/b/:y", (c) => c.text(`y:${c.params?.["y"]}`));
-    app.get("/a/:x", (c) => c.text(`x:${c.params?.["x"]}`));
+    app.get("/a/b/:y", (c) => c.text(`y:${c.params["y"]}`));
+    app.get("/a/:x", (c) => c.text(`x:${c.params["x"]}`));
     expect(await (await app.handle(req("/a/b/1"))).text()).toBe("y:1");
     expect(await (await app.handle(req("/a/c"))).text()).toBe("x:c");
     // "/a/b" (two segments) matches the shorter param route, not the deeper one
@@ -128,7 +128,7 @@ describe("locks correct: fast matcher / trie equivalence", () => {
 
   it("repeated param names keep the LATEST capture on both matcher paths", async () => {
     const app = new Keala(quiet);
-    app.get("/dup/:x/:x", (c) => c.text(`x:${c.params?.["x"]}`));
+    app.get("/dup/:x/:x", (c) => c.text(`x:${c.params["x"]}`));
     // fast path (single simple pattern in the bucket)
     expect(await (await app.handle(req("/dup/1/2"))).text()).toBe("x:2");
     // trie path (a second dynamic pattern disables the fast matcher)
@@ -140,9 +140,9 @@ describe("locks correct: fast matcher / trie equivalence", () => {
 describe("locks correct: trie priority matrix (optionals, variants, wildcards)", () => {
   it("first-registered wins: /a/:x? over /a/:x(\\d+) over /a/*", async () => {
     const app = new Keala(quiet);
-    app.get("/a/:x?", (c) => c.text(`opt:${c.params?.["x"] ?? "-"}`));
-    app.get("/a/:x(\\d+)", (c) => c.text(`num:${c.params?.["x"]}`));
-    app.get("/a/*", (c) => c.text(`wild:${c.params?.["wildcard"]}`));
+    app.get("/a/:x?", (c) => c.text(`opt:${c.params["x"] ?? "-"}`));
+    app.get("/a/:x(\\d+)", (c) => c.text(`num:${c.params["x"]}`));
+    app.get("/a/*", (c) => c.text(`wild:${c.params["wildcard"]}`));
     expect(await (await app.handle(req("/a"))).text()).toBe("opt:-");
     // "/a/": the optional-skip pops before the wildcard's empty capture
     expect(await (await app.handle(req("/a/"))).text()).toBe("opt:-");
@@ -153,7 +153,7 @@ describe("locks correct: trie priority matrix (optionals, variants, wildcards)",
 
   it("an optional param in mid-position skips only when consuming dead-ends", async () => {
     const app = new Keala(quiet);
-    app.get("/a/:x?/b", (c) => c.text(`x:${c.params?.["x"] ?? "-"}`));
+    app.get("/a/:x?/b", (c) => c.text(`x:${c.params["x"] ?? "-"}`));
     expect(await (await app.handle(req("/a/b"))).text()).toBe("x:-"); // skip
     expect(await (await app.handle(req("/a/x/b"))).text()).toBe("x:x"); // consume
     expect((await app.handle(req("/a/b/c"))).status).toBe(404);
@@ -162,7 +162,7 @@ describe("locks correct: trie priority matrix (optionals, variants, wildcards)",
 
   it("an optional custom-pattern param skips non-matching segments at the end", async () => {
     const app = new Keala(quiet);
-    app.get("/n/:x(\\d+)?", (c) => c.text(`x:${c.params?.["x"] ?? "-"}`));
+    app.get("/n/:x(\\d+)?", (c) => c.text(`x:${c.params["x"] ?? "-"}`));
     expect(await (await app.handle(req("/n"))).text()).toBe("x:-");
     expect(await (await app.handle(req("/n/"))).text()).toBe("x:-");
     expect(await (await app.handle(req("/n/5"))).text()).toBe("x:5");
@@ -172,7 +172,7 @@ describe("locks correct: trie priority matrix (optionals, variants, wildcards)",
   it("optional param followed by wildcard composes both skip and consume paths", async () => {
     const app = new Keala(quiet);
     app.get("/a/:x?/*", (c) =>
-      c.text(`x:${c.params?.["x"] ?? "-"} w:${c.params?.["wildcard"] ?? "-"}`),
+      c.text(`x:${c.params["x"] ?? "-"} w:${c.params["wildcard"] ?? "-"}`),
     );
     expect(await (await app.handle(req("/a/"))).text()).toBe("x:- w:");
     expect(await (await app.handle(req("/a/b"))).text()).toBe("x:- w:b");
@@ -182,8 +182,8 @@ describe("locks correct: trie priority matrix (optionals, variants, wildcards)",
 
   it("a required-param sibling is never served through another route's optional skip", async () => {
     const app = new Keala(quiet);
-    app.get("/a/:x/b", (c) => c.text(`req:${c.params?.["x"]}`));
-    app.get("/a/:x?/c", (c) => c.text(`opt:${c.params?.["x"] ?? "-"}`));
+    app.get("/a/:x/b", (c) => c.text(`req:${c.params["x"]}`));
+    app.get("/a/:x?/c", (c) => c.text(`opt:${c.params["x"] ?? "-"}`));
     expect(await (await app.handle(req("/a/y/b"))).text()).toBe("req:y");
     expect(await (await app.handle(req("/a/c"))).text()).toBe("opt:-");
     expect(await (await app.handle(req("/a/y/c"))).text()).toBe("opt:y");
@@ -366,7 +366,7 @@ describe("locks correct: trailing-slash parity between static and dynamic routes
 
   it("a non-root wildcard does NOT answer its bare prefix without the slash", async () => {
     const app = new Keala(quiet);
-    app.get("/w/*", (c) => c.text(`w:${c.params?.["wildcard"]}`));
+    app.get("/w/*", (c) => c.text(`w:${c.params["wildcard"]}`));
     expect((await app.handle(req("/w"))).status).toBe(404);
     expect(await (await app.handle(req("/w/"))).text()).toBe("w:");
   });

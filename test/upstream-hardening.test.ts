@@ -162,7 +162,7 @@ describe("upstream hardening: pattern registration guards", () => {
     // capture across segments — documented deliberate divergence from hono.
     const app = new Keala(quiet);
     app.get("/files/:name(.*)", (c) => {
-      c.body = `got ${c.params?.["name"]}`;
+      c.body = `got ${c.params["name"]}`;
     });
     expect((await app.handle(req("/files/a/b"))).status).toBe(404);
     expect(await (await app.handle(req("/files/a"))).text()).toBe("got a");

@@ -38,9 +38,9 @@ describe("concurrent isolation", () => {
     const app = new Keala({ ...quiet, keys: ["k"] });
     const router = new Router();
     router.get("/user/:id", async (c) => {
-      await delay(Number(c.params?.["id"]) % 3);
+      await delay(Number(c.params["id"]) % 3);
       c.setHeader("X-Path", "param");
-      c.body = `user:${c.params?.["id"]}:${c.query("tag") ?? "none"}`;
+      c.body = `user:${c.params["id"]}:${c.query("tag") ?? "none"}`;
     });
     router.get("/static", (c) => {
       c.type = "json";

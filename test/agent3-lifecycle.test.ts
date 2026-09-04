@@ -57,7 +57,7 @@ describe("guarded pooling: release vs streaming body consumption", () => {
       streamText(c, async (w) => {
         w.write("begin|");
         await gate; // a second request recycles the context while this body is open
-        w.write(`secret=${c.params?.["secret"]}`);
+        w.write(`secret=${c.params["secret"]}`);
       }),
     );
 

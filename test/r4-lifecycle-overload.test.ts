@@ -140,9 +140,9 @@ describe("R4.6 overload: queue (opt-in maxQueue)", () => {
     const order: string[] = [];
     const gates = [deferred(), deferred(), deferred()];
     app.get("/work/:id", async (c) => {
-      order.push(`start:${c.params?.["id"]}`);
-      await (gates[Number(c.params?.["id"])] ?? gates[0]!).promise;
-      order.push(`end:${c.params?.["id"]}`);
+      order.push(`start:${c.params["id"]}`);
+      await (gates[Number(c.params["id"])] ?? gates[0]!).promise;
+      order.push(`end:${c.params["id"]}`);
     });
     const handles: Promise<Response>[] = [0, 1, 2].map((i) =>
       app.handle(new Request(`http://x/work/${i}`)),

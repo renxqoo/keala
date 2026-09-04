@@ -181,7 +181,7 @@ describe("anomalies: router illegal inputs", () => {
   it("deep path (30 segments) matches and captures correctly", async () => {
     const app = new Keala(quiet);
     app.get("/a/:p1/b/:p2/c/*", (c) => {
-      c.body = `${c.params?.p1}-${c.params?.p2}-${c.params?.wildcard}`;
+      c.body = `${c.params.p1}-${c.params.p2}-${c.params.wildcard}`;
     });
     const tail = Array.from({ length: 30 }, (_, i) => `s${i}`).join("/");
     const res = await app.handle(new Request(`http://localhost:3000/a/ONE/b/TWO/c/${tail}`));

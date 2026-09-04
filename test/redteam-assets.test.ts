@@ -193,7 +193,7 @@ describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
   it("CONFIRMED-BUG(now fixed) (RT-9b): static must beat the wildcard for /%61dmin", async () => {
     const app = new Keala(quiet);
     app.get("/admin", (c) => c.text("static-admin"));
-    app.get("/*", (c) => c.text(`wild:${c.params?.["wildcard"]}`));
+    app.get("/*", (c) => c.text(`wild:${c.params["wildcard"]}`));
     expect(await text(await app.handle(req("http://localhost/%61dmin")))).toBe("static-admin");
   });
 
@@ -217,7 +217,7 @@ describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
 
   it("green witness: a dynamic route answers its encoded static prefix", async () => {
     const app = new Keala(quiet);
-    app.get("/admin/:id", (c) => c.text(`dyn:${c.params?.["id"]}`));
+    app.get("/admin/:id", (c) => c.text(`dyn:${c.params["id"]}`));
     expect(await text(await app.handle(req("http://localhost/%61dmin/1")))).toBe("dyn:1");
   });
 });

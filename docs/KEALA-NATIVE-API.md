@@ -1,10 +1,12 @@
 # keala 原生 API 参考(0.7.x)
 
-> 状态:0.7.0 已裁决定稿并实施(2026-09-04),R4.10 审计修订(同日)。
+> 状态:0.7.0 已裁决定稿并实施(2026-09-04),R4.10 审计修订(同日),
+> R411 人体工学四项(0.7.2,2026-09-05:bodyOf / c.get 退役 / params
+> 非空 / routePath)。
 > 本文是 keala 的**完整 API 参考**:每个 API 的签名、用法,以及与 Hono
 > 的逐项差异与**为什么**。设计史(裁决记录、性能实测、验收)保留在
-> 第六部分。对照源:keala `src/`(0.7.1)与 Hono 4.13.5
-> (`.parity/hono/src/`,逐条核对)。
+> 第六部分。对照源:keala `src/`(0.7.2)与 Hono 4.13.5
+> (`.parity/hono/src/`,逐条核对;请求面另对照 hono.dev 官方文档)。
 
 ---
 
@@ -44,7 +46,7 @@ app.use(async (c, next) => {
   c.setHeader("X-Response-Time", `${Math.round(performance.now() - start)}ms`);
 });
 
-app.get("/hello/:name", (c) => c.text(`hello ${c.params?.["name"]}`));
+app.get("/hello/:name", (c) => c.text(`hello ${c.params["name"]}`));
 
 const server = app.listen(3000, "127.0.0.1");
 // 优雅停机:SIGTERM → 排空在途 → 关连接池 → 退出
@@ -75,12 +77,15 @@ c.queries("tag"); // 重复键全部值:["a","b"];缺失 []
 // 键匹配 raw 与 encodeURIComponent 两种 wire 形态;非规范编码
 // (%5F 表示 _)不参与匹配——需要时读 c.querystring 自解析
 
-c.params; // 路由参数:{ id: "12345" };未匹配路由时 null
-// 访问:c.params?.["id"](可能为 null,用可选链)
+c.params; // 路由参数:{ id: "12345" };永不为 null(未匹配路由的中间件读冻结空对象)
+// 访问:c.params["id"] 或 const { id } = c.params(无需可选链,0.7.2)
 
-c.header("x-token"); // 请求头,缺失 ""(注意:不是 undefined)
-c.get("referer"); // 同 c.header;"referrer"/"referer" 可互换
-c.headers; // 原生 Headers 对象(需要遍历时用)
+c.routePath; // 命中的注册模式(含 mount 前缀):"/users/:id";未匹配 ""
+c.routeName; // 命中命名路由时的名字;未命名/未匹配 undefined
+// 观测地基:metrics 标签 / span 名用 c.routePath(有界基数),不用 c.path
+
+c.header("x-token"); // 请求头,缺失 ""(注意:不是 undefined);"referrer"/"referer" 可互换
+c.headers; // 原生 Headers 对象(需要遍历时用;大小写不敏感)
 
 c.host; // "api.example.com"(proxy 时取 x-forwarded-host 首项)
 c.protocol; // "https"(proxy 时取 x-forwarded-proto)
@@ -190,7 +195,8 @@ return c.html("<h1>hi</h1>");
 c.method  c.url  c.path  c.querystring  c.search
 c.query(name)  c.queries(name)  c.params  c.ip  c.host  c.protocol  c.secure
 c.origin  c.href  c.idempotent  c.reqLength  c.URL
-c.headers  c.header(name)  c.get(name)  c.raw  c.signal  c.runtime
+c.headers  c.header(name)  c.raw  c.signal  c.runtime
+c.routePath  c.routeName
 c.is()  c.accepts()  c.acceptsEncodings()
 
 // 响应(提交前暂存;提交后头部可写、body/status/redirect 抛)
@@ -291,7 +297,7 @@ new Keala({
 ```ts
 app.get("/users/:id", handler); // 路径参数;?x? 可选段;* 通配
 app.get("/files/*", handler); // 前缀通配
-app.get("/report", "named-route", handler); // 命名路由(第二参为名)
+app.get("named-route", "/report", handler); // 命名路由(名在前;运行时 c.routeName 可读)
 app.post / put / patch / delete /head/inoopst / all("/x", ...handlers);
 app.on("TRACE", "/x", handler);
 app.use(authMiddleware); // 全局洋葱层
@@ -321,7 +327,7 @@ const authorize = async (c, next) => {
 ```ts
 app.ws("/chat/:room", {
   open(ws, c) {
-    broadcast(c.params?.["room"], "joined");
+    broadcast(c.params["room"], "joined");
   },
   message(ws, message, c) {
     ws.send(`echo:${String(message)}`);
@@ -418,12 +424,14 @@ validator(schema)                   // Standard Schema(zod4/valibot/typebox)→ 
 ```
 
 ```ts
-// 正文读取(createBodyParser 插件:jsonLimit/textLimit/formLimit/formPartLimit)
+// 正文读取(createBodyParser 插件 + bodyOf 类型化访问器)
 app.use(createBodyParser({ jsonLimit: 1 << 20, formLimit: 10 << 20 }));
 app.post("/echo", async (c) => {
-  const body = await (c as ContextWithBody).req.json(); // memo 化,重复读安全
+  const body = await bodyOf(c).json(); // memo 化,重复读安全;零 cast(0.7.2)
   return c.json(body);
 });
+// 全部 reader 直达:bodyOf(c).text() / .arrayBuffer() / .blob() / .formData()
+// 未装插件时 bodyOf 抛带修复指引的 TypeError(不再是无指引的 undefined.req)
 
 // 流式助手(src/helpers)
 return stream(c, async (w) => {
@@ -451,18 +459,21 @@ return streamSSE(
 Hono 是 keala 的对标与部分场景的超越对象(见第六部分性能实测)。
 以下差异**全部是有意的**,每条附理由。Hono 侧逐条核对自 4.13.5 源码。
 
-### D1. 参数:`c.params?.["id"]` vs `c.req.param("id")`
+### D1. 参数:`c.params["id"]` vs `c.req.param("id")`
 
 ```ts
 // Hono                              // keala
 const id = c.req.param("id");
-const id = c.params?.["id"];
+const id = c.params["id"];
 ```
 
 **为什么**:路由匹配时 keala 把参数作为普通对象预填进 context 槽位
 (dispatch 一次物化),读取是纯属性访问——零函数调用、零分配。Hono 的
 `c.req.param()` 每次调用走 HonoRequest 门面再进 `#cachedParamData`。
 千路由规模实测 keala 匹配快 6-81x(见 §9.2);读取侧差距是同一来源。
+0.7.2 起 `c.params` 永不为 null(未匹配路由的中间件读冻结空对象),
+`const { id } = c.params` 与 Hono 的 `c.req.param()` 全量解构同款零税,
+不再需要可选链。
 
 ### D2. 查询:`c.query("q")` vs `c.req.query("q")`
 
@@ -495,9 +506,15 @@ c.append("Vary", "X");
 **为什么**:Hono 的 `c.header()` **写响应**而 `c.req.header()` 读请求——
 同名单双向,从 Hono 迁移极易写反(读侧误写)。keala 拆名:写必带
 `setHeader`(动作语义),读侧 `c.header(name)` 空参即读。0.7.0 裁决,
-迁移成本一次性付清,陷阱永久消失。读侧缺失返回 `""`(falsy 但可判),
+迁移成本一次性付清,陷阱永久消失;0.7.2 退役 koa 遗产别名 `c.get`
+(读侧从此单入口,与写侧严格对偶)。读侧缺失返回 `""`(falsy 但可判),
 Hono 返回 `undefined`——统一 falsy 判断,代价是区分"缺失"与"空值"
 需 `c.headers.get()`(返回 null)。
+
+**佐证**(Hono 官方文档):Hono 的 `c.req.header()` 无参形态返回键全
+小写的 record,文档自己挂着 ❌/✅ 警告——`headerRecord['X-Foo']` 静默
+undefined。keala 的遍历面是原生 `c.headers`(大小写不敏感),该陷阱
+结构性不存在。
 
 ### D4. 响应:双态(状态式 + 返回式)vs 仅返回式
 
@@ -633,6 +650,35 @@ Node 适配器(`keala/node`)与 Bun 路径都在主包,同一 `listen()` 选项
 (差异键给迁移指引)。中间件(压缩/验证/限流/指标)全部内置,无
 hono/zod-validator 式外挂——`validator()` 直收 Standard Schema。
 
+### D13. `url` 语义:Hono 绝对 vs keala 相对
+
+```ts
+// Hono                              // keala
+c.req.url; // "http://host/about/me" c.url;   // "/about/me?x=1"(path+search)
+c.href; // 绝对形态(http://host/…)
+c.origin; // "http://host"
+```
+
+**为什么**:keala 沿 koa 的相对形态(代理/嵌入场景里原始请求目标常是
+路径形态,绝对化需要 host 解析——`c.href` 惰性做这件事)。**迁移陷阱**:
+Hono 老兵写 `c.url` 期待绝对 URL,keala 给相对串——要绝对用 `c.href`。
+
+### D14. Hono 有而 keala 不做 API 的三件(配方替代)
+
+对照 hono.dev/docs/api/request 全景(2026-09-05 评审),三项能力 keala
+**用配方而非 API** 承接(裁决记录见 `docs/R411-API-ERGONOMICS-PLAN.md`):
+
+| Hono API                | keala 配方                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `parseBody({all, dot})` | `for (const [k, v] of formData.entries())` 十行循环;`dot` 嵌套是原型污染教科书,坚决不学         |
+| `cloneRawRequest()`     | memo 化读取下重复读安全;转发用 `new Request(url, { body: await bodyOf(c).arrayBuffer() })` 重建 |
+| 全量 `query()` 解构     | `c.querystring`(原始串)或 `c.URL.searchParams`;定向读覆盖绝大多数场景                           |
+
+`matchedRoutes`/`routeIndex`(Hono 自己 v4.8 已弃用)不学;`valid()` 六
+目标验证是真实缺口,独立方案(0.7.3)另行评审。`routePath` 能力 keala
+0.7.2 以 `c.routePath`/`c.routeName` 承接(Hono 弃属性换 Helper,keala
+直接属性,合"无键事实→属性"规则)。
+
 ---
 
 ## 第六部分 设计史(裁决、实测、验收)
@@ -647,6 +693,22 @@ hono/zod-validator 式外挂——`validator()` 直收 Standard Schema。
 5. **`c.set` → `c.setHeader`**(消与 Hono 的同名陷阱;读侧
    `c.header(name)/c.get(name)` 不变;状态是 `c.state`,与之无关)。
 6. **README 重定位**:"洋葱 + 双态 + Bun 原生快路径"。
+
+### 6.1b 裁决记录(2026-09-05,R411,0.7.2 实施)
+
+1. **`bodyOf(c)`**:插件化正文的类型化访问器,库内唯一 cast;未装插件
+   抛带修复指引的 TypeError(替代无指引的 `undefined.req`)。declaration
+   merging 对"内部声明+再导出"的入口不可行,泛型方案破坏扁平性——
+   访问器是终裁。
+2. **`c.get` 退役**:0.7.0 只改了写侧,读侧 koa 别名漏了;读请求头单
+   入口 `c.header(name)`,与 `c.setHeader` 严格对偶。
+3. **`c.params` 永不为 null**:handler 只在匹配后运行,类型不该为最
+   罕见场景买单;未匹配中间件读冻结空对象,属性读取逐字节不变。
+4. **`c.routePath` / `c.routeName`**:运行时匹配模式(含 mount 前缀),
+   观测地基——metrics 标签/span 名用有界模式而非高基数路径;与 params
+   同族直读槽位,注册期一次 pattern 引用赋值,请求期命中路径 +2 属性写。
+5. **不学清单**:parseBody({dot})/cloneRawRequest/全量 query()/matchedRoutes
+   (配方替代,见 D14);validator 多目标独立 0.7.3 方案。
 
 ### 6.2 删除的 koa 语义面(0.7.0)
 
@@ -674,9 +736,13 @@ etag 开销(R4.10 修复后):30k 行 JSON,Node +0.11ms、Bun +0.05ms
 
 ### 6.4 验收(全部通过)
 
-1. 速查表即全 API:表面锁测试通过(§2.3)。
-2. 全门禁绿:Node 2317 / Bun 2261 测试、coverage ≥90 底线、build、
-   smoke/soak(双运行时)/example/process:check;CI 绿。
+1. 速查表即全 API:表面锁测试通过(§2.3;0.7.2 删 `get` 行,params/
+   routePath/routeName 是直读槽位不计入表面锁)。
+2. 全门禁绿:Node 2327 / Bun 2271 测试、coverage ≥90 底线
+   (94.79/90.68/95.6/96.39)、build、soak(双运行时)/example/
+   process:check;R411 抽查:命中路径 +2 属性写零位移(stash 前后
+   对照,机器噪声带内)。
 3. 契约测试:提交后写入抛、请求只读、redirect 码校验、405/501 空体、
-   错误漏斗防护头收割(R4.10 审计 30 项回归锁)。
-4. `docs/MIGRATION-0.7.md` 覆盖每个删除项的替代写法。
+   错误漏斗防护头收割(R4.10 审计 30 项回归锁;R411 十项:
+   test/r411-api-ergonomics.test.ts)。
+4. `docs/MIGRATION-0.7.md` 覆盖每个删除项的替代写法(§10 为 0.7.2)。

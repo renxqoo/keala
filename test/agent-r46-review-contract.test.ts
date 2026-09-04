@@ -1032,7 +1032,7 @@ it("REVIEW-CT-38: §4 U1 — an injected queueAdmission is byte-equal to the imp
     const order: string[] = [];
     const gates = [deferred(), deferred(), deferred()];
     app.get("/work/:id", async (c) => {
-      const id = c.params?.["id"] ?? "?";
+      const id = c.params["id"] ?? "?";
       order.push(`start:${id}`);
       await (gates[Number(id)] ?? gates[0]!).promise;
       order.push(`end:${id}`);

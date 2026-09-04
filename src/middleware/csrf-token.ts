@@ -189,7 +189,7 @@ export const csrfTokenGuard = (options: CsrfTokenGuardOptions): RouteHandler => 
   const requireSession = options.sessionId !== undefined;
   return async (c, next) => {
     if (SAFE_METHODS.has(c.method)) return next();
-    const token = c.get(header);
+    const token = c.header(header);
     if (token.length === 0) {
       throw createError(403, "missing CSRF token", { expose: true });
     }

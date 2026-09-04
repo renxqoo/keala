@@ -23,9 +23,11 @@ c.vary("Origin");
 c.append("Vary", "Origin");
 ```
 
-读侧不变:`c.header(name)` / `c.get(name)`(请求头)、`c.resHeader(name)`、
-`c.has(name)`。状态是 `c.state`,与 `c.setHeader/c.get` 无关(这正是改名
+读侧不变:`c.header(name)`(请求头)、`c.resHeader(name)`、
+`c.has(name)`。状态是 `c.state`,与 `c.setHeader/c.header` 无关(这正是改名
 的理由:0.6 的 `c.set` 与 Hono 的 `c.header` 同义不同名,是移植陷阱)。
+(0.7.2:koa 遗产别名 `c.get(name)` 退役,读请求头单入口 `c.header`——
+见 §10。)
 
 ## 3. 提交契约(最大的行为变化)
 
@@ -93,9 +95,9 @@ const full = c.url; // 请求不可变后恒等
 | --------------------------------- | ---------------------------------------------------------- |
 | `c.message` / statusText 自定义   | 无(sugar/finalizer 用标准 reason phrase)                   |
 | `c.fresh` / `c.stale`             | `etag()` 中间件 / `http/conditional.ts` 的 `isNotModified` |
-| `c.redirect("back")` / `c.back()` | 自己读 `c.get("referrer")` 判断后 `c.redirect(target)`     |
+| `c.redirect("back")` / `c.back()` | 自己读 `c.header("referrer")` 判断后 `c.redirect(target)`  |
 | `c.subdomains`                    | `c.host.split(".")` 自取                                   |
-| `c.ips`                           | `c.ip` + 显式读 `c.get("x-forwarded-for")`                 |
+| `c.ips`                           | `c.ip` + 显式读 `c.header("x-forwarded-for")`              |
 | `c.hostname`                      | 从 `c.host` 剥端口:`c.host.replace(/:\d+$/, "")`           |
 | `c.vary(field)`                   | `c.append("Vary", field)`                                  |
 | `c.charset` / `c.reqType`         | `c.header("content-type")` 自解析(`c.is(...)` 仍在)        |
@@ -187,7 +189,28 @@ Bun-only 键(reusePort/nativeRoutes/websocket/development)给出迁移指引
 而非裸 unknown-option。新增 `app.onShutdown(handler)`:排空完成后、close()
 resolve 前按注册顺序运行一次(刷日志/指标、关连接池),失败被包容。
 
-## 10. 0.7 → 0.6 反向(降级)注意
+## 10. R411 API 人体工学(0.7.2)
+
+**破坏性变更(两条,TS 编译期全部抓出)**:
+
+1. **`c.get(name)` 退役** → `c.header(name)`。读请求头单入口,与写侧
+   `c.setHeader` 严格对偶;koa 的 `ctx.get` 语义相同,机械改名即可。
+   带键查找一律走方法(与 Hono `c.req.header(name)` 同构)。
+2. **`c.params` 永不为 null**。handler 只在路由匹配后运行,`c.params["id"]`
+   与 `const { id } = c.params` 直接写;唯一需要迁移的是显式 null 判断
+   (`c.params === null` → `Object.keys(c.params).length === 0`);可选链
+   读取行为逐字节不变(未匹配中间件读冻结空对象,`?.x` 依旧 undefined)。
+
+**新增(非破坏)**:
+
+- **`bodyOf(c)`**:类型化正文访问器,`await bodyOf(c).json()` 取代
+  `(c as ContextWithBody).req.json()` cast;未装 bodyParser 插件时抛带
+  修复指引的 TypeError。根入口与 `keala/middleware` 均可导入。
+- **`c.routePath` / `c.routeName`**:本次请求命中的注册模式(含 mount
+  前缀,如 `/api/u/:id`)与命名路由名;未匹配为 `""`/`undefined`。metrics
+  标签与 span 名请用 `c.routePath`(有界基数),不要用 `c.path`。
+
+## 11. 0.7 → 0.6 反向(降级)注意
 
 无官方降级路径。若必须:恢复 `c.set` 改名、重新引入 rule-4
 (`src/core/respond.ts` 的 git 历史)、恢复 0.6 的 request setter 与

@@ -2,23 +2,22 @@ import { describe, expect, it } from "vitest";
 
 import { startNodeServer } from "../src/adapters/node.ts";
 import { Keala } from "../src/core/app.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { createPlannedResponse, inheritResponseFacts } from "../src/core/response-plan.ts";
 
 describe("R4.5 Node request header ownership", () => {
   it("keeps bounded memoized body reads correct after headers materialization", async () => {
     const app = new Keala({ env: "test" });
     app.use(createBodyParser({ jsonLimit: 16 }));
-    app.post("/body", async (c0) => {
-      const c = c0 as ContextWithBody;
+    app.post("/body", async (c) => {
       const held = c.headers;
       held.set("x-observed", "yes");
-      const value = await c.req.json();
+      const value = await bodyOf(c).json();
       return c.json({
         value,
-        memoized: value === (await c.req.json()),
+        memoized: value === (await bodyOf(c).json()),
         same: held === c.raw.headers,
-        observed: c.get("x-observed"),
+        observed: c.header("x-observed"),
         used: c.raw.bodyUsed,
       });
     });
@@ -71,16 +70,16 @@ describe("R4.5 Node request header ownership", () => {
   it("B45-16: headers-first and raw-first share one mutable request-header source", async () => {
     const app = new Keala({ env: "test" });
     app.get("/headers/:order", (c) => {
-      const held = c.params?.order === "raw" ? c.raw.headers : c.headers;
+      const held = c.params.order === "raw" ? c.raw.headers : c.headers;
       held.set("x-mutable", "headers");
-      const first = c.get("x-mutable");
+      const first = c.header("x-mutable");
       c.raw.headers.set("x-mutable", "raw");
-      const second = c.get("x-mutable");
+      const second = c.header("x-mutable");
       c.headers.delete("x-mutable");
       return c.json({
         first,
         second,
-        removed: c.get("x-mutable"),
+        removed: c.header("x-mutable"),
         same: held === c.raw.headers && held === c.headers,
       });
     });

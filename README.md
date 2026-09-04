@@ -127,8 +127,9 @@ import {
 } from "keala/middleware"; // the aggregate — or per file: keala/middleware/cors
 import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "keala";
 
-app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs c.req.json()/text()/formData()…
-// formData() is double-budgeted: formLimit bytes AND formPartLimit parts
+app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs body readers via bodyOf(c)
+// const body = await bodyOf(c).json() — typed accessor, zero cast; the read
+// is memoized and double-budgeted: formLimit bytes AND formPartLimit parts
 // (default 1000 — thousands of tiny parts are a memory-amplification
 // vector a byte cap alone does not stop).
 app.use(cors({ origin: ["https://app.site"], allowCredentials: true }));
@@ -209,9 +210,10 @@ app.post("/echo", async (c) => {
 
 Each call consumes the underlying stream — read once per request. The
 `createBodyParser` plugin upgrades every handler with a memoized,
-size-bounded reader instead: `c.req.json()` / `c.req.text()` /
-`c.req.formData()` answer 413 over the limit, exposed 400 on malformed
-input, and double-budget forms (bytes AND parts). `readBodyLimited` is the
+size-bounded reader instead: `bodyOf(c).json()` / `.text()` /
+`.formData()` answer 413 over the limit, exposed 400 on malformed
+input, and double-budget forms (bytes AND parts); without the plugin,
+`bodyOf(c)` throws a TypeError naming the fix. `readBodyLimited` is the
 one-shot bounded helper underneath, exported for custom readers.
 
 ### HTTP & fs safety primitives
@@ -232,8 +234,8 @@ if (
   isNotModified({
     etag,
     mtimeMs: stat.mtimeMs,
-    ifNoneMatch: c.get("if-none-match"),
-    ifModifiedSince: c.get("if-modified-since"),
+    ifNoneMatch: c.header("if-none-match"),
+    ifModifiedSince: c.header("if-modified-since"),
   })
 ) {
   return new Response(null, { status: 304 });
@@ -258,12 +260,14 @@ Every request allocates exactly one context. Request and response live on the
 same object; everything lazy (`query`, `cookies`, `ip`, `state`) materializes
 on first touch.
 
-| Request side (read-only)                                          | Response side                             | Sugar (return style)             |
-| ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------- |
-| `c.raw/method/path/url/querystring/search`                        | `c.status/body/type/length`               | `c.text(str, status?, headers?)` |
-| `c.get(name)` / `c.header(name)`                                  | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
-| `c.params` `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.etag/lastModified/attachment/redirect` | `c.html(str, status?, headers?)` |
-| `c.accepts/is` `c.signal` `c.runtime`                             | `c.cookies` (signed, key rotation)        | `c.throw/assert`                 |
+| Request side (read-only)                               | Response side                             | Sugar (return style)             |
+| ------------------------------------------------------ | ----------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/querystring/search`             | `c.status/body/type/length`               | `c.text(str, status?, headers?)` |
+| `c.header(name)`                                       | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
+| `c.params` (never null) `c.routePath/routeName`        | `c.etag/lastModified/attachment/redirect` | `c.html(str, status?, headers?)` |
+| `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.cookies` (signed, key rotation)        | `c.throw/assert`                 |
+| `c.accepts/is` `c.signal` `c.runtime`                  |                                           |                                  |
+| `c.accepts/is` `c.signal` `c.runtime`                  | `c.cookies` (signed, key rotation)        | `c.throw/assert`                 |
 
 Dual-mode rules in one line each: **a returned `Response` commits; `c.*`
 writes are staged; the last committer wins; untouched requests hit
@@ -328,7 +332,7 @@ production (rules: `DESIGN.md` §2 in the [repo](https://github.com/renxqoo/keal
 
 | Koa                                                     | keala                                                   |
 | ------------------------------------------------------- | ------------------------------------------------------- |
-| `ctx.request.get("x")`                                  | `c.get("x")`                                            |
+| `ctx.request.get("x")`                                  | `c.header("x")`                                         |
 | `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.setHeader("x", v)`                                   |
 | `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n` (same)                    |
 | `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`                 |
@@ -350,8 +354,9 @@ their object shape on `c.body` reads.
 | `app.get(path, (c) => c.json(...))`                | the same return style                                                                                      |
 | `c.req.param("id")`                                | `c.params.id`                                                                                              |
 | `c.req.query("q")`                                 | `c.query("q")` (identical idiom; `c.queries("q")` for repeats)                                             |
-| `c.req.header("x")`                                | `c.get("x")`                                                                                               |
-| `await c.req.json()`                               | `await c.raw.json()` (zero setup) or the parser plugin's `c.req.json()`                                    |
+| `c.req.header("x")`                                | `c.header("x")`                                                                                            |
+| `await c.req.json()`                               | `await bodyOf(c).json()` (with the bodyParser plugin) or `await c.raw.json()` (zero setup)                 |
+| `c.req.routePath()` (Route Helper)                 | `c.routePath` / `c.routeName` (properties, named routes included)                                          |
 | `app.use(mw)`                                      | the same — plus a [dev warning](#global-middleware-and-routing-order--the-1-trap) when it swallows a route |
 | `app.notFound(fn)` / `app.onError(fn)`             | `app.notFound(fn)` / `app.onError(fn)`                                                                     |
 | `hono.route("/api", subApp)`                       | `app.mount("/api", router)` (table merge; 404s fall through)                                               |

@@ -217,12 +217,12 @@ describe("redteam round2 — GA-2 concurrency isolation", () => {
       c.setHeader("x-done", "1");
     });
     app.get("/text", (c) => c.text("hello"));
-    app.get("/users/:id", (c) => c.json({ id: c.params?.["id"], st: c.state.step }));
+    app.get("/users/:id", (c) => c.json({ id: c.params["id"], st: c.state.step }));
     app.get("/err", () => {
       throw new Error("boom");
     });
-    app.post("/users/:id/posts", (c) => c.text(`p:${c.params?.["id"]}`));
-    app.get("/wild/*", (c) => c.text(`w:${c.params?.["wildcard"]}`));
+    app.post("/users/:id/posts", (c) => c.text(`p:${c.params["id"]}`));
+    app.get("/wild/*", (c) => c.text(`w:${c.params["wildcard"]}`));
     app.get("/cookies", (c) => {
       c.cookies.set("s", "1", { signed: true });
       return c.text("ck");
@@ -299,11 +299,11 @@ describe("redteam round2 — GA-3 leak fence", () => {
     async () => {
       const app = new Keala({ ...quiet, keys: ["k"] });
       app.get("/text", (c) => c.text("hello"));
-      app.get("/users/:id", (c) => c.json({ id: c.params?.["id"] }));
+      app.get("/users/:id", (c) => c.json({ id: c.params["id"] }));
       app.get("/err", () => {
         throw new Error("boom");
       });
-      app.get("/wild/*", (c) => c.text(`w:${c.params?.["wildcard"]}`));
+      app.get("/wild/*", (c) => c.text(`w:${c.params["wildcard"]}`));
       app.get("/cookies", (c) => {
         c.cookies.set("s", "1", { signed: true });
         return c.text("ck");
@@ -398,7 +398,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
 
   it("encoded traversal in a captured param stays a decoded string (no path semantics)", async () => {
     const app = new Keala(quiet);
-    app.get("/files/:name", (c) => c.text(`f=${c.params?.["name"]}`));
+    app.get("/files/:name", (c) => c.text(`f=${c.params["name"]}`));
     const res = await handleFlat(app, req("http://localhost/files/..%2F..%2Fetc"));
     expect([res.status, await text(res)]).toEqual([200, "f=../../etc"]);
   });

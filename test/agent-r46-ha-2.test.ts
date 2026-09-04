@@ -88,7 +88,7 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
       const app = new Keala({ env: "test", overload: { maxConcurrency: 1, maxQueue: 128 } });
       const startOrder: number[] = [];
       app.get("/f/:id", async (c) => {
-        const id = Number(c.params?.["id"]);
+        const id = Number(c.params["id"]);
         startOrder.push(id);
         await wait(1);
         c.body = String(id);

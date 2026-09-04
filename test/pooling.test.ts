@@ -18,6 +18,7 @@ import {
   resetContext,
   type Context,
 } from "../src/core/context/context.ts";
+import { EMPTY_PARAMS } from "../src/router/router.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -72,7 +73,7 @@ describe("resetContext recycling semantics", () => {
     expect(recycled.has("X-Used")).toBe(false);
     expect(recycled.resHeader("set-cookie")).toBe("");
     expect(Object.keys(recycled.state)).toEqual([]);
-    expect(recycled.params).toBe(null);
+    expect(recycled.params).toBe(EMPTY_PARAMS);
     expect(recycled.ip).toBe("2.2.2.2");
     // Unsigned read: the app carries signing keys, and a signed read of an
     // unsigned value fails closed (by design) — the point here is that the
@@ -118,7 +119,7 @@ describe("request isolation (fresh context per request)", () => {
   it("serial requests never observe stale state", async () => {
     const app = new Keala(quiet);
     app.get("/a/:id", (c) => {
-      c.state["id"] = c.params?.["id"];
+      c.state["id"] = c.params["id"];
       c.setHeader("X-Run", String(c.state["id"]));
       c.body = JSON.stringify({ id: c.state["id"], q: c.query("v") ?? null });
     });
@@ -153,9 +154,9 @@ describe("request isolation (fresh context per request)", () => {
   it("concurrent interleaved requests keep isolated contexts", async () => {
     const app = new Keala(quiet);
     app.get("/slow/:tag", async (c) => {
-      const mine = c.params?.["tag"] as string;
+      const mine = c.params["tag"] as string;
       await new Promise((resolve) => setTimeout(resolve, mine === "a" ? 15 : 2));
-      c.body = `${mine}:${c.params?.["tag"]}`;
+      c.body = `${mine}:${c.params["tag"]}`;
     });
     const results = await Promise.all([
       app.handle(new Request("http://localhost:3000/slow/a")),

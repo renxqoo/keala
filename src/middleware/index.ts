@@ -32,6 +32,9 @@ export {
   type LoggerOptions,
 } from "./headers.ts";
 export { bodyLimit, timeout } from "./limits.ts";
+// The typed body-reader accessor rides the middleware aggregate too — it is
+// the companion every bodyParser consumer imports alongside the plugin.
+export { bodyOf } from "../plugins/body-parser.ts";
 export { serveStatic, type ServeStaticOptions } from "./serve-static.ts";
 export { validator, type StandardSchema } from "./validator.ts";
 export { rateLimit, type RateLimitOptions } from "./rate-limit.ts";

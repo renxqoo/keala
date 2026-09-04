@@ -70,10 +70,11 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
   const varyOrigin = originAllow !== "*";
 
   return async (c, next) => {
-    const origin = c.get("origin");
+    const origin = c.header("origin");
     const allowed = origin.length > 0 && isAllowed(origin, originAllow);
 
-    const preflight = c.method === "OPTIONS" && c.get("access-control-request-method").length > 0;
+    const preflight =
+      c.method === "OPTIONS" && c.header("access-control-request-method").length > 0;
     if (preflight) {
       if (!allowed) {
         // The 403 exists ONLY because of the Origin header — a shared cache
@@ -134,8 +135,8 @@ export const csrf = (): RouteHandler => {
   const SAFE = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
   return async (c, next) => {
     if (SAFE.has(c.method)) return next();
-    const originHeader = c.get("origin");
-    const source = originHeader.length > 0 ? originHeader : c.get("referer");
+    const originHeader = c.header("origin");
+    const source = originHeader.length > 0 ? originHeader : c.header("referer");
     // Sandboxed iframes and privacy extensions send the literal "null" —
     // it is never a same-origin signal.
     if (source === "null") {

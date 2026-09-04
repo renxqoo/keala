@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
 import { Keala } from "../src/core/app.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { createPlannedResponse } from "../src/core/response-plan.ts";
 
 const servers: NodeServerHandle[] = [];
@@ -72,7 +72,7 @@ describe.skipIf(typeof Bun !== "undefined")("R4.5 Node request source", () => {
   it("does not materialize a Request for a GET route that only needs routing and headers", async () => {
     const count = await withRequestConstructionCount(async () => {
       const server = await start((app) => {
-        app.get("/probe", (c) => c.json({ method: c.method, host: c.get("host") }));
+        app.get("/probe", (c) => c.json({ method: c.method, host: c.header("host") }));
       });
       const response = await raw(
         server,
@@ -255,7 +255,7 @@ describe("R4.5 Node body ownership and cleanup", () => {
         });
         app.use(createBodyParser({ jsonLimit: 256 }));
         app.post("/abort", async (c0) => {
-          await (c0 as ContextWithBody).req.arrayBuffer();
+          await bodyOf(c0).arrayBuffer();
           return c0.text("unreachable");
         });
       });
@@ -287,9 +287,8 @@ describe("R4.5 Node body ownership and cleanup", () => {
     async () => {
       const server = await start((app) => {
         app.use(createBodyParser({ jsonLimit: 64 }));
-        app.post("/body", async (c0) => {
-          const c = c0 as ContextWithBody;
-          const value = await c.req.json();
+        app.post("/body", async (c) => {
+          const value = await bodyOf(c).json();
           const bodyUsed = c.raw.bodyUsed;
           let secondReadRejected = false;
           try {
@@ -344,7 +343,7 @@ describe("R4.5 Node body ownership and cleanup", () => {
     const server = await start((app) => {
       app.use(createBodyParser({ jsonLimit: 4 }));
       app.post("/limited", async (c0) => {
-        await (c0 as ContextWithBody).req.json();
+        await bodyOf(c0).json();
         return c0.text("unreachable");
       });
       app.get("/next", (c) => c.text("next"));
@@ -363,12 +362,11 @@ describe("R4.5 Node body ownership and cleanup", () => {
     async () => {
       const server = await start((app) => {
         app.use(createBodyParser({ jsonLimit: 64 }));
-        app.post("/raw-first", async (c0) => {
-          const c = c0 as ContextWithBody;
+        app.post("/raw-first", async (c) => {
           expect(c.raw).toBe(c.raw);
           expect(c.headers).toBe(c.headers);
-          expect(c.get("x-missing")).toBe("");
-          return c.json(await c.req.json());
+          expect(c.header("x-missing")).toBe("");
+          return c.json(await bodyOf(c).json());
         });
       });
 
@@ -401,10 +399,9 @@ describe("R4.5 Node body ownership and cleanup", () => {
     async () => {
       const server = await start((app) => {
         app.use(createBodyParser({ jsonLimit: 4 }));
-        app.post("/raw-limited", async (c0) => {
-          const c = c0 as ContextWithBody;
+        app.post("/raw-limited", async (c) => {
           void c.raw;
-          return c.json(await c.req.json());
+          return c.json(await bodyOf(c).json());
         });
       });
       const response = await fetch(`http://127.0.0.1:${server.port}/raw-limited`, {
@@ -420,7 +417,7 @@ describe("R4.5 Node body ownership and cleanup", () => {
     const server = await start((app) => {
       app.use(createBodyParser({ jsonLimit: 4 }));
       app.post("/empty", async (c0) => {
-        const bytes = await (c0 as ContextWithBody).req.arrayBuffer();
+        const bytes = await bodyOf(c0).arrayBuffer();
         return c0.text(String(bytes.byteLength));
       });
     });
@@ -438,13 +435,12 @@ describe("R4.5 Node body ownership and cleanup", () => {
         // arrayBuffer() owns the formLimit budget (R4.10).
         app.use(createBodyParser({ formLimit: 16 }));
         app.post("/native", async (c0) => {
-          const bytes = await (c0 as ContextWithBody).req.arrayBuffer();
+          const bytes = await bodyOf(c0).arrayBuffer();
           return c0.text(new TextDecoder().decode(bytes));
         });
-        app.post("/raw", async (c0) => {
-          const c = c0 as ContextWithBody;
+        app.post("/raw", async (c) => {
           void c.raw;
-          const bytes = await c.req.arrayBuffer();
+          const bytes = await bodyOf(c).arrayBuffer();
           return c.text(String(bytes.byteLength));
         });
       });

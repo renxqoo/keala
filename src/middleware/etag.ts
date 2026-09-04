@@ -130,7 +130,7 @@ export const etag = (): RouteHandler => {
     if (c.has("etag")) return;
     const tag = tagOf(c, c.bodyValue);
     if (tag === null) return;
-    const noneMatch = c.get("if-none-match");
+    const noneMatch = c.header("if-none-match");
     if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {
       // 304 must not carry body or content headers (koan contract).
       c.status = 304;
@@ -221,7 +221,7 @@ const COMPRESSED_TYPE =
 export const compress = (options: CompressOptions = {}): RouteHandler => {
   const gzip = options.gzip ?? webGzip;
   return async (c, next) => {
-    const encoding = c.get("accept-encoding");
+    const encoding = c.header("accept-encoding");
     if (!acceptsGzip(encoding)) {
       await next();
       c.append("Vary", "Accept-Encoding");

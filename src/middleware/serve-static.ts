@@ -186,8 +186,8 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       isNotModified({
         etag,
         mtimeMs,
-        ifNoneMatch: c.get("if-none-match"),
-        ifModifiedSince: c.get("if-modified-since"),
+        ifNoneMatch: c.header("if-none-match"),
+        ifModifiedSince: c.header("if-modified-since"),
       })
     ) {
       return new Response(null, { status: 304, headers });
@@ -202,7 +202,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
         headers: { ...headers, "content-length": String(info.size) },
       });
     }
-    const rangeHeader = c.get("range");
+    const rangeHeader = c.header("range");
     const range = rangeHeader.length > 0 ? parseRange(rangeHeader, info.size) : null;
     if (range === "unsatisfiable") {
       return new Response(null, {

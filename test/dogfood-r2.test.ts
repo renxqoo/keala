@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
 import { createBodyParser, readBodyLimited } from "../src/index.ts";
-import type { ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf } from "../src/plugins/body-parser.ts";
 import type { Next, RouteHandler } from "../src/index.ts";
 import { isHttpError } from "../src/index.ts";
 
@@ -177,7 +177,7 @@ describe("C4: body errors carry machine-readable codes", () => {
     app.use(parser);
     app.post("/x", async (c) => {
       try {
-        return c.json(await (c as ContextWithBody).req.json());
+        return c.json(await bodyOf(c).json());
       } catch (error) {
         if (isHttpError(error)) return c.json({ code: error.code ?? null }, error.status as 400);
         throw error;

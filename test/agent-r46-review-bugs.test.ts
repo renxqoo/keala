@@ -196,7 +196,7 @@ describe("R4.6 review hunt: counter accounting at the admission/settle seam", ()
         const gate = deferred();
         app.get("/work/:id", async (c) => {
           await gate.promise;
-          c.body = `done:${c.params?.["id"]}`;
+          c.body = `done:${c.params["id"]}`;
         });
         const first = app.handle(new Request("http://x/work/a"));
         await wait(offset); // B parks in the queue, its 25ms timer now armed
@@ -261,7 +261,7 @@ describe("R4.6 review hunt: counter accounting at the admission/settle seam", ()
       });
       app.get("/w/:id", async (c) => {
         await wait(2);
-        c.body = `id=${c.params?.["id"]}`;
+        c.body = `id=${c.params["id"]}`;
       });
       const controllers = new Map<number, AbortController>();
       const handles: Array<Promise<Response>> = [];
@@ -295,7 +295,7 @@ describe("R4.6 review hunt: counter accounting at the admission/settle seam", ()
       });
       app2.get("/w/:id", async (c) => {
         await wait(6);
-        c.body = `id=${c.params?.["id"]}`;
+        c.body = `id=${c.params["id"]}`;
       });
       const wave = Array.from({ length: 30 }, (_, i) =>
         app2.handle(new Request(`http://x/w/${i}`)).then(async (r) => ({
@@ -372,8 +372,8 @@ describe("R4.6 review hunt: strategy × drain interleavings (U1)", () => {
         });
         const gates = [deferred(), deferred()];
         app.get("/work/:id", async (c) => {
-          await gates[Number(c.params?.["id"])]!.promise;
-          c.body = `done:${c.params?.["id"]}`;
+          await gates[Number(c.params["id"])]!.promise;
+          c.body = `done:${c.params["id"]}`;
         });
         const first = app.handle(new Request("http://x/work/0"));
         await wait(5);

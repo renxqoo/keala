@@ -208,7 +208,7 @@ describe("red team: router", () => {
       (app) => {
         const child = new Router();
         child.get("/items/:sku", (c) => {
-          c.body = { sku: c.params?.["sku"] };
+          c.body = { sku: c.params["sku"] };
         });
         app.mount("/shop", child);
       },
@@ -222,7 +222,7 @@ describe("red team: router", () => {
       (app) => {
         const child = new Router();
         child.get("/items/:sku", (c) => {
-          c.body = { sku: c.params?.["sku"] };
+          c.body = { sku: c.params["sku"] };
         });
         app.mount("/shop", child);
       },

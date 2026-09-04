@@ -204,7 +204,7 @@ describe("MW-5 [RED]: requests bearing a Cookie header must not seed/replay cach
     // A handler that personalizes on the request's Cookie header without
     // touching the c.cookies facade and without setting any cookie —
     // every other eligibility rule is satisfied.
-    app.get("/me", cache({ ttl: 60_000 }), (c) => c.text(`user:${c.get("cookie") ?? "anon"}`));
+    app.get("/me", cache({ ttl: 60_000 }), (c) => c.text(`user:${c.header("cookie") ?? "anon"}`));
 
     const alice = await app.handle(req("/me", { headers: { cookie: "session=alice" } }));
     expect(await alice.text()).toBe("user:session=alice");
@@ -221,9 +221,9 @@ describe("MW-5 [RED]: requests bearing a Cookie header must not seed/replay cach
     let computed = 0;
     app.get("/pub", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
-      // c.get() returns "" (never null) for an absent header — the facade
+      // c.header() returns "" (never null) for an absent header — the facade
       // contract — so the anonymous fallback keys on emptiness.
-      const cookie = c.get("cookie");
+      const cookie = c.header("cookie");
       return c.text(`public:${cookie.length > 0 ? cookie : "anon"}`);
     });
 

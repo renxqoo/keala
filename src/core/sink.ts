@@ -241,8 +241,7 @@ export const registerSink = (
     // declaration diverges the native leg only), and the handler receives a
     // real Request on every runtime (native sources materialize lazily).
     const handler = (entry as NativeFnSink).handler;
-    const mirror: RouteHandler = (c) =>
-      handler(sourceRequest(c.rawRequest), c.params ?? EMPTY_PARAMS);
+    const mirror: RouteHandler = (c) => handler(sourceRequest(c.rawRequest), c.params);
     registerDef(router, "GET", path, [mirror], undefined, middleware);
     markSunk();
     return;

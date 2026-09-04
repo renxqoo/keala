@@ -36,6 +36,13 @@ export interface RouteTarget {
   layers: Map<string, unknown[]>;
   /** methods registered on this path (for the `Allow` header) */
   allowed: Set<string>;
+  /**
+   * The registered pattern this target serves ("/users/:id", mount prefix
+   * included) — the runtime fact behind `c.routePath`. Set at bind time;
+   * a terminal shared by two patterns carries the last bound one (the same
+   * resolution `name` uses). Empty string only on a never-bound target.
+   */
+  pattern: string;
   /** route name for `router.url(name, params)` */
   name?: string;
   /** Registration-time immutable result reused by exact static matches. */
@@ -81,6 +88,7 @@ export const createTarget = (): RouteTarget => ({
   methods: new Map(),
   layers: new Map(),
   allowed: new Set(),
+  pattern: "",
   staticMatch: null,
 });
 

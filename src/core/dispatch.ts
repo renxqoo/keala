@@ -310,6 +310,12 @@ export const dispatchRequest = (
   const match = matchRoute(router, path);
   if (match !== null) {
     c.params = match.params ?? EMPTY_PARAMS;
+    // Matched-pattern facts (R411 Fix 4), published beside params: visible
+    // to every chain layer, the 405 path below and post-next() observers —
+    // metrics labels and span names get the route TEMPLATE, never the
+    // high-cardinality raw path.
+    c.routePath = match.target.pattern;
+    c.routeName = match.target.name;
     const rawMethod = sourceMethod(request);
     const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
     // Express-style convenience: HEAD falls back to the GET handler.

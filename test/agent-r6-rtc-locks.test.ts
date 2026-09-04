@@ -106,10 +106,10 @@ describe("R6-F trie: root wildcard priority matrix [locks]", () => {
 
   it("/:x does NOT answer / while /* does (empty capture)", async () => {
     const a = new Keala(quiet);
-    a.get("/:x", (c) => c.text(`p:${c.params?.["x"]}`));
+    a.get("/:x", (c) => c.text(`p:${c.params["x"]}`));
     expect((await drive(a, new Request("http://x/"))).status).toBe(404);
     const b = new Keala(quiet);
-    b.get("/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
+    b.get("/*", (c) => c.text(`w:${c.params["wildcard"] ?? ""}`));
     const res = await drive(b, new Request("http://x/"));
     expect(await res.text()).toBe("w:");
   });
@@ -117,13 +117,13 @@ describe("R6-F trie: root wildcard priority matrix [locks]", () => {
   it("optional /:x? outranks /* on /", async () => {
     const app = new Keala(quiet);
     app.get("/*", (c) => c.text("wild"));
-    app.get("/:x?", (c) => c.text(`opt:${c.params?.["x"] ?? "-"}`));
+    app.get("/:x?", (c) => c.text(`opt:${c.params["x"] ?? "-"}`));
     expect(await (await drive(app, new Request("http://x/"))).text()).toBe("opt:-");
   });
 
   it("/* answers // (normalized to /) and /deep/paths", async () => {
     const app = new Keala(quiet);
-    app.get("/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
+    app.get("/*", (c) => c.text(`w:${c.params["wildcard"] ?? ""}`));
     expect((await drive(app, new Request("http://x//"))).status).toBe(200);
     expect(await (await drive(app, new Request("http://x/a/b/c"))).text()).toBe("w:a/b/c");
   });

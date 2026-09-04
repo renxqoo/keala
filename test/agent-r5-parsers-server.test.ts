@@ -82,7 +82,7 @@ describe("node adapter locks correct behavior", () => {
   it("joins repeated request headers with ', '", async () => {
     const { port } = await serve((app) => {
       app.get("/", (c) => {
-        c.body = c.get("x-dup");
+        c.body = c.header("x-dup");
       });
     });
     const out = await raw(

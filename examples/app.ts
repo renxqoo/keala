@@ -78,7 +78,7 @@ const UserSchema = {
 
 api.post(
   "/users",
-  csrfTokenGuard({ service: tokens, sessionId: (c) => sessionOf(c.get("cookie")) }),
+  csrfTokenGuard({ service: tokens, sessionId: (c) => sessionOf(c.header("cookie")) }),
   validator(UserSchema),
   (c) => c.json({ created: (c.valid as { name: string }).name }, 201),
 );

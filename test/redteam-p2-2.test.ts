@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { validator, type StandardSchema } from "../src/middleware/validator.ts";
 import { cors, csrf } from "../src/middleware/cors.ts";
 import { stream, streamSSE, streamText } from "../src/helpers/streams.ts";
@@ -39,9 +39,8 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
     const app = new Keala(quiet);
     // arrayBuffer() owns the formLimit budget (R4.10).
     app.use(createBodyParser({ formLimit: 1000 }));
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = `len:${(await c.req.arrayBuffer()).byteLength}`;
+    app.post("/x", async (c) => {
+      c.body = `len:${(await bodyOf(c).arrayBuffer()).byteLength}`;
     });
     const chunks = new ReadableStream({
       start(controller) {
@@ -63,9 +62,8 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   it("jsonLimit=0 admits only empty bodies; negative limits behave like 0", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 0 }));
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = JSON.stringify(await c.req.json());
+    app.post("/x", async (c) => {
+      c.body = JSON.stringify(await bodyOf(c).json());
     });
     const empty = await app.handle(req("/x", { method: "POST" }));
     expect(empty.status).toBe(200);
@@ -81,9 +79,8 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   it("JSON top-level primitives round-trip (divergence ledger: object bodies pass through)", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = JSON.stringify(await c.req.json());
+    app.post("/x", async (c) => {
+      c.body = JSON.stringify(await bodyOf(c).json());
     });
     const num = await app.handle(
       req("/x", { method: "POST", body: "123", headers: { "content-type": "application/json" } }),
@@ -98,17 +95,16 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   it("a rejected bounded read stays rejected for every later reader", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 50 }));
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
+    app.post("/x", async (c) => {
       let first = "none";
       let second = "none";
       try {
-        await c.req.json();
+        await bodyOf(c).json();
       } catch (err) {
         first = String((err as { status?: number }).status);
       }
       try {
-        await c.req.text();
+        await bodyOf(c).text();
       } catch (err) {
         second = String((err as { status?: number }).status);
       }
@@ -128,9 +124,8 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
   it("formLimit is independent of jsonLimit (text route 413s, form route parses)", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 100 }));
-    app.post("/t", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = `t:${(await c.req.text()).length}`;
+    app.post("/t", async (c) => {
+      c.body = `t:${(await bodyOf(c).text()).length}`;
     });
     const over = await app.handle(
       req("/t", {

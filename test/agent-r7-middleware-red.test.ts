@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { Keala } from "../src/core/app.ts";
 import { logger } from "../src/middleware/headers.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit): Request =>
@@ -32,10 +32,9 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
      */
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/json", async (c0) => {
-      const c = c0 as ContextWithBody;
-      const first = await c.req.json();
-      const second = await c.req.json();
+    app.post("/json", async (c) => {
+      const first = await bodyOf(c).json();
+      const second = await bodyOf(c).json();
       c.body = first === second ? "same" : "different";
     });
 
@@ -59,9 +58,8 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
      */
     const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 0 }));
-    app.post("/form", async (c0) => {
-      const c = c0 as ContextWithBody;
-      const form = await c.req.formData();
+    app.post("/form", async (c) => {
+      const form = await bodyOf(c).formData();
       let entries = 0;
       form.forEach(() => {
         entries += 1;

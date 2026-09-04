@@ -1,10 +1,9 @@
 // keala bench server (Node.js runtime via the node adapter) — mirrors
 // bench/server-keala.ts route for route, so the two runtimes are comparable.
 // Run: node --experimental-strip-types bench/server-keala-node.ts [port]
-import { createBodyParser, Keala, type Context } from "../src/index.ts";
+import { createBodyParser, bodyOf, Keala, type Context } from "../src/index.ts";
 import { bodyLimit } from "../src/middleware/limits.ts";
 import { listen } from "../src/adapters/node.ts";
-import type { ContextWithBody } from "../src/plugins/body-parser.ts";
 import { serverMetrics } from "./server-metrics.ts";
 
 // KEALA_POOLING=1 runs the pooled leg of the matrix (opt-in guarded context
@@ -35,15 +34,15 @@ app.get("/json", (c) => c.json({ hello: "world" }));
 if (sink === "param") {
   app.sink("/users/:id", (_request, params) => new Response(`user ${params["id"]}`));
 } else {
-  app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+  app.get("/users/:id", (c) => c.text(`user ${c.params["id"]}`));
 }
 
 app.get("/search/:id", (c) => {
   c.setHeader("X-Query", "hit");
-  return c.text(`${c.params?.["id"]} ${c.query("name")} ${c.query("page")}`);
+  return c.text(`${c.params["id"]} ${c.query("name")} ${c.query("page")}`);
 });
 
-app.post("/echo-safe", async (c) => c.json(await (c as ContextWithBody).req.json()));
+app.post("/echo-safe", async (c) => c.json(await bodyOf(c).json()));
 
 app.get(
   "/mw",

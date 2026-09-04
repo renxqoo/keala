@@ -2,6 +2,45 @@
 
 > 0.6.x 为 pre-1.0 系列:表面可破坏,破坏性变更在 CHANGELOG 逐条记录。
 
+## 0.7.2 (2026-09-05)
+
+R411 API 人体工学四项(docs/R411-API-ERGONOMICS-PLAN.md v2,含 Hono
+官方 Request API 文档全景评审结论)。零兼容层:旧形态全部删除。
+
+### 破坏性变更(0.7.2)
+
+- **`c.get(name)` 退役** → `c.header(name)`。读请求头单入口,与写侧
+  `c.setHeader` 严格对偶(0.7.0 只改了写侧,读侧 koa 别名漏了)。TS
+  编译期抓出全部调用点。
+- **`c.params` 永不为 null**。handler 只在路由匹配后运行——`c.params["id"]`
+  与 `const { id } = c.params` 直接写,不再需要可选链;未匹配路由的
+  中间件读冻结空对象(EMPTY_PARAMS),可选链读取行为逐字节不变,
+  显式 `=== null` 判断需迁移。路由器内部 `matchRoute` 的可空返回值
+  不变。
+
+### 新增
+
+- **`bodyOf(c)`**:类型化正文访问器——`await bodyOf(c).json()` 取代
+  `(c as ContextWithBody).req.json()` cast(库内唯一 cast);未装
+  bodyParser 插件时抛带修复指引的 TypeError(替代无指引的
+  `undefined.req` 崩溃)。根入口与 `keala/middleware` 均可导入。
+- **`c.routePath` / `c.routeName`**:本次请求命中的注册模式(含 mount
+  前缀)与命名路由名;未匹配为 `""`/`undefined`。观测地基——metrics
+  标签/span 名用有界模式而非高基数路径;与 params 同族直读槽位,
+  注册期一次 pattern 引用赋值(RouteTarget.pattern),请求期命中路径
+  +2 属性写,405 路径同样有值。
+
+### 文档
+
+- KEALA-NATIVE-API.md:D13(url 语义分歧:Hono 绝对 vs keala 相对)、
+  D14(Hono 三能力配方替代表)、D3 补官方 header() record 小写陷阱
+  佐证、§6.1b R411 裁决记录;修正 §3.2 命名路由示例的实参顺序
+  (name 在前)。
+- MIGRATION-0.7.md §10:两条破坏性变更的迁移写法。
+
+回归锁:test/r411-api-ergonomics.test.ts(10 项:bodyOf 3、params
+非空 1、routePath/routeName 6)。
+
 ## 0.7.1 (2026-09-04)
 
 R4.10 全面审计修复:四路深读子代理(Node adapter / 生命周期与 ws /

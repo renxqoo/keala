@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
 import { listen, startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { streamText } from "../src/helpers/streams.ts";
 
 const quiet = { env: "test" } as const;
@@ -47,7 +47,7 @@ describe("node adapter: request bridging", () => {
     const { base } = await serve((app) => {
       app.post("/users/:id", async (c) => {
         const body = await c.raw.text();
-        return c.json({ id: c.params?.["id"], q: new URL(c.raw.url).searchParams.get("q"), body });
+        return c.json({ id: c.params["id"], q: new URL(c.raw.url).searchParams.get("q"), body });
       });
     });
     const res = await fetch(`${base}/users/42?q=hi`, {
@@ -61,7 +61,7 @@ describe("node adapter: request bridging", () => {
     const { base } = await serve((app) => {
       app.use(createBodyParser());
       app.post("/j", async (c) => {
-        const parsed = await (c as unknown as ContextWithBody).req.json();
+        const parsed = await bodyOf(c).json();
         return c.json(parsed);
       });
     });
@@ -287,7 +287,7 @@ describe("node adapter: failure surfaces", () => {
   it("repeated request headers arrive as an array value", async () => {
     const app = new Keala(quiet);
     app.get("/x-forwarded", (c) => {
-      c.body = c.get("x-forwarded-for");
+      c.body = c.header("x-forwarded-for");
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);

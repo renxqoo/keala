@@ -73,7 +73,7 @@ const freshApp = (): InstanceType<typeof Keala> => {
   const clone = new Keala({ keys: ["soak"], env: "test" });
   clone.use(async (c, next) => {
     await next();
-    void c.get("x-soak");
+    void c.header("x-soak");
   });
   clone.get("/text", (c) => c.text("hello world"));
   clone.get("/json", (c) => c.json({ hello: "world", list: [1, 2, 3] }));

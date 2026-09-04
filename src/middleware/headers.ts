@@ -58,7 +58,7 @@ const RANDOM_UUID =
  */
 export const requestId = (): RouteHandler => {
   return async (c, next) => {
-    const inbound = c.get("x-request-id");
+    const inbound = c.header("x-request-id");
     const id = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,128}$/.test(inbound) ? inbound : RANDOM_UUID();
     c.state.requestId = id;
     try {

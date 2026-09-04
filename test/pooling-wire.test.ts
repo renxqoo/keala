@@ -23,7 +23,7 @@ const registerRoutes = (app: InstanceType<typeof Keala>): void => {
   app.get("/livez", (c) => c.json({ status: "ok" }));
   app.get("/text", (c) => c.text("hello world"));
   app.get("/json", (c) => c.json({ hello: "world" }));
-  app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+  app.get("/users/:id", (c) => c.text(`user ${c.params["id"]}`));
   app.get("/async-json", async (c) => c.json({ async: true }));
   app.get(
     "/mw",

@@ -410,7 +410,7 @@ describe("agent r5 — locks correct behavior", () => {
     const app = new Keala({ ...quiet, pooling: true });
     const enc = new TextEncoder();
     app.get("/s/:id", (c) => {
-      const id = c.params?.["id"] ?? "?";
+      const id = c.params["id"] ?? "?";
       c.status = 200;
       c.body = new ReadableStream({
         pull(controller) {

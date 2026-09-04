@@ -21,8 +21,23 @@ export interface ContextState {
   urlValue: string | null;
   ipValue: string | null;
   allowedValue: Set<string> | null;
-  /** Path parameters set by the router; null when unmatched. */
-  params: Record<string, string> | null;
+  /**
+   * Path parameters set by the router. The frozen EMPTY_PARAMS sentinel when
+   * no route matched (R411 Fix 3): a handler only ever runs post-match, the
+   * unmatched-middleware case reads a frozen empty object — property reads
+   * are byte-identical to the old `params?.x` null form.
+   */
+  params: Record<string, string>;
+
+  /**
+   * The route pattern this request matched ("/users/:id", mount prefix
+   * included); "" when no route matched (404/501 fallback chains). The
+   * bounded-cardinality label for metrics and span names (R411 Fix 4).
+   * A direct slot like `params`: assigned once by dispatch, never derived.
+   */
+  routePath: string;
+  /** The matched route's registered name; undefined when unnamed or unmatched. */
+  routeName: string | undefined;
   // response side
   querystringValue: string | null;
   hostValue: string | null;

@@ -157,7 +157,6 @@ describe("0.7: the context surface is the §8 quick reference", () => {
       "headers",
       "runtime",
       "header",
-      "get",
       "host",
       "protocol",
       "secure",

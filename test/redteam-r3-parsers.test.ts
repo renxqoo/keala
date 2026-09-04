@@ -69,7 +69,7 @@ import {
   acceptsType,
 } from "../src/negotiation/accepts.ts";
 import { parseCookies, serializeCookie, sign, unsign } from "../src/context/cookies.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
 
 const quiet = { env: "test" } as const;
@@ -126,7 +126,7 @@ describe("R3-2 bodyParser: multipart part budget disarmed by `;` in a quoted bou
     // The exposed 413 from the budget check renders through the standard
     // error path; a surviving budget materializes every part instead.
     app.use(async (c0) => {
-      const fd = await (c0 as ContextWithBody).req.formData();
+      const fd = await bodyOf(c0).formData();
       c0.body = `parsed ${[...fd.keys()].length} parts`;
     });
     return app;

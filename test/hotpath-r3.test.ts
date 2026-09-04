@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 
 const quiet = { env: "test" } as const;
 const request = (path: string, init?: RequestInit): Request =>
@@ -85,7 +85,7 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
       seen.push("child-scope");
       await next();
     });
-    child.get("/users/:id", (c) => c.text(c.params?.["id"] ?? ""));
+    child.get("/users/:id", (c) => c.text(c.params["id"] ?? ""));
 
     const app = new Keala(quiet);
     app.use(
@@ -113,7 +113,7 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
       seen.push("scoped");
       await next();
     });
-    leaf.get("/:section", (c) => c.text(c.params?.["section"] ?? ""));
+    leaf.get("/:section", (c) => c.text(c.params["section"] ?? ""));
 
     const middle = new Keala(quiet);
     middle.mount("/inner", leaf);
@@ -196,7 +196,7 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
       hits += 1;
       await next();
     });
-    app.get("/:first", (c) => c.text(c.params?.["first"] ?? ""));
+    app.get("/:first", (c) => c.text(c.params["first"] ?? ""));
     app.get("/api", (c) => c.text("api"));
     expect(await (await app.handle(request("/other"))).text()).toBe("other");
     expect(await (await app.handle(request("/api"))).text()).toBe("api");
@@ -208,10 +208,9 @@ describe("HOTPATH-R3 body in-flight memoization", () => {
   it("concurrent json readers share the same promise, parse and object identity", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/", async (c0) => {
-      const c = c0 as ContextWithBody;
-      const first = c.req.json();
-      const second = c.req.json();
+    app.post("/", async (c) => {
+      const first = bodyOf(c).json();
+      const second = bodyOf(c).json();
       const [a, b] = await Promise.all([first, second]);
       return c.json({ samePromise: first === second, sameObject: a === b });
     });
@@ -230,29 +229,28 @@ describe("HOTPATH-R3 body in-flight memoization", () => {
       {
         contentType: "text/plain",
         body: "hello",
-        read: (c: ContextWithBody) => c.req.text(),
+        read: (c: Context) => bodyOf(c).text(),
       },
       {
         contentType: "application/octet-stream",
         body: "hello",
-        read: (c: ContextWithBody) => c.req.arrayBuffer(),
+        read: (c: Context) => bodyOf(c).arrayBuffer(),
       },
       {
         contentType: "application/octet-stream",
         body: "hello",
-        read: (c: ContextWithBody) => c.req.blob(),
+        read: (c: Context) => bodyOf(c).blob(),
       },
       {
         contentType: "application/x-www-form-urlencoded",
         body: "a=1",
-        read: (c: ContextWithBody) => c.req.formData(),
+        read: (c: Context) => bodyOf(c).formData(),
       },
     ];
     for (const testCase of cases) {
       const app = new Keala(quiet);
       app.use(createBodyParser());
-      app.post("/", async (c0) => {
-        const c = c0 as ContextWithBody;
+      app.post("/", async (c) => {
         const first = testCase.read(c);
         const second = testCase.read(c);
         const [a, b] = await Promise.all([first, second]);
@@ -272,10 +270,9 @@ describe("HOTPATH-R3 body in-flight memoization", () => {
   it("memoizes malformed-json rejection without weakening the 400 contract", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/", async (c0) => {
-      const c = c0 as ContextWithBody;
-      const first = c.req.json();
-      const second = c.req.json();
+    app.post("/", async (c) => {
+      const first = bodyOf(c).json();
+      const second = bodyOf(c).json();
       const errors = await Promise.allSettled([first, second]);
       const statuses = errors.map((result) =>
         result.status === "rejected" ? (result.reason as { status?: number }).status : 0,
@@ -296,10 +293,9 @@ describe("HOTPATH-R3 body in-flight memoization", () => {
     const app = new Keala(quiet);
     // arrayBuffer() owns the formLimit budget (R4.10).
     app.use(createBodyParser({ formLimit: 2 }));
-    app.post("/", async (c0) => {
-      const c = c0 as ContextWithBody;
-      const first = c.req.arrayBuffer();
-      const second = c.req.arrayBuffer();
+    app.post("/", async (c) => {
+      const first = bodyOf(c).arrayBuffer();
+      const second = bodyOf(c).arrayBuffer();
       const [a, b] = await Promise.allSettled([first, second]);
       return c.json({
         samePromise: first === second,
@@ -326,10 +322,9 @@ describe("HOTPATH-R3 body in-flight memoization", () => {
   it("returns cached bytes when a later smaller limit still fits", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ formLimit: 100, jsonLimit: 5 }));
-    app.post("/", async (c0) => {
-      const c = c0 as ContextWithBody;
-      await c.req.formData();
-      return c.text(String((await c.req.arrayBuffer()).byteLength));
+    app.post("/", async (c) => {
+      await bodyOf(c).formData();
+      return c.text(String((await bodyOf(c).arrayBuffer()).byteLength));
     });
     const response = await app.handle(
       request("/", {

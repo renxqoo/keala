@@ -20,6 +20,7 @@ import { responseApi } from "./response.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestSource } from "../request-source.ts";
 import { sourceHeader } from "../request-source.ts";
+import { EMPTY_PARAMS } from "../../router/router.ts";
 
 export interface ContextCore extends RequestApi, ResponseApi {
   readonly app: Application;
@@ -108,7 +109,9 @@ const CONTEXT_DEFAULTS = {
   urlValue: null,
   ipValue: null,
   allowedValue: null,
-  params: null,
+  params: EMPTY_PARAMS,
+  routePath: "",
+  routeName: undefined,
   querystringValue: null,
   urlObjectValue: null,
   hostValue: null,

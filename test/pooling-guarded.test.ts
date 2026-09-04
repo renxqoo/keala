@@ -14,7 +14,7 @@ const quiet = { env: "test" } as const;
 describe("guarded pooling", () => {
   it("recycles contexts across requests with identical behavior", async () => {
     const app = new Keala({ ...quiet, pooling: true });
-    app.get("/x/:id", (c) => c.text(`id:${c.params?.["id"]}`));
+    app.get("/x/:id", (c) => c.text(`id:${c.params["id"]}`));
     for (let i = 0; i < 5; i++) {
       const res = await app.handle(new Request(`http://localhost:3000/x/${i}`));
       expect(await res.text()).toBe(`id:${i}`);

@@ -51,7 +51,6 @@ export interface RequestApi {
   readonly headers: Headers;
   readonly runtime: Runtime | undefined;
   header(field: string): string;
-  get(field: string): string;
   readonly host: string;
   readonly protocol: string;
   readonly secure: boolean;
@@ -109,17 +108,17 @@ const authorityOf = (url: string): string => {
 };
 
 /** Host authority with userinfo stripped (proxy-aware, header-first). */
-const computeHost = (c: ContextState & { get(field: string): string }): string => {
+const computeHost = (c: ContextState & { header(field: string): string }): string => {
   // Strip userinfo (user:pass@host) — only the authority is trusted, in
   // BOTH sources: a crafted "evil.com:fake@legitimate.com" in
   // X-Forwarded-Host or Host must never leak into origin/href.
   if (c.appSettings.proxy) {
     // Koa: only the first entry of a chained X-Forwarded-Host is trusted.
-    const forwarded = stripUserinfo(c.get("x-forwarded-host").split(",")[0]?.trim() ?? "");
+    const forwarded = stripUserinfo(c.header("x-forwarded-host").split(",")[0]?.trim() ?? "");
     if (forwarded.length > 0) return forwarded;
   }
-  const header = stripUserinfo(c.get("host"));
-  if (header.length > 0) return header;
+  const host = stripUserinfo(c.header("host"));
+  if (host.length > 0) return host;
   return authorityOf(sourceAbsoluteUrl(c.rawRequest));
 };
 
@@ -212,9 +211,6 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     );
   },
   header(field: string): string {
-    return this.get(field);
-  },
-  get(field: string): string {
     const name = field.toLowerCase();
     // Koa: "Referrer" and "Referer" are interchangeable; fetch Headers only
     // store the latter, so both lookups must fall through to it.
@@ -233,7 +229,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   },
   get protocol(): string {
     if (this.appSettings.proxy) {
-      const forwarded = this.get("x-forwarded-proto").split(",")[0]?.trim();
+      const forwarded = this.header("x-forwarded-proto").split(",")[0]?.trim();
       if (forwarded !== undefined && forwarded.length > 0) return forwarded;
     }
     return sourceAbsoluteUrl(this.rawRequest).startsWith("https://") ? "https" : "http";
@@ -246,7 +242,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     // truncation the old `ips` accessor applied — `c.ips` itself is gone,
     // but `c.ip` keeps its exact resolution order).
     if (this.appSettings.proxy) {
-      const raw = this.get(this.appSettings.proxyIpHeader);
+      const raw = this.header(this.appSettings.proxyIpHeader);
       if (raw.length > 0) {
         const chain = raw
           .split(",")

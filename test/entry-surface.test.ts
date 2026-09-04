@@ -47,6 +47,7 @@ const ROOT_EXPORTS = new Set([
   "findSymlink",
   // plugin (the body reader)
   "createBodyParser",
+  "bodyOf",
   "readBodyLimited",
   // helpers (in-handler utilities)
   "stream",

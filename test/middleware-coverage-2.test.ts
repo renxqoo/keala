@@ -152,7 +152,7 @@ describe("coverage: adapter drain + router mount through dispatch", () => {
     const app = new Keala(quiet);
     const api = new Router({ prefix: "/v1" });
     api.param("id", async (c, next) => {
-      c.setHeader("X-Param-Mw", c.params?.["id"] ?? "");
+      c.setHeader("X-Param-Mw", c.params["id"] ?? "");
       await next();
     });
     api.get("/items/:id", (c) => c.text("item"));

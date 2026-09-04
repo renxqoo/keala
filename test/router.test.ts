@@ -30,7 +30,7 @@ describe("router: matching layers", () => {
 
   it("simple param routes take the bucket fast matcher", async () => {
     const request = appWith((app) => {
-      app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+      app.get("/users/:id", (c) => c.text(`user ${c.params["id"]}`));
     });
     expect(await (await request("/users/42")).text()).toBe("user 42");
     expect((await request("/users")).status).toBe(404);
@@ -41,9 +41,9 @@ describe("router: matching layers", () => {
   it("multi-pattern buckets fall back to the trie with static-over-param order", async () => {
     const request = appWith((app) => {
       app.get("/shop/*", (c) => c.text("wildcard"));
-      app.get("/shop/:name", (c) => c.text(`param:${c.params?.["name"]}`));
+      app.get("/shop/:name", (c) => c.text(`param:${c.params["name"]}`));
       app.get("/shop/new", (c) => c.text("static"));
-      app.get("/shop/:name/price", (c) => c.text(`price:${c.params?.["name"]}`));
+      app.get("/shop/:name/price", (c) => c.text(`price:${c.params["name"]}`));
     });
     expect(await (await request("/shop/new")).text()).toBe("static");
     expect(await (await request("/shop/abc")).text()).toBe("param:abc");
@@ -53,9 +53,9 @@ describe("router: matching layers", () => {
 
   it("complex shapes (optionals, patterns, wildcards) always work", async () => {
     const request = appWith((app) => {
-      app.get("/files/:name?", (c) => c.text(c.params?.["name"] ?? "index"));
-      app.get("/n/:num(\\d+)", (c) => c.text(c.params?.["num"] ?? ""));
-      app.get("/hex/:h([0-9a-f]+)", (c) => c.text(c.params?.["h"] ?? ""));
+      app.get("/files/:name?", (c) => c.text(c.params["name"] ?? "index"));
+      app.get("/n/:num(\\d+)", (c) => c.text(c.params["num"] ?? ""));
+      app.get("/hex/:h([0-9a-f]+)", (c) => c.text(c.params["h"] ?? ""));
     });
     expect(await (await request("/files")).text()).toBe("index");
     expect(await (await request("/files/f.txt")).text()).toBe("f.txt");
@@ -67,7 +67,7 @@ describe("router: matching layers", () => {
 
   it("encoding: captured params decode; %2F stays one segment; case-sensitive", async () => {
     const request = appWith((app) => {
-      app.get("/users/:name", (c) => c.text(c.params?.["name"] ?? ""));
+      app.get("/users/:name", (c) => c.text(c.params["name"] ?? ""));
       app.get("/Case", (c) => c.text("exact"));
     });
     expect(await (await request("/users/%E4%B8%AD")).text()).toBe("中");
@@ -80,8 +80,8 @@ describe("router: matching layers", () => {
 
   it("fast-matcher static heads match on segment boundaries only", async () => {
     const request = appWith((app) => {
-      app.get("/v1/users/:id", (c) => c.text(`u:${c.params?.["id"]}`));
-      app.get("/v1/u/:x/:y", (c) => c.text(`${c.params?.["x"]}/${c.params?.["y"]}`));
+      app.get("/v1/users/:id", (c) => c.text(`u:${c.params["id"]}`));
+      app.get("/v1/u/:x/:y", (c) => c.text(`${c.params["x"]}/${c.params["y"]}`));
     });
     expect(await (await request("/v1/users/7")).text()).toBe("u:7");
     // prefix "/v1/users" must not capture "/v1/usersXYZ/5"
@@ -221,7 +221,7 @@ describe("router: groups and mounts", () => {
   it("prefix groups, nesting and fallthrough", async () => {
     const app = new Keala(quiet);
     const users = new Router();
-    users.get("/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+    users.get("/:id", (c) => c.text(`user ${c.params["id"]}`));
     users.get("/", (c) => c.text("index"));
     app.mount("/v1/users", users);
     app.get("/v1/admin/panel", (c) => c.text("panel"));
@@ -250,7 +250,7 @@ describe("router: groups and mounts", () => {
     const app = new Keala(quiet);
     const api = new Router();
     api.param("oid", async (c, next) => {
-      c.setHeader("X-Org", c.params?.["oid"] ?? "");
+      c.setHeader("X-Org", c.params["oid"] ?? "");
       await next();
     });
     api.get("/orgs/:oid", (c) => c.text("org"));

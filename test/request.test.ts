@@ -48,9 +48,9 @@ describe("request facade (flat context)", () => {
       method: "GET",
       headers: { "X-Custom": "yes", "Content-Type": "application/json; charset=utf-8" },
     });
-    expect(ctx.get("X-CUSTOM")).toBe("yes");
-    expect(ctx.get("x-custom")).toBe("yes");
-    expect(ctx.get("missing")).toBe("");
+    expect(ctx.header("X-CUSTOM")).toBe("yes");
+    expect(ctx.header("x-custom")).toBe("yes");
+    expect(ctx.header("missing")).toBe("");
     expect(ctx.header("x-custom")).toBe("yes");
     // c.headers IS the raw fetch Headers (no second facade object).
     expect(ctx.headers).toBe(ctx.raw.headers);

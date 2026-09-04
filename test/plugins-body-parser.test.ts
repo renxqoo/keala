@@ -6,11 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import {
-  createBodyParser,
-  readBodyLimited,
-  type ContextWithBody,
-} from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser, readBodyLimited } from "../src/plugins/body-parser.ts";
 import {
   validator,
   type ContextWithValid,
@@ -41,7 +37,7 @@ describe("bodyParser: readers", () => {
     app.use(createBodyParser({ formLimit: 4 }));
     app.post("/x", async (c0) => {
       await readBodyLimited(c0, 16);
-      await (c0 as ContextWithBody).req.arrayBuffer();
+      await bodyOf(c0).arrayBuffer();
       c0.body = "unreachable";
     });
     const request = post(
@@ -61,7 +57,7 @@ describe("bodyParser: readers", () => {
     app.use(createBodyParser({ formLimit: 4 }));
     let cancelObserved = false;
     app.post("/x", async (c0) => {
-      await (c0 as ContextWithBody).req.arrayBuffer();
+      await bodyOf(c0).arrayBuffer();
       c0.body = "unreachable";
     });
     const request = post(
@@ -84,16 +80,15 @@ describe("bodyParser: readers", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
     let order: string[] = [];
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
+    app.post("/x", async (c) => {
       order = [];
-      const json = (await c.req.json()) as { a: number };
+      const json = (await bodyOf(c).json()) as { a: number };
       order.push("json");
-      const text = await c.req.text();
+      const text = await bodyOf(c).text();
       order.push("text");
-      const bytes = await c.req.arrayBuffer();
+      const bytes = await bodyOf(c).arrayBuffer();
       order.push("bytes");
-      const blob = await c.req.blob();
+      const blob = await bodyOf(c).blob();
       order.push("blob");
       c.body = `${json.a}|${text}|${bytes.byteLength}|${blob.size}`;
     });
@@ -105,14 +100,12 @@ describe("bodyParser: readers", () => {
   it("multiple middleware+handler reads share one body consumption", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/x", async (c0, next) => {
-      const c = c0 as ContextWithBody;
-      c.state.first = await c.req.text();
+    app.post("/x", async (c, next) => {
+      c.state.first = await bodyOf(c).text();
       await next();
     });
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = `${c.state.first as string}/${await c.req.text()}`;
+    app.post("/x", async (c) => {
+      c.body = `${c.state.first as string}/${await bodyOf(c).text()}`;
     });
     const res = await app.handle(post("payload"));
     expect(await res.text()).toBe("payload/payload");
@@ -121,9 +114,8 @@ describe("bodyParser: readers", () => {
   it("empty bodies: json -> null, text -> empty string", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = JSON.stringify([await c.req.json(), await c.req.text()]);
+    app.post("/x", async (c) => {
+      c.body = JSON.stringify([await bodyOf(c).json(), await bodyOf(c).text()]);
     });
     const res = await app.handle(post(""));
     expect(await res.text()).toBe('[null,""]');
@@ -132,9 +124,8 @@ describe("bodyParser: readers", () => {
   it("urlencoded and multipart formData parse", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      const form = await c.req.formData();
+    app.post("/x", async (c) => {
+      const form = await bodyOf(c).formData();
       c.body = JSON.stringify([form.get("a"), form.get("b")]);
     });
     const urlenc = await app.handle(
@@ -153,9 +144,8 @@ describe("bodyParser: limits and malformed input", () => {
   it("declared Content-Length over the limit fails fast with 413", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 8 }));
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = JSON.stringify(await c.req.json());
+    app.post("/x", async (c) => {
+      c.body = JSON.stringify(await bodyOf(c).json());
     });
     const res = await app.handle(jsonBody({ padding: "0123456789" }));
     expect(res.status).toBe(413);
@@ -165,9 +155,8 @@ describe("bodyParser: limits and malformed input", () => {
   it("streamed bodies over the limit abort at the boundary (no Content-Length)", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 16 }));
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = JSON.stringify(await c.req.json());
+    app.post("/x", async (c) => {
+      c.body = JSON.stringify(await bodyOf(c).json());
     });
     const chunks = new ReadableStream({
       start(controller) {
@@ -190,9 +179,8 @@ describe("bodyParser: limits and malformed input", () => {
   it("malformed JSON answers an exposed 400", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = JSON.stringify(await c.req.json());
+    app.post("/x", async (c) => {
+      c.body = JSON.stringify(await bodyOf(c).json());
     });
     const res = await app.handle(post("{not json", { "content-type": "application/json" }));
     expect(res.status).toBe(400);
@@ -269,7 +257,7 @@ describe("bodyParser: form part budget", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 3 }));
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req
+      return bodyOf(c)
         .formData()
         .then((fd) => c.text(String(fd.getAll("f").length)));
     });
@@ -288,7 +276,7 @@ describe("bodyParser: form part budget", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 10 }));
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req
+      return bodyOf(c)
         .formData()
         .then((fd) => c.text(String(fd.getAll("f").length)));
     });
@@ -308,7 +296,9 @@ describe("bodyParser: form part budget", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 3 }));
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req.formData().then((fd) => c.text(String(fd.get("c"))));
+      return bodyOf(c)
+        .formData()
+        .then((fd) => c.text(String(fd.get("c"))));
     });
     const res = await app.handle(
       post("a=1&b=2&c=3&d=4", { "content-type": "application/x-www-form-urlencoded" }),
@@ -324,7 +314,9 @@ describe("bodyParser: form part budget", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+      return bodyOf(c)
+        .formData()
+        .then(() => c.text("parsed"));
     });
     const boundary = "bk-amp";
     // ~1200 near-empty parts, only a few KB — under every byte limit.
@@ -346,7 +338,9 @@ describe("bodyParser: coverage top-up", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 5 }));
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req.formData().then((fd) => c.text(String(fd.get("f"))));
+      return bodyOf(c)
+        .formData()
+        .then((fd) => c.text(String(fd.get("f"))));
     });
     const boundary = "quoted-boundary";
     const body = `--${boundary}\r\ncontent-disposition: form-data; name="f"\r\n\r\nv\r\n--${boundary}--\r\n`;
@@ -360,7 +354,9 @@ describe("bodyParser: coverage top-up", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 50 }));
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+      return bodyOf(c)
+        .formData()
+        .then(() => c.text("parsed"));
     });
     // RFC 2046 boundaries are case-sensitive: scanning for a lowercased
     // delimiter counts zero occurrences and silently disarms the budget.
@@ -378,7 +374,9 @@ describe("bodyParser: coverage top-up", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ formPartLimit: 50 }));
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+      return bodyOf(c)
+        .formData()
+        .then(() => c.text("parsed"));
     });
     const long = "x".repeat(80);
     const part = `--${long}\r\ncontent-disposition: form-data; name="f"\r\n\r\nx\r\n`;
@@ -394,7 +392,9 @@ describe("bodyParser: coverage top-up", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 16 }));
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req.json().then(() => c.text("parsed"));
+      return bodyOf(c)
+        .json()
+        .then(() => c.text("parsed"));
     });
     const res = await app.handle(
       new Request("http://localhost:3000/x", {
@@ -412,7 +412,9 @@ describe("bodyParser: boundary edge cases", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
     app.post("/x", (c) => {
-      return (c as ContextWithBody).req.formData().then(() => c.text("parsed"));
+      return bodyOf(c)
+        .formData()
+        .then(() => c.text("parsed"));
     });
     const res = await app.handle(
       post("--x\r\n", { "content-type": "multipart/form-data; boundary=" }),

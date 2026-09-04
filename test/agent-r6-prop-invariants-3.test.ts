@@ -22,9 +22,9 @@ describe("INV-4 routing determinism", () => {
   it("dynamic patterns (optional / custom regex / wildcard / trailing slash) match deterministically", async () => {
     await runProp("dynamic-determinism", 120, async (rng) => {
       const app = new Keala({ ...quiet });
-      app.get("/opt/:x?/tail", (c) => c.text(`opt:${c.params?.["x"] ?? "-"}`));
-      app.get("/num/:n(\\d+)", (c) => c.text(`num:${c.params?.["n"]}`));
-      app.get("/w/*", (c) => c.text(`w:${c.params?.["wildcard"]}`));
+      app.get("/opt/:x?/tail", (c) => c.text(`opt:${c.params["x"] ?? "-"}`));
+      app.get("/num/:n(\\d+)", (c) => c.text(`num:${c.params["n"]}`));
+      app.get("/w/*", (c) => c.text(`w:${c.params["wildcard"]}`));
       app.get("/plain", (c) => c.text("plain"));
       const targets = [
         "/opt/tail",
@@ -205,7 +205,7 @@ describe("INV-6 pooling isolation", () => {
         }
         if (c.resHeader("x-leak") !== "") problems.push(`req#${id}: staged header leaked`);
         if (c.resHeader("set-cookie") !== "") problems.push(`req#${id}: cookie leaked`);
-        if (c.params !== null && Object.keys(c.params).length !== 0) {
+        if (Object.keys(c.params).length !== 0) {
           problems.push(`req#${id}: params leaked`);
         }
         // This request's junk (must not survive the recycle).

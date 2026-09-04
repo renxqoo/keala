@@ -271,6 +271,9 @@ const bindDef = (state: RouterState, def: RouteDef, middleware: MiddlewareStack)
     if (def.method === ALL) target.allowed.add("*");
     if (def.method === "GET") target.allowed.add("HEAD");
     if (def.name !== undefined) target.name = def.name;
+    // The matched-pattern fact behind c.routePath (R411 Fix 4): one string
+    // REFERENCE per bind — the normalized fullPath already exists.
+    target.pattern = def.path;
   }
 };
 

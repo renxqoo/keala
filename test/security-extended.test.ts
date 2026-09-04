@@ -275,7 +275,7 @@ describe("security: path traversal and routing abuse", () => {
   ])("wildcard capture of %p stays inside the route", async (raw) => {
     const app = new Keala(quiet);
     app.get("/static/*", (c) => {
-      c.body = `cap:${c.params?.wildcard}`;
+      c.body = `cap:${c.params.wildcard}`;
     });
     const path = raw.startsWith("/") ? raw : `/static/${raw}`;
     const res = await app.handle(new Request(`http://localhost:3000${path}`));
@@ -287,7 +287,7 @@ describe("security: path traversal and routing abuse", () => {
   it("decoded params never escape their segment for :name captures", async () => {
     const app = new Keala(quiet);
     app.get("/users/:name/files/:rest", (c) => {
-      c.body = `${c.params?.name}/${c.params?.rest}`;
+      c.body = `${c.params.name}/${c.params.rest}`;
     });
     const res = await app.handle(new Request("http://localhost:3000/users/a%2Fb/files/c%2Fd"));
     // Decoding is intentional (koa parity); the capture stays a value, never

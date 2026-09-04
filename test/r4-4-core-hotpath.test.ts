@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import {
-  createBodyParser,
-  readBodyLimited,
-  type ContextWithBody,
-} from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser, readBodyLimited } from "../src/plugins/body-parser.ts";
 
 const request = (path = "/livez", init?: RequestInit): Request =>
   new Request(`http://localhost${path}`, init);
@@ -98,10 +94,9 @@ describe("R4.4 body-state semantic locks", () => {
     app.use(createBodyParser({ jsonLimit: 128 }));
     const facades: unknown[] = [];
     const values: unknown[] = [];
-    app.post("/echo", async (c0) => {
-      const c = c0 as ContextWithBody;
-      facades.push(c.req);
-      const value = await c.req.json();
+    app.post("/echo", async (c) => {
+      facades.push(bodyOf(c));
+      const value = await bodyOf(c).json();
       values.push(value);
       return c.json(value);
     });
@@ -126,14 +121,13 @@ describe("R4.4 body-state semantic locks", () => {
   it("mixed concurrent readers share bytes while retaining reader identity", async () => {
     const app = new Keala({ env: "production" });
     app.use(createBodyParser({ jsonLimit: 128 }));
-    app.post("/echo", async (c0) => {
-      const c = c0 as ContextWithBody;
-      const jsonA = c.req.json();
-      const jsonB = c.req.json();
-      const textA = c.req.text();
-      const textB = c.req.text();
-      const bytesA = c.req.arrayBuffer();
-      const bytesB = c.req.arrayBuffer();
+    app.post("/echo", async (c) => {
+      const jsonA = bodyOf(c).json();
+      const jsonB = bodyOf(c).json();
+      const textA = bodyOf(c).text();
+      const textB = bodyOf(c).text();
+      const bytesA = bodyOf(c).arrayBuffer();
+      const bytesB = bodyOf(c).arrayBuffer();
       const [json, text, bytes] = await Promise.all([jsonA, textA, bytesA]);
       return c.json({
         jsonPromise: jsonA === jsonB,
@@ -165,12 +159,11 @@ describe("R4.4 body-state semantic locks", () => {
   it("concurrent reader types trigger exactly one native body consumption", async () => {
     const app = new Keala({ env: "production" });
     app.use(createBodyParser({ jsonLimit: 128 }));
-    app.post("/echo", async (c0) => {
-      const c = c0 as ContextWithBody;
+    app.post("/echo", async (c) => {
       const [json, text, bytes] = await Promise.all([
-        c.req.json(),
-        c.req.text(),
-        c.req.arrayBuffer(),
+        bodyOf(c).json(),
+        bodyOf(c).text(),
+        bodyOf(c).arrayBuffer(),
       ]);
       return c.json({ json, text, bytes: bytes.byteLength });
     });

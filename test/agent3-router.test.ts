@@ -45,7 +45,7 @@ describe("agent3: static Map vs trie equivalence", () => {
     // segment (locked by trie.test.ts and router.test.ts), so the dynamic
     // sibling correctly refuses it…
     const dyn = new Keala(quiet);
-    dyn.get("/admin/:page", (c) => c.text(`dyn:${c.params?.["page"]}`));
+    dyn.get("/admin/:page", (c) => c.text(`dyn:${c.params["page"]}`));
     expect((await dyn.handle(req("/admin%2Fpanel"))).status).toBe(404);
 
     // …but matchRoute()'s decoded retry decodes the WHOLE path before the
@@ -61,7 +61,7 @@ describe("agent3: static Map vs trie equivalence", () => {
 describe("agent3: named-route URL building", () => {
   it("url() percent-encodes wildcard values so the built URL round-trips", async () => {
     const app = new Keala(quiet);
-    app.get("wild", "/w/*", (c) => c.text(c.params?.["wildcard"] ?? ""));
+    app.get("wild", "/w/*", (c) => c.text(c.params["wildcard"] ?? ""));
     // A wildcard value is user data: characters that cannot appear in a URL
     // path (space, "?", "#") must be escaped, or the built string stops
     // addressing the same resource. ("/" may stay raw — a wildcard spans
@@ -107,7 +107,7 @@ describe("agent3: mount() and param middleware ordering", () => {
     app.get("/old/:oid", (c) => c.text("parent"));
     const api = new Router();
     api.param("oid", async (c, next) => {
-      c.setHeader("X-Org", c.params?.["oid"] ?? "");
+      c.setHeader("X-Org", c.params["oid"] ?? "");
       await next();
     });
     api.get("/orgs/:oid", (c) => c.text("sub"));
@@ -131,7 +131,7 @@ describe("agent3: mount() and param middleware ordering", () => {
 describe("agent3: regression probes for adjacent behavior (green today)", () => {
   it("optional params backtrack mid-path", async () => {
     const app = new Keala(quiet);
-    app.get("/users/:id?/posts", (c) => c.text(`id=${c.params?.["id"] ?? "-"}`));
+    app.get("/users/:id?/posts", (c) => c.text(`id=${c.params["id"] ?? "-"}`));
     expect(await (await app.handle(req("/users/9/posts"))).text()).toBe("id=9");
     expect(await (await app.handle(req("/users/posts"))).text()).toBe("id=-");
     expect((await app.handle(req("/users"))).status).toBe(404);
@@ -140,7 +140,7 @@ describe("agent3: regression probes for adjacent behavior (green today)", () => 
   it("static beats param across a mount boundary", async () => {
     const app = new Keala(quiet);
     const api = new Router();
-    api.get("/:id", (c) => c.text(`param:${c.params?.["id"]}`));
+    api.get("/:id", (c) => c.text(`param:${c.params["id"]}`));
     app.mount("/api", api);
     app.get("/api/list", (c) => c.text("static"));
     expect(await (await app.handle(req("/api/list"))).text()).toBe("static");
@@ -150,8 +150,8 @@ describe("agent3: regression probes for adjacent behavior (green today)", () => 
 
   it("fast matcher and trie agree on %2F inside a captured param", async () => {
     const app = new Keala(quiet);
-    app.get("/users/:id", (c) => c.text(c.params?.["id"] ?? ""));
-    app.get("/users/:id/posts/:tid", (c) => c.text(`${c.params?.["id"]}/${c.params?.["tid"]}`));
+    app.get("/users/:id", (c) => c.text(c.params["id"] ?? ""));
+    app.get("/users/:id/posts/:tid", (c) => c.text(`${c.params["id"]}/${c.params["tid"]}`));
     expect(await (await app.handle(req("/users/a%2Fb"))).text()).toBe("a/b");
     expect(await (await app.handle(req("/users/a%2Fb/posts/c%2Fd"))).text()).toBe("a/b/c/d");
   });

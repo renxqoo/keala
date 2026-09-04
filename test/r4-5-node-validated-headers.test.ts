@@ -15,7 +15,7 @@ describe("R4.5 Node validated header writes", () => {
         ["set-cookie", "b=2; Path=/"],
         ["content-length", "1000"],
       ]);
-      const mode = c.params?.mode;
+      const mode = c.params.mode;
       // A native clone is a foreign stream; its length is not construction
       // evidence the adapter can repair without consuming the stream.
       if (mode === "clone") headers.delete("content-length");
@@ -71,7 +71,7 @@ describe("R4.5 Node validated header writes", () => {
     app.get("/:mode", (c) =>
       c.text("你好", 200, {
         "content-length": "1000",
-        ...(c.params?.mode === "chunked" ? { "transfer-encoding": "chunked" } : {}),
+        ...(c.params.mode === "chunked" ? { "transfer-encoding": "chunked" } : {}),
       }),
     );
     const agent = new Agent({ keepAlive: true, maxSockets: 1 });

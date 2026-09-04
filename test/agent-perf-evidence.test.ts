@@ -19,7 +19,7 @@ const isBun = typeof Bun !== "undefined";
 const app = new Keala({ env: "test" });
 app.get("/text", (c) => c.text("hello world"));
 app.get("/json", (c) => c.json({ hello: "world" }));
-app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+app.get("/users/:id", (c) => c.text(`user ${c.params["id"]}`));
 app.get(
   "/mw",
   async (c, next) => {

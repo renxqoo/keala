@@ -10,7 +10,7 @@ import { bodyLimit } from "hono/body-limit";
 
 import { Keala } from "../src/core/app.ts";
 import type { Context } from "../src/core/context/context.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { createBodyParser, bodyOf } from "../src/plugins/body-parser.ts";
 
 type Framework = "keala" | "hono";
 type CaseName =
@@ -103,10 +103,7 @@ if (framework === "keala") {
     });
   } else if (caseName === "body" || caseName === "body-limited" || caseName === "body-safe") {
     app.use(createBodyParser({ jsonLimit: 1024 }));
-    app.post("/v1/echo", async (c0) => {
-      const c = c0 as ContextWithBody;
-      return c.json(await c.req.json());
-    });
+    app.post("/v1/echo", async (c) => c.json(await bodyOf(c).json()));
   } else if (caseName === "error") {
     // R4.3: the error mapper builds the enterprise envelope centrally —
     // no onion layer, no promise guard on healthy requests.
@@ -130,7 +127,7 @@ if (framework === "keala") {
   } else if (caseName === "query") {
     app.get("/search/:id", (c) => {
       c.setHeader("X-Query", "hit");
-      return c.text(`${c.params?.["id"]} ${c.query("name")} ${c.query("page")}`);
+      return c.text(`${c.params["id"]} ${c.query("name")} ${c.query("page")}`);
     });
   } else {
     if (

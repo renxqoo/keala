@@ -88,7 +88,7 @@ describe("responseCache", () => {
 
   it("LRU evicts the oldest beyond max", async () => {
     const app = new Keala(quiet);
-    app.get("/l/:id", cache({ max: 2 }), (c) => c.text(`id:${c.params?.["id"]}`));
+    app.get("/l/:id", cache({ max: 2 }), (c) => c.text(`id:${c.params["id"]}`));
     await app.handle(req("/l/1"));
     await app.handle(req("/l/2"));
     await app.handle(req("/l/3")); // evicts /l/1

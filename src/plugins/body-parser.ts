@@ -2,7 +2,8 @@
  * bodyParser — the request-body plugin.
  *
  * `app.use(bodyParser())` — a PLUGIN (install protocol) — installs a lazy `c.req` facade with json/text/
- * formData/arrayBuffer/blob readers. The raw body is read ONCE (bounded by
+ * formData/arrayBuffer/blob readers, reached through the typed `bodyOf(c)`
+ * accessor. The raw body is read ONCE (bounded by
  * the configured limits) and every reader derives from the memoized bytes —
  * middleware, validators and handlers can each call a reader safely.
  *
@@ -350,6 +351,24 @@ const stateOf = (c: Context, config: BodyReaderConfig | null = null): BodyReader
  */
 export const readBodyLimited = (c: Context, limit: number): Promise<Uint8Array> =>
   stateOf(c).read(limit);
+
+/**
+ * Typed accessor for the plugin's `c.req` facade (R411 Fix 1):
+ * `await bodyOf(c).json()` instead of `(c as ContextWithBody).req.json()`.
+ * The library's one and only cast lives here. When the plugin is not
+ * installed the facade is absent — failing loud with the fix beats
+ * `undefined.req` blowing up deep in a handler with zero guidance.
+ */
+export const bodyOf = (c: Context): RequestBodyFacade => {
+  const facade = (c as Context & { req?: RequestBodyFacade }).req;
+  if (facade === undefined) {
+    throw new TypeError(
+      "bodyOf(c): body readers require the bodyParser plugin — " +
+        "app.use(createBodyParser({ jsonLimit, formLimit, … })) first",
+    );
+  }
+  return facade;
+};
 
 const assertLimit = (name: string, value: number | undefined): void => {
   if (value === undefined) return;

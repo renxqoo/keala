@@ -57,7 +57,7 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
   const challenge = `Basic realm="${realm}", charset="UTF-8"`;
   return async (c, next) => {
     // The auth-scheme is case-insensitive per RFC 7617.
-    const { scheme, rest } = authScheme(c.get("authorization"));
+    const { scheme, rest } = authScheme(c.header("authorization"));
     let accepted = false;
     if (scheme === "basic") {
       const credentials = decodeBasic(rest.trim());
@@ -103,7 +103,7 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
   const realm = (options.realm ?? "Restricted").replaceAll('"', "");
   const challenge = `Bearer realm="${realm}"`;
   return async (c, next) => {
-    const { scheme, rest } = authScheme(c.get("authorization"));
+    const { scheme, rest } = authScheme(c.header("authorization"));
     let token: string | null = null;
     if (scheme === "bearer") {
       const candidate = rest.trim();

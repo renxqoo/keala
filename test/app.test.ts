@@ -287,7 +287,7 @@ describe("app: registration validation", () => {
   it("app.param middleware runs for routes capturing the param", async () => {
     const app = new Keala(quiet);
     app.param("pid", async (c, next) => {
-      c.setHeader("X-Param", c.params?.["pid"] ?? "");
+      c.setHeader("X-Param", c.params["pid"] ?? "");
       await next();
     });
     app.get("/p/:pid", (c) => c.text("done"));

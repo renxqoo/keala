@@ -63,14 +63,14 @@ describe("R3-1 sticky optionality contaminates required-param routes (trie)", ()
   it("a required-param route must 404 a path with the param absent once a sibling declares the position optional", async () => {
     // Control: the required-param route alone refuses "/a/c".
     const alone = new Keala(quiet);
-    alone.get("/a/:x/c", (c) => c.text(`x=${c.params?.["x"]}`));
+    alone.get("/a/:x/c", (c) => c.text(`x=${c.params["x"]}`));
     expect((await alone.handle(req("/a/c"))).status).toBe(404);
 
     // Registering an unrelated optional variant at the same position makes
     // the SAME request answer 200 with `x` MISSING — the skip transition of
     // ":x?" reaches the "/c" tail registered by the required-param pattern.
     const app = new Keala(quiet);
-    app.get("/a/:x/c", (c) => c.text(`x=${c.params?.["x"] ?? "MISSING"}`));
+    app.get("/a/:x/c", (c) => c.text(`x=${c.params["x"] ?? "MISSING"}`));
     app.get("/a/:x?/b", (c) => c.text("b"));
     const res = await app.handle(req("/a/c"));
     expect(res.status).toBe(404);
@@ -78,7 +78,7 @@ describe("R3-1 sticky optionality contaminates required-param routes (trie)", ()
 
   it("a plain single-param route must not become servable at the bare prefix (no param captured)", async () => {
     const app = new Keala(quiet);
-    app.get("/u/:id", (c) => c.text(`id=${c.params?.["id"] ?? "MISSING"}`));
+    app.get("/u/:id", (c) => c.text(`id=${c.params["id"] ?? "MISSING"}`));
     app.get("/u/:id?/posts", (c) => c.text("posts"));
     const res = await app.handle(req("/u"));
     expect(res.status).toBe(404);
@@ -117,7 +117,7 @@ describe("R3-3 staticMap and trie disagree on decoded static segments containing
     // Same pair through a dynamic route: the trie's raw-first static-child
     // lookup accepts the RAW "a%2Fb" against the decoded key "a%2Fb".
     const dyn = new Keala(quiet);
-    dyn.get("/a%252Fb/:id", (c) => c.text(`dyn:${c.params?.["id"]}`));
+    dyn.get("/a%252Fb/:id", (c) => c.text(`dyn:${c.params["id"]}`));
     expect((await dyn.handle(req("/a%2Fb/5"))).status).toBe(404);
   });
 });
@@ -125,15 +125,15 @@ describe("R3-3 staticMap and trie disagree on decoded static segments containing
 describe("R3-4 duplicate param names: fast matcher and trie capture different values", () => {
   it("adding an unrelated route to the bucket must not flip the captured param value (last one wins)", async () => {
     const fast = new Keala(quiet);
-    fast.get("/dup/:x/:x", (c) => c.text(`x=${c.params?.["x"]}`));
+    fast.get("/dup/:x/:x", (c) => c.text(`x=${c.params["x"]}`));
     const fastRes = await fast.handle(req("/dup/1/2"));
     expect(await fastRes.text()).toBe("x=2");
 
     // A second dynamic pattern under "/dup" disables the fast matcher —
     // the trie's cons-list keeps the FIRST capture instead.
     const trieApp = new Keala(quiet);
-    trieApp.get("/dup/:x/:x", (c) => c.text(`x=${c.params?.["x"]}`));
-    trieApp.get("/dup/x/:y", (c) => c.text(`y=${c.params?.["y"]}`));
+    trieApp.get("/dup/:x/:x", (c) => c.text(`x=${c.params["x"]}`));
+    trieApp.get("/dup/x/:y", (c) => c.text(`y=${c.params["y"]}`));
     const trieRes = await trieApp.handle(req("/dup/1/2"));
     expect(await trieRes.text()).toBe("x=2");
   });
@@ -178,7 +178,7 @@ describe("R3-7 redirect destination params the source never captures explode per
 describe("R3-8 url() builds '/w/' for an empty wildcard value but the router 404s it", () => {
   it("a trailing wildcard must match the bare prefix+'/' with an empty capture (url round-trip)", async () => {
     const app = new Keala(quiet);
-    app.get("w", "/w/*", (c) => c.text(`[${c.params?.["wildcard"] ?? ""}]`));
+    app.get("w", "/w/*", (c) => c.text(`[${c.params["wildcard"] ?? ""}]`));
     const built = app.url("w", { wildcard: "" });
     expect(built).toBe("/w/");
     const res = await app.handle(req("/w/"));

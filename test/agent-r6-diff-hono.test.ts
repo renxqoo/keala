@@ -280,7 +280,7 @@ describe("documents intentional divergence: HEAD backfills Content-Length from t
 describe("documents intentional divergence: c.path stays percent-encoded (koa; hono decodes with decodeURI)", () => {
   it("params decode, the path does not", async () => {
     const app = new Keala(quiet);
-    app.get("/r/:p", (c) => c.json({ path: c.path, p: c.params?.p }));
+    app.get("/r/:p", (c) => c.json({ path: c.path, p: c.params.p }));
     const res = await drive(app, new Request("http://x/r/a%20b"));
     expect(await res.text()).toBe('{"path":"/r/a%20b","p":"a b"}');
   });

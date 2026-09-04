@@ -61,14 +61,14 @@ const text = async (res: Response): Promise<string> => res.text();
 describe("redteam — RT-1 fast matcher ignores static tail after params", () => {
   it("CONFIRMED-BUG(now fixed) (RT-1a): /users/:id/posts must not match /users/42", async () => {
     const app = new Keala(quiet);
-    app.get("/users/:id/posts", (c) => c.json({ route: "posts", id: c.params?.["id"] }));
+    app.get("/users/:id/posts", (c) => c.json({ route: "posts", id: c.params["id"] }));
     const res = await app.handle(req("http://localhost/users/42"));
     expect(res.status).toBe(404);
   });
 
   it("CONFIRMED-BUG(now fixed) (RT-1b): /admin/:a/items/:b must not match /admin/1/items", async () => {
     const app = new Keala(quiet);
-    app.get("/admin/:a/items/:b", (c) => c.json({ a: c.params?.["a"], b: c.params?.["b"] }));
+    app.get("/admin/:a/items/:b", (c) => c.json({ a: c.params["a"], b: c.params["b"] }));
     const res = await app.handle(req("http://localhost/admin/1/items"));
     expect(res.status).toBe(404);
   });
@@ -97,7 +97,7 @@ describe("redteam — RT-1 fast matcher ignores static tail after params", () =>
   it("CONFIRMED-BUG(now fixed) (RT-1e): mounted routers inherit the bug (mount /user/:id + /profile)", async () => {
     const app = new Keala(quiet);
     const sub = new Router();
-    sub.get("/profile", (c) => c.text(`uid=${c.params?.["id"]}`));
+    sub.get("/profile", (c) => c.text(`uid=${c.params["id"]}`));
     app.mount("/user/:id", sub);
     const res = await app.handle(req("http://localhost/user/42")); // "/profile" missing
     expect(res.status).toBe(404);

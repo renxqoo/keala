@@ -146,7 +146,7 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
 describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
   it("app.get('/*') answers GET / (express/hono semantics; '/*' is the catch-all)", async () => {
     const app = new Keala(quiet);
-    app.get("/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
+    app.get("/*", (c) => c.text(`w:${c.params["wildcard"] ?? ""}`));
     const res = await app.handle(req("/"));
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("w:");
@@ -154,7 +154,7 @@ describe("R5-2 CONFIRMED-BUG: root wildcard '/*' does not match '/'", () => {
 
   it("url() output for an empty root wildcard round-trips", async () => {
     const app = new Keala(quiet);
-    app.get("w", "/*", (c) => c.text(`w:${c.params?.["wildcard"] ?? ""}`));
+    app.get("w", "/*", (c) => c.text(`w:${c.params["wildcard"] ?? ""}`));
     const url = app.url("w", { wildcard: "" }); // buildURL emits "/"
     expect(url).toBe("/");
     const res = await app.handle(req(url));
@@ -252,7 +252,7 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
     const app = new Keala(quiet);
     const inner = new Router();
     inner.param("id", async (c, next) => {
-      c.setHeader("X-Param", c.params?.["id"] ?? "");
+      c.setHeader("X-Param", c.params["id"] ?? "");
       await next();
     });
     inner.get("/i/:id", (c) => c.text("i"));

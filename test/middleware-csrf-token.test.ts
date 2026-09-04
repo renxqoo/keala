@@ -163,7 +163,7 @@ describe("csrfToken service", () => {
 });
 
 describe("csrfTokenGuard middleware", () => {
-  const guardedApp = (sessionId?: (c: { get(k: string): string }) => string | undefined) => {
+  const guardedApp = (sessionId?: (c: { header(k: string): string }) => string | undefined) => {
     const service = csrfToken({ secret: "guard-secret" });
     const app = new Keala(quiet);
     app.use(csrfTokenGuard({ service, sessionId }));
@@ -215,8 +215,8 @@ describe("csrfTokenGuard middleware", () => {
   });
 
   it("sessionId resolver binds the token to the request's session", async () => {
-    const cookieOf = (c: { get(k: string): string }): string | undefined =>
-      c.get("cookie").match(/session=([^;]+)/)?.[1];
+    const cookieOf = (c: { header(k: string): string }): string | undefined =>
+      c.header("cookie").match(/session=([^;]+)/)?.[1];
     const { app, service } = guardedApp(cookieOf);
     const good = req("/act", {
       method: "POST",

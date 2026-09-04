@@ -26,7 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
 import { startBunServer } from "../src/adapters/bun.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { validator, type StandardSchema } from "../src/middleware/validator.ts";
 import { cors, csrf } from "../src/middleware/cors.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
@@ -81,12 +81,11 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   it("CONFIRMED-BUG(now fixed) (P2-1): a smaller reader limit must still hold after an earlier larger read", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 100, textLimit: 10 * 1024 * 1024 }));
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      await c.req.text(); // reads under the 10MB text limit first
+    app.post("/x", async (c) => {
+      await bodyOf(c).text(); // reads under the 10MB text limit first
       // jsonLimit=100 must still reject the 5KB memoized body — the throw
       // propagates straight into the error path (413, exposed).
-      await c.req.json();
+      await bodyOf(c).json();
     });
     const res = await app.handle(
       req("/x", {
@@ -224,9 +223,8 @@ describe("redteam P2: confirmed bugs (locked)", () => {
   it("CONFIRMED-BUG(now fixed) (P2-10): an undecodable formData body must answer 4xx, not 500", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.post("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      await c.req.formData(); // throws the exposed 400
+    app.post("/x", async (c) => {
+      await bodyOf(c).formData(); // throws the exposed 400
     });
     const res = await app.handle(
       req("/x", {
@@ -299,8 +297,8 @@ describe("redteam P2: websocket (green)", () => {
     expect(res.status).toBe(200);
     expect(res.body).toBeNull();
     expect(upgradeCalls.map((u) => u.wsKey)).toEqual(["/ws/:id"]);
-    const ctx = upgradeCalls[0]?.ctx as { params: Record<string, string> | null };
-    expect(ctx.params?.["id"]).toBe("42");
+    const ctx = upgradeCalls[0]?.ctx as { params: Record<string, string> };
+    expect(ctx.params["id"]).toBe("42");
 
     // adapter dispatch resolves handlers by the PATTERN key, not the concrete path
     let serveOptions: Record<string, unknown> | null = null;

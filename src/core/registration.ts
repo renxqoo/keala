@@ -75,7 +75,7 @@ export const registerRedirect = (
     source,
     [
       (c) => {
-        const target = destSegments === null ? destination : buildURL(destSegments, c.params ?? {});
+        const target = destSegments === null ? destination : buildURL(destSegments, c.params);
         c.status = code;
         c.redirect(target);
       },

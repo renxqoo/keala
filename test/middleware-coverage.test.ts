@@ -12,7 +12,7 @@ import { etag, compress } from "../src/middleware/etag.ts";
 import { cors, csrf } from "../src/middleware/cors.ts";
 import { secureHeaders, requestId } from "../src/middleware/headers.ts";
 import { stream, streamText, streamSSE } from "../src/helpers/streams.ts";
-import { createBodyParser, type ContextWithBody } from "../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
 import { serveStatic } from "../src/middleware/serve-static.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -220,9 +220,8 @@ describe("coverage: body-parser reader errors", () => {
   it("a locked/missing body reads as empty", async () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
-    app.get("/x", async (c0) => {
-      const c = c0 as ContextWithBody;
-      c.body = JSON.stringify(await c.req.json());
+    app.get("/x", async (c) => {
+      c.body = JSON.stringify(await bodyOf(c).json());
     });
     const res = await app.handle(req("/x")); // GET: empty body
     expect(await res.text()).toBe("null");
