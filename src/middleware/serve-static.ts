@@ -4,6 +4,14 @@
  * rejection, empty-segment refusal, GET/HEAD-only methods, symlink denial
  * (opt-in via lstat), nosniff, weak ETag + Last-Modified/304.
  *
+ * Under Bun, requests WITHOUT conditional headers (If-None-Match /
+ * If-Modified-Since / Range) and without index resolution take a leaner
+ * path: stat and the symlink audit still run (a vanished file must 404, a
+ * symlink must 403 — Bun's native Bun.file serving answers 500 and 200 for
+ * those respectively), but the Last-Modified/304 layer is skipped — the
+ * response carries the weak ETag, so revalidation still round-trips
+ * (PARITY.md carries the divergence note).
+ *
  * The path-safety and conditional-request primitives live in
  * `utils/path-safety.ts` / `http/conditional.ts` (and on the root entry) —
  * this middleware is their flagship consumer, not their owner. The fs/path
@@ -15,7 +23,13 @@ import { createError } from "../http/errors.ts";
 import { isNotModified, weakEtag } from "../http/conditional.ts";
 import type { RouteHandler } from "../router/router.ts";
 import { nodeFsPromises, nodePath } from "../utils/node-lazy.ts";
-import { findSymlink, isWithinRoot, resolveRelativeSegments } from "../utils/path-safety.ts";
+import {
+  findSymlink,
+  findSymlinkSync,
+  isWithinRoot,
+  nodeFsSync,
+  resolveRelativeSegments,
+} from "../utils/path-safety.ts";
 import { mimeFromExtension } from "../utils/mime.ts";
 
 // Bun.file bodies are zero-copy (sendfile) with automatic Content-Length and
@@ -44,13 +58,6 @@ export interface ServeStaticOptions {
   dotfiles?: "allow" | "ignore";
 }
 
-/**
- * Path-relative remainder of a mounted request, or null when the path is not
- * under the prefix (the mount then declines: next()). Segment boundaries only
- * — "/assets" owns "/assets" and "/assets/…", never "/assetsfoo". "/" (and a
- * trailing-slash form like "/assets/") normalize to the root/segment form so
- * every canonical prefix spelling owns the same subtree.
- */
 /**
  * Single-range `bytes=` parse (RFC 9110 §14.1.1). Multi-range requests
  * decline Range handling entirely (a 200 full-body answer is legal);
@@ -128,9 +135,60 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     }
     const clean = segments.join("/");
     if (clean.length === 0 && indexName === false) throw createError(404);
-    const absolute = resolve(root, clean.length === 0 ? (indexName as string) : clean);
+    // resolveRelativeSegments has already eliminated every ".", ".." and
+    // empty segment, so on POSIX the plain join IS resolve(root, clean) —
+    // without the normalizer's per-request allocations (R4.11 PERF-2).
+    const absolute =
+      clean.length === 0 || sep !== "/"
+        ? resolve(root, clean.length === 0 ? (indexName as string) : clean)
+        : root === "/"
+          ? `/${clean}`
+          : `${root}/${clean}`;
     if (!isWithinRoot(absolute, root, sep)) {
       throw createError(403, "path traversal rejected", { expose: true });
+    }
+    // Lean Bun path: no conditional headers, no Range, no index resolution
+    // in play (a final segment with an extension cannot be an index lookup).
+    // stat and the symlink audit below still run — Bun 1.4 serves a vanished
+    // Bun.file as 500 and follows symlinks, so neither check is droppable —
+    // but the Last-Modified/304 layer is skipped. The weak ETag stays, so
+    // clients can still graduate to conditional requests.
+    const leanFile =
+      bunFile !== null &&
+      clean.length !== 0 &&
+      clean.indexOf(".", clean.lastIndexOf("/") + 1) !== -1 &&
+      c.header("if-none-match").length === 0 &&
+      c.header("if-modified-since").length === 0 &&
+      c.header("range").length === 0;
+
+    if (leanFile) {
+      // Sync metadata calls: Bun 1.4's fs/promises compat layer costs ~23µs
+      // per stat (probe-verified — the entire static request budget) against
+      // ~1µs for the native sync call, so the lean path never awaits fs. A
+      // directory here (an extension-named directory requested without its
+      // trailing slash) falls through to the async path for index resolution.
+      const { statSync } = nodeFsSync();
+      let syncInfo: ReturnType<typeof statSync>;
+      try {
+        syncInfo = statSync(absolute);
+      } catch {
+        throw createError(404);
+      }
+      if (!syncInfo.isDirectory()) {
+        if (options.followSymlinks !== true) {
+          const link = findSymlinkSync(root, absolute);
+          if (link !== null) {
+            throw createError(403, "symlinks are not followed", { expose: true });
+          }
+        }
+        const leanHeaders: Record<string, string> = {
+          etag: weakEtag(syncInfo.size, syncInfo.mtime.getTime()),
+          "x-content-type-options": "nosniff",
+        };
+        const leanMime = mimeFromExtension(absolute);
+        if (leanMime !== null) leanHeaders["content-type"] = leanMime;
+        return new Response(bunFile(absolute), { headers: leanHeaders });
+      }
     }
 
     const { stat, readFile } = nodeFsPromises();

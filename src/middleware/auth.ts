@@ -2,7 +2,7 @@
  * Request guards — HTTP authentication middleware (handlers layer).
  *
  * - basicAuth: RFC 7617 (case-insensitive scheme, UTF-8-fatal decode,
- *   NUL/whitespace/control rejection, length caps, escaped realm challenge)
+ *   NUL/whitespace/control rejection, length caps, sanitized realm challenge)
  * - bearerAuth: RFC 6750 (opaque-token validation, error="invalid_token")
  *
  * Credential verification always delegates to the caller's `verify` —
@@ -49,11 +49,26 @@ const authScheme = (header: string): { scheme: string; rest: string } => {
   return { scheme: header.slice(0, space).toLowerCase(), rest: header.slice(space + 1) };
 };
 
+/**
+ * Realm payload for a WWW-Authenticate challenge. `"` and `\` are stripped:
+ * a stray backslash is an escape in a quoted-string (RFC 9110 §5.6.4), so a
+ * realm ending in one — `realm="My\"` — used to terminate the quote early
+ * and corrupt the challenge (SEC-5). A realm that strips to nothing is a
+ * setup error, not a silent empty protection-space label.
+ */
+const realmPayload = (middleware: string, realm: string | undefined): string => {
+  const stripped = (realm ?? "Restricted").replaceAll('"', "").replaceAll("\\", "");
+  if (stripped.length === 0) {
+    throw new TypeError(`${middleware}: realm must keep characters other than '"' and "\\"`);
+  }
+  return stripped;
+};
+
 export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
   if (typeof options?.verify !== "function") {
     throw new TypeError("basicAuth({ verify }) requires a verify function");
   }
-  const realm = (options.realm ?? "Restricted").replaceAll('"', "");
+  const realm = realmPayload("basicAuth", options.realm);
   const challenge = `Basic realm="${realm}", charset="UTF-8"`;
   return async (c, next) => {
     // The auth-scheme is case-insensitive per RFC 7617.
@@ -100,7 +115,7 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
   if (typeof options?.verify !== "function") {
     throw new TypeError("bearerAuth({ verify }) requires a verify function");
   }
-  const realm = (options.realm ?? "Restricted").replaceAll('"', "");
+  const realm = realmPayload("bearerAuth", options.realm);
   const challenge = `Bearer realm="${realm}"`;
   return async (c, next) => {
     const { scheme, rest } = authScheme(c.header("authorization"));

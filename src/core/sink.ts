@@ -35,11 +35,15 @@
  * `{dir}` sinks mirror to `serveStatic({root, prefix})`: index resolution
  * and 404s match, but the native table adds 301 trailing-slash redirects
  * and Range requests the JS mirror does not implement (documented in
- * PARITY.md). The mirror also keeps serveStatic's symlink denial.
+ * PARITY.md). The mirror also keeps serveStatic's symlink denial — and since
+ * Bun's native `{dir}` route has no per-request checks at all, every tree is
+ * SCANNED (assertSunkDirSafe) before it goes native: a dotfile or symlink
+ * the mirror would decline/403 would be a plain 200 one layer down.
  */
 
 import { serveStatic } from "../middleware/serve-static.ts";
 import {
+  EMPTY_PARAMS,
   pathsConflict,
   registerDef,
   type RouteDef,
@@ -55,6 +59,85 @@ import {
   type MiddlewareStack,
   type SinkGuardSpec,
 } from "./middleware-stack.ts";
+import { nodePath } from "../utils/node-lazy.ts";
+import { nodeFsSync } from "../utils/path-safety.ts";
+
+/** Scan budgets (per sink): bound the pre-listen walk itself — an unbounded
+ *  scan of a huge tree would be a startup stall (and a DoS lever on shared
+ *  mounts). Trees past either budget refuse to go native, loudly. */
+const MAX_SCAN_ENTRIES = 10_000;
+const MAX_SCAN_DEPTH = 64;
+
+/**
+ * Refuse to hand a `{dir}` sink to Bun's native routes table unless the
+ * whole tree is provably servable WITHOUT per-request checks: any dotfile
+ * (the mirror's default policy declines it; `.well-known` is exempt per RFC
+ * 8615) or ANY symlink component (the mirror answers 403) would be a plain
+ * 200 on the native leg — the R4.11 audit served `.env` and followed a
+ * symlink out of the root that way. Throws a TypeError listing the
+ * violating paths and the two remedies.
+ *
+ * Sync by design (the table feeds Bun.serve synchronously — see the inline
+ * note below); runs at EVERY native-table build — listen(), sink()-after-
+ * listen and reloadNativeRoutes() all rebuild through buildNativeRoutes, so
+ * a tree dirtied between builds is caught at the next one. What appears
+ * INSIDE the window between two scans is the deployer's responsibility
+ * (documented in PARITY.md's divergence ledger).
+ */
+export const assertSunkDirSafe = (sinkPath: string, dir: string): void => {
+  // Sync fs by necessity: this runs inside buildNativeRoutes, which feeds
+  // Bun.serve({routes}) and server.reload({routes}) synchronously.
+  const fs = nodeFsSync();
+  const { resolve, sep } = nodePath();
+  const root = resolve(dir);
+  const violations: string[] = [];
+  let scanned = 0;
+  let overBudget = false;
+  const walk = (current: string, depth: number): void => {
+    if (depth > MAX_SCAN_DEPTH) {
+      violations.push(`${current}${sep}… (deeper than ${MAX_SCAN_DEPTH})`);
+      return;
+    }
+    let entries: readonly import("node:fs").Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? String(error);
+      throw new TypeError(
+        `sink ${sinkPath}: cannot scan ${current} (${code}) — the native {dir} route refuses to serve a tree it cannot verify. ` +
+          `Create the directory (or fix its permissions) and retry, or serve explicit content with a Response/handler sink instead.`,
+        { cause: error },
+      );
+    }
+    for (const entry of entries) {
+      if (++scanned > MAX_SCAN_ENTRIES) {
+        overBudget = true;
+        return;
+      }
+      const full = `${current}${sep}${entry.name}`;
+      if (entry.isSymbolicLink()) violations.push(`${full} (symlink)`);
+      else if (entry.name.startsWith(".") && entry.name !== ".well-known")
+        violations.push(`${full} (dotfile)`);
+      else if (entry.isDirectory()) walk(full, depth + 1);
+    }
+  };
+  walk(root, 0);
+  if (overBudget) {
+    throw new TypeError(
+      `sink ${sinkPath}: directory ${dir} exceeds the native-table scan budget (${MAX_SCAN_ENTRIES} entries) — ` +
+        `split the tree into smaller sinks, or serve explicit content with a Response/handler sink instead.`,
+    );
+  }
+  if (violations.length > 0) {
+    const shown = violations.slice(0, 5).join("; ");
+    const more = violations.length > 5 ? ` (+${violations.length - 5} more)` : "";
+    throw new TypeError(
+      `sink ${sinkPath}: the native {dir} route cannot serve this tree — ${shown}${more}. ` +
+        `The JS mirror declines dotfiles and symlinks, but Bun's native table would serve them as plain 200s. ` +
+        `Remove the offending entries and retry, or serve explicit content with a Response/handler sink instead.`,
+    );
+  }
+};
 
 /** A prebuilt static response (Bun reuses the instance natively). */
 export interface NativeStaticSink {
@@ -90,8 +173,6 @@ export type NativeSinkEntry = NativeStaticSink | NativeDirSink | NativeFnSink;
 
 const GET_METHODS: ReadonlySet<string> = new Set(["GET"]);
 
-const EMPTY_PARAMS: Readonly<Record<string, string>> = Object.freeze(Object.create(null));
-
 // Prior sinks are already mirrored into defs, so one pass over the route
 // table covers both JS routes and earlier sinks. Pattern-aware: a dynamic
 // segment on either side can consume what the other spells literally.
@@ -107,6 +188,12 @@ const conflictsWithAny = (path: string, defs: readonly RouteDef[]): string | fal
 /**
  * Register a sink: validate loudly, mirror into the JS router, and record
  * the path so later JS registrations under the same subtree throw.
+ *
+ * Registration stays sync and fs-free: `{dir}` trees are safety-scanned
+ * (assertSunkDirSafe) when the native table is BUILT — listen(), a later
+ * sink() and reloadNativeRoutes() all rescan there — so a directory that is
+ * still being populated at registration time is verified before any byte is
+ * served natively.
  */
 export const registerSink = (
   router: RouterState,
@@ -346,7 +433,9 @@ const nativeFnRoute =
  * Build the plain routes-table object for `Bun.serve({routes})` /
  * `server.reload({routes})`. Response instances are reused natively; dir
  * sinks become `{ dir }` entries (index/Range handled by Bun); function
- * sinks get the contained wrapper above.
+ * sinks get the contained wrapper above. Every `{dir}` entry is scanned
+ * first (assertSunkDirSafe): a refusal throws out of here, which fails
+ * listen()/reload before any byte is served natively.
  *
  * Every entry is scoped `{ GET: value }` — a bare key would answer POST/
  * DELETE/… with the sunk response (verified against Bun 1.4), while the
@@ -363,7 +452,12 @@ export const buildNativeRoutes = (
       routes[path] = { GET: nativeFnRoute(entry.handler) };
       continue;
     }
-    routes[path] = { GET: "response" in entry ? entry.response : { dir: entry.dir } };
+    if ("response" in entry) {
+      routes[path] = { GET: entry.response };
+      continue;
+    }
+    assertSunkDirSafe(path, entry.dir);
+    routes[path] = { GET: { dir: entry.dir } };
   }
   return routes;
 };

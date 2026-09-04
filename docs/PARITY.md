@@ -82,6 +82,46 @@ requests the mirror does not implement — `listen({nativeRoutes: false})`
 forces JS-only serving when byte-parity matters more than the fast path
 (and stays sticky across later `sink()` calls / `reloadNativeRoutes()`).
 
+R4.11 `{dir}` sink safety scan (SEC-1): Bun's native `{dir}` route serves a
+tree with ZERO per-request checks — probe-verified on 1.4.0 it returned
+`.env` as a plain 200 and followed a symlink out of the root, both of which
+the JS mirror declines/403s. Every `{dir}` tree is therefore scanned
+(`assertSunkDirSafe`) at EVERY native-table build — listen(), sink()-after-
+listen and reloadNativeRoutes() all rebuild through buildNativeRoutes, and a
+refusal (any dotfile except `.well-known` per RFC 8615, any symlink
+component, >10000 entries or >64 depth, or an unscannable root) throws a
+TypeError listing the paths before any byte is served natively; the JS
+mirror alone (`nativeRoutes: false`) keeps its per-request guards and is
+unaffected. Registration stays sync and fs-free. Residual window, by
+design: the scan is point-in-time — a dotfile or symlink planted BETWEEN two
+scans (i.e. after a listen/reload and before the next) is the deployer's
+responsibility; the scan also cannot see races inside Bun's own request-time
+file opens.
+
+R4.11 serveStatic lean path (PERF-2): under Bun, a GET/HEAD for a
+file-shaped path with no `If-None-Match`/`If-Modified-Since`/`Range` headers
+is served without the Last-Modified/304 layer — the 200 carries the weak
+ETag (so a client that revalidates still gets its 304 via the slow path)
+but no `Last-Modified`, so validator-less clients cannot IMS-revalidate on
+first contact. stat and the symlink audit are NOT skipped (Bun 1.4 answers
+500 for a vanished `Bun.file` and 200 for a symlinked one — both
+probe-verified), and they run through the native sync calls because Bun
+1.4's `node:fs/promises` compat layer costs ~23µs per stat against ~1µs
+sync (the entire static request budget; paired e2e staticFile ratio moved
+0.50 → 0.71 vs raw `Bun.file`). Node keeps the buffered async path
+byte-identical; an extension-named directory requested without its trailing
+slash falls through to the async path for index resolution.
+
+R4.11 security boundary (SEC-4): serveStatic's symlink audit (findSymlink)
+is a point-in-time walk — an attacker with LOCAL write access to the tree
+can swap a clean component for a symlink inside the lstat→open window
+(TOCTOU). The audit denies the standing threat (planted symlinked trees);
+closing the race needs O_NOFOLLOW/openat component-wise opens that neither
+`Bun.file` nor the buffered readFile path can express. No post-hoc realpath
+re-check helps: `Bun.file` is opened by the runtime after the handler
+returns. Same residual applies, with an unbounded window, to the native
+`{dir}` scan above.
+
 R4.8 function-sink divergence ledger (each row pinned by direction in the
 smoke differential; the mirror is the reference): static `Response` entries
 get Bun's automatic ETag/If-None-Match 304, the mirror does not; a GET
