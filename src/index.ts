@@ -79,6 +79,11 @@ export type {
 } from "./types.ts";
 export type { RouteHandler } from "./router/router.ts";
 export type { Plugin } from "./types.ts";
+// The typed context-extension channel (EXT-1): merge into ContextExtensions
+// to type `app.decorate` members app-wide; createMiddleware<C>() narrows a
+// single middleware instead. The factory is runtime-identity (zero frames).
+export { createMiddleware } from "./types.ts";
+export type { ContextExtensions } from "./types.ts";
 export type {
   NativeSinkEntry,
   NativeStaticSink,
@@ -93,8 +98,12 @@ export {
   readBodyLimited,
   type BodyParserOptions,
   type RequestBodyFacade,
-  type ContextWithBody,
 } from "./plugins/body-parser.ts";
+/**
+ * @deprecated Use `bodyOf(c)` instead — `await bodyOf(c).json()` needs no
+ * cast and fails loud (with the fix) when the plugin is not installed.
+ */
+export type { ContextWithBody } from "./plugins/body-parser.ts";
 export {
   stream,
   streamText,

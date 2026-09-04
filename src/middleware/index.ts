@@ -36,6 +36,6 @@ export { bodyLimit, timeout } from "./limits.ts";
 // the companion every bodyParser consumer imports alongside the plugin.
 export { bodyOf } from "../plugins/body-parser.ts";
 export { serveStatic, type ServeStaticOptions } from "./serve-static.ts";
-export { validator, type StandardSchema } from "./validator.ts";
+export { validator, validOf, type StandardSchema } from "./validator.ts";
 export { rateLimit, type RateLimitOptions } from "./rate-limit.ts";
 export { metrics, type Metrics, type MetricsRegistry, type MetricsSnapshot } from "./metrics.ts";

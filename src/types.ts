@@ -23,11 +23,70 @@ export type HeaderMap = Record<string, HeaderValue>;
  */
 export type ResponseBody = string | Uint8Array | ReadableStream | Blob | object | null;
 
-/** Response-shaping arguments accepted by the `c.text/json/html` sugar. */
-export interface ResponseInitLike {
-  status?: number;
-  headers?: Record<string, HeaderValue>;
-}
+/**
+ * Declaration-merging point for context extensions (EXT-1).
+ *
+ * `app.decorate(key, value)` installs a member on every context at RUNTIME;
+ * this interface is how the same member becomes visible to TypeScript.
+ * Augment it once from any module in the program and every `Context` — route
+ * handlers, middleware, `onStreamError` hooks — sees the member, because
+ * `Context` is `ContextState & ContextCore & ContextExtensions` and interface
+ * merging flows through that intersection. Augmentations are program-global:
+ * pick keys the way you pick public API names.
+ *
+ * ```ts
+ * import type { ContextExtensions } from "keala";
+ *
+ * declare module "keala" {
+ *   interface ContextExtensions {
+ *     db: Pool;
+ *   }
+ * }
+ *
+ * const app = new Keala();
+ * app.decorate("db", pool);
+ * app.get("/users", (c) => c.json(c.db.list())); // c.db strongly typed
+ * ```
+ *
+ * Prefer scoping to one middleware over program-global augmentation? See
+ * `createMiddleware<C>()` below — it narrows a single handler instead.
+ */
+export interface ContextExtensions {}
+
+/**
+ * Typed middleware factory (EXT-1's opt-in, scoped half): hands a middleware
+ * author a narrowed `Context & C` without declaration merging. The returned
+ * wrapper accepts your handler and yields a plain `RouteHandler` ready for
+ * `app.use` / route registration. At runtime it is the IDENTITY — the passed
+ * function is returned unchanged, so composition never sees an extra frame;
+ * `C` describes members YOUR middleware guarantees (by decorating, wrapping,
+ * or otherwise installing them before calling `next()`).
+ *
+ * ```ts
+ * const requireUser = createMiddleware<{ user: User }>()(async (c, next) => {
+ *   const user = await loadUser(c);          // your machinery
+ *   c.user = user;                            // visible downstream…
+ *   return next();                            // …only if you put it there
+ * });
+ * app.use(requireUser);
+ * ```
+ *
+ * The two channels cooperate: members merged into `ContextExtensions` are
+ * already on `Context`, so they need not be restated in `C` — an app's
+ * merged members never become a burden on a third-party middleware's own
+ * `C` (and the no-arg default absorbs every merge for free).
+ */
+export const createMiddleware = <C extends object = ContextExtensions>() => {
+  return (
+    fn: (
+      c: import("./core/context/context.ts").Context & C,
+      next: Next,
+    ) =>
+      | import("./core/compose.ts").HandlerResult
+      | Promise<import("./core/compose.ts").HandlerResult>,
+  ): import("./router/router.ts").RouteHandler =>
+    fn as unknown as import("./router/router.ts").RouteHandler;
+};
 
 /**
  * Plugin: installs capabilities onto an app at setup (bootstrap) time —
@@ -38,7 +97,7 @@ export interface ResponseInitLike {
  */
 export interface Plugin {
   readonly name: string;
-  install(app: unknown): void;
+  install(app: import("./core/app.ts").Application): void;
 }
 
 /** Per-request runtime injection channel (server handle, env, remote addr). */
@@ -156,6 +215,13 @@ export interface CloseOptions {
    * Default 30_000; 0 = immediate force; Infinity waits indefinitely.
    */
   drain?: number;
+  /**
+   * Milliseconds to wait for EACH `app.onShutdown()` handler before
+   * logging and continuing (a hung handler must not wedge `close()`
+   * forever — later handlers still run). Default 10_000; 0 waits
+   * indefinitely. R4.11 review: HA-4.
+   */
+  shutdownTimeout?: number;
 }
 
 /** Result of `app.close()`. */

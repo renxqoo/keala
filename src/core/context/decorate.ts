@@ -11,6 +11,11 @@
  * service object (any Map, any repository façade), and silently reinterpreting
  * one as the other corrupts the decoration. Lazy accessors opt in EXPLICITLY
  * via `decorateLazy(key, getter)`.
+ *
+ * Typing the members you install is declaration merging, not a runtime
+ * concern: augment `ContextExtensions` (src/types.ts, re-exported from the
+ * root entry) and `Context` picks the member up through its intersection —
+ * see the EXT-1 pattern documented there.
  */
 
 import { createContext, baseContextProto } from "./context.ts";

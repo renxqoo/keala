@@ -121,7 +121,13 @@ const assertFormPartBudget = (bytes: Uint8Array, contentType: string, limit: num
   }
 };
 
-/** Context extended with the installed `c.req` body facade. */
+/**
+ * Context extended with the installed `c.req` body facade.
+ *
+ * @deprecated 0.7 replaced the cast pattern with the typed accessor —
+ * `await bodyOf(c).json()` (and friends); this type stays for the 0.x
+ * migration window only.
+ */
 export type ContextWithBody = Context & { req: RequestBodyFacade };
 
 export interface RequestBodyFacade {

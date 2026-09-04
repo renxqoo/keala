@@ -18,6 +18,7 @@ const ROOT_EXPORTS = new Set([
   "compose",
   "direct",
   "NOOP_TAIL",
+  "createMiddleware",
   "createContext",
   "resetContext",
   "baseContextProto",

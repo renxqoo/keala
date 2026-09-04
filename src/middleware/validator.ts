@@ -4,7 +4,7 @@
  * `app.post("/users", validator(schema), handler)` reads and validates the
  * JSON body; failures short-circuit with an exposed 400 listing the issues.
  * The parsed value lands on `c.valid` (a decorated getter), typed `unknown`
- * at the framework level — cast or narrow in the handler.
+ * at the framework level — read it typed with `validOf<T>(c)`.
  */
 
 import { createError } from "../http/errors.ts";
@@ -58,8 +58,32 @@ const issueLines = (issues: unknown[]): string => {
   return parts.join("; ");
 };
 
-/** Context extended with the installed `c.valid` getter. */
+/**
+ * Context extended with the installed `c.valid` getter.
+ *
+ * @deprecated Use `validOf<T>(c)` instead — same read, no cast, and a loud
+ * failure (with the fix in the message) when the middleware never ran.
+ */
 export type ContextWithValid<T = unknown> = Context & { valid: T };
+
+/**
+ * Typed accessor for the validator middleware's parsed value (UX-2a):
+ * `const input = validOf<{ email: string }>(c)` instead of
+ * `(c as ContextWithValid<T>).valid`. Reads the same `validValue` slot the
+ * installed `c.valid` getter reads. When no `validator(schema)` middleware
+ * ran upstream the slot is absent — failing loud with the fix beats
+ * `undefined` flowing silently into a handler (same posture as `bodyOf`).
+ */
+export const validOf = <T>(c: Context): T => {
+  const value = (c as { validValue?: unknown }).validValue;
+  if (value === undefined) {
+    throw new TypeError(
+      "validOf(c): no validated value on this context — " +
+        "put validator(schema) upstream of this handler",
+    );
+  }
+  return value as T;
+};
 
 /**
  * Create the validation middleware. Installs the `c.valid` getter on first
