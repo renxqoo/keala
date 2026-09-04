@@ -14,7 +14,7 @@ import {
   normalizePrefix,
   redirectTargetSegments,
 } from "./router.ts";
-import { compilePattern } from "./pattern.ts";
+import { compilePattern, normalizePath } from "./pattern.ts";
 import type { RouteDef, RouteHandler } from "./router.ts";
 import type { Application } from "../core/application.ts";
 
@@ -55,7 +55,7 @@ export class Router {
     const full = `${this.#prefix}${path}` || "/";
     const def: RouteDef = {
       method: method.toUpperCase(),
-      path: full.length > 1 && full.endsWith("/") ? full.slice(0, -1) : full,
+      path: normalizePath(full),
       // Raw handlers only — router middleware is injected at mount time, so
       // `use()` registered after routes still applies.
       handlers,
@@ -166,7 +166,7 @@ export class Router {
   redirect(source: string, destination: string, code = 301): Router {
     if (!Number.isInteger(code) || code < 300 || code > 399) {
       // Eager contract (same as registration.ts): a bad code would 500 on
-      // every request or silently coerce to 302 at c.redirect time.
+      // every request (the c.status setter throws).
       throw new TypeError(`redirect() code must be a 3xx integer, got ${code}`);
     }
     // A destination PATH carrying `:params` is rebuilt from the matched
@@ -176,9 +176,12 @@ export class Router {
     if (destSegments !== null) assertRedirectCaptures(source, destSegments);
     this.#add("GET", source, [
       (c) => {
-        const target = destSegments === null ? destination : buildURL(destSegments, c.params ?? {});
-        c.status = code;
-        c.redirect(target);
+        // BUG-1 (0.6.2 review, mirrors registration.ts): pass the code
+        // through c.redirect's EXPLICIT branch — the no-code call's
+        // isRedirectStatus gate silently rewrote 304/306/309+ to 302.
+        // c.params is never null post-R411 (the ?? {} fallback was dead).
+        const target = destSegments === null ? destination : buildURL(destSegments, c.params);
+        c.redirect(target, code);
       },
     ]);
     return this;

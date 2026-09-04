@@ -16,11 +16,10 @@ describe("admission queue (latched)", () => {
       env: "test",
       overload: { maxConcurrency: 1, maxQueue: 2, queueTimeoutMs: 1000 },
     });
-    let open = 0;
+    let gateHits = 0;
     const gate = async (): Promise<void> => {
-      open++;
+      gateHits++;
       await new Promise((r) => setTimeout(r, 30));
-      open--;
     };
     app.get("/hold", async () => {
       await gate();
@@ -32,6 +31,7 @@ describe("admission queue (latched)", () => {
     const [a, b] = await Promise.all([first, second]);
     expect(a.status).toBe(200);
     expect(b.status).toBe(200);
+    expect(gateHits).toBe(2); // the queued second request was admitted, not dropped
     expect(app.inFlight).toBe(0);
   });
 
@@ -58,7 +58,9 @@ describe("admission queue (latched)", () => {
     ctl.abort();
     const settled = await second;
     expect(settled.status).toBe(503);
-    release?.();
+    // The cast resets TS's closure-blind narrowing to `null` (the assignment
+    // happens inside the handler's promise executor).
+    (release as (() => void) | null)?.();
     expect((await first).status).toBe(200);
   });
 });
@@ -217,11 +219,12 @@ describe("error mapper + cookies", () => {
       c.cookies.set("pre", "1");
       return next();
     });
-    app.onError(() =>
-      new Response("boom", {
-        status: 500,
-        headers: { "set-cookie": "post=2; Path=/" },
-      }),
+    app.onError(
+      () =>
+        new Response("boom", {
+          status: 500,
+          headers: { "set-cookie": "post=2; Path=/" },
+        }),
     );
     app.get("/", () => {
       throw new Error("x");

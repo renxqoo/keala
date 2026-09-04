@@ -63,8 +63,7 @@ export const registerRedirect = (
 ): void => {
   if (!Number.isInteger(code) || code < 300 || code > 399) {
     // Eager contract (same as url.ts): a bad code would otherwise 500 on
-    // EVERY request (the c.status setter throws) or silently coerce to 302
-    // (c.redirect's isRedirectStatus gate).
+    // EVERY request (the c.status setter throws).
     throw new TypeError(`redirect() code must be a 3xx integer, got ${code}`);
   }
   const destSegments = redirectTargetSegments(destination);
@@ -76,8 +75,11 @@ export const registerRedirect = (
     [
       (c) => {
         const target = destSegments === null ? destination : buildURL(destSegments, c.params);
-        c.status = code;
-        c.redirect(target);
+        // BUG-1 (0.6.2 review): the code rides through c.redirect's EXPLICIT
+        // branch, not the staged-status branch. The registered intent is a
+        // validated 3xx integer — 304/306/309+ are not in isRedirectStatus,
+        // so the no-code call silently rewrote them to 302 on every request.
+        c.redirect(target, code);
       },
     ],
     undefined,
@@ -92,8 +94,27 @@ export const registerRedirect = (
  * 101 Response, so a null Response stands in.
  */
 export const wsUpgradeHandler =
-  (wsKey: string): RouteHandler =>
+  (wsKey: string, origin?: WebSocketHandlers["origin"]): RouteHandler =>
   (c) => {
+    // SEC-2 (0.6.2 review, CSWSH): csrf() cannot protect a browser websocket
+    // handshake (no custom header slot on the WebSocket API), so the upgrade
+    // itself enforces the route's origin policy. Fail CLOSED for the array
+    // form — a browser handshake always carries Origin, so an absent header
+    // under an allowlist is not a browser we can vet. The predicate form
+    // owns the whole decision (403 on false).
+    if (origin !== undefined) {
+      if (typeof origin === "function") {
+        if (!origin(c)) {
+          c.throw(403, "websocket origin rejected", { expose: true });
+        }
+      } else {
+        const header = c.header("origin");
+        const lower = header.toLowerCase();
+        if (header.length === 0 || !origin.some((entry) => entry.toLowerCase() === lower)) {
+          c.throw(403, "websocket origin rejected", { expose: true });
+        }
+      }
+    }
     const server = c.runtime?.server as
       | { upgrade?(req: Request, opts?: { data?: unknown }): boolean }
       | undefined;
@@ -140,7 +161,9 @@ export const mergeMountedWs = (
     router,
     def.method,
     path,
-    [wsUpgradeHandler(newKey)],
+    // The origin policy travels with the socket handlers (SEC-2): a mounted
+    // ws route enforces the same allowlist it was registered with.
+    [wsUpgradeHandler(newKey, socketHandlers.origin)],
     def.name,
     middleware,
     mountedMiddleware,
@@ -188,7 +211,7 @@ export const registerWsRoute = (
     router,
     "ALL",
     routeKey,
-    [wsUpgradeHandler(routeKey)],
+    [wsUpgradeHandler(routeKey, handlers.origin)],
     undefined,
     middleware,
   );

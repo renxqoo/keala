@@ -84,19 +84,25 @@ describe("BUG-2: error-mapper takeover drops staged Set-Cookie when it sets its 
 });
 
 describe("BUG-3: c.body = <Response> type-checks but silently serializes {}", () => {
-  it("assigning a web Response produces a JSON body, not the Response's content", async () => {
+  it("assigning a web Response throws TypeError with the return-it guidance", async () => {
     const app = new Keala({ env: "test" });
+    let caught: unknown = null;
     app.get("/", (c) => {
-      c.body = new Response("real-body", { status: 201, headers: { "x-r": "1" } });
+      try {
+        c.body = new Response("real-body", { status: 201, headers: { "x-r": "1" } });
+      } catch (err) {
+        caught = err;
+        throw err; // rethrow so the funnel path is exercised too
+      }
     });
     const res = await hit(app, "/");
-    // Expected under the documented removal: a loud error. Actual: silent
-    // 200 with JSON "{}" — status and headers of the assigned Response are
-    // dropped even though the type permits the assignment.
-    expect([res.status, await res.text(), res.headers.get("x-r")]).toEqual([
-      "201-or-error",
-      "real-body-or-error",
-      "1-or-error",
-    ]);
+    // Expected under the documented removal (docs/KEALA-NATIVE-API.md §6.2):
+    // a loud TypeError at the assignment site, and the funnel answers 500 —
+    // never a silent 200 "{}" that drops the assigned Response's
+    // status/headers.
+    expect(caught).toBeInstanceOf(TypeError);
+    expect((caught as TypeError).message).toContain("return the Response instead");
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("Internal Server Error");
   });
 });

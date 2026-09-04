@@ -275,8 +275,12 @@ describe("R4.3 error policy: header merge (if-absent)", () => {
           void c.setHeader("x-security", "staged");
           return next();
         });
+        // 500, not 302: createError never minted a 3xx (it coerced to 500),
+        // and since UX-7 c.throw REFUSES 1xx/2xx/3xx loudly — the test needs
+        // an exposed error with protocol headers, which a 500 provides
+        // byte-identically to what the old 302 coercion produced.
         a.get("/red", (c) =>
-          c.throw(302, "go", { expose: true, headers: { "x-would-merge": "yes" } }),
+          c.throw(500, "go", { expose: true, headers: { "x-would-merge": "yes" } }),
         );
         // Response.redirect produces an immutable Headers on Node — the
         // framework must rebuild it rather than silently discard protocol

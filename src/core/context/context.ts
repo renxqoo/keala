@@ -12,7 +12,7 @@ import { createError, type HttpErrorProps } from "../../http/errors.ts";
 import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
 import { clearBranches } from "../branches.ts";
 import { FLAG_DEV_CHAIN } from "./state.ts";
-import type { HeaderMap } from "../../types.ts";
+import type { ContextExtensions, HeaderMap } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
 import { requestApi } from "./request.ts";
 import type { ResponseApi } from "./response.ts";
@@ -32,7 +32,13 @@ export interface ContextCore extends RequestApi, ResponseApi {
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void;
 }
 
-export type Context = ContextState & ContextCore;
+/**
+ * The per-request context type. `ContextExtensions` is the (empty by
+ * default) declaration-merging point: users augment it to type their
+ * `app.decorate(...)` members, and interface merging flows through this
+ * intersection into every handler signature (see src/types.ts).
+ */
+export type Context = ContextState & ContextCore & ContextExtensions;
 
 /** Merge API objects into one prototype, preserving property descriptors. */
 const mergeProtos = (...sources: object[]): object => {
@@ -90,6 +96,16 @@ const contextApi: ThisType<Context> & {
     return (this.allowedValue ??= new Set());
   },
   throw(status: number, message?: string | HttpErrorProps, props?: HttpErrorProps): never {
+    // UX-7 (0.6.2 review): an error status is 4xx/5xx by definition. A 1xx/
+    // 2xx/3xx here is a caller bug — the funnel would coerce it to a
+    // meaningless 500 (createError's normalization fallback, which stays for
+    // genuinely malformed inputs). Fail loud at the throw site naming the
+    // right tool; the error funnel itself keeps coercing (it cannot throw).
+    if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 399) {
+      throw new TypeError(
+        `c.throw() expects a 4xx/5xx error status, got ${status} — redirect with c.redirect(url[, code]) or return a Response; informational and success statuses are not errors`,
+      );
+    }
     throw createError(status, message, props);
   },
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void {

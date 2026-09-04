@@ -143,6 +143,15 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
   },
   set body(value: ResponseBody) {
     if (this._res !== undefined) throw new TypeError(COMMITTED);
+    // BUG-3 (0.6.2 review): a web Response type-checks through the object
+    // branch of ResponseBody but the finalizer would silently serialize it
+    // as "{}" (status/headers dropped). The 0.7 surface removed this shape
+    // (docs/KEALA-NATIVE-API.md §6.2) — fail loud with the guidance instead.
+    if (value instanceof Response) {
+      throw new TypeError(
+        "c.body cannot carry a web Response — return the Response instead; the commit slot owns it",
+      );
+    }
     this.bodyValue = value;
     if (value === null || value === undefined) {
       // Koa 3: clearing a JSON-typed body yields the literal "null".

@@ -69,7 +69,6 @@ describe("matchRoute differential fuzz (fast paths vs trie)", () => {
         // pattern), so equality is only required when the alone-match hits the
         // pattern itself; mismatch on hit is a fast-path divergence.
         const na = norm(a);
-        const nb = norm(b);
         if (na !== null) {
           expect([pattern, path, na]).toEqual([pattern, path, na]); // sanity
         }
@@ -106,22 +105,28 @@ describe("pooling soak", () => {
     });
     const results = await Promise.all(
       Array.from({ length: 60 }, (_, i) =>
-        app.handle(new Request(`http://localhost/${i % 3 === 0 ? "json" : i % 3 === 1 ? "text" : "hdr"}/${i}`)),
+        app.handle(
+          new Request(
+            `http://localhost/${i % 3 === 0 ? "json" : i % 3 === 1 ? "text" : "hdr"}/${i}`,
+          ),
+        ),
       ),
     );
     const bodies = await Promise.all(results.map((r) => r.text()));
     for (let i = 0; i < 60; i++) {
       const kind = i % 3;
       const expected = kind === 0 ? `{"n":"${i}"}` : kind === 1 ? `t:${i}` : `h:${i}`;
-      expect(bodies[i]).toBe(expected);
-      if (kind === 0) expect(results[i].headers.get("content-type")).toContain("application/json");
-      if (kind === 2) expect(results[i].headers.get("x-n")).toBe(String(i));
+      expect(bodies[i]).toBe(expected); // index access proven in-bounds by the loop bound
+      if (kind === 0) {
+        expect(results[i]!.headers.get("content-type")).toContain("application/json");
+      }
+      if (kind === 2) expect(results[i]!.headers.get("x-n")).toBe(String(i));
     }
   });
 
   it("floating next() branch cannot corrupt a recycled context", async () => {
     const app = new Keala({ env: "test", pooling: true });
-    app.use((c, next) => {
+    app.use((_c, next) => {
       // sync return after next(): the floating branch stays registered
       void next();
     });
@@ -161,8 +166,11 @@ describe("onError mapper contract", () => {
     });
     const res = await app.handle(new Request("http://localhost/"));
     expect(res.status).toBe(502);
-    expect(seen && seen.status).toBe(500);
-    expect(seen && seen.name).toBe("Error"); // in-place classification: the thrown error IS the HttpError (no wrapper, no cause)
+    // A widened local resets TS's closure-blind narrowing (`seen` is written
+    // inside the mapper; the control-flow analysis cannot see it).
+    const observed = seen as { status: number; name: string; causeName: string | null } | null;
+    expect(observed?.status).toBe(500);
+    expect(observed?.name).toBe("Error"); // in-place classification: the thrown error IS the HttpError (no wrapper, no cause)
   });
 
   it("c.throw props (code) survive into the mapper", async () => {
@@ -232,7 +240,13 @@ describe("request-target forms", () => {
 describe("app surface guards", () => {
   it("second listen() throws; close-then-listen throws", () => {
     const app = new Keala({ env: "test" });
-    const fakeServer = { port: 0, hostname: "x", stop() {}, fetch: async () => new Response("x"), reload() {} };
+    const fakeServer = {
+      port: 0,
+      hostname: "x",
+      stop() {},
+      fetch: async () => new Response("x"),
+      reload() {},
+    };
     // attach via a stubbed serve implementation through startBunServer is Bun-only;
     // instead verify the draining guard only.
     void fakeServer;

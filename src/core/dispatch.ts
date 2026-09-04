@@ -202,6 +202,12 @@ const dispatchDirect = (
   method: string,
 ): Response | Promise<Response> => {
   const finish = (result: HandlerResult): Response | Promise<Response> => {
+    // DUAL-WRITE ANCHOR (DEAD-25): this async-settle body is deliberately
+    // duplicated by the SYNC INLINE block further down (search
+    // "DUAL-WRITE ANCHOR #2") — a closure for the sync path would cost an
+    // allocation per request. The two blocks MUST evolve in lockstep: any
+    // change to the result classification, the fast-path condition or the
+    // commit fallback here applies verbatim there, and vice versa.
     try {
       if (result === undefined || result === null) return finalizeGuarded(app, c);
       if (!(result instanceof Response)) {
@@ -240,6 +246,9 @@ const dispatchDirect = (
     }
     // Sync fast path: no closure was needed — finish would only allocate
     // one per sync request for nothing (~3-5ns + 64B each).
+    // DUAL-WRITE ANCHOR #2 (DEAD-25): this block is the verbatim sync twin
+    // of the `finish` closure above (search "DUAL-WRITE ANCHOR") — keep the
+    // two in lockstep; a change to one without the other is a divergence bug.
     try {
       if (result === undefined || result === null) return finalizeGuarded(app, c);
       if (!(result instanceof Response)) {

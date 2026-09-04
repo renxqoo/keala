@@ -65,7 +65,7 @@ describe("post-commit header writes (0.7 contract)", () => {
       await next();
       c.append("x-joined", "post");
     });
-    app.get("/", (c) => new Response("ok", { headers: { "x-joined": "committed" } }));
+    app.get("/", (_c) => new Response("ok", { headers: { "x-joined": "committed" } }));
     const res = await hit(app, "/");
     // append semantics: the committed value must survive
     expect(res.headers.get("x-joined")?.includes("committed")).toBe(true);
@@ -90,7 +90,7 @@ describe("post-commit header writes (0.7 contract)", () => {
       await next();
       c.remove("x-drop");
     });
-    app.get("/", (c) => new Response("ok", { headers: { "x-drop": "1", "x-keep": "2" } }));
+    app.get("/", (_c) => new Response("ok", { headers: { "x-drop": "1", "x-keep": "2" } }));
     const res = await hit(app, "/");
     expect(res.headers.get("x-drop")).toBeNull();
     expect(res.headers.get("x-keep")).toBe("2");
@@ -103,7 +103,7 @@ describe("post-commit header writes (0.7 contract)", () => {
       await next();
       seen = String(c.has("x-frame-options"));
     });
-    app.get("/", (c) => new Response("ok", { headers: { "x-frame-options": "DENY" } }));
+    app.get("/", (_c) => new Response("ok", { headers: { "x-frame-options": "DENY" } }));
     await hit(app, "/");
     expect(seen).toBe("true");
   });
@@ -156,7 +156,7 @@ describe("error funnel interactions", () => {
   it("error thrown by handler AFTER committing sugar: response replaced, not 200", async () => {
     const app = new Keala({ env: "test" });
     app.get("/", (c) => {
-      const r = c.text("ok");
+      c.text("ok");
       throw new Error("after commit");
     });
     const res = await hit(app, "/");
@@ -277,7 +277,13 @@ describe("query parsing", () => {
     const app = new Keala({ env: "test" });
     const seen: unknown[] = [];
     app.get("/", (c) => {
-      seen.push(c.query("page"), c.query("pagesize"), c.queries("a"), c.query("missing"), c.query("enc"));
+      seen.push(
+        c.query("page"),
+        c.query("pagesize"),
+        c.queries("a"),
+        c.query("missing"),
+        c.query("enc"),
+      );
       return c.text("ok");
     });
     await hit(app, "/?pagesize=2&page=1&a=1&a=2&enc=%ZZ&enc=%41");
@@ -374,7 +380,7 @@ describe("state-mode responses", () => {
 describe("compose/onion invariants", () => {
   it("double next() throws", async () => {
     const app = new Keala({ env: "test" });
-    app.use((c, next) => {
+    app.use((_c, next) => {
       void next();
       return next();
     });
@@ -385,7 +391,7 @@ describe("compose/onion invariants", () => {
 
   it("last committer wins (downstream rewrite)", async () => {
     const app = new Keala({ env: "test" });
-    app.use(async (c, next) => {
+    app.use(async (_c, next) => {
       await next();
       return new Response("outer");
     });
@@ -396,7 +402,7 @@ describe("compose/onion invariants", () => {
 
   it("sync return after next(): response committed by branch", async () => {
     const app = new Keala({ env: "test" });
-    app.use((c, next) => {
+    app.use((_c, next) => {
       void next();
       return undefined;
     });

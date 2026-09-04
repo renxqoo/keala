@@ -33,6 +33,16 @@ import { isNativeRequestSource } from "./request-source.ts";
 /** Body-describing headers a 204/304 must not carry (RFC 9110 §8.6). */
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
 
+/**
+ * Shared init.headers for the JSON fast paths (PERF-4, 0.6.2 review): a
+ * record init re-allocates and re-validates per response; the fetch
+ * Response constructor only READS init.headers (both runtimes copy entries
+ * into the new Response's own header list and never retain or mutate the
+ * source), so one frozen-shape instance serves every JSON response —
+ * measured 189ns record init vs 127ns shared Headers on the review matrix.
+ */
+const JSON_HEADERS = new Headers({ "content-type": "application/json" });
+
 type HeaderEntries = [string, string][];
 
 const countOf = (record: HeaderMap): number => {
@@ -307,9 +317,7 @@ const buildFromState = (c: Context, head: boolean): Response => {
       // Memo-text construction: undici's Response.json would re-stringify
       // the object the etag middleware (or the HEAD backfill) already
       // serialized — the memo is the single stringify for the request.
-      return new Response(jsonTextOf(c, body), {
-        headers: { "content-type": "application/json" },
-      });
+      return new Response(jsonTextOf(c, body), { headers: JSON_HEADERS });
     }
     if (
       isNativeRequestSource(c.rawRequest) &&
@@ -331,10 +339,7 @@ const buildFromState = (c: Context, head: boolean): Response => {
         const json = jsonTextOf(c, body);
         return createPlannedResponse(json, { status }, "application/json");
       }
-      return new Response(jsonTextOf(c, body), {
-        status,
-        headers: { "content-type": "application/json" },
-      });
+      return new Response(jsonTextOf(c, body), { status, headers: JSON_HEADERS });
     }
     if (
       isNativeRequestSource(c.rawRequest) &&
@@ -411,18 +416,24 @@ export const sanitizeEmptyStatus = (res: Response): Response => {
 export const finalize = (app: Application, c: Context): Response | Promise<Response> => {
   const committed = c._res;
   if (committed !== undefined) {
-    // RFC 9110 §8.6: a 204/304 MUST NOT carry a body. A handler returning a
-    // bodied Response with an empty status is sanitized exactly like the
-    // state-mode path (undici refuses the construction; Bun allows it).
-    if (isEmptyStatus(committed.status) && committed.body !== null) {
-      return sanitizeEmptyStatus(committed);
-    }
     // Headers staged BEFORE the commit merge onto the committed Response;
-    // post-commit header writes already landed there directly. HEAD drops
-    // the body on every path.
+    // post-commit header writes already landed there directly. The merge
+    // runs BEFORE empty-status sanitation (BUG-6, 0.6.2 review): a bodied
+    // 204/304 used to early-return through the sanitizer and skip the
+    // merge entirely. Merge-first is the semantically correct order — the
+    // sanitizer then drops exactly the content-DESCRIBING names (they
+    // describe a body the empty status forbids) while staged protocol and
+    // security headers reach the wire.
     const record = c.headersRecord;
     const merged =
       record !== null && countOf(record) > 0 ? applyStagedHeaders(committed, record) : committed;
+    // RFC 9110 §8.6: a 204/304 MUST NOT carry a body. A handler returning a
+    // bodied Response with an empty status is sanitized exactly like the
+    // state-mode path (undici refuses the construction; Bun allows it).
+    if (isEmptyStatus(merged.status) && merged.body !== null) {
+      return sanitizeEmptyStatus(merged);
+    }
+    // HEAD drops the body on every path.
     if (c.method === "HEAD" && merged.body !== null) return stripBody(merged);
     return merged;
   }

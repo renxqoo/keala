@@ -31,9 +31,9 @@ describe("trustedHosts", () => {
   });
   it("refuses a poisoned forwarded chain", async () => {
     expect((await probe("api.io", { "x-forwarded-host": "evil.com" })).status).toBe(403);
-    expect(
-      (await probe("api.io", { "x-forwarded-host": "a.example.com, evil.com" })).status,
-    ).toBe(200);
+    expect((await probe("api.io", { "x-forwarded-host": "a.example.com, evil.com" })).status).toBe(
+      200,
+    );
   });
 });
 
@@ -247,12 +247,9 @@ describe("misc request edges", () => {
       ip = c.ip;
       return c.text("ok");
     });
-    await app.handle(
-      new Request("http://localhost/"),
-      ({
-        server: { requestIP: () => ({ address: "10.0.0.7" }) },
-      }) as never,
-    );
+    await app.handle(new Request("http://localhost/"), {
+      server: { requestIP: () => ({ address: "10.0.0.7" }) },
+    } as never);
     expect(ip).toBe("10.0.0.7");
   });
 

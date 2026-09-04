@@ -44,6 +44,17 @@ export type NotFoundHandler = (c: Context) => Response | void;
 
 /** Bun-native websocket event handlers (the `ws` argument IS Bun's socket). */
 export interface WebSocketHandlers {
+  /**
+   * Origin check for the upgrade handshake (SEC-2, CSWSH defense): the
+   * cross-site-websocket-hijack vector is invisible to csrf() — a browser
+   * WebSocket cannot carry a custom token header, so the upgrade itself
+   * must refuse foreign origins. Array form: exact match, case-insensitive,
+   * and a MISSING Origin header is refused (fail closed — browser
+   * handshakes always send one). Predicate form: owns the whole decision
+   * (read `c.header("origin")` yourself); returning false refuses the
+   * upgrade with 403. Omitted: no origin enforcement (previous behavior).
+   */
+  origin?: string[] | ((c: Context) => boolean);
   open?: (ws: unknown, c: Context) => void | Promise<void>;
   message?: (ws: unknown, message: string | ArrayBuffer, c: Context) => void | Promise<void>;
   close?: (ws: unknown, code: number, reason: string, c: Context) => void | Promise<void>;

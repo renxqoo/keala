@@ -230,8 +230,12 @@ const applyAbsentHeaders = (
       if (value === undefined || isMergeForbidden(name)) continue;
       try {
         // Per-name if-absent: once a name is being merged, later values of
-        // the same name append instead of being blocked by has().
-        if (headers.has(name) && !mergedNames.has(name)) continue;
+        // the same name append instead of being blocked by has(). set-cookie
+        // is EXEMPT from the has() short-circuit (BUG-2, 0.6.2 review):
+        // cookie merges are additive — a staged cookie must ship alongside
+        // the takeover's own set-cookie, exactly like the builtin path and
+        // the finalizer's headersWith() join.
+        if (name !== "set-cookie" && headers.has(name) && !mergedNames.has(name)) continue;
         mergedNames.add(name);
         headers.append(name, value);
       } catch {

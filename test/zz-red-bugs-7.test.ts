@@ -11,7 +11,7 @@ const hit = async (
 ): Promise<Response> => app.handle(new Request(`http://localhost${path}`, init));
 
 describe("P1: direct() chain has no double-next() guard", () => {
-  it("composed chains throw on double next(); single-handler routes do not", async () => {
+  it("composed chains throw on double next(); single-handler routes do too", async () => {
     const composed = new Keala({ env: "test" });
     composed.use((_c, next) => {
       void next();
@@ -21,18 +21,28 @@ describe("P1: direct() chain has no double-next() guard", () => {
     const composedRes = await hit(composed, "/x");
     expect(composedRes.status).toBe(500); // guarded — loud
 
+    // EXPECTED behavior (compose direct() fix, BUG-4): a single-handler
+    // route's second next() must trip the SAME guard the composed path has
+    // — never resolve silently. Probed through the error funnel so the
+    // assertion holds whether the guard throws synchronously or rejects.
     const direct = new Keala({ env: "test" });
     let nextCalls = 0;
-    direct.get("/y", (c, next) => {
+    let guardMessage: string | null = null;
+    direct.onError((e) => {
+      guardMessage = e.message;
+      return undefined;
+    });
+    direct.get("/y", (_c, next) => {
       void next().then(() => {
         nextCalls++;
       });
       nextCalls++;
-      return c.text("y");
+      return next(); // second call — must fail loud, not silently no-op
     });
     const directRes = await hit(direct, "/y");
-    expect(directRes.status).toBe(200); // no error, next invoked twice silently
-    expect(nextCalls).toBe(2);
+    expect(directRes.status).toBe(500);
+    expect(guardMessage).toContain("next() called multiple times");
+    expect(nextCalls).toBe(2); // the FIRST next() still settled once
   });
 });
 

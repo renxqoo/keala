@@ -36,7 +36,7 @@ describe("path-scoped middleware", () => {
   it("prefix scope applies to subtree only (documented: exact vs /*)", async () => {
     const app = new Keala({ env: "test" });
     const order: string[] = [];
-    app.use("/api/*", async (c, next) => {
+    app.use("/api/*", async (_c, next) => {
       order.push("scoped");
       await next();
     });
@@ -119,8 +119,17 @@ describe("mount + sub-app scoped middleware offset", () => {
 });
 
 describe("fastDynamic vs trie equivalence", () => {
-
-  const shared = ["/users", "/users/", "/users/7", "/users/7/", "/users/a/b", "/users//x", "/", "/users/æ", "/users/a%20b"];
+  const shared = [
+    "/users",
+    "/users/",
+    "/users/7",
+    "/users/7/",
+    "/users/a/b",
+    "/users//x",
+    "/",
+    "/users/æ",
+    "/users/a%20b",
+  ];
   const run = async (app: InstanceType<typeof Keala>): Promise<string[]> => {
     const out: string[] = [];
     for (const p of shared) {
@@ -140,7 +149,7 @@ describe("fastDynamic vs trie equivalence", () => {
   it("duplicate registration keeps both handlers once each", async () => {
     const app = new Keala({ env: "test" });
     let n = 0;
-    app.get("/d/:id", (c, next) => {
+    app.get("/d/:id", (_c, next) => {
       n += 1;
       return next();
     });
@@ -193,7 +202,9 @@ describe("overload admission", () => {
     await new Promise((r) => setTimeout(r, 10));
     const second = await app.handle(new Request("http://localhost/hold"));
     expect(second.status).toBe(503);
-    release?.();
+    // The cast resets TS's closure-blind narrowing to `null` (the assignment
+    // happens inside the handler's promise executor).
+    (release as (() => void) | null)?.();
     expect((await first).status).toBe(200);
   });
 
@@ -202,11 +213,10 @@ describe("overload admission", () => {
       env: "test",
       overload: { maxConcurrency: 1, maxQueue: 2, queueTimeoutMs: 1000 },
     });
-    let active = 0;
+    let runs = 0;
     app.get("/hold", async () => {
-      active++;
+      runs++;
       await new Promise((r) => setTimeout(r, 30));
-      active--;
       return new Response("done");
     });
     const first = app.handle(new Request("http://localhost/hold"));
@@ -214,6 +224,7 @@ describe("overload admission", () => {
     const second = app.handle(new Request("http://localhost/hold"));
     const [a, b] = await Promise.all([first, second]);
     expect([a.status, b.status]).toEqual([200, 200]);
+    expect(runs).toBe(2); // the queued second request was admitted, not dropped
     expect(app.inFlight).toBe(0);
   });
 });
@@ -225,7 +236,7 @@ describe("notFound handler", () => {
       c.setHeader("x-g", "1");
       return next();
     });
-    app.notFound((c) => new Response("custom 404", { status: 404 }));
+    app.notFound((_c) => new Response("custom 404", { status: 404 }));
     const res = await hit(app, "/missing");
     expect(res.status).toBe(404);
     expect(res.headers.get("x-g")).toBe("1");
@@ -266,8 +277,10 @@ describe("c.signal", () => {
     app.get("/a", async (c) => {
       const ctl = new AbortController();
       c.raw.signal.addEventListener("abort", () => ctl.abort(c.raw.signal.reason));
-      // simulate a client abort through the request's own signal
-      (c.raw as Request & { signal: AbortSignal }).signal;
+      // simulate a client abort through the request's own signal: the raw
+      // Request exposes an AbortSignal (read it so the access is not dead).
+      const rawSignal = (c.raw as Request & { signal: AbortSignal }).signal;
+      rawSignal.addEventListener("abort", () => undefined);
       await new Promise((r) => setTimeout(r, 20));
       reasonName = "observed";
       return new Response("ok");
