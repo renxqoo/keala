@@ -116,7 +116,7 @@ describe("R3-2: cache() must not store/replay no-cache responses", () => {
     const app = new Keala(quiet);
     app.get("/x", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
-      c.set("Cache-Control", "no-cache");
+      c.setHeader("Cache-Control", "no-cache");
       return c.text(`v${computed}`);
     });
     await app.handle(req("/x"));
@@ -130,7 +130,7 @@ describe("R3-2: cache() must not store/replay no-cache responses", () => {
     const app = new Keala(quiet);
     app.get("/m", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
-      c.set("Cache-Control", "max-age=0");
+      c.setHeader("Cache-Control", "max-age=0");
       return c.text(`v${computed}`);
     });
     await app.handle(req("/m"));

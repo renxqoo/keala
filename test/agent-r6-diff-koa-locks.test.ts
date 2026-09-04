@@ -217,21 +217,8 @@ describe("documents intentional divergence", () => {
     expect(bun.headers["etag"]).toBeUndefined(); // koa: '""'
   });
 
-  it("fresh() honors an OWS-padded '*' wildcard where the fresh package does not", async () => {
-    // fresh pkg compares reqHeaders['if-none-match'] !== '*' exactly; bun
-    // trims OWS first (RFC 9110 field-value semantics). Koa-quirk, not followed.
-    const bun = await driveBun(
-      (app) => {
-        app.use((c) => {
-          c.etag = '"a"';
-          c.status = 200;
-          c.body = `fresh=${c.fresh}`;
-        });
-      },
-      { url: "/", headers: { "if-none-match": " * " } },
-    );
-    expect(bun.body).toBe("fresh=true"); // koa: fresh=false
-  });
+  // 0.7: the "fresh() honors an OWS-padded '*'" lock is gone with c.fresh
+  // (conditional.ts owns freshness now).
 
   it("ctx.is() ignores body presence (locked by test/request.test.ts)", async () => {
     // type-is returns null for bodyless requests; keala matches on the
@@ -258,19 +245,8 @@ describe("documents intentional divergence", () => {
     expect(typeIs("image/png", ["any"])).toBe("image/png");
   });
 
-  it("the no-arg language list is lowercased (locked by test/coverage-gaps-4.test.ts)", async () => {
-    // negotiator preserves 'fr-CA'; keala's shared preference parser
-    // lowercases values — locked by coverage-gaps-4.test.ts:118.
-    const bun = await driveBun(
-      (app) => {
-        app.use((c) => {
-          c.body = JSON.stringify(c.acceptsLanguages());
-        });
-      },
-      { url: "/", headers: { "accept-language": "fr-CH, fr;q=0.9" } },
-    );
-    expect(bun.body).toBe(JSON.stringify(["fr-ch", "fr"])); // koa: ['fr-CH','fr']
-  });
+  // 0.7: the "no-arg language list is lowercased" lock is gone with
+  // c.acceptsLanguages (parse the Accept-Language header yourself).
 
   it("attachment rejects path separators in a string fallback (locked by test/response.test.ts)", () => {
     // content-disposition basenames a '/'-containing fallback; keala throws

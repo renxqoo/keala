@@ -159,7 +159,7 @@ describe("router: registration behaviors", () => {
   it("duplicate path+method registrations chain in registration order", async () => {
     const request = appWith((app) => {
       app.get("/dup", async (c, next) => {
-        c.set("X-First", "1");
+        c.setHeader("X-First", "1");
         await next();
       });
       app.get("/dup", (c) => c.text("second"));
@@ -236,7 +236,7 @@ describe("router: groups and mounts", () => {
     const app = new Keala(quiet);
     const api = new Router();
     api.use(async (c, next) => {
-      c.set("X-Api", "1");
+      c.setHeader("X-Api", "1");
       await next();
     });
     api.get("/inside", (c) => c.text("in"));
@@ -250,7 +250,7 @@ describe("router: groups and mounts", () => {
     const app = new Keala(quiet);
     const api = new Router();
     api.param("oid", async (c, next) => {
-      c.set("X-Org", c.params?.["oid"] ?? "");
+      c.setHeader("X-Org", c.params?.["oid"] ?? "");
       await next();
     });
     api.get("/orgs/:oid", (c) => c.text("org"));

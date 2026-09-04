@@ -28,9 +28,9 @@ const registerRoutes = (app: InstanceType<typeof Keala>): void => {
   app.get(
     "/mw",
     async (c, next) => {
-      c.set("X-Step", "1");
+      c.setHeader("X-Step", "1");
       await next();
-      c.set("X-Step-3", "3");
+      c.setHeader("X-Step-3", "3");
     },
     (c: Context) => {
       c.type = "text/plain";
@@ -141,26 +141,23 @@ describe("pooling wire parity", () => {
     for (const app of [pooled, plain]) {
       app.get("/text", (c) => c.text("same"));
       app.get("/json", (c) => c.json({ same: true }));
-      // A post-commit body write rebuilds the sugar Response (flag 128) —
-      // the rebuild must stay pooling-parity too.
+      // 0.7: a post-commit body write throws now; the surviving in-place
+      // post-commit mutation is the header write — that path must stay
+      // pooling-parity too.
       app.get("/late", (c) => {
         const res = c.text("first");
-        c.body = "late-body";
+        c.setHeader("x-late", "1");
         return res;
       });
-      // A staged c.message rides sugar json as the reason phrase.
-      app.get("/msg", (c) => {
-        c.message = "Made You Look";
-        return c.json({ ok: true });
-      });
     }
-    for (const path of ["/text", "/json", "/late", "/msg"]) {
+    for (const path of ["/text", "/json", "/late"]) {
       const pooledResponse = await pooled.handle(new Request(`http://localhost:3000${path}`));
       const plainResponse = await plain.handle(new Request(`http://localhost:3000${path}`));
       expect(await pooledResponse.text()).toBe(await plainResponse.text());
       expect(pooledResponse.headers.get("content-type")).toBe(
         plainResponse.headers.get("content-type"),
       );
+      expect(pooledResponse.headers.get("x-late")).toBe(plainResponse.headers.get("x-late"));
       expect(pooledResponse.status).toBe(plainResponse.status);
       expect(pooledResponse.statusText).toBe(plainResponse.statusText);
     }

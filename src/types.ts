@@ -18,9 +18,10 @@ export type HeaderMap = Record<string, HeaderValue>;
 
 /**
  * Allowed response bodies (state mode): objects are serialized as JSON,
- * `Blob` / `Response` / `ReadableStream` pass through directly.
+ * `Blob` / `ReadableStream` pass through directly. A web `Response` is NOT
+ * assignable (0.7): return it instead — the commit slot owns it.
  */
-export type ResponseBody = string | Uint8Array | ReadableStream | Blob | Response | object | null;
+export type ResponseBody = string | Uint8Array | ReadableStream | Blob | object | null;
 
 /** Response-shaping arguments accepted by the `c.text/json/html` sugar. */
 export interface ResponseInitLike {
@@ -57,8 +58,6 @@ export interface AppOptions {
   proxyIpHeader?: string;
   /** Max IPs kept from the proxy header when `proxy` is enabled. */
   maxIpsCount?: number;
-  /** Number of hostname labels that make up the "root". Default 2. */
-  subdomainOffset?: number;
   /** Environment name. Default `process.env.NODE_ENV` or `"development"`. */
   env?: string;
   /**

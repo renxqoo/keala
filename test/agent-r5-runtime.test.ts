@@ -35,7 +35,7 @@
  *         `null`, so any LATER `c.cookies.set()` writes into the detached
  *         record and silently disappears (both the same-request
  *         `const built = c.text(...); c.cookies.set(...)` form and the
- *         post-commit middleware form). Plain `c.set()` keeps working and
+ *         post-commit middleware form). Plain `c.setHeader()` keeps working and
  *         state-mode late cookies keep working — only the facade goes stale.
  *         Fix: give the facade a getter to the CURRENT record (or clear the
  *         consumed record's keys in place instead of swapping the slot).
@@ -109,18 +109,8 @@ describe("agent r5 — confirmed bugs", () => {
     expect(await res.text()).toBe("hello");
   });
 
-  it("R5-1b: post-commit message-only override must not resurrect a stale staged status", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      c.status = 418; // pre-commit
-      await next();
-      c.message = "Custom"; // post-commit reason-phrase rewrite
-    });
-    app.get("/", () => new Response("hello"));
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(200); // actual: 418
-    expect(res.statusText).toBe("Custom");
-  });
+  // 0.7: R5-1b (post-commit message-only override) is gone with c.message
+  // and the rule-4 rebuild — statusText customization no longer exists.
 
   it("R5-1c: pre-commit c.body=null must not turn a committed 200 into a bodyless 204", async () => {
     const app = new Keala(quiet);
@@ -173,16 +163,26 @@ describe("agent r5 — confirmed bugs", () => {
     expect(out?.status).toBe(500);
   });
 
-  it("R5-3: post-commit c.redirect() must actually redirect", async () => {
+  it("R5-3 (0.7): an auth middleware redirects by replacing the committed response", async () => {
     const app = new Keala(quiet);
+    let caught: unknown;
     app.use(async (c, next) => {
       await next();
-      c.redirect("/login");
+      try {
+        c.redirect("/login"); // the old post-commit write — a loud TypeError now
+      } catch (err) {
+        caught = err;
+      }
+      // Supported pattern: return the replacement Response (last committer wins).
+      return new Response(null, { status: 302, headers: { location: "/login" } });
     });
     app.get("/", () => new Response("secret data"));
     const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(302); // actual: 200
+    expect(caught).toBeInstanceOf(TypeError);
+    expect((caught as Error).message).toContain("response already committed");
+    expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/login");
+    expect(await res.text()).toBe("");
   });
 
   it("R5-4a: late c.cookies.set() after a sugar return must not vanish (post-commit form)", async () => {

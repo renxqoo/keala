@@ -33,7 +33,7 @@ describe("R4.3 error policy: on/off differential", () => {
     ): Array<{ path: string; status: number; body: string; extra?: [string, string] }> => {
       app.use((c, next) => {
         // Security header staged BEFORE the throw must survive on error pages.
-        void c.set("x-security", "on");
+        void c.setHeader("x-security", "on");
         return next();
       });
       app.get("/exposed", (c) => c.throw(422, "invalid input", { expose: true }));
@@ -214,11 +214,11 @@ describe("R4.3 error policy: header merge (if-absent)", () => {
   it("error.headers and staged security headers are added only when absent", async () => {
     const app = boot((a) => {
       a.use((c, next) => {
-        void c.set("x-security", "staged");
-        void c.set("retry-after", "30");
+        void c.setHeader("x-security", "staged");
+        void c.setHeader("retry-after", "30");
         // Content-describing staged headers describe the body that failed —
         // they are stripped by the reset and must never reach the takeover.
-        void c.set("content-type", "application/staged-json");
+        void c.setHeader("content-type", "application/staged-json");
         return next();
       });
       a.get("/limited", (c) =>
@@ -272,7 +272,7 @@ describe("R4.3 error policy: header merge (if-absent)", () => {
     async () => {
       const app = boot((a) => {
         a.use((c, next) => {
-          void c.set("x-security", "staged");
+          void c.setHeader("x-security", "staged");
           return next();
         });
         a.get("/red", (c) =>
@@ -296,7 +296,7 @@ describe("R4.3 error policy: header merge (if-absent)", () => {
     async () => {
       const app = boot((a) => {
         a.use((c, next) => {
-          void c.set("x-security", "staged-only");
+          void c.setHeader("x-security", "staged-only");
           return next();
         });
         a.get("/red", () => {

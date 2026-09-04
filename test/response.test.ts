@@ -10,7 +10,6 @@ describe("response facade (flat context)", () => {
     app.use(async (c) => {
       expect(c.status).toBe(404);
       expect(c.body).toBe(null);
-      expect(c.headerSent).toBe(false);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(404);
@@ -30,29 +29,6 @@ describe("response facade (flat context)", () => {
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(201);
-  });
-
-  it("sets status message", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.status = 200;
-      c.message = "all good";
-      c.body = "x";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(200);
-    expect(res.statusText).toBe("all good");
-  });
-
-  it("rejects CR/LF in status message", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      expect(() => {
-        c.message = "bad\r\nmessage";
-      }).toThrow(TypeError);
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/"));
   });
 
   it("delivers string bodies verbatim with a runtime text content-type (markup sniffing removed)", async () => {
@@ -182,16 +158,15 @@ describe("response facade (flat context)", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("set/append/remove/vary header operations", async () => {
+  it("set/append/remove header operations", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.set("X-One", "1");
-      c.set("x-one", "override");
+      c.setHeader("X-One", "1");
+      c.setHeader("x-one", "override");
       c.append("X-Many", "a");
       c.append("X-Many", "b");
-      c.vary("Origin");
-      c.vary("origin");
-      c.vary("Accept");
+      c.append("Vary", "Origin");
+      c.append("Vary", "Accept");
       c.remove("x-one");
       c.body = "ok";
     });
@@ -204,9 +179,8 @@ describe("response facade (flat context)", () => {
   it("rejects invalid header field names and values", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      expect(() => c.set("Bad Name", "v")).toThrow(TypeError);
-      expect(() => c.set("X-Ok", "v\r\nInjected: 1")).toThrow(TypeError);
-      expect(() => c.vary("Origin, Accept")).toThrow(TypeError);
+      expect(() => c.setHeader("Bad Name", "v")).toThrow(TypeError);
+      expect(() => c.setHeader("X-Ok", "v\r\nInjected: 1")).toThrow(TypeError);
       c.body = "ok";
     });
     await app.handle(new Request("http://localhost:3000/"));
@@ -253,7 +227,7 @@ describe("response facade (flat context)", () => {
     expect(res.headers.get("etag")).toBe(null);
   });
 
-  it("redirect sets location and html fallback body", async () => {
+  it("redirect sets Location with an empty body (0.7 adjudication)", async () => {
     const app = makeApp();
     app.use(async (c) => {
       c.redirect("/target?x=1");
@@ -265,45 +239,27 @@ describe("response facade (flat context)", () => {
     );
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/target?x=1");
-    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    expect(await res.text()).toContain("Redirecting to /target?x=1.");
-
-    const plain = makeApp();
-    plain.use(async (c) => {
-      c.redirect("/t");
-    });
-    const plainRes = await plain.handle(
-      new Request("http://localhost:3000/", { headers: { Accept: "text/plain" } }),
-    );
-    expect(plainRes.headers.get("content-type")).toBe("text/plain; charset=utf-8");
-    expect(await plainRes.text()).toContain("Redirecting to /t.");
+    expect(res.headers.get("content-type")).toBe(null);
+    expect(await res.text()).toBe("");
   });
 
-  it("redirect supports back with referrer and alt fallback", async () => {
+  it("redirect accepts an explicit 3xx code and rejects anything else eagerly", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.redirect("back", "/fallback");
+      c.redirect("/gone", 301);
     });
-    const withReferrer = await app.handle(
-      new Request("http://localhost:3000/", { headers: { Referrer: "http://x.dev/prev" } }),
-    );
-    // Hardening divergence from koa: BOTH back spellings gate the Referrer
-    // on same-origin — a cross-origin Referrer falls back to alt instead of
-    // being forwarded verbatim (open-redirect defense).
-    expect(withReferrer.headers.get("location")).toBe("/fallback");
-    const sameOrigin = await app.handle(
-      new Request("http://localhost:3000/", {
-        headers: { Referrer: "http://localhost:3000/prev" },
-      }),
-    );
-    expect(sameOrigin.headers.get("location")).toBe("http://localhost:3000/prev");
+    const res = await app.handle(new Request("http://localhost:3000/"));
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("/gone");
 
-    const plain = makeApp();
-    plain.use(async (c) => {
-      c.redirect("back");
+    const invalid = makeApp();
+    invalid.use(async (c) => {
+      expect(() => c.redirect("/x", 200)).toThrow(/3xx/);
+      expect(() => c.redirect("/x", 404)).toThrow(/3xx/);
+      expect(() => c.redirect("/x", 302.5)).toThrow(/3xx/);
+      c.body = "ok";
     });
-    const res = await plain.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("location")).toBe("/");
+    await invalid.handle(new Request("http://localhost:3000/"));
   });
 
   it("keeps an explicit redirect status", async () => {
@@ -316,17 +272,22 @@ describe("response facade (flat context)", () => {
     expect(res.status).toBe(301);
   });
 
-  it("escapes html in redirect bodies", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.redirect("/a?next=<script>alert(1)</script>");
+  it("redirect after a commit throws", async () => {
+    const app = new Keala({ env: "production" });
+    const thrown: unknown[] = [];
+    app.use(async (c, next) => {
+      await next();
+      try {
+        c.redirect("/late");
+      } catch (error) {
+        thrown.push(error);
+      }
     });
-    const res = await app.handle(
-      new Request("http://localhost:3000/", { headers: { Accept: "text/html" } }),
-    );
-    const body = await res.text();
-    expect(body).not.toContain("<script>");
-    expect(body).toContain("&lt;script&gt;");
+    app.get("/", (c) => c.text("committed"));
+    const res = await app.handle(new Request("http://localhost:3000/"));
+    expect(thrown[0]).toBeInstanceOf(TypeError);
+    expect(res.headers.get("location")).toBe(null);
+    expect(await res.text()).toBe("committed");
   });
 
   it("attachment sets content-disposition and infers type", async () => {

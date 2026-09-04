@@ -47,16 +47,11 @@ export const deadProtoFor = (liveProto: object): object => {
   const descriptors: PropertyDescriptorMap = {};
   for (const key of [
     "status",
-    "message",
     "body",
     "type",
     "length",
     "etag",
     "lastModified",
-    "url",
-    "path",
-    "querystring",
-    "search",
     "state",
     "cookies",
   ]) {
@@ -71,7 +66,7 @@ export const deadProtoFor = (liveProto: object): object => {
       configurable: true,
     };
   }
-  for (const key of ["set", "append", "remove", "vary", "redirect", "back", "attachment"]) {
+  for (const key of ["setHeader", "append", "remove", "redirect", "attachment"]) {
     descriptors[key] = {
       value(): void {
         throw new Error(RETIRED);

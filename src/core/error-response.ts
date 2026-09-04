@@ -295,7 +295,6 @@ const builtinErrorResponse = (
     delete record["content-encoding"];
   }
   c.bodyValue = null;
-  c.messageValue = "";
   c.flags = 0;
   // FAST PATH: nothing staged, nothing to replay, not HEAD, bodied status —
   // construct the exact same bytes directly and skip the staged-state
@@ -320,7 +319,7 @@ const builtinErrorResponse = (
   for (const [field, value] of Object.entries(error.headers ?? {})) {
     // The error path must never throw; skip headers that fail validation.
     try {
-      c.set(field, Array.isArray(value) ? value : String(value));
+      c.setHeader(field, Array.isArray(value) ? value : String(value));
     } catch {
       // Invalid header from an error object — drop it silently.
     }
@@ -328,7 +327,7 @@ const builtinErrorResponse = (
   c.status = error.status;
   const message =
     error.expose === true ? error.message : statusMessage(error.status) || "Internal Server Error";
-  c.set("Content-Type", "text/plain; charset=utf-8");
+  c.setHeader("Content-Type", "text/plain; charset=utf-8");
   c.body = message;
   // TERMINAL conversion — the error path must never re-enter the full error
   // pipeline: a finalize failure here (say, a staged header no Response can

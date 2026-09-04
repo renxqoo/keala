@@ -54,7 +54,7 @@ describe("agent review: mergeAbsentHeaders (takeover merge)", () => {
   it("one invalid entry in error.headers must not abort the whole merge — staged security headers still apply", async () => {
     const app = boot((a) => {
       a.use((c, next) => {
-        void c.set("x-security", "on");
+        void c.setHeader("x-security", "on");
         return next();
       });
       a.get("/auth", (c) =>
@@ -160,7 +160,7 @@ describe("agent review: toHttpError in-place classification", () => {
     // as body-describing. Left skipped pending a ruling on the enumeration.
     const app = boot((a) => {
       a.use((c, next) => {
-        void c.set("content-encoding", "gzip");
+        void c.setHeader("content-encoding", "gzip");
         return next();
       });
       a.get("/boom", () => {

@@ -43,7 +43,7 @@ describe("requestId", () => {
     const app = new Keala(quiet);
     app.use(requestId());
     app.get("/x", (c) => {
-      c.set("X-State-Id", String(c.state.requestId ?? ""));
+      c.setHeader("X-State-Id", String(c.state.requestId ?? ""));
       c.body = "ok";
     });
     const res = await app.handle(req("/x"));

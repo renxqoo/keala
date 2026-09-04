@@ -60,12 +60,10 @@ describe("R1 (bug): negotiator breaks q-ties on match specificity, not header or
     expect(picked).toBe("gzip");
   });
 
-  it("acceptsCharsets: `Accept-Charset: *, utf-8` prefers utf-8 over ascii", async () => {
-    // negotiator.charsets(['ascii','utf-8'])[0] === 'utf-8'.
-    const picked = await probe({ "accept-charset": "*, utf-8" }, (c) =>
-      c.acceptsCharsets(["ascii", "utf-8"]),
-    );
-    expect(picked).toBe("utf-8");
+  it("acceptsCharset: `Accept-Charset: *, utf-8` prefers utf-8 over ascii", async () => {
+    // 0.7: the c.acceptsCharsets accessor is gone; the shared helper (the
+    // unit lock below) carries the same specificity contract.
+    expect(acceptsCharset("*, utf-8", ["ascii", "utf-8"])).toBe("utf-8");
   });
 
   it("unit level: acceptsType/acceptsEncoding miss the specificity key", () => {

@@ -46,7 +46,7 @@ describe("security: response-splitting variant matrix", () => {
 
   it.each(payloads)("set() blocks %p", async (payload) => {
     const res = await attack((c) => {
-      expect(() => c.set("X-Target", payload)).toThrow(TypeError);
+      expect(() => c.setHeader("X-Target", payload)).toThrow(TypeError);
       c.body = "ok";
     });
     expect(wireHeaders(res)).not.toContain("evil=1");
@@ -75,7 +75,7 @@ describe("security: response-splitting variant matrix", () => {
     "header name %p rejected before storage",
     async (name) => {
       await attack((c) => {
-        expect(() => c.set(name, "v")).toThrow(TypeError);
+        expect(() => c.setHeader(name, "v")).toThrow(TypeError);
       });
     },
   );
@@ -90,7 +90,9 @@ describe("security: response-splitting variant matrix", () => {
 
   it("set({object}) validates values too", async () => {
     const res = await attack((c) => {
-      expect(() => c.set({ "X-A": "fine", "X-B": "bad\r\nX-C: 1" } as never)).toThrow(TypeError);
+      expect(() => c.setHeader({ "X-A": "fine", "X-B": "bad\r\nX-C: 1" } as never)).toThrow(
+        TypeError,
+      );
       c.body = "ok";
     });
     expect(res.headers.get("x-c")).toBe(null);

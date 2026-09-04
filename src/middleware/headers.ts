@@ -32,13 +32,13 @@ export const secureHeaders = (options: SecureHeadersOptions = {}): RouteHandler 
     try {
       await next();
     } finally {
-      c.set("X-Content-Type-Options", "nosniff");
-      c.set("X-Frame-Options", "DENY");
-      c.set("Referrer-Policy", options.referrerPolicy ?? "no-referrer");
+      c.setHeader("X-Content-Type-Options", "nosniff");
+      c.setHeader("X-Frame-Options", "DENY");
+      c.setHeader("Referrer-Policy", options.referrerPolicy ?? "no-referrer");
       if (options.permittedCrossDomainPolicies !== undefined) {
-        c.set("X-Permitted-Cross-Domain-Policies", options.permittedCrossDomainPolicies);
+        c.setHeader("X-Permitted-Cross-Domain-Policies", options.permittedCrossDomainPolicies);
       }
-      if (hstsValue !== null) c.set("Strict-Transport-Security", hstsValue);
+      if (hstsValue !== null) c.setHeader("Strict-Transport-Security", hstsValue);
     }
   };
 };
@@ -64,7 +64,7 @@ export const requestId = (): RouteHandler => {
     try {
       await next();
     } finally {
-      c.set("X-Request-ID", id);
+      c.setHeader("X-Request-ID", id);
     }
   };
 };
@@ -79,12 +79,12 @@ export const timing = (): RouteHandler => {
     state.timingMark = (name: string): void => {
       const current = c.resHeader("Server-Timing");
       const entry = `${name};dur=${(performance.now() - start).toFixed(1)}`;
-      c.set("Server-Timing", current.length === 0 ? entry : `${current}, ${entry}`);
+      c.setHeader("Server-Timing", current.length === 0 ? entry : `${current}, ${entry}`);
     };
     await next();
     const total = `total;dur=${(performance.now() - start).toFixed(1)}`;
     const current = c.resHeader("Server-Timing");
-    c.set("Server-Timing", current.length === 0 ? total : `${total}, ${current}`);
+    c.setHeader("Server-Timing", current.length === 0 ? total : `${total}, ${current}`);
   };
 };
 

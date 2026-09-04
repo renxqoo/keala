@@ -6,7 +6,6 @@
 import { describe, expect, it } from "vitest";
 import {
   PRINTABLE,
-  TOKEN,
   delay,
   quiet,
   randCookieHeader,
@@ -115,44 +114,8 @@ describe("INV-1 never-reject", () => {
     });
   }, 25_000);
 
-  /** Random request-URL rewrites through the setters. */
-  it("random c.url/c.path/c.query/... rewrites never break handle()", async () => {
-    await runProp("request-rewrites", 250, async (rng, _seed, ctx) => {
-      const app = new Keala({ ...quiet });
-      app.use(async (c, next) => {
-        switch (rng.int(5)) {
-          case 0:
-            c.url = `http://localhost${randPath(rng)}`;
-            break;
-          case 1:
-            c.path = randPath(rng);
-            break;
-          case 2:
-            c.querystring = `k=${randString(rng, 5, TOKEN)}`;
-            break;
-          case 3:
-            c.querystring = randQueryString(rng);
-            break;
-          default:
-            c.search = rng.bool(0.5) ? `?${randQueryString(rng)}` : "";
-        }
-        await next();
-      });
-      app.on("ALL", "/*", (c) => c.text(`${c.path}?${c.querystring}`));
-      const req = tryRequest(
-        rng,
-        `http://localhost${randPath(rng)}?${randQueryString(rng)}`,
-        false,
-      );
-      if (req === null) {
-        ctx.skipped++;
-        return;
-      }
-      const res = await app.handle(req);
-      expect(res).toBeInstanceOf(Response);
-      await res.text();
-    });
-  }, 20_000);
+  // 0.7: the "random c.url/c.path/c.query/... rewrites" property is gone —
+  // request setters were deleted (requests are read-only).
 });
 describe("INV-2 exactly-once", () => {
   it("counter at a random position among well-behaved middleware runs exactly once", async () => {

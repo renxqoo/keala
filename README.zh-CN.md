@@ -236,15 +236,19 @@ if (isNotModified({ etag, mtimeMs: stat.mtimeMs, ifNoneMatch: c.get("if-none-mat
 每个请求只分配一个 context。请求与响应在同一个对象上；一切惰性属性
 （`query`、`cookies`、`ip`、`state`）在首次访问时才物化。
 
-| 请求侧                                                                | 响应侧                                         | 语法糖（return 风格）            |
-| --------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------- |
-| `c.raw/method/path/url/query`                                         | `c.status/body/message/type/length`            | `c.text(str, status?, headers?)` |
-| `c.get(name)` / `c.header(name)`                                      | `c.set/append/remove/vary/has/resHeader`       | `c.json(obj, status?, headers?)` |
-| `c.params` `c.query(name)` `c.queries(name)` `c.ip/ips/host/hostname` | `c.etag/lastModified/attachment/redirect/back` | `c.html(str, status?, headers?)` |
-| `c.accepts*/is/fresh/stale/charset`                                   | `c.cookies`（签名、密钥轮换）                  | `c.throw/assert`                 |
+| 请求侧（只读）                                                    | 响应侧                                    | 语法糖（return 风格）            |
+| ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/querystring/search`                        | `c.status/body/type/length`               | `c.text(str, status?, headers?)` |
+| `c.get(name)` / `c.header(name)`                                  | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
+| `c.params` `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.etag/lastModified/attachment/redirect` | `c.html(str, status?, headers?)` |
+| `c.accepts/is` `c.signal` `c.runtime`                             | `c.cookies`（签名、密钥轮换）             | `c.throw/assert`                 |
 
 双模式规则各一句话：**返回的 `Response` 立即提交；`c.*` 写入先暂存；
-最后一个提交者获胜；未被写过的请求落入 `app.notFound`**。路径命中但
+最后一个提交者获胜；未被写过的请求落入 `app.notFound`**。提交之后：头部
+写入仍然直接装饰已提交的 Response（`await next()` 后照常
+`c.setHeader/append/remove`），而 `c.body/c.status/c.redirect` 抛
+TypeError——要替换已提交的响应，构造新 Response 返回（完整契约见
+`docs/MIGRATION-0.7.md`）。路径命中但
 方法不匹配时回答 405 + `Allow`（OPTIONS 得到 200 + `Allow`，未知方法
 501）。
 
@@ -299,7 +303,7 @@ pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则�
 | Koa                                                     | keala                                               |
 | ------------------------------------------------------- | --------------------------------------------------- |
 | `ctx.request.get("x")`                                  | `c.get("x")`                                        |
-| `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                     |
+| `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.setHeader("x", v)`                               |
 | `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n`（相同）               |
 | `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`             |
 | `app.use(router.routes()).use(router.allowedMethods())` | 直接 `app.get(...)`，或 `app.mount(prefix, router)` |
@@ -381,7 +385,7 @@ app.onError((error, c) => {
 
 | 成员                                                                           | 说明                                                                                                                                  |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Keala(options?)`                                                          | 应用类（koa 风格的 `new`）。选项：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`subdomainOffset`、`env`                           |
+| `new Keala(options?)`                                                          | 应用类（koa 风格的 `new`）。选项：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`env`                                              |
 | `app.use(...mw)`                                                               | 全局中间件，编译进每条路由链（延迟 `use` 会重新组合）                                                                                 |
 | `app.use(path, ...mw)`                                                         | 静态精确路径或末尾 `/*` 作用域中间件；同样覆盖作用域内的 404/405                                                                      |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | 路由注册；命名形式 `app.get(name, path, ...handlers)`                                                                                 |
@@ -401,13 +405,12 @@ app.onError((error, c) => {
 
 一个扁平对象 —— 请求侧、响应侧与语法糖共享它：
 
-- 请求：`raw method url path query querystring search originalUrl URL host
-hostname protocol secure ip ips subdomains origin href fresh stale idempotent
-charset reqType reqLength headers get/header is accepts acceptsEncodings
-acceptsCharsets acceptsLanguages params state`（`url`/`path`/`query` 可写；
-  重写会使缓存失效，行为与 koa 完全一致）
-- 响应：`status message body type length etag lastModified attachment
-redirect back set append remove vary has resHeader cookies`
+- 请求（只读——请求是客户端的事实）：`raw method url path query(name)
+queries(name) querystring search URL host protocol secure ip origin href
+idempotent reqLength headers get/header is accepts acceptsEncodings params
+state signal runtime`
+- 响应：`status body type length etag lastModified attachment
+redirect(url, code?) setHeader append remove has resHeader res cookies`
 - 语法糖：`text/json/html(body, status?, headers?)` —— 可直接从 handler
   返回
 - `c.throw(status, msg?, props?)`、`c.assert(cond, status, ...)`

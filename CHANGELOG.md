@@ -2,6 +2,47 @@
 
 > 0.6.x 为 pre-1.0 系列:表面可破坏,破坏性变更在 CHANGELOG 逐条记录。
 
+## 0.7.0 (2026-09-04)
+
+keala 原生 API:去 koa 化定稿(设计文档 docs/KEALA-NATIVE-API.md,
+迁移指南 docs/MIGRATION-0.7.md)。目标是"一页纸可记住"的 API +
+更少的 finalize 机器。
+
+### 破坏性变更(0.7.0)
+
+- **提交契约**:Response 提交后,`c.body/c.status/c.redirect` 写入抛
+  `TypeError`(要替换正文,构造并返回新 Response);头部写入
+  (`c.setHeader/append/remove/type/length/etag/lastModified/attachment`)
+  直接写进已提交 Response 的 Headers(与 Hono post-`next()` 语义一致,
+  rule-4 重建机器整体删除)。提交后 SET/REMOVE 幂等重放到更新的提交与
+  错误漏斗;APPEND/Set-Cookie 直 SET 只作用于当时 Response。
+- **`c.set` → `c.setHeader`**(消与 Hono 的同名陷阱;读侧
+  `c.header/get` 不变)。
+- **请求不可变**:`set url/path/search/querystring` 删除(写入抛
+  TypeError);五写入器失效矩阵整条删除。
+- **redirect 空体**:`c.redirect(url, code?)`,显式码须 3xx 整数
+  (TypeError),Location-only(koa "Redirecting to X." 体删除);
+  已 staged 的 3xx 保留。
+- **405/501 空体**:Allow 头保留,koa 状态文案体删除(OPTIONS 200
+  空体不变;`c.status=4xx` 无 body 回填文案的自有契约不变)。
+- **删除 16 项 koa 语义 API**:`c.message`(get/set)、`c.fresh`、
+  `c.stale`、`c.vary`、`c.back()`/`c.redirect("back")`、`c.subdomains`、
+  `c.ips`、`c.hostname`、`c.charset`、`c.reqType`、`c.acceptsCharsets`、
+  `c.acceptsLanguages`、`c.toJSON()`、`c.headerSent`、`c.originalUrl`、
+  `c.body = <Response>`。逐项替代见 docs/MIGRATION-0.7.md §5。
+- 删除导出:`FLAG_COMMITTED_*` 旗标、`src/core/committed-headers.ts`
+  模块;`ResponseBody` 联合移除 `Response` 成员。
+
+### 内部
+
+- respond.ts 约 −40%(rebuildCommitted/flag 合并矩阵/405 体);
+  committed-headers.ts(三态守卫探测)整文件删除;
+  `messageValue/removedValue/implicitTextResponseValue` 槽位删除。
+- keala 中间件全套适配(cors 的 Vary 合并、secureHeaders 的 finally
+  防护头经镜像重放、late cookies 经暂存记录连接)。
+- 契约测试:test/commit-0-7-contract.test.ts(请求只读、提交契约、
+  405/501 空体、context 公共面 = §8 速查表)。
+
 ## 0.6.2 (2026-09-04)
 
 生产可用(GA)。相对 0.6.1 的完整变更叙事;测量结论以仓库

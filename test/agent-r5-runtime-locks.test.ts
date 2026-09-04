@@ -1,14 +1,12 @@
 /**
  * ROUND 5 AUDIT — locks correct behavior (request lifecycle / compose /
- * finalizer / pooling / streaming). Split from agent-r5-runtime.test.ts to
- * respect the repo's 500-line file budget; the CONFIRMED-BUG red tests live
- * there. Every `it` here passed BEFORE the fixes and must keep passing.
+ * finalizer / pooling / streaming). Split from agent-r5-runtime.test.ts for
+ * the 500-line file budget; the CONFIRMED-BUG red tests live there.
  */
 
 import { describe, expect, it } from "vitest";
 
 import { Keala, type Application } from "../src/core/app.ts";
-import { parseListenArgs } from "../src/core/listen.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, req: Request) => app.handle(req);
@@ -205,13 +203,13 @@ describe("agent r5 — locks correct behavior", () => {
     expect(await r2.text()).toBe("base"); // proto value again, not req1-mutation
   });
 
-  it("finalizer: HEAD + dirty committed stream merges headers WITHOUT reading the body", async () => {
+  it("finalizer: HEAD + staged headers on a committed stream merge WITHOUT reading the body", async () => {
     // R7-CORE-4: the finalizer never reads a committed body — an open producer
     // must never block handle(). CL/CT stay what the Response itself exposes.
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("X-Late", "1");
+      c.setHeader("X-Late", "1");
     });
     app.get("/", () => new Response(streamOf(["abc"])));
     const res = await drive(app, new Request("http://localhost:3000/", { method: "HEAD" }));
@@ -237,7 +235,7 @@ describe("agent r5 — locks correct behavior", () => {
   it("finalizer: HEAD + unmatched method answers 405 with Allow and staged global headers", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      c.set("X-Global", "1");
+      c.setHeader("X-Global", "1");
       await next();
     });
     app.post("/x", (c) => c.text("posted"));
@@ -248,14 +246,13 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.body).toBeNull();
   });
 
-  it("finalizer: dirty rebuild carries NO sniffed content-type (clean/dirty parity)", async () => {
-    // R7-CORE-3: sniffing required reading the body; the finalizer never
-    // reads committed bodies now. A bare bytes Response carries no CT on the
-    // dirty path either — exactly like the untouched commit path.
+  it("finalizer: a late header write carries NO sniffed content-type (R7-CORE-3 parity)", async () => {
+    // Sniffing would require reading the body; the finalizer never does. A
+    // bare bytes Response carries no CT on the decorated path either.
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("X-Late", "1");
+      c.setHeader("X-Late", "1");
     });
     app.get("/", () => new Response(new Uint8Array([0x00, 0x01, 0xff, 0xfe])));
     const res = await drive(app, new Request("http://localhost:3000/"));
@@ -276,31 +273,31 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.status).toBe(500);
   });
 
-  it("finalizer: DISTURBED committed body + dirty rebuild answers 500, handle never rejects", async () => {
+  it("finalizer (0.7): a DISTURBED committed body never crashes the finalizer — the failure belongs to the consumer", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("X-Late", "1");
+      c.setHeader("X-Late", "1");
     });
     app.get("/", async () => {
       const res = new Response(new Uint8Array([1, 2, 3]));
-      await res.arrayBuffer();
+      await res.arrayBuffer(); // disturbs the body
       return res;
     });
+    // No rebuild means no finalizer read of committed bodies; the adapters'
+    // onServeError owns the wire-level 500 (test/adapters-node-sink.test.ts).
     const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(500);
+    expect(res.headers.get("x-late")).toBe("1");
+    await expect(res.arrayBuffer()).rejects.toThrow();
   });
 
-  it("sugar: plain c.set after a sugar return still merges (control for R5-4)", async () => {
+  it("sugar: plain c.setHeader after a sugar return still merges (control for R5-4)", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("X-Late", "1");
+      c.setHeader("X-Late", "1");
     });
-    app.get("/k", (c) => {
-      c.set("X-Early", "1");
-      return c.text("ok");
-    });
+    app.get("/k", (c) => (c.setHeader("X-Early", "1"), c.text("ok")));
     const res = await drive(app, new Request("http://localhost:3000/k"));
     expect(res.headers.get("x-early")).toBe("1");
     expect(res.headers.get("x-late")).toBe("1");
@@ -340,23 +337,43 @@ describe("agent r5 — locks correct behavior", () => {
     expect(await r2.text()).toBe("ok:/b");
   });
 
-  it("rule 4: post-commit status override written POST-commit applies (control for R5-1)", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
+  it("0.7: a post-commit status override is a TypeError; the override pattern returns a new Response", async () => {
+    const frozen = new Keala(quiet);
+    frozen.use(async (c, next) => {
       await next();
-      c.status = 418;
+      try {
+        c.status = 418;
+      } catch {
+        /* committed statuses are frozen (0.7) */
+      }
     });
-    app.get("/c", () => new Response("tea"));
-    const res = await drive(app, new Request("http://localhost:3000/c"));
-    expect(res.status).toBe(418);
-    expect(await res.text()).toBe("tea");
+    frozen.get("/c", () => new Response("tea"));
+    const res = await drive(frozen, new Request("http://localhost:3000/c"));
+    expect([res.status, await res.text()]).toEqual([200, "tea"]);
+
+    const replaced = new Keala(quiet);
+    replaced.use(async (c, next) => {
+      await next();
+      const inner = c.res;
+      if (inner !== undefined)
+        return new Response(inner.body, { status: 418, headers: inner.headers });
+    });
+    replaced.get("/c", () => new Response("tea"));
+    const swapped = await drive(replaced, new Request("http://localhost:3000/c"));
+    expect([swapped.status, await swapped.text()]).toEqual([418, "tea"]);
   });
 
-  it("rule 4: post-commit 304 keeps validators, drops content headers", async () => {
+  it("0.7: a not-modified takeover keeps validators, drops content headers (override pattern)", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.status = 304;
+      const inner = c.res;
+      if (inner === undefined || inner.status !== 200) return;
+      const headers = new Headers(inner.headers);
+      headers.delete("content-type");
+      headers.delete("content-length");
+      headers.delete("transfer-encoding");
+      return new Response(null, { status: 304, headers });
     });
     app.get(
       "/f",
@@ -373,7 +390,7 @@ describe("agent r5 — locks correct behavior", () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("X-Replace", "second");
+      c.setHeader("X-Replace", "second");
       c.remove("X-Drop");
     });
     app.get(
@@ -429,7 +446,7 @@ describe("agent r5 — locks correct behavior", () => {
   it("finalizer: staged-only headers ride on the 404 and on a notFound handler Response", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      c.set("X-Global", "1");
+      c.setHeader("X-Global", "1");
       await next();
     });
     const res = await drive(app, new Request("http://localhost:3000/nope"));
@@ -439,7 +456,7 @@ describe("agent r5 — locks correct behavior", () => {
 
     const app2 = new Keala(quiet);
     app2.use(async (c, next) => {
-      c.set("X-Global", "1");
+      c.setHeader("X-Global", "1");
       await next();
     });
     app2.notFound(() => new Response("custom nf", { status: 404, headers: { "x-nf": "1" } }));
@@ -454,7 +471,7 @@ describe("agent r5 — locks correct behavior", () => {
     // R7: the finalizer never reads a committed body — no CL backfill.
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      c.set("X-Global", "1");
+      c.setHeader("X-Global", "1");
       await next();
     });
     app.notFound(() => new Response("custom-nf-body", { status: 404 }));
@@ -463,21 +480,5 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.headers.get("content-length")).toBeNull();
     expect(res.headers.get("x-global")).toBe("1");
     expect(res.body).toBeNull();
-  });
-  it("dispatch: parseListenArgs accepts port/hostname/callback, numeric strings and option bags", () => {
-    const onListen = () => {};
-    const parsed = parseListenArgs([3000, "0.0.0.0", onListen]);
-    expect(parsed.listen.port).toBe(3000);
-    expect(parsed.hostname).toBe("0.0.0.0");
-    expect(parsed.onListen).toBe(onListen);
-    expect(parseListenArgs(["8080"]).listen.port).toBe(8080);
-    const bag = parseListenArgs([
-      { port: 99, hostname: "h", idleTimeout: 9, nativeRoutes: false, websocket: true },
-    ]);
-    expect(bag.listen.port).toBe(99);
-    expect(bag.hostname).toBe("h");
-    expect(bag.listen.idleTimeout).toBe(9);
-    expect(bag.listen.nativeRoutes).toBe(false);
-    expect(bag.listen.websocket).toBe(true);
   });
 });

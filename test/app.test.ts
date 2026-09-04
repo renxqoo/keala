@@ -26,7 +26,7 @@ describe("app pipeline", () => {
   it("global middleware runs for UNMATCHED paths (koa contract)", async () => {
     const app = new Keala(quiet);
     app.use((c, next) => {
-      c.set("X-Global", "1");
+      c.setHeader("X-Global", "1");
       return next();
     });
     app.get("/known", (c) => c.text("ok"));
@@ -53,7 +53,7 @@ describe("app pipeline", () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.status = 201;
-      c.set("X-Made", "yes");
+      c.setHeader("X-Made", "yes");
       c.body = "made";
     });
     const res = await app.handle(req("/s"));
@@ -65,7 +65,7 @@ describe("app pipeline", () => {
   it("dual mode: a committed Response wins over concurrent state, and later c.set merges in", async () => {
     const app = new Keala(quiet);
     app.get("/d", (c) => {
-      void c.set("X-Before", "1");
+      void c.setHeader("X-Before", "1");
       return c.text("returned");
     });
     const res = await app.handle(req("/d"));
@@ -85,39 +85,47 @@ describe("app pipeline", () => {
     expect(ct === null || ct === "text/plain;charset=UTF-8").toBe(true);
   });
 
-  it("keeps the implicit text type when post-next middleware rebuilds c.text()", async () => {
+  it("a post-next header write never disturbs c.text()'s implicit type (0.7: no rebuild)", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("x-late", "1");
+      c.setHeader("x-late", "1");
     });
     app.get("/text", (c) => c.text("plain"));
 
     const res = await app.handle(req("/text"));
-    expect(res.headers.get("content-type") ?? "").toMatch(/^text\/plain(?:;|$)/i);
+    // undici stamps string bodies at construction; Bun defers text/plain to
+    // serve-time inference — either way the write did not touch the type.
+    const ct = res.headers.get("content-type") ?? "";
+    expect(ct === "" || /^text\/plain/i.test(ct)).toBe(true);
     expect(res.headers.get("x-late")).toBe("1");
     expect(await res.text()).toBe("plain");
   });
 
-  it("does not resurrect an explicitly removed or replaced text content-type", async () => {
+  it("does not resurrect an explicitly removed text content-type; a replaced body throws (0.7)", async () => {
     const removed = new Keala(quiet);
     removed.use(async (c, next) => {
       await next();
       c.remove("content-type");
-      c.set("x-late", "1");
+      c.setHeader("x-late", "1");
     });
     removed.get("/text", (c) => c.text("plain"));
     expect((await removed.handle(req("/text"))).headers.get("content-type")).toBeNull();
 
     const replaced = new Keala(quiet);
+    const thrown: unknown[] = [];
     replaced.use(async (c, next) => {
       await next();
-      c.body = new Uint8Array([1, 2, 3]);
+      try {
+        c.body = new Uint8Array([1, 2, 3]);
+      } catch (error) {
+        thrown.push(error);
+      }
     });
     replaced.get("/text", (c) => c.text("plain"));
     const replacedRes = await replaced.handle(req("/text"));
-    expect(replacedRes.headers.get("content-type")).toBeNull();
-    expect(new Uint8Array(await replacedRes.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    expect(thrown[0]).toBeInstanceOf(TypeError);
+    expect(await replacedRes.text()).toBe("plain");
   });
 
   it("c.json returns application/json through the native static", async () => {
@@ -195,7 +203,7 @@ describe("app pipeline", () => {
     const app = new Keala(quiet);
     app.get("/late", (c) => c.text("core"));
     app.use(async (c, next) => {
-      c.set("X-Late", "1");
+      c.setHeader("X-Late", "1");
       await next();
     });
     const res = await app.handle(req("/late"));
@@ -247,7 +255,7 @@ describe("app: mounting", () => {
   it("mounts another app's routes with its global middleware prepended", async () => {
     const sub = new Keala(quiet);
     sub.use((c, next) => {
-      c.set("X-Sub", "1");
+      c.setHeader("X-Sub", "1");
       return next();
     });
     sub.get("/inner", (c) => c.text("inner"));
@@ -279,7 +287,7 @@ describe("app: registration validation", () => {
   it("app.param middleware runs for routes capturing the param", async () => {
     const app = new Keala(quiet);
     app.param("pid", async (c, next) => {
-      c.set("X-Param", c.params?.["pid"] ?? "");
+      c.setHeader("X-Param", c.params?.["pid"] ?? "");
       await next();
     });
     app.get("/p/:pid", (c) => c.text("done"));

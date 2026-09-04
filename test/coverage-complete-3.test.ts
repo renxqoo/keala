@@ -25,7 +25,7 @@ describe("coverage: final sugar shapes", () => {
   it("json with only state-record headers (no args) merges them", async () => {
     const app = new Keala(quiet);
     app.get("/h", (c) => {
-      c.set("x-rec", "1");
+      c.setHeader("x-rec", "1");
       return c.json({ ok: 1 });
     });
     const res = await app.handle(req("/h"));
@@ -60,21 +60,22 @@ describe("coverage: request host edge branches", () => {
       undefined,
     );
 
+  // 0.7: c.hostname is gone — host (with port) is the surviving accessor;
+  // callers strip the port themselves.
+
   it("an empty host header falls back to the URL authority", () => {
     const c = ctxFor("http://localhost:3000/x", { host: "" });
     expect(c.host).toBe("localhost:3000");
-    expect(c.hostname).toBe("localhost");
   });
 
-  it("bracketed IPv6 hosts resolve through WHATWG URL semantics", () => {
+  it("bracketed IPv6 hosts pass through verbatim with their port", () => {
     const c = ctxFor("http://localhost:3000/x", { host: "[::1]:3000" });
-    // URL.hostname keeps the brackets for IPv6 literals (koa behavior).
-    expect(c.hostname).toBe("[::1]");
+    expect(c.host).toBe("[::1]:3000");
   });
 
-  it("host userinfo is stripped before hostname parsing", () => {
+  it("host userinfo is stripped before the authority is exposed", () => {
     const c = ctxFor("http://localhost:3000/x", { host: "user:pass@example.com:8080" });
-    expect(c.hostname).toBe("example.com");
+    expect(c.host).toBe("example.com:8080");
   });
 
   it("absolute request URLs fall back to their authority for host", () => {

@@ -11,7 +11,6 @@ import type { Application } from "../app.ts";
 import { createError, type HttpErrorProps } from "../../http/errors.ts";
 import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
 import { clearBranches } from "../branches.ts";
-import { markCommittedHeadersStaged } from "../committed-headers.ts";
 import { FLAG_DEV_CHAIN } from "./state.ts";
 import type { HeaderMap } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
@@ -20,7 +19,7 @@ import type { ResponseApi } from "./response.ts";
 import { responseApi } from "./response.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestSource } from "../request-source.ts";
-import { sourceHeader, sourceHeaders } from "../request-source.ts";
+import { sourceHeader } from "../request-source.ts";
 
 export interface ContextCore extends RequestApi, ResponseApi {
   readonly app: Application;
@@ -30,7 +29,6 @@ export interface ContextCore extends RequestApi, ResponseApi {
   readonly cookies: CookiesFacade;
   throw(status: number, message?: string | HttpErrorProps, props?: HttpErrorProps): never;
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void;
-  toJSON(): Record<string, unknown>;
 }
 
 export type Context = ContextState & ContextCore;
@@ -51,7 +49,6 @@ const contextApi: ThisType<Context> & {
   readonly routerAllowed: Set<string>;
   throw(status: number, message?: string | HttpErrorProps, props?: HttpErrorProps): never;
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void;
-  toJSON(): Record<string, unknown>;
 } = {
   get app(): Application {
     return this.appValue;
@@ -67,12 +64,9 @@ const contextApi: ThisType<Context> & {
     // The facade writes `Set-Cookie` straight into the response header record
     // (same semantics as koa); arrays are detected by the finalizer without
     // needing the multi-value flag. Null-proto like recordOf() — inherited
-    // keys must never surface on the header record.
-    // The facade writes the record directly. If earlier post-commit header
-    // operations were applied in place, materializing this writer turns the
-    // mirror back into semantic rebuild input so a later cookie cannot be
-    // skipped by the finalizer.
-    markCommittedHeadersStaged(c);
+    // keys must never surface on the header record. Post-commit cookie writes
+    // ride the same record: the finalizer merges it onto the committed
+    // Response (set-cookie joins, it never replaces).
     const headers = (c.headersRecord ??= Object.create(null) as HeaderMap);
     const cookies = createCookies({
       get cookieHeader(): string | null {
@@ -100,17 +94,6 @@ const contextApi: ThisType<Context> & {
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void {
     if (!test) throw createError(status, message, props);
   },
-  toJSON(): Record<string, unknown> {
-    const record = this.headersRecord;
-    return {
-      method: this.method,
-      url: this.url,
-      header: Object.fromEntries(sourceHeaders(this.rawRequest).entries()),
-      status: this.statusValue,
-      message: this.message,
-      headers: record === null ? {} : { ...record },
-    };
-  },
 };
 
 /**
@@ -123,22 +106,17 @@ const CONTEXT_DEFAULTS = {
   runtimeValue: undefined,
   pathValue: null,
   urlValue: null,
-  originalUrlValue: null,
   ipValue: null,
   allowedValue: null,
   params: null,
   querystringValue: null,
   urlObjectValue: null,
-  hostnameValue: null,
   hostValue: null,
   statusValue: 404,
-  messageValue: "",
   headersRecord: null,
   bodyValue: null,
   flags: 0,
-  removedValue: null,
   _res: undefined,
-  implicitTextResponseValue: undefined,
   directBodyResponseValue: undefined,
   stateValue: null,
   cookiesValue: null,

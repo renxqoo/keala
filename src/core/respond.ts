@@ -7,23 +7,27 @@
  * for objects; init with a `Headers` instance (cheaper than a record); flattened
  * [name, value] pairs when multi-value headers exist.
  *
+ * 0.7 commit contract: a committed Response is returned verbatim unless the
+ * request staged headers BEFORE the commit (`c.setHeader(...)` followed by
+ * `return new Response(...)`) — those merge straight onto the committed
+ * headers in place, with a rebuild fallback for immutable guards. There is
+ * no post-commit body/status rewrite machinery: the accessors throw instead
+ * (docs/KEALA-NATIVE-API.md §3).
+ *
  * Inherited response contracts (docs/MIGRATION.md §3): empty-status header
  * cleanup, HEAD Content-Length for state-mode bodies and sugar HEAD returns
  * (computed from the would-be body value — committed bodies are never read),
- * non-Latin-1 statusText fallback, and the set-cookie/multi-value
- * precondition for the fast paths.
+ * and the set-cookie/multi-value precondition for the fast paths.
  */
 
 import type { Application } from "./app.ts";
 import type { Context } from "./context/context.ts";
 import { byteLengthOf } from "../utils/url.ts";
 import { isEmptyStatus, statusMessage } from "../http/status.ts";
-import { isStatusText } from "../utils/text.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
-import { isImplicitTextResponse, TEXT_PLAIN } from "./context/sugar.ts";
-import { FLAG_COMMITTED_HEADERS_APPLIED } from "./context/state.ts";
-import { createPlannedResponse, inheritResponseFacts } from "./response-plan.ts";
+import { TEXT_PLAIN } from "./context/sugar.ts";
+import { createPlannedResponse } from "./response-plan.ts";
 import { isNativeRequestSource } from "./request-source.ts";
 
 /** Body-describing headers a 204/304 must not carry (RFC 9110 §8.6). */
@@ -62,7 +66,7 @@ const untouched = (c: Context): boolean => (c.flags & 1) === 0 && c.bodyValue ==
 /**
  * 405/501/OPTIONS for a matched path whose method has no handler — evaluated
  * only when the middleware layer left the response untouched (koa-router
- * semantics via allowedMethods).
+ * semantics via allowedMethods). 0.7: the answers carry `Allow` and NO body.
  */
 const methodNotAllowed = (c: Context): Response | null => {
   const allowed = c.allowedValue;
@@ -70,76 +74,70 @@ const methodNotAllowed = (c: Context): Response | null => {
   const allowHeader = ALLOW_ORDER.filter((m) => allowed.has(m)).join(", ");
   const method = c.method.toUpperCase();
   const headers: HeaderMap = { allow: allowHeader };
-  // koa parity: 405/501 carry the status-message body (HEAD stays bodiless).
-  const bodied = (status: number, fallback: string): Response => {
-    // Post-next observers (logging, metrics by exact code) read c.status —
-    // the synthesized answer must be visible there, not only on the wire.
-    c.statusValue = status;
-    return (c.directBodyResponseValue = new Response(statusMessage(status) || fallback, {
-      status,
-      headers: { ...headers, "content-type": "text/plain; charset=utf-8" },
-    }));
-  };
+  // Post-next observers (logging, metrics by exact code) read c.status —
+  // the synthesized answer must be visible there, not only on the wire.
   if (!KNOWN_METHODS.has(method)) {
     // koa-router answers 501; unknownMethodAs404 opts into 404 instead.
     if (c.appValue.unknownMethodAs404) return null;
-    return method === "HEAD"
-      ? new Response(null, { status: 501, headers })
-      : bodied(501, "Not Implemented");
+    c.statusValue = 501;
+    return new Response(null, { status: 501, headers });
   }
   if (method === "OPTIONS") {
     // koa-router: OPTIONS answers 200 with an empty body and Allow.
+    c.statusValue = 200;
     return new Response(null, { status: 200, headers });
   }
   if (!allowed.has(method)) {
-    if (method === "HEAD") return new Response(null, { status: 405, headers });
-    return bodied(405, "Method Not Allowed");
+    c.statusValue = 405;
+    return new Response(null, { status: 405, headers });
   }
   return null;
 };
 
-/**
- * Rule 4: post-commit mutations rewrite the committed Response. Removals
- * drop their headers, staged writes REPLACE their headers wholesale (they
- * are the user's latest intent — arrays append as exact multi-values), and
- * post-commit `c.status`/`c.message`/`c.body` writes (flags 32/64/128 — set
- * by the accessors only when a Response is already committed) override the
- * status, reason phrase and body respectively. Pre-commit staging never
- * leaks in: the commit superseded it. The rebuild NEVER reads the committed
- * body — content-type/length metadata comes from what the Response itself
- * exposes, so an OPEN stream producer can never block the finalizer (a
- * body is the adapter's/client's to consume, not the framework's).
- */
-const rebuildCommitted = (c: Context, res: Response): Response => {
-  const headers = mergedResponseHeaders(res);
-  // A post-commit body write (flag 128) REPLACES the committed body — the
-  // committed Response's body-describing headers describe the OLD body and
-  // must not ride along: a stale content-length desyncs the byte stream on
-  // keep-alive/proxied connections (the error path does the same cleanup
-  // for the same reason). Staged record headers still apply on top below.
-  if ((c.flags & 128) !== 0) {
-    headers.delete("content-length");
-    headers.delete("transfer-encoding");
-    headers.delete("content-encoding");
-    headers.delete("content-type");
+/** Copy one header map onto a fresh `Headers`, set-cookie joined additively. */
+const headersWith = (res: Response, record: HeaderMap): Headers => {
+  const headers = new Headers();
+  for (const [key, value] of res.headers.entries()) {
+    if (key === "set-cookie") continue; // appended individually below
+    headers.set(key, value);
   }
-  const removed = c.removedValue;
-  let contentTypeRemoved = false;
-  if (removed !== null) {
-    for (const name of removed) {
-      headers.delete(name);
-      if (name === "content-type") contentTypeRemoved = true;
+  for (const cookie of res.headers.getSetCookie()) headers.append("set-cookie", cookie);
+  for (const key of Object.keys(record)) {
+    const value = record[key] as string | string[];
+    if (key === "set-cookie") {
+      // Set-Cookie is add-only on the wire: staged cookies JOIN the ones the
+      // response already carries (a late c.cookies.set adds a cookie, never
+      // replaces the ones the handler already sent).
+      if (Array.isArray(value)) {
+        for (const item of value) headers.append(key, item);
+      } else {
+        headers.append(key, value);
+      }
+      continue;
+    }
+    headers.delete(key);
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(key, item);
+    } else {
+      headers.set(key, value);
     }
   }
-  const record = c.headersRecord;
-  if (record !== null) {
+  return headers;
+};
+
+/**
+ * Merge the headers staged BEFORE a commit onto the committed Response —
+ * in place for the ordinary (locally built, mutable) case. An immutable
+ * guard (a fetched/redirected Response someone returned while headers were
+ * staged) rebuilds through a local Response instead: the one construction
+ * that can carry them. The body is passed by reference, never read.
+ */
+const applyStagedHeaders = (res: Response, record: HeaderMap): Response => {
+  try {
+    const headers = res.headers;
     for (const key of Object.keys(record)) {
       const value = record[key] as string | string[];
       if (key === "set-cookie") {
-        // Set-Cookie is add-only on the wire: staged cookies JOIN the
-        // committed ones (a late c.cookies.set adds a cookie, never replaces
-        // the ones the handler already sent). Removal goes through
-        // c.remove("Set-Cookie") — the removal list above.
         if (Array.isArray(value)) {
           for (const item of value) headers.append(key, item);
         } else {
@@ -154,55 +152,15 @@ const rebuildCommitted = (c: Context, res: Response): Response => {
         headers.set(key, value);
       }
     }
+    return res;
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: headersWith(res, record),
+    });
   }
-  // A c.text() Response rebuilt from `res.body` no longer carries Bun's
-  // internal string-body type: the body is now a ReadableStream and Bun.serve
-  // emits application/octet-stream. Restore only that known implicit type;
-  // an explicit removal or post-commit body replacement must still win.
-  if (
-    (c.flags & 128) === 0 &&
-    !contentTypeRemoved &&
-    !headers.has("content-type") &&
-    isImplicitTextResponse(c, res)
-  ) {
-    headers.set("content-type", TEXT_PLAIN);
-  }
-  const statusOverridden = (c.flags & 32) !== 0;
-  const status = statusOverridden ? c.statusValue : res.status;
-  // Rule 4 as documented: a post-commit c.status OR c.message overrides the
-  // reason phrase — but only writes made AFTER the commit count (64). A
-  // message staged before the commit was superseded by the Response itself.
-  const statusText =
-    (c.flags & 64) !== 0 && isStatusText(c.messageValue) ? c.messageValue : res.statusText;
-  // A post-commit body write (128) replaces the committed body — the user's
-  // latest intent; anything staged before the commit rides the Response.
-  const body = (c.flags & 128) !== 0 ? bodyInitOf(c.bodyValue) : res.body;
-  if (isEmptyStatus(status)) {
-    // RFC 9110 §8.6: a 204/304 MUST NOT carry content-describing headers —
-    // the same cleanup the state-mode path applies.
-    headers.delete("content-type");
-    headers.delete("content-length");
-    headers.delete("transfer-encoding");
-    return new Response(null, { status, statusText, headers });
-  }
-  const rebuilt = new Response(body, { status, statusText, headers });
-  if ((c.flags & 128) !== 0 && !isContextBoundBody(c.bodyValue)) {
-    c.directBodyResponseValue = rebuilt;
-    return rebuilt;
-  }
-  return (c.flags & 128) === 0 ? inheritResponseFacts(rebuilt, res) : rebuilt;
-};
-
-/** Response headers for a rebuild: the committed headers as-is — content-type
- *  inference stays whatever the Response itself carries. */
-const mergedResponseHeaders = (res: Response): Headers => {
-  const headers = new Headers();
-  for (const [key, value] of res.headers.entries()) {
-    if (key === "set-cookie") continue; // appended individually below
-    headers.set(key, value);
-  }
-  for (const cookie of res.headers.getSetCookie()) headers.append("set-cookie", cookie);
-  return headers;
 };
 
 /**
@@ -218,8 +176,8 @@ export const stripBody = (res: Response): Response =>
 
 type BodyData = string | Uint8Array | ReadableStream | Blob | null;
 
-const isStreaming = (body: unknown): body is ReadableStream | Blob | Response =>
-  body instanceof ReadableStream || body instanceof Blob || body instanceof Response;
+const isStreaming = (body: unknown): body is ReadableStream | Blob =>
+  body instanceof ReadableStream || body instanceof Blob;
 
 /** Serialize per body kind: objects through native JSON, the rest verbatim. */
 const bodyInitOf = (body: Context["bodyValue"]): BodyData => {
@@ -286,12 +244,10 @@ const observedStream = (
   });
 };
 
-const isContextBoundBody = (body: Context["bodyValue"]): boolean =>
-  body instanceof ReadableStream || body instanceof Response;
+const isContextBoundBody = (body: Context["bodyValue"]): boolean => body instanceof ReadableStream;
 
 const buildFromState = (c: Context, head: boolean): Response => {
   const status = c.statusValue;
-  const custom = c.messageValue;
   let body: Context["bodyValue"] = c.bodyValue;
   let record = c.headersRecord;
 
@@ -305,7 +261,7 @@ const buildFromState = (c: Context, head: boolean): Response => {
   if (body === null || body === undefined) {
     if ((c.flags & 2) === 0 && !isEmptyStatus(status)) {
       // koa: a null body falls back to the status message text.
-      body = custom.length > 0 ? custom : statusMessage(status) || String(status);
+      body = statusMessage(status) || String(status);
     } else {
       body = null;
       if (record !== null) {
@@ -339,14 +295,12 @@ const buildFromState = (c: Context, head: boolean): Response => {
 
   const multiValue =
     (c.flags & 4) !== 0 || (record !== null && Array.isArray(record["set-cookie"]));
-  const statusText = isStatusText(custom) ? custom : "";
-  const reason = statusText.length > 0 ? statusText : undefined;
   const hasRecord = record !== null && countOf(record) > 0;
   const isObject = body !== null && typeof body === "object" && !(body instanceof Uint8Array);
 
-  // Bare fast path: default status, no custom headers, no message — the
-  // runtime provides content-type/length.
-  if (!multiValue && !hasRecord && status === 200 && custom.length === 0) {
+  // Bare fast path: default status, no custom headers — the runtime provides
+  // content-type/length.
+  if (!multiValue && !hasRecord && status === 200) {
     if (isObject && !isStreaming(body)) {
       if (isNativeRequestSource(c.rawRequest)) {
         const json = JSON.stringify(body) ?? "null";
@@ -365,16 +319,16 @@ const buildFromState = (c: Context, head: boolean): Response => {
 
   if (multiValue) {
     const flat = record === null ? [] : flattenHeaders(record);
-    return new Response(bodyInitOf(body), { status, statusText: reason, headers: flat });
+    return new Response(bodyInitOf(body), { status, headers: flat });
   }
   if (!hasRecord) {
-    // Status/message only — the cheap init shape.
+    // Status-only — the cheap init shape.
     if (isObject && !isStreaming(body)) {
       if (isNativeRequestSource(c.rawRequest)) {
         const json = JSON.stringify(body) ?? "null";
-        return createPlannedResponse(json, { status, statusText: reason }, "application/json");
+        return createPlannedResponse(json, { status }, "application/json");
       }
-      return jsonInit(body as object, { status, statusText: reason });
+      return jsonInit(body as object, { status });
     }
     if (
       isNativeRequestSource(c.rawRequest) &&
@@ -382,11 +336,11 @@ const buildFromState = (c: Context, head: boolean): Response => {
     ) {
       return createPlannedResponse(
         body,
-        { status, statusText: reason },
+        { status },
         typeof body === "string" ? TEXT_PLAIN : undefined,
       );
     }
-    return new Response(bodyInitOf(body), { status, statusText: reason });
+    return new Response(bodyInitOf(body), { status });
   }
   // Headers-instance init (faster than a record init by ~60ns).
   const headers = new Headers();
@@ -403,9 +357,9 @@ const buildFromState = (c: Context, head: boolean): Response => {
     if (isNativeRequestSource(c.rawRequest)) {
       const json = JSON.stringify(body) ?? "null";
       if (!headers.has("content-type")) headers.set("content-type", "application/json");
-      return createPlannedResponse(json, { status, statusText: reason, headers });
+      return createPlannedResponse(json, { status, headers });
     }
-    return jsonInit(body as object, { status, statusText: reason, headers });
+    return jsonInit(body as object, { status, headers });
   }
   if (
     isNativeRequestSource(c.rawRequest) &&
@@ -413,11 +367,11 @@ const buildFromState = (c: Context, head: boolean): Response => {
   ) {
     return createPlannedResponse(
       body,
-      { status, statusText: reason, headers },
+      { status, headers },
       typeof body === "string" ? TEXT_PLAIN : undefined,
     );
   }
-  return new Response(bodyInitOf(body), { status, statusText: reason, headers });
+  return new Response(bodyInitOf(body), { status, headers });
 };
 
 const fromState = (c: Context, head: boolean): Response => {
@@ -456,23 +410,14 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
     if (isEmptyStatus(committed.status) && committed.body !== null) {
       return sanitizeEmptyStatus(committed);
     }
+    // Headers staged BEFORE the commit merge onto the committed Response;
+    // post-commit header writes already landed there directly. HEAD drops
+    // the body on every path.
     const record = c.headersRecord;
-    // Rule 4: a committed Response with post-commit mutations (staged
-    // headers, removals, a status/message override) is REBUILT; the common
-    // untouched commit returns synchronously as-is. HEAD still drops the
-    // body on every path.
-    const applied = (c.flags & FLAG_COMMITTED_HEADERS_APPLIED) !== 0;
-    const semanticOverride = (c.flags & (32 | 64 | 128)) !== 0;
-    const dirty =
-      semanticOverride ||
-      ((c.flags & 16) !== 0 && !applied) ||
-      (!applied && record !== null && countOf(record) > 0);
-    if (dirty) {
-      const merged = rebuildCommitted(c, committed);
-      return c.method === "HEAD" && merged.body !== null ? stripBody(merged) : merged;
-    }
-    if (c.method === "HEAD" && committed.body !== null) return stripBody(committed);
-    return committed;
+    const merged =
+      record !== null && countOf(record) > 0 ? applyStagedHeaders(committed, record) : committed;
+    if (c.method === "HEAD" && merged.body !== null) return stripBody(merged);
+    return merged;
   }
   const head = c.method === "HEAD";
   if (untouched(c)) {
@@ -483,7 +428,7 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
       // Global-middleware headers must reach synthesized 405/501/OPTIONS
       // answers too (the koa contract: middleware output is never dropped).
       if (!staged) return head ? stripBody(rejected) : rejected;
-      const merged = rebuildCommitted(c, rejected);
+      const merged = applyStagedHeaders(rejected, record as HeaderMap);
       return head ? stripBody(merged) : merged;
     }
     const notFound = app.notFoundHandler(c);
@@ -492,7 +437,7 @@ export const finalize = (app: Application, c: Context): Response | Promise<Respo
       if (!staged) {
         return head && notFound.body !== null ? stripBody(notFound) : notFound;
       }
-      const merged = rebuildCommitted(c, notFound);
+      const merged = applyStagedHeaders(notFound, record as HeaderMap);
       return head && merged.body !== null ? stripBody(merged) : merged;
     }
   }

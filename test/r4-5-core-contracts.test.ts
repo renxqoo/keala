@@ -170,7 +170,7 @@ describe("R4.5 internal lifecycle contracts", () => {
   it("normalizes record-form numeric and boolean response headers", async () => {
     const app = new Keala({ env: "test" });
     app.get("/headers", (c) => {
-      c.set({ "x-count": 2, "x-enabled": true } as never);
+      c.setHeader({ "x-count": 2, "x-enabled": true } as never);
       return c.text("ok");
     });
     const response = await app.handle(new Request("http://localhost/headers"));
@@ -187,28 +187,30 @@ describe("R4.5 internal lifecycle contracts", () => {
       new Request("http://localhost/"),
       undefined,
     );
-    expect(() => context.set("content-type", ["text/plain", "application/json"])).toThrow(
+    expect(() => context.setHeader("content-type", ["text/plain", "application/json"])).toThrow(
       "singleton header",
     );
     expect(() => context.append("content-length", ["1", "2"])).toThrow("singleton header");
-    context.set("content-type", "text/plain");
+    context.setHeader("content-type", "text/plain");
     expect(() => context.append("content-type", "application/json")).toThrow("cannot be appended");
-    context.set("x-undefined", undefined as unknown as string);
-    context.set("x-null", null as unknown as string);
+    context.setHeader("x-undefined", undefined as unknown as string);
+    context.setHeader("x-null", null as unknown as string);
     expect(context.resHeader("x-undefined")).toBe("");
     expect(context.resHeader("x-null")).toBe("");
   });
 
-  it("restores an implicit text content-type before a post-commit header write", async () => {
+  it("a post-commit header write never resurrects an explicitly deleted content-type", async () => {
     const app = new Keala({ env: "test" });
     app.get("/bun-text-compat", (c) => {
       const response = c.text("body");
       response.headers.delete("content-type");
       c._res = response;
-      c.set("x-after-commit", "yes");
+      c.setHeader("x-after-commit", "yes");
     });
     const response = await app.handle(new Request("http://localhost/bun-text-compat"));
-    expect(response.headers.get("content-type")).toMatch(/^text\/plain/i);
+    // 0.7: no rebuild machinery means nothing rewrites the committed
+    // Response behind the handler's back — a deleted header stays deleted.
+    expect(response.headers.get("content-type")).toBeNull();
     expect(response.headers.get("x-after-commit")).toBe("yes");
     expect(await response.text()).toBe("body");
   });

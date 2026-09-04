@@ -16,7 +16,11 @@ import { REDIRECT_TARGETS, TOKEN } from "./agent-r6-prop-rig.mts";
 // INV-1: never-reject — app.handle never throws / rejects, always a Response
 // ---------------------------------------------------------------------------
 
-/** Random post-commit mutations (the rule-4 rebuild surface). */
+/**
+ * Random post-commit mutations (the 0.7 commit surface): header/cookie-ish
+ * writes land in place; body/status/redirect writes throw TypeError and are
+ * caught by the caller's log — both halves belong in the zoo.
+ */
 export const lateMutations = (rng: Rng): ((c: Context, log?: string[]) => void) => {
   const ops: ((c: Context, log?: string[]) => void)[] = [];
   const n = rng.range(1, 4);
@@ -30,8 +34,10 @@ export const lateMutations = (rng: Rng): ((c: Context, log?: string[]) => void) 
         break;
       case 1:
         ops.push((c, log) => {
-          log?.push("message");
-          c.message = randHeaderValue(rng);
+          // 0.7: the c.message op became a lastModified write (occasionally
+          // invalid, which throws exactly like the old message setter did).
+          log?.push("last-modified");
+          c.lastModified = rng.bool(0.2) ? new Date(Number.NaN) : new Date(rng.int(4102444800000));
         });
         break;
       case 2:
@@ -49,7 +55,7 @@ export const lateMutations = (rng: Rng): ((c: Context, log?: string[]) => void) 
       case 3:
         ops.push((c, log) => {
           log?.push("set");
-          c.set(randHeaderName(rng), randHeaderValue(rng));
+          c.setHeader(randHeaderName(rng), randHeaderValue(rng));
         });
         break;
       case 4:
@@ -81,8 +87,9 @@ export const lateMutations = (rng: Rng): ((c: Context, log?: string[]) => void) 
         break;
       case 8:
         ops.push((c, log) => {
+          // 0.7: c.vary is gone; append("Vary", …) is the replacement.
           log?.push("vary");
-          c.vary("x-late");
+          c.append("Vary", "x-late");
         });
         break;
       case 9:

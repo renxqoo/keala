@@ -102,7 +102,7 @@ describe("responseCache", () => {
     const app = new Keala(quiet);
     app.get("/post-only", cache(), (c) => c.text("mutated"));
     app.get("/private", cache(), (c) => {
-      c.set("Cache-Control", "private");
+      c.setHeader("Cache-Control", "private");
       return c.text("secret");
     });
     app.get("/cookied", cache(), (c) => {

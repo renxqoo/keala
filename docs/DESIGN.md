@@ -107,7 +107,7 @@ interface Ctx {
 1. **单一真相源**：每请求一个内部 `res: Response | undefined` 槽。`c.body/c.status/c.header` 是暂存写；handler 返回的 Response 是提交。
 2. **return 优先**：叶子 `return Response` → 直接用（同请求设过 `c.body` 则 dev 警告）；中间件在 `await next()` **前** return → 短路；在 `await next()` **后** return → 覆盖下游（最终改写权，hono 语义）。
 3. **undefined 由框架兜底**：叶子 undefined 且从未写 body → notFound 处理器；中间件 undefined → 透传下游。
-4. **误用检测**：return 非 Response/undefined → dev 模式 throw；`c.header()` 在 return 之后调用 → **并入**该 Response 的 headers（保证 `c.json()` 直返后仍能补头）。
+4. **误用检测**：return 非 Response/undefined → dev 模式 throw；`c.setHeader()` 在提交之后调用 → **直写**已提交 Response 的 headers（保证 `c.json()` 直返后仍能补头；0.7 契约——`c.body/c.status/c.redirect` 提交后写则抛 TypeError，见 docs/KEALA-NATIVE-API.md §3）。
 5. **错误路径**：链中 throw → `onError(err, c)`；HTTPError 携带可选 Response；onError 结果同样可被外层改写。
 6. **body 单次性**：`c.req.json()/text()/formData()/arrayBuffer()/blob()` 全部记忆化到 `bodyCache`（洋葱内多次调用安全）；需重读用 `c.req.clone()`。
 

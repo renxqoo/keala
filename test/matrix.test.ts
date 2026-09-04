@@ -83,8 +83,8 @@ describe("matrix: body kinds x explicit empty statuses", () => {
     async (status) => {
       const res = await respondWith((c) => {
         c.body = "payload";
-        c.set("Content-Length", "99");
-        c.set("X-Keep", "1");
+        c.setHeader("Content-Length", "99");
+        c.setHeader("X-Keep", "1");
         c.status = status;
       });
       expect(res.status).toBe(status);
@@ -99,7 +99,7 @@ describe("matrix: body kinds x explicit empty statuses", () => {
     async (status) => {
       const c = await captureCtx((ctx) => {
         ctx.body = "payload";
-        ctx.set("X-Keep", "1");
+        ctx.setHeader("X-Keep", "1");
         ctx.status = status;
       });
       expect(c.body).toBe(null);
@@ -111,22 +111,21 @@ describe("matrix: body kinds x explicit empty statuses", () => {
 });
 
 describe("matrix: missing body per status family (koa respond semantics)", () => {
-  const cases: [number, string, string][] = [
-    [200, "OK", "OK"],
-    [201, "Created", "Created"],
-    [202, "", "Accepted"],
-    [400, "Bad Request", "Bad Request"],
-    [404, "", "Not Found"],
-    [410, "gone", "gone"],
-    [418, "teapot", "teapot"],
-    [500, "", "Internal Server Error"],
-    [503, "", "Service Unavailable"],
-    [599, "", "599"],
+  const cases: [number, string][] = [
+    [200, "OK"],
+    [201, "Created"],
+    [202, "Accepted"],
+    [400, "Bad Request"],
+    [404, "Not Found"],
+    [410, "Gone"],
+    [418, "I'm a teapot"],
+    [500, "Internal Server Error"],
+    [503, "Service Unavailable"],
+    [599, "599"],
   ];
-  it.each(cases)("status %d + msg %j → %j", async (status, message, expected) => {
+  it.each(cases)("status %d → %j body", async (status, expected) => {
     const res = await respondWith((c) => {
       c.status = status;
-      if (message) c.message = message;
     });
     expect(res.status).toBe(status);
     expect(await res.text()).toBe(expected);
@@ -186,7 +185,7 @@ describe("matrix: HEAD across body kinds", () => {
     // With a pre-existing header record the backfilled length survives.
     const res = await respondWith(
       (c) => {
-        c.set("X-A", "1");
+        c.setHeader("X-A", "1");
         c.body = "0123456789";
       },
       { method: "HEAD" },
@@ -315,51 +314,16 @@ describe("matrix: redirect status preservation", () => {
   });
 });
 
-describe("matrix: vary dedupe and ordering", () => {
+describe("matrix: Vary via append (comma-joined, casing preserved)", () => {
   it.each([
     [[["a"], ["b"]], "a, b"],
-    [[["a"], ["A"]], "a"],
-    [[["a"], ["b"], ["a"]], "a, b"],
-    [[["Origin"], ["origin"], ["Accept-Encoding"]], "Origin, Accept-Encoding"],
-  ])("vary %p → %s", async (stages, expected) => {
+    [[["a"], ["A"]], "a, A"],
+    [[["Origin"], ["Accept-Encoding"]], "Origin, Accept-Encoding"],
+  ])("append %p → %s", async (stages, expected) => {
     const res = await respondWith((c) => {
-      for (const stage of stages as string[][]) for (const field of stage) c.vary(field);
+      for (const stage of stages as string[][]) for (const field of stage) c.append("Vary", field);
       c.body = "ok";
     });
     expect(res.headers.get("vary")).toBe(expected);
-  });
-});
-
-describe("matrix: toJSON snapshots", () => {
-  it("toJSON reflects the state at call time (headers, status, message)", async () => {
-    const c = await captureCtx((ctx) => {
-      ctx.status = 201;
-      const before = ctx.toJSON() as { headers: Record<string, string> };
-      ctx.set("X-Step", "2");
-      const after = ctx.toJSON() as {
-        headers: Record<string, string>;
-        status: number;
-        message: string;
-      };
-      expect(before.headers["x-step"]).toBeUndefined();
-      expect(after.headers["x-step"]).toBe("2");
-      expect(after.status).toBe(201);
-      expect(after.message).toBe("Created");
-    });
-    expect(c.toJSON()["status"]).toBe(201);
-  });
-
-  it("toJSON captures method/url/header from the request side", async () => {
-    const app = new Keala(quiet);
-    let json: Record<string, unknown> | undefined;
-    app.use((c) => {
-      json = c.toJSON();
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/a/b?c=1", { headers: { "X-P": "yes" } }));
-    expect(json?.["method"]).toBe("GET");
-    expect(json?.["url"]).toBe("/a/b?c=1");
-    const header = (json?.["header"] ?? {}) as Record<string, string>;
-    expect(header["x-p"]).toBe("yes");
   });
 });

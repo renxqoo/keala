@@ -25,10 +25,10 @@ describe("header injection (response splitting)", () => {
   it("rejects CRLF in header values via set/append", async () => {
     const app = new Keala(quiet);
     app.use(async (c) => {
-      expect(() => c.set("X-Safe", "v\r\nSet-Cookie: pwned=1")).toThrow(TypeError);
+      expect(() => c.setHeader("X-Safe", "v\r\nSet-Cookie: pwned=1")).toThrow(TypeError);
       expect(() => c.append("X-Safe", "v\nX-Evil: 1")).toThrow(TypeError);
-      expect(() => c.set("X-Safe", "v\rX-Evil: 1")).toThrow(TypeError);
-      expect(() => c.set("X-Safe", "v\u0000")).toThrow(TypeError);
+      expect(() => c.setHeader("X-Safe", "v\rX-Evil: 1")).toThrow(TypeError);
+      expect(() => c.setHeader("X-Safe", "v\u0000")).toThrow(TypeError);
       c.body = "ok";
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
@@ -48,16 +48,8 @@ describe("header injection (response splitting)", () => {
     expect(res.headers.get("set-cookie")).toBe(null);
   });
 
-  it("rejects CRLF in status messages", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c) => {
-      expect(() => {
-        c.message = "fine\r\nX-Evil: 1";
-      }).toThrow(TypeError);
-      c.body = "ok";
-    });
-    await drive(app, new Request("http://localhost:3000/"));
-  });
+  // 0.7: the "rejects CRLF in status messages" lock is gone with c.message
+  // (statusText customization no longer exists).
 
   it("rejects CRLF and NUL in cookie serialization", async () => {
     const app = new Keala(quiet);
@@ -122,9 +114,9 @@ describe("prototype pollution", () => {
   it("rejects __proto__-style header names", async () => {
     const app = new Keala(quiet);
     app.use(async (c) => {
-      expect(() => c.set("__proto__", "x")).toThrow(TypeError);
-      expect(() => c.set("constructor", "x")).toThrow(TypeError);
-      expect(() => c.set("prototype", "x")).toThrow(TypeError);
+      expect(() => c.setHeader("__proto__", "x")).toThrow(TypeError);
+      expect(() => c.setHeader("constructor", "x")).toThrow(TypeError);
+      expect(() => c.setHeader("prototype", "x")).toThrow(TypeError);
       c.body = "ok";
     });
     await drive(app, new Request("http://localhost:3000/"));
@@ -249,7 +241,10 @@ describe("information disclosure", () => {
     expect(await res.text()).toBe("invalid input");
   });
 
-  it("escapes HTML in redirect bodies (XSS in fallback page)", async () => {
+  it("redirect bodies are gone; the Location value carries no raw markup (XSS)", async () => {
+    // 0.7: redirects are empty-bodied (Location only), so the old fallback
+    // page's HTML-escaping surface is gone — the attack intent moves to the
+    // header, where encodeUrlValue percent-encodes < > " and friends.
     const app = new Keala();
     app.use(async (c) => {
       c.redirect("/next?<script>alert(document.domain)</script>");
@@ -258,12 +253,14 @@ describe("information disclosure", () => {
       app,
       new Request("http://localhost:3000/", { headers: { Accept: "text/html" } }),
     );
-    const body = await res.text();
-    expect(body).not.toContain("<script>");
-    expect(body).toContain("&lt;script&gt;");
+    expect(await res.text()).toBe("");
+    const location = res.headers.get("location") ?? "";
+    expect(location).not.toContain("<");
+    expect(location).not.toContain(">");
+    expect(location).toContain("%3Cscript%3E");
   });
 
-  it("escapes quotes in redirect href attributes", async () => {
+  it("redirect Location values never carry raw quotes", async () => {
     const app = new Keala();
     app.use(async (c) => {
       c.redirect('/a?x="onmouseover=alert(1)');
@@ -272,8 +269,8 @@ describe("information disclosure", () => {
       app,
       new Request("http://localhost:3000/", { headers: { Accept: "text/html" } }),
     );
-    const body = await res.text();
-    expect(body).not.toContain('"onmouseover');
+    expect(await res.text()).toBe("");
+    expect(res.headers.get("location")).not.toContain('"');
   });
 });
 

@@ -2,10 +2,11 @@
  * Response sugar helpers — the hono-compatible `c.text()/c.json()/c.html()`
  * return-style constructors.
  *
- * The helpers CONSUME the staged headers: whatever c.set()/c.cookies wrote
- * before the return is delivered inside the built Response, and the staging
- * record is cleared so the finalizer does not merge it a second time. Only
- * writes staged AFTER the sugar return hit the rule-4 merge path.
+ * The helpers CONSUME the staged headers: whatever c.setHeader()/c.cookies
+ * wrote before the return is delivered inside the built Response, and the
+ * staging record is cleared so the finalizer does not merge it a second
+ * time. Writes made AFTER the sugar return land directly on the committed
+ * Response's headers (the 0.7 contract).
  *
  * Null-body statuses (204/205/304) honor the same contract as the state-mode
  * finalizer: no body, no content headers — a 204-with-body Response cannot
@@ -15,9 +16,8 @@
 import type { HeaderValue } from "../../types.ts";
 import { byteLengthOf } from "../../utils/url.ts";
 import { isEmptyStatus } from "../../http/status.ts";
-import { isStatusText } from "../../utils/text.ts";
 import type { ContextState } from "./state.ts";
-import { createPlannedResponse, responseFactsOf } from "../response-plan.ts";
+import { createPlannedResponse } from "../response-plan.ts";
 import { isNativeRequestSource, sourceMethod } from "../request-source.ts";
 
 export const TEXT_PLAIN = "text/plain; charset=utf-8";
@@ -36,23 +36,11 @@ const directResponse = (c: ContextState, response: Response): Response => {
   return response;
 };
 
-export const isImplicitTextResponse = (c: ContextState, response: Response): boolean =>
-  c.implicitTextResponseValue === response ||
-  responseFactsOf(response)?.implicitContentType === TEXT_PLAIN;
-
 const textResponse = (c: ContextState, body: string, init?: ResponseInit): Response => {
   if (isNativeRequestSource(c.rawRequest)) {
     return directResponse(c, createPlannedResponse(body, init, TEXT_PLAIN));
   }
-  const response = new Response(body, init);
-  c.implicitTextResponseValue = response;
-  return directResponse(c, response);
-};
-
-/** Latin-1-safe statusText candidate from a staged c.message. */
-const stagedStatusText = (c: ContextState): string | undefined => {
-  const message = c.messageValue;
-  return message.length > 0 && isStatusText(message) ? message : undefined;
+  return directResponse(c, new Response(body, init));
 };
 
 /** Drop content-describing headers for a null-body status (204/205/304). */
@@ -127,12 +115,10 @@ const consumeStaged = (
 /** The empty-status Response shared by every sugar helper. */
 const emptyStatusResponse = (
   st: number,
-  statusText: string | undefined,
   clean: Record<string, HeaderValue> | undefined,
 ): Response =>
   new Response(null, {
     status: st,
-    ...(statusText !== undefined ? { statusText } : {}),
     ...(clean !== undefined ? { headers: headersInitOf(clean) } : {}),
   });
 
@@ -147,7 +133,6 @@ const sugarHead = (
   contentType: string | undefined,
   bodyLength: number,
   status: number | undefined,
-  statusText: string | undefined,
 ): Response => {
   const record: Record<string, HeaderValue> = merged === undefined ? {} : { ...merged };
   if (contentType !== undefined && record["content-type"] === undefined) {
@@ -156,7 +141,6 @@ const sugarHead = (
   record["content-length"] = String(bodyLength);
   return new Response(null, {
     status: status ?? 200,
-    ...(statusText !== undefined ? { statusText } : {}),
     headers: headersInitOf(record),
   });
 };
@@ -174,38 +158,19 @@ export const sugarText = (
   const merged = consumeStaged(c, headers);
   // An explicitly staged c.status wins over the default (hono parity).
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
-  const statusText = stagedStatusText(c);
   const st = status ?? staged;
   if (st !== undefined && isEmptyStatus(st)) {
-    return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
+    return emptyStatusResponse(st, dropContentHeaders(merged));
   }
   if (sourceMethod(c.rawRequest) === "HEAD") {
-    return sugarHead(
-      merged,
-      TEXT_PLAIN,
-      payloadLength(body as string | Uint8Array),
-      st,
-      statusText,
-    );
-  }
-  if (merged === undefined && status === undefined && staged === undefined) {
-    // Bare path only when nothing is staged — a staged c.message must ride
-    // along as statusText exactly like the state-mode finalizer.
-    if (statusText === undefined) return textResponse(c, body);
-    return textResponse(c, body, { statusText });
+    return sugarHead(merged, TEXT_PLAIN, payloadLength(body as string | Uint8Array), st);
   }
   if (merged === undefined) {
-    return textResponse(c, body, {
-      status: st,
-      ...(statusText !== undefined ? { statusText } : {}),
-    });
+    if (st === undefined) return textResponse(c, body);
+    return textResponse(c, body, { status: st });
   }
   if (merged["content-type"] === undefined) merged["content-type"] = TEXT_PLAIN;
-  const init = {
-    status: st as number,
-    ...(statusText !== undefined ? { statusText } : {}),
-    headers: headersInitOf(merged),
-  };
+  const init = { status: st as number, headers: headersInitOf(merged) };
   return directResponse(
     c,
     isNativeRequestSource(c.rawRequest)
@@ -228,10 +193,9 @@ export const sugarJson = (
   // Response.json sets `application/json` and serializes natively — 74ns
   // cheaper than stringify + record init (see docs/AUDIT.md).
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
-  const statusText = stagedStatusText(c);
   const st = status ?? staged;
   if (st !== undefined && isEmptyStatus(st)) {
-    return emptyStatusResponse(st, statusText, dropContentHeaders(merged));
+    return emptyStatusResponse(st, dropContentHeaders(merged));
   }
   if (sourceMethod(c.rawRequest) === "HEAD") {
     // The HEAD view serializes once, here — Response.json would attach a body.
@@ -240,7 +204,6 @@ export const sugarJson = (
       "application/json",
       byteLengthOf(JSON.stringify(payload) ?? "null"),
       st,
-      statusText,
     );
   }
   if (isNativeRequestSource(c.rawRequest)) {
@@ -248,14 +211,7 @@ export const sugarJson = (
     if (merged === undefined) {
       return directResponse(
         c,
-        createPlannedResponse(
-          bodyText,
-          {
-            ...(st !== undefined ? { status: st } : {}),
-            ...(statusText !== undefined ? { statusText } : {}),
-          },
-          "application/json",
-        ),
+        createPlannedResponse(bodyText, st === undefined ? {} : { status: st }, "application/json"),
       );
     }
     const initHeaders = merged;
@@ -266,24 +222,21 @@ export const sugarJson = (
       c,
       createPlannedResponse(bodyText, {
         ...(st !== undefined ? { status: st } : {}),
-        ...(statusText !== undefined ? { statusText } : {}),
         headers: headersInitOf(initHeaders),
       }),
     );
   }
   if (merged === undefined && status === undefined && staged === undefined) {
-    if (statusText === undefined) return directResponse(c, Response.json(payload));
-    return directResponse(c, Response.json(payload, { statusText }));
+    return directResponse(c, Response.json(payload));
   }
   return directResponse(
     c,
     Response.json(
       payload,
       merged === undefined
-        ? { status: st, ...(statusText !== undefined ? { statusText } : {}) }
+        ? { status: st }
         : {
             status: st,
-            ...(statusText !== undefined ? { statusText } : {}),
             headers: headersInitOf(merged),
           },
     ),
@@ -308,40 +261,20 @@ export const sugarHtml = (
         : merged;
   const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
   const st = status ?? staged;
-  const statusText = stagedStatusText(c);
-  const statusInit =
-    st === undefined && statusText === undefined
-      ? {}
-      : {
-          ...(st !== undefined ? { status: st } : {}),
-          ...(statusText !== undefined ? { statusText } : {}),
-        };
   // Null-body statuses never carry the html content-type (see sugarText).
   if (st !== undefined && isEmptyStatus(st)) {
     return new Response(null, {
-      ...statusInit,
+      ...(st !== undefined ? { status: st } : {}),
       headers: headersInitOf(dropContentHeaders(withType) ?? {}),
     });
   }
   if (sourceMethod(c.rawRequest) === "HEAD") {
-    return sugarHead(
-      withType,
-      undefined,
-      payloadLength(body as string | Uint8Array),
-      st,
-      statusText,
-    );
+    return sugarHead(withType, undefined, payloadLength(body as string | Uint8Array), st);
   }
-  if (st === undefined && statusText === undefined) {
-    const init = { headers: headersInitOf(withType) };
-    return directResponse(
-      c,
-      isNativeRequestSource(c.rawRequest)
-        ? createPlannedResponse(body, init)
-        : new Response(body, init),
-    );
-  }
-  const init = { ...statusInit, headers: headersInitOf(withType) };
+  const init =
+    st === undefined
+      ? { headers: headersInitOf(withType) }
+      : { status: st, headers: headersInitOf(withType) };
   return directResponse(
     c,
     isNativeRequestSource(c.rawRequest)

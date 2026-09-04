@@ -205,7 +205,7 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
   const innerRouter = () => {
     const inner = new Router();
     inner.use(async (c, next) => {
-      c.set("X-Inner", "1");
+      c.setHeader("X-Inner", "1");
       await next();
     });
     inner.get("/leaf", (c) => c.text("leaf"));
@@ -234,7 +234,7 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
     const app = new Keala(quiet);
     const leaf = new Router();
     leaf.use(async (c, next) => {
-      c.set("X-Leaf", "1");
+      c.setHeader("X-Leaf", "1");
       await next();
     });
     leaf.get("/x", (c) => c.text("x"));
@@ -252,13 +252,13 @@ describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middle
     const app = new Keala(quiet);
     const inner = new Router();
     inner.param("id", async (c, next) => {
-      c.set("X-Param", c.params?.["id"] ?? "");
+      c.setHeader("X-Param", c.params?.["id"] ?? "");
       await next();
     });
     inner.get("/i/:id", (c) => c.text("i"));
     const mid = new Keala(quiet);
     mid.use(async (c, next) => {
-      c.set("X-Mid", "1");
+      c.setHeader("X-Mid", "1");
       await next();
     });
     mid.mount("/r", inner);

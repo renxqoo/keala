@@ -215,7 +215,7 @@ describe("INV-6 pooling isolation", () => {
         anyC["bodyCache"] = { secret: id };
         anyC["validValue"] = { secret: id };
         c.cookies.set("leak", `secret-${id}`);
-        c.set("x-leak", `secret-${id}`);
+        c.setHeader("x-leak", `secret-${id}`);
         return c.text(`req-${id}`);
       });
       app.get("/stream", (c) => {
@@ -275,7 +275,7 @@ describe("INV-6 pooling isolation", () => {
               /* the documented guard */
             }
             try {
-              captured.set("x-late", "evil"); // direct method: must throw
+              captured.setHeader("x-late", "evil"); // direct method: must throw
               guardFailures++;
             } catch {
               /* guard */

@@ -382,7 +382,7 @@ describe("review fixes: 0.6.3 regression locks", () => {
   it("Node transport: a staged content-length never desyncs a streamed committed Response", async () => {
     const app = new Keala({ env: "test" });
     app.get("/cl", (c) => {
-      c.set("content-length", "50"); // staged lie
+      c.setHeader("content-length", "50"); // staged lie
       return new Response("hi"); // 2-byte body
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
@@ -419,32 +419,32 @@ describe("review fixes: 0.6.3 regression locks", () => {
     ).not.toThrow();
   });
 
-  it("post-next observers see the committed Response's status/message/type", async () => {
+  it("post-next observers see the committed Response's status/type", async () => {
     const app = new Keala(quiet);
     const seen: unknown[] = [];
     app.use(async (c, next) => {
       await next();
-      seen.push(c.status, c.message, c.type);
+      // 0.7: c.message is gone; the commit-aware reads are status/type.
+      seen.push(c.status, c.type);
     });
     app.get(
       "/x",
       () =>
         new Response("body", {
           status: 201,
-          statusText: "Made",
           headers: { "content-type": "application/json" },
         }),
     );
     const res = await app.handle(new Request("http://127.0.0.1:3000/x"));
     expect(res.status).toBe(201);
-    expect(seen).toEqual([201, "Made", "application/json"]);
+    expect(seen).toEqual([201, "application/json"]);
   });
 
   it("has() sees committed Response headers — security-header guards cannot clobber", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      if (!c.has("x-frame-options")) c.set("x-frame-options", "DENY");
+      if (!c.has("x-frame-options")) c.setHeader("x-frame-options", "DENY");
     });
     app.get("/x", () => new Response("ok", { headers: { "x-frame-options": "SAMEORIGIN" } }));
     const res = await app.handle(new Request("http://127.0.0.1:3000/x"));

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { Keala } from "../src/index.ts";
 import type { Context } from "../src/core/context/context.ts";
 import { serializeCookie } from "../src/context/cookies.ts";
-import { acceptsType } from "../src/negotiation/accepts.ts";
+import { acceptsCharset, acceptsType, acceptsLanguage } from "../src/negotiation/accepts.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -86,9 +86,10 @@ describe("negotiation matrix: language matching table", () => {
     ["de-DE,de;q=0.8,en;q=0.5", ["de", "en", "de-CH"], "de"],
     ["pt-BR", ["pt", "en"], "pt"],
   ];
-  it.each(rows)("acceptsLanguages(%j, %j) → %j", async (header, provided, expected) => {
-    const ctx = await probe({ "Accept-Language": header });
-    expect(ctx.acceptsLanguages(...provided)).toBe(expected);
+  // 0.7: c.acceptsLanguages is gone; the matching matrix runs against the
+  // surviving acceptsLanguage helper directly (parse the header yourself).
+  it.each(rows)("acceptsLanguage(%j, %j) → %j", (header, provided, expected) => {
+    expect(acceptsLanguage(header, provided)).toBe(expected);
   });
 });
 
@@ -108,14 +109,15 @@ describe("negotiation matrix: encoding and charset tables", () => {
     expect(ctx.acceptsEncodings(...provided)).toBe(expected);
   });
 
+  // 0.7: c.acceptsCharsets is gone; the charset matrix runs against the
+  // surviving acceptsCharset helper directly.
   it.each([
     ["utf-8", ["utf-8", "latin1"], "utf-8"],
     ["utf-16;q=0.9, utf-8;q=0.1", ["utf-8", "utf-16"], "utf-16"],
     ["shift-jis", ["utf-8"], false],
     ["*", ["utf-8"], "utf-8"],
-  ])("charsets %j → %j", async (header, provided, expected) => {
-    const ctx = await probe({ "Accept-Charset": header });
-    expect(ctx.acceptsCharsets(...provided)).toBe(expected);
+  ])("charsets %j → %j", (header, provided, expected) => {
+    expect(acceptsCharset(header, provided)).toBe(expected);
   });
 });
 
@@ -254,9 +256,11 @@ describe("cookies matrix: facade behaviors", () => {
 });
 
 describe("url/query matrix: dense getters", () => {
+  // 0.7: c.hostname is gone (strip the port from c.host yourself); the
+  // matrix keeps locking the surviving read-only getters.
   const rows: [string, Record<string, unknown>][] = [
-    ["http://h:8080/", { path: "/", host: "h:8080", hostname: "h", querystring: "" }],
-    ["http://h/", { path: "/", host: "h", hostname: "h" }],
+    ["http://h:8080/", { path: "/", host: "h:8080", querystring: "" }],
+    ["http://h/", { path: "/", host: "h" }],
     ["http://h/a?b", { path: "/a", querystring: "b", search: "?b" }],
     ["http://h/a#f", { path: "/a", querystring: "" }],
     ["http://h/a?f#g", { path: "/a", querystring: "f" }],
@@ -269,7 +273,6 @@ describe("url/query matrix: dense getters", () => {
       seen = {
         path: c.path,
         host: c.host,
-        hostname: c.hostname,
         querystring: c.querystring,
         search: c.search,
       };

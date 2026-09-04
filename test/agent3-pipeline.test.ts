@@ -22,13 +22,13 @@ describe("agent3 — finalize: synthesized responses drop staged headers", () =>
   // 501/OPTIONS synthesis (methodNotAllowed) builds a fresh Response from
   // `{ allow }` only, and a notFound handler's returned Response is sent
   // verbatim; neither consults c.headersRecord. Staged writes survive the
-  // untouched check because c.set() only raises flag 4, not flag 1.
+  // untouched check because c.setHeader() only raises flag 4, not flag 1.
   // Expected (koa contract, cf. app.test.ts "global middleware runs for
   // UNMATCHED paths"): middleware headers reach the client on every response.
   it("CONFIRMED-BUG: 405 synthesis drops headers staged by global middleware", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      c.set("X-Tag", "1");
+      c.setHeader("X-Tag", "1");
       await next();
     });
     app.post("/only", (c) => c.text("post"));
@@ -41,7 +41,7 @@ describe("agent3 — finalize: synthesized responses drop staged headers", () =>
   it("CONFIRMED-BUG: notFound returning a Response drops staged headers", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      c.set("X-Tag", "1");
+      c.setHeader("X-Tag", "1");
       await next();
     });
     app.notFound(() => new Response("nothing", { status: 404 }));
@@ -51,34 +51,45 @@ describe("agent3 — finalize: synthesized responses drop staged headers", () =>
   });
 });
 
-describe("agent3 — post-commit response rewrites are dropped", () => {
-  // Root cause: src/core/respond.ts finalize() — the committed fast path
-  // returns `committed` as-is and mergeIntoCommitted() rebuilds with
-  // `status: res.status`, so a state-mode `c.status` write made after
-  // `await next()` never reaches the wire (the getter was made commit-aware,
-  // the setter is silently lost).
-  it("CONFIRMED-BUG: c.status write after next() never reaches the response", async () => {
+describe("agent3 — post-commit response rewrites", () => {
+  // 0.7: the old silently-dropped `c.status` writes are now loud TypeErrors
+  // (the rule-4 rebuild machinery is gone). Replace a committed response by
+  // RETURNING a new one from middleware.
+  it("post-commit c.status write throws instead of being silently dropped", async () => {
     const app = new Keala(quiet);
+    let caught: unknown;
     app.use(async (c, next) => {
       await next();
-      c.status = 201;
+      try {
+        c.status = 201;
+      } catch (err) {
+        caught = err;
+      }
     });
     app.get("/x", (c) => c.text("made"));
     const res = await app.handle(req("/x"));
-    expect(res.status).toBe(201);
+    expect(caught).toBeInstanceOf(TypeError);
+    expect((caught as Error).message).toContain("response already committed");
+    expect(res.status).toBe(200); // the committed Response survives
     expect(await res.text()).toBe("made");
   });
 
-  it("CONFIRMED-BUG: c.status write after next() is dropped on the merge path too", async () => {
+  it("post-commit header writes still land while status writes throw", async () => {
     const app = new Keala(quiet);
+    let caught: unknown;
     app.use(async (c, next) => {
       await next();
-      c.status = 203;
-      c.set("X-Late", "1");
+      try {
+        c.status = 203;
+      } catch (err) {
+        caught = err;
+      }
+      c.setHeader("X-Late", "1"); // header writes stay legal post-commit
     });
     app.get("/x", () => new Response("ok"));
     const res = await app.handle(req("/x"));
-    expect(res.status).toBe(203);
+    expect(caught).toBeInstanceOf(TypeError);
+    expect(res.status).toBe(200);
     expect(res.headers.get("x-late")).toBe("1");
   });
 
@@ -151,19 +162,8 @@ describe("agent3 — sugar helpers vs staged state", () => {
     expect(await res.text()).toBe("");
   });
 
-  // Root cause: src/core/context/response.ts text()/json()/html() consume the
-  // staged status but never pass `statusText: this.messageValue`, so a staged
-  // c.message is silently discarded — fromState() would have honored it
-  // (cf. test/response.test.ts "status message" via the state path).
-  it("CONFIRMED-BUG: sugar helpers drop a staged c.message (statusText lost)", async () => {
-    const app = new Keala(quiet);
-    app.get("/x", (c) => {
-      c.message = "all good";
-      return c.text("ok");
-    });
-    const res = await app.handle(req("/x"));
-    expect(res.statusText).toBe("all good");
-  });
+  // 0.7: the "sugar helpers drop a staged c.message" lock is gone with the
+  // API — statusText customization no longer exists.
 });
 
 describe("agent3 — investigated and cleared", () => {

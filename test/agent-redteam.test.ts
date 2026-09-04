@@ -160,7 +160,7 @@ describe("red team: router", () => {
         c.body = "route";
       });
       router.param("id", (c, next) => {
-        c.set("X-Param", "ran");
+        c.setHeader("X-Param", "ran");
         return next();
       });
       app.mount("/r1", router);
@@ -234,18 +234,8 @@ describe("red team: router", () => {
   });
 });
 
-describe("red team: request lazy cache", () => {
-  it("[Q1] querystring setter round-trips when the url carries a fragment", async () => {
-    const app = new Keala({ env: "test" });
-    app.use((c) => {
-      c.url = "/a#f";
-      c.querystring = "x=1";
-      c.body = `${c.querystring}|${c.search}`;
-    });
-    const res = await app.handle(new Request("http://localhost:3000/orig"));
-    expect(await res.text()).toBe("x=1|?x=1");
-  });
-});
+// 0.7: the "red team: request lazy cache" suite is gone — request
+// url/querystring setters were deleted (requests are read-only).
 
 describe("red team: respond state machine", () => {
   // The old bug (status lost → 200 "hello") IS fixed, but the test
@@ -262,14 +252,8 @@ describe("red team: respond state machine", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("[P2] keeps the status of an assigned web Response after a string body", async () => {
-    const res = await runPlain((c) => {
-      c.body = new Response("inner", { status: 201 });
-      c.body = "outer";
-    });
-    expect(res.status).toBe(201);
-    expect(await res.text()).toBe("outer");
-  });
+  // 0.7: [P2] (`c.body = new Response(...)` status/body adoption) is gone
+  // with the Response-as-body quirk — return the Response instead.
 
   it("[P3] stays empty for null body then undefined body then explicit status", async () => {
     const res = await runPlain((c) => {
@@ -288,7 +272,7 @@ describe("red team: respond state machine", () => {
     // auto content-length; Bun exposes it).
     let observed: number | undefined = -1;
     const res = await runPlain((c) => {
-      c.set("Content-Length", "99");
+      c.setHeader("Content-Length", "99");
       c.body = "hi";
       observed = c.length;
     });
@@ -301,7 +285,7 @@ describe("red team: respond state machine", () => {
     const res = await runPlain(
       (c) => {
         c.body = "hi";
-        c.set("Content-Length", "99");
+        c.setHeader("Content-Length", "99");
       },
       { method: "HEAD" },
     );

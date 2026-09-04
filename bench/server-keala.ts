@@ -36,7 +36,7 @@ if (sink === "param") {
 }
 
 app.get("/search/:id", (c) => {
-  c.set("X-Query", "hit");
+  c.setHeader("X-Query", "hit");
   return c.text(`${c.params?.["id"]} ${c.query("name")} ${c.query("page")}`);
 });
 
@@ -45,12 +45,12 @@ app.post("/echo-safe", async (c) => c.json(await (c as ContextWithBody).req.json
 app.get(
   "/mw",
   async (c, next) => {
-    c.set("X-Step", "1");
+    c.setHeader("X-Step", "1");
     await next();
-    c.set("X-Step-3", "3");
+    c.setHeader("X-Step-3", "3");
   },
   async (c, next) => {
-    c.set("X-Step-2", "2");
+    c.setHeader("X-Step-2", "2");
     await next();
   },
   (c) => {

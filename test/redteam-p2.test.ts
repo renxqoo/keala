@@ -147,7 +147,7 @@ describe("redteam P2: confirmed bugs (locked)", () => {
     const app = new Keala(quiet);
     app.use(cors({ origin: ["https://a.example"] }));
     app.get("/x", (c) => {
-      c.set("Vary", "Accept-Language"); // its own variance axis
+      c.setHeader("Vary", "Accept-Language"); // its own variance axis
       return c.text("ok");
     });
     const res = await app.handle(req("/x", { headers: { origin: "https://a.example" } }));
@@ -444,7 +444,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
     const app = new Keala(quiet);
     const sub = new Router();
     sub.use(async (c, next) => {
-      c.set("X-Sub", "1");
+      c.setHeader("X-Sub", "1");
       await next();
     });
     sub.get("/leaf", (c) => c.text("leaf"));
@@ -464,12 +464,12 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   it("sugar responses consume staged headers exactly once (rule-4 containment)", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.set("X-Staged", "1");
+      c.setHeader("X-Staged", "1");
       return c.json({ ok: true }, 201, { "X-Call": "2" });
     });
     app.use(async (c, next) => {
       await next();
-      c.set("X-Post", "3"); // post-commit write merges, does not duplicate
+      c.setHeader("X-Post", "3"); // post-commit write merges, does not duplicate
     });
     const res = await app.handle(req("/x"));
     expect(res.status).toBe(201);

@@ -1,5 +1,5 @@
 /**
- * ROUND 5 PARSER AUDIT — request-side locks (query/path/host/protocol/fresh).
+ * ROUND 5 PARSER AUDIT — request-side locks (query/path/host/protocol/ip).
  * Split from agent-r5-parsers.test.ts; passed before the fixes, must stay green.
  */
 
@@ -131,17 +131,13 @@ describe("getPath/getSearch lock correct behavior", () => {
 });
 
 // ---------------------------------------------------------------------------
-// host / hostname / protocol / ips — locks correct behavior
+// host / protocol / ip — locks correct behavior
 // ---------------------------------------------------------------------------
 
-describe("host/hostname lock correct behavior", () => {
-  it("splits host:port and keeps bracketed IPv6 (WHATWG hostname keeps brackets)", async () => {
-    // koa hostname → this.URL.hostname → '[::1]' (WHATWG includes brackets).
-    expect(await probe({ host: "a.com:8080" }, (c) => [c.host, c.hostname])).toEqual([
-      "a.com:8080",
-      "a.com",
-    ]);
-    expect(await probe({ host: "[::1]:3000" }, (c) => c.hostname)).toBe("[::1]");
+describe("host lock correct behavior", () => {
+  it("keeps host:port and bracketed IPv6 verbatim", async () => {
+    expect(await probe({ host: "a.com:8080" }, (c) => c.host)).toBe("a.com:8080");
+    expect(await probe({ host: "[::1]:3000" }, (c) => c.host)).toBe("[::1]:3000");
   });
 
   it("falls back to the URL authority when Host is absent", async () => {
@@ -156,17 +152,14 @@ describe("host/hostname lock correct behavior", () => {
     expect(
       await probe(
         { host: "real.com", "x-forwarded-host": "first.com, second.com" },
-        (c) => [c.host, c.hostname],
+        (c) => c.host,
         { proxy: true },
       ),
-    ).toEqual(["first.com", "first.com"]);
+    ).toBe("first.com");
   });
 
   it("userinfo is stripped from BOTH host sources", async () => {
-    expect(await probe({ host: "user@legit.com" }, (c) => [c.host, c.hostname])).toEqual([
-      "legit.com",
-      "legit.com",
-    ]);
+    expect(await probe({ host: "user@legit.com" }, (c) => c.host)).toBe("legit.com");
     expect(
       await probe(
         { host: "real.com", "x-forwarded-host": "evil.com:80@legit.com" },
@@ -177,7 +170,7 @@ describe("host/hostname lock correct behavior", () => {
   });
 });
 
-describe("protocol/secure/ips lock correct behavior", () => {
+describe("protocol/secure/ip lock correct behavior", () => {
   it("takes the first entry of a multi-valued X-Forwarded-Proto (koa 3)", async () => {
     expect(
       await probe({ "x-forwarded-proto": "https, http" }, (c) => [c.protocol, c.secure], {
@@ -192,175 +185,22 @@ describe("protocol/secure/ips lock correct behavior", () => {
     );
   });
 
-  it("ips: koa 3 semantics — slice(-maxIpsCount), only when > 0", async () => {
-    const chain = { "x-forwarded-for": "1.1.1.1, 2.2.2.2" };
-    // koa 3.2.1 request.js: `if (this.app.maxIpsCount > 0) ips = ips.slice(-this.app.maxIpsCount)`
-    expect(await probe(chain, (c) => c.ips, { proxy: true })).toEqual(["1.1.1.1", "2.2.2.2"]);
-    expect(await probe(chain, (c) => c.ips, { proxy: true, maxIpsCount: 0 })).toEqual([
-      "1.1.1.1",
-      "2.2.2.2",
-    ]);
-    expect(await probe(chain, (c) => c.ips, { proxy: true, maxIpsCount: -1 })).toEqual([
-      "1.1.1.1",
-      "2.2.2.2",
-    ]);
-    expect(await probe(chain, (c) => c.ips, { proxy: true, maxIpsCount: 1 })).toEqual(["2.2.2.2"]);
-  });
-
-  it("ips strips ports only on the two unambiguous shapes", async () => {
+  it("ip strips ports only on the two unambiguous shapes", async () => {
     // Azure-style "1.2.3.4:38242" and bracketed "[::1]:99"; a bare IPv6
     // literal keeps its colons (they ARE the address).
-    expect(
-      await probe({ "x-forwarded-for": "1.2.3.4:80, [::1]:99, 2001:db8::1" }, (c) => c.ips, {
-        proxy: true,
-      }),
-    ).toEqual(["1.2.3.4", "[::1]", "2001:db8::1"]);
-  });
-
-  it("ips ignores X-Forwarded-For entirely without proxy: true", async () => {
-    expect(await probe({ "x-forwarded-for": "1.1.1.1" }, (c) => c.ips)).toEqual([]);
-    expect(await probe({ "x-forwarded-for": "1.1.1.1" }, (c) => c.ip, { proxy: false })).toBe("");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// fresh / etagMatches — locks correct behavior (semantics of the `fresh` pkg)
-// ---------------------------------------------------------------------------
-
-describe("fresh locks correct behavior (fresh@2 parity)", () => {
-  const get = async (
-    reqHeaders: Record<string, string>,
-    fn: (c: Context) => unknown,
-  ): Promise<unknown> => {
-    const app = new Keala(quiet);
-    let captured: Context | undefined;
-    app.use(async (c) => {
-      captured = c;
-    });
-    await drive(app, new Request("http://x/", { headers: reqHeaders }));
-    return fn(captured as Context);
-  };
-
-  it("If-Modified-Since alone with no Last-Modified on the response → stale", async () => {
-    expect(
-      await get({ "if-modified-since": "Wed, 21 Oct 2026 07:28:00 GMT" }, (c) => {
-        c.status = 200;
-        return c.fresh;
-      }),
-    ).toBe(false);
-  });
-
-  it("both validators present and satisfied → fresh", async () => {
-    expect(
-      await get(
-        { "if-none-match": '"v1"', "if-modified-since": "Wed, 21 Oct 2026 07:28:00 GMT" },
-        (c) => {
-          c.status = 200;
-          c.etag = '"v1"';
-          c.lastModified = new Date("Tue, 20 Oct 2026 07:28:00 GMT");
-          return c.fresh;
-        },
-      ),
-    ).toBe(true);
-  });
-
-  it("a future Last-Modified → stale", async () => {
-    expect(
-      await get({ "if-modified-since": "Wed, 21 Oct 2026 07:28:00 GMT" }, (c) => {
-        c.status = 200;
-        c.lastModified = new Date("Thu, 22 Oct 2026 07:28:00 GMT");
-        return c.fresh;
-      }),
-    ).toBe(false);
-  });
-
-  it("If-None-Match: * matches any current representation", async () => {
-    expect(
-      await get({ "if-none-match": "*" }, (c) => {
-        c.status = 200;
-        return c.fresh;
-      }),
-    ).toBe(true);
-  });
-
-  it("weak comparison strips W/ on either side (RFC 7232 §2.3.2)", async () => {
-    expect(
-      await get({ "if-none-match": 'W/"v1"' }, (c) => {
-        c.status = 200;
-        c.etag = '"v1"';
-        return c.fresh;
-      }),
-    ).toBe(true);
-    expect(
-      await get({ "if-none-match": '"v1"' }, (c) => {
-        c.status = 200;
-        c.etag = 'W/"v1"';
-        return c.fresh;
-      }),
-    ).toBe(true);
-  });
-
-  it("an array ETag header is joined before matching", async () => {
-    expect(
-      await get({ "if-none-match": '"a", "b"' }, (c) => {
-        c.status = 200;
-        c.set("etag", ['"a"']);
-        return c.fresh;
-      }),
-    ).toBe(true);
-  });
-
-  it("cache-control: no-cache forces a full response", async () => {
-    expect(
-      await get({ "if-none-match": '"v1"', "cache-control": "no-cache" }, (c) => {
-        c.status = 200;
-        c.etag = '"v1"';
-        return c.fresh;
-      }),
-    ).toBe(false);
-  });
-
-  it("non-GET/HEAD methods are never fresh; default 404 status is not fresh (koa order)", async () => {
-    expect(
-      await get({ "if-none-match": '"v1"' }, (c) => {
-        c.etag = '"v1"';
-        return c.fresh; // statusValue still the 404 default here
-      }),
-    ).toBe(false);
-    const app = new Keala(quiet);
-    let fresh = true;
-    app.post("/", (c) => {
-      c.status = 200;
-      c.etag = '"v1"';
-      fresh = c.fresh;
-      c.body = "x";
-    });
-    await drive(
-      app,
-      new Request("http://x/", { method: "POST", headers: { "if-none-match": '"v1"' } }),
+    expect(await probe({ "x-forwarded-for": "1.2.3.4:80" }, (c) => c.ip, { proxy: true })).toBe(
+      "1.2.3.4",
     );
-    expect(fresh).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// query setter round-trip — locks correct behavior
-// ---------------------------------------------------------------------------
-
-describe("querystring rewrite + targeted read locks correct behavior", () => {
-  it("a raw querystring rewrite rewrites the url and targeted reads see it", async () => {
-    const result = await probe({}, (c) => {
-      c.querystring = "a=x+y&b=1&d=1&d=2";
-      return [c.url, c.query("a"), c.queries("d")];
-    });
-    expect(result).toEqual(["/?a=x+y&b=1&d=1&d=2", "x y", ["1", "2"]]);
+    expect(await probe({ "x-forwarded-for": "[::1]:99" }, (c) => c.ip, { proxy: true })).toBe(
+      "[::1]",
+    );
+    expect(await probe({ "x-forwarded-for": "2001:db8::1" }, (c) => c.ip, { proxy: true })).toBe(
+      "2001:db8::1",
+    );
   });
 
-  it("a literal '+' in a raw querystring reads back as space, %2B as literal", async () => {
-    const result = await probe({}, (c) => {
-      c.querystring = "a=1%2B2+x";
-      return [c.query("a")];
-    });
-    expect(result).toEqual(["1+2 x"]);
+  it("ip ignores X-Forwarded-For entirely without proxy: true", async () => {
+    expect(await probe({ "x-forwarded-for": "1.1.1.1" }, (c) => c.ip)).toBe("");
+    expect(await probe({ "x-forwarded-for": "1.1.1.1" }, (c) => c.ip, { proxy: false })).toBe("");
   });
 });

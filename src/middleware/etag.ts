@@ -59,10 +59,10 @@ export const etag = (): RouteHandler => {
       // 304 must not carry body or content headers (koan contract).
       c.status = 304;
       c.body = null;
-      c.set("ETag", tag);
+      c.setHeader("ETag", tag);
       return;
     }
-    c.set("ETag", tag);
+    c.setHeader("ETag", tag);
   };
 };
 
@@ -171,7 +171,7 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
     const packed = await gzip(bytes);
     if (packed.byteLength >= bytes.byteLength) return;
     c.bodyValue = packed;
-    c.set("Content-Encoding", "gzip");
+    c.setHeader("Content-Encoding", "gzip");
     c.remove("Content-Length");
   };
 };

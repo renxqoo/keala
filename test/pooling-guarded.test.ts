@@ -26,7 +26,7 @@ describe("guarded pooling", () => {
     app.get("/slow", async (c, next) => {
       await new Promise((resolve) => setTimeout(resolve, 5));
       await next();
-      c.set("X-After", "1");
+      c.setHeader("X-After", "1");
     });
     app.get("/slow", (c) => c.text("done"));
     const res = await app.handle(new Request("http://localhost:3000/slow"));

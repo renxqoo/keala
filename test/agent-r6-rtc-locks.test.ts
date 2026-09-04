@@ -256,7 +256,7 @@ describe("R6-J regex audit: 100KB hostile inputs stay linear [locks]", () => {
     const app = new Keala(quiet);
     const hostile = `${"no-cache,".repeat(20_000)}private`;
     app.get("/cc", cache(), (c) => {
-      c.set("Cache-Control", hostile);
+      c.setHeader("Cache-Control", hostile);
       return c.text("x");
     });
     const t0 = performance.now();

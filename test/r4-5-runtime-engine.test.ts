@@ -198,10 +198,7 @@ describe("R4.5 Node response engine", () => {
           ],
         }),
       );
-      app.get("/bare-status", (c) => {
-        c.message = "Created";
-        return c.text("status", 201);
-      });
+      app.get("/bare-status", (c) => c.text("status", 201));
       app.get("/bare-bytes", (c) => {
         c.status = 200;
         c.body = new Uint8Array([4, 5, 6]);
@@ -229,7 +226,7 @@ describe("R4.5 Node response engine", () => {
     expect(await tuples.text()).toBe("tuples");
 
     const status = await fetch(`http://127.0.0.1:${server.port}/bare-status`);
-    expect(status.statusText).toBe("Created");
+    expect(status.status).toBe(201); // 0.7: the c.message statusText staging is gone
     expect(await status.text()).toBe("status");
 
     const bytes = await fetch(`http://127.0.0.1:${server.port}/bare-bytes`);

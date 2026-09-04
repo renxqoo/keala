@@ -8,7 +8,7 @@ const app = new Keala({ env: "production" });
 app.use(createBodyParser({ jsonLimit: 16 }));
 app.use(async (c, next) => {
   await next();
-  c.set("x-artifact", "dist");
+  c.setHeader("x-artifact", "dist");
 });
 app.get("/health", (c) => c.text("ok"));
 app.get("/users/:id", (c) => c.json({ id: c.params?.id }));

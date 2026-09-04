@@ -17,7 +17,7 @@ const DRIFT_BUDGET_BYTES = 1_500; // allowed retained growth per request
 
 const app = new Keala({ keys: ["soak"], env: "test" });
 app.use(async (c, next) => {
-  c.set("X-Soak", "1");
+  c.setHeader("X-Soak", "1");
   await next();
 });
 app.get("/text", (c) => c.text("hello world"));

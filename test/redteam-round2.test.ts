@@ -214,7 +214,7 @@ describe("redteam round2 — GA-2 concurrency isolation", () => {
     app.use(async (c, next) => {
       c.state.step = "1";
       await next();
-      c.set("x-done", "1");
+      c.setHeader("x-done", "1");
     });
     app.get("/text", (c) => c.text("hello"));
     app.get("/users/:id", (c) => c.json({ id: c.params?.["id"], st: c.state.step }));
@@ -329,7 +329,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
   it("CRLF in header values is rejected and answers 500 without injecting", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.set("x-inj", "a\r\nSet-Cookie: pwned=1");
+      c.setHeader("x-inj", "a\r\nSet-Cookie: pwned=1");
       return c.text("ok");
     });
     const res = await handleFlat(app, req("http://localhost/x"));

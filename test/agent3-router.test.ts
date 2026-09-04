@@ -107,7 +107,7 @@ describe("agent3: mount() and param middleware ordering", () => {
     app.get("/old/:oid", (c) => c.text("parent"));
     const api = new Router();
     api.param("oid", async (c, next) => {
-      c.set("X-Org", c.params?.["oid"] ?? "");
+      c.setHeader("X-Org", c.params?.["oid"] ?? "");
       await next();
     });
     api.get("/orgs/:oid", (c) => c.text("sub"));

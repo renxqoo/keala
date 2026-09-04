@@ -2,6 +2,12 @@
  * Security-relevant assertions ported from the archived koa/official parity
  * suites (docs/MIGRATION.md §2: the parity FILES are archived, but these
  * semantics are regression locks and stay).
+ *
+ * 0.7 migration: redirect("back")/back(), c.message statusText and
+ * c.hostname are deleted APIs — their locks (referrer preference, the
+ * cross-origin Referrer defense, custom status phrases, IPv6 hostname
+ * normalization) are gone with them, as is the `c.body = <Response>` merge
+ * quirk (return the Response instead).
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,26 +19,6 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 const quiet = { env: "test" } as const;
 
 describe("ported parity security semantics", () => {
-  it("redirect(back) prefers same-origin Referrer, then alt, then /", async () => {
-    const app = new Keala(quiet);
-    app.get("/back", (c) => {
-      c.redirect("back", "/alt");
-    });
-    app.get("/back-noalt", (c) => {
-      c.redirect("back");
-    });
-    const referrer = await app.handle(
-      new Request("http://localhost:3000/back", { headers: { Referrer: "/previous-page" } }),
-    );
-    expect(referrer.headers.get("location")).toBe("/previous-page");
-
-    const alt = await app.handle(new Request("http://localhost:3000/back"));
-    expect(alt.headers.get("location")).toBe("/alt");
-
-    const root = await app.handle(new Request("http://localhost:3000/back-noalt"));
-    expect(root.headers.get("location")).toBe("/");
-  });
-
   it("attachment with unicode filenames emits RFC 5987 encoding + mime", async () => {
     const app = new Keala(quiet);
     app.get("/a", (c) => {
@@ -68,24 +54,6 @@ describe("ported parity security semantics", () => {
     expect(res.headers.get("etag")).toBe('"v42"');
   });
 
-  it("web Response as body merges headers through validated set()", async () => {
-    const app = new Keala(quiet);
-    app.get("/r", (c) => {
-      // Inner status wins (koa semantics); headers merge via set().
-      c.body = new Response("inner", {
-        status: 201,
-        headers: { "x-from-inner": "1", "content-type": "text/csv" },
-      });
-    });
-    const res = await app.handle(new Request("http://localhost:3000/r"));
-    expect(res.status).toBe(201);
-    expect(res.headers.get("x-from-inner")).toBe("1");
-    // koa parity: the inference goes through the same expansion c.type
-    // uses — text/* extensions carry their charset.
-    expect(res.headers.get("content-type")).toContain("text/csv");
-    expect(await res.text()).toBe("inner");
-  });
-
   it("error responses hide 5xx messages; staged headers ride along (koa parity)", async () => {
     // Verified against koa 3.2.1: headers the chain staged before the throw
     // stay on the error response (security middleware must cover error
@@ -93,8 +61,8 @@ describe("ported parity security semantics", () => {
     // never leaked.
     const app = new Keala(quiet);
     app.get("/boom", (c) => {
-      c.set("X-Before", "1");
-      c.set("Content-Length", "999");
+      c.setHeader("X-Before", "1");
+      c.setHeader("Content-Length", "999");
       c.cookies.set("sid", "abc");
       c.throw(500, "secret details");
     });
@@ -116,18 +84,6 @@ describe("ported parity security semantics", () => {
     expect(await res.text()).toBe("short and stout");
   });
 
-  it("custom status message survives to statusText", async () => {
-    const app = new Keala(quiet);
-    app.get("/m", (c) => {
-      c.status = 418;
-      c.message = "short and stout";
-      c.body = "x";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/m"));
-    expect(res.status).toBe(418);
-    expect(res.statusText).toBe("short and stout");
-  });
-
   it("unhandled requests answer 404 Not Found", async () => {
     const app = new Keala(quiet);
     const res = await app.handle(new Request("http://localhost:3000/nowhere"));
@@ -142,24 +98,6 @@ describe("ported parity security semantics", () => {
 // ---------------------------------------------------------------------------
 
 describe("koa corpus locks", () => {
-  it("back() REJECTS a cross-origin Referrer (open-redirect defense)", async () => {
-    const app = new Keala(quiet);
-    app.get("/back", (c) => c.redirect("back", "/alt"));
-    const res = await app.handle(
-      req("/back", { headers: { referer: "https://evil.example/login" } }),
-    );
-    expect(res.headers.get("location")).toBe("/alt"); // never the foreign origin
-    const scheme = await app.handle(
-      req("/back", { headers: { referer: "//evil.example/login/" } }),
-    );
-    expect(scheme.headers.get("location")).toBe("/alt");
-    // Same-origin absolute referrer IS honored.
-    const same = await app.handle(
-      req("/back", { headers: { referer: "http://localhost:3000/prev" } }),
-    );
-    expect(same.headers.get("location")).toBe("http://localhost:3000/prev");
-  });
-
   it("redirect normalizes absolute targets through URL (backslash-at stays a path)", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => c.redirect("http://google.com\\@apple.com"));
@@ -217,20 +155,6 @@ describe("koa corpus locks", () => {
       throw err;
     });
     expect((await app.handle(req("/junk"))).status).toBe(500);
-  });
-
-  it("hostname resolves bracketed IPv6 through URL semantics", async () => {
-    const app = new Keala(quiet);
-    app.get("/h", (c) => {
-      c.body = c.hostname;
-    });
-    const v6 = await app.handle(
-      new Request("http://[2001:cdba:0000:0000:0000:0000:3257:9652]:8080/h"),
-    );
-    expect(await v6.text()).toBe("[2001:cdba::3257:9652]");
-    // Under the fetch model an invalid bracketed host never REACHES the
-    // framework — the Request constructor itself refuses it.
-    expect(() => new Request("http://[not-v6]:8080/h")).toThrow();
   });
 
   it("c.URL exposes the live WHATWG URL view", async () => {

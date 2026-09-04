@@ -29,17 +29,14 @@ const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
   c.params = { id: "7" };
   c.routerAllowed.add("GET");
   c.state["step"] = 1;
-  c.set("X-Used", "yes");
+  c.setHeader("X-Used", "yes");
   c.append("Set-Cookie", "old=1; Path=/");
   c.status = 201;
-  c.message = "created";
   c.body = "payload";
   c.cookies.set("sid", "one", { signed: true });
-  // Materialize every lazy cache, then rewrite the url (drops them).
+  // Materialize every lazy cache (the recycle must drop them).
   void c.ip;
   void c.query("v");
-  void c.originalUrl;
-  c.url = "/rewritten?z=9";
   return c;
 };
 
@@ -72,7 +69,6 @@ describe("resetContext recycling semantics", () => {
     expect(recycled.query("y")).toBe("2");
     expect(recycled.status).toBe(404);
     expect(recycled.body).toBe(null);
-    expect(recycled.message).toBe("Not Found");
     expect(recycled.has("X-Used")).toBe(false);
     expect(recycled.resHeader("set-cookie")).toBe("");
     expect(Object.keys(recycled.state)).toEqual([]);
@@ -123,7 +119,7 @@ describe("request isolation (fresh context per request)", () => {
     const app = new Keala(quiet);
     app.get("/a/:id", (c) => {
       c.state["id"] = c.params?.["id"];
-      c.set("X-Run", String(c.state["id"]));
+      c.setHeader("X-Run", String(c.state["id"]));
       c.body = JSON.stringify({ id: c.state["id"], q: c.query("v") ?? null });
     });
     app.get("/b", (c) => {
@@ -189,7 +185,7 @@ describe("request isolation (fresh context per request)", () => {
     app.use(async (c) => {
       if (c.path === "/set") {
         c.cookies.set("sid", "one", { signed: true });
-        c.set("X-Custom", "first");
+        c.setHeader("X-Custom", "first");
         return;
       }
       c.body = [

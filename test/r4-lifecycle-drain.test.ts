@@ -429,7 +429,7 @@ describe("R4.6 seam red tests: S2 drain × node transport, S3 hold × committed 
       await next();
       // Post-commit header writes ride the committed fast lane (R4.1): the
       // settle-time drain-hold must carry them EXACTLY once into the wrap.
-      c.set("X-Late", "drain");
+      c.setHeader("X-Late", "drain");
     });
     app.get("/committed", async () => {
       await gate.promise;

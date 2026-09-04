@@ -80,12 +80,12 @@ if (caseName === "body") {
   app.get(
     "/mw",
     async (c, next) => {
-      c.set("x-step", "1");
+      c.setHeader("x-step", "1");
       await next();
-      c.set("x-step-3", "3");
+      c.setHeader("x-step-3", "3");
     },
     async (c, next) => {
-      c.set("x-step-2", "2");
+      c.setHeader("x-step-2", "2");
       await next();
     },
     (c) => c.text("middleware"),

@@ -213,21 +213,21 @@ describe("anomalies: header operations", () => {
   const badNames = ["", " ", "a b", "a:b", "a;b", "a,b", "a=b", "é", "a(b)", "__proto__"];
   it.each(badNames)("set(%p) throws TypeError", async (name) => {
     await captureCtx((c) => {
-      expect(() => c.set(name, "v")).toThrow(TypeError);
+      expect(() => c.setHeader(name, "v")).toThrow(TypeError);
     });
   });
 
   const badValues = ["v\r\nX: 1", "v\nX: 1", "v\rX: 1", "v\0", "v\u0000x"];
   it.each(badValues)("set(name, %p) throws", async (value) => {
     await captureCtx((c) => {
-      expect(() => c.set("X-Safe", value)).toThrow(TypeError);
+      expect(() => c.setHeader("X-Safe", value)).toThrow(TypeError);
     });
   });
 
   it.each(["", " ", "x".repeat(16 * 1024)])("accepts value %s without crashing", async (value) => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
-      c.set("X-Long", value);
+      c.setHeader("X-Long", value);
       c.body = "ok";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
@@ -238,7 +238,7 @@ describe("anomalies: header operations", () => {
     await captureCtx((c) => {
       c.append("X-A", "1");
       c.append("X-A", "2");
-      c.set("X-A", "3");
+      c.setHeader("X-A", "3");
       expect(c.resHeader("X-A")).toBe("3");
     });
   });
@@ -251,23 +251,15 @@ describe("anomalies: header operations", () => {
 
   it("set(undefined value) is ignored, not stored", async () => {
     await captureCtx((c) => {
-      c.set("X-Undefined", undefined as unknown as string);
+      c.setHeader("X-Undefined", undefined as unknown as string);
       expect(c.resHeader("X-Undefined")).toBe("");
     });
   });
 });
 
-describe("anomalies: message and etag inputs", () => {
-  it.each(["", "ok", "with spaces", "unicode 中文"])("message %p is safe to set", async (msg) => {
-    const app = new Keala(quiet);
-    app.get("/", (c) => {
-      c.status = 201;
-      c.message = msg;
-      c.body = "ok";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(201); // never a 500 from statusText encoding
-  });
+describe("anomalies: etag inputs", () => {
+  // 0.7: the c.message input matrix is gone with the API (statusText
+  // customization no longer exists, so there is nothing to poison).
 
   it.each(["", "abc", '"quoted"', 'W/"weak"', '\\"escaped'])(
     "etag %p accepted safely",

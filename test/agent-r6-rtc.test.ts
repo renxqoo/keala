@@ -187,15 +187,9 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
     expect(await res.text()).toBe("hello");
   });
 
-  it("c.body = new Response(stream) hits the same lock (R6-1b)", async () => {
-    const app = new Keala({ ...quiet, onStreamError: () => undefined });
-    app.get("/s", cache(), (c) => {
-      c.body = new Response(streamOf(["world"]));
-    });
-    const res = await drive(app, new Request("http://good.com/s"));
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("world");
-  });
+  // 0.7: the R6-1b variant (`c.body = new Response(stream)`) is gone with
+  // the c.body-Response quirk — return the Response instead; the surviving
+  // locks above and below cover the stream/cache interaction.
 
   it("locks: the same route streams fine without the onStreamError hook", async () => {
     const app = new Keala(quiet);
@@ -238,109 +232,92 @@ describe("R6-B cache(): ttl window [RED]", () => {
     expect(await second.text()).toBe("n1");
   });
 });
-describe("R6-C response flags 32/64/128: post-commit mutations [RED + locks]", () => {
-  it("post-commit c.body = null upgrades to 204 (koa parity) (R6-2)", async () => {
+describe("R6-C post-commit contract (0.7): writes throw, new Responses win", () => {
+  // 0.7 rewrote the flags 32/64/128 rebuild machinery into the commit
+  // contract: c.body/c.status/c.redirect throw once a Response is committed;
+  // middleware replaces a committed response by RETURNING a new one.
+
+  it("post-commit c.body writes throw TypeError (was R6-2 / flag 128)", async () => {
     const app = new Keala(quiet);
+    let caught: unknown;
     app.get(
       "/x",
       async (c, next) => {
         await next();
-        c.body = null;
+        try {
+          c.body = null;
+        } catch (err) {
+          caught = err;
+        }
       },
       () => new Response("hello"),
     );
     const res = await drive(app, new Request("http://good.com/x"));
-    // The body setter's own state machine writes statusValue=204 — the shipped
-    // response must agree (204, no content headers). Actual: 200 + no body.
-    expect(res.status).toBe(204);
-    expect(res.headers.get("content-type")).toBe(null);
+    expect(caught).toBeInstanceOf(TypeError);
+    expect((caught as Error).message).toContain("response already committed");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("hello"); // the committed body survives
   });
 
-  it("post-commit redirect keeps a committed 301/308 (R6-3)", async () => {
+  it("post-commit c.status overrides throw TypeError (was flag 32)", async () => {
     const app = new Keala(quiet);
+    let caught: unknown;
     app.get(
       "/x",
       async (c, next) => {
         await next();
-        c.redirect("/elsewhere");
+        try {
+          c.status = 404;
+        } catch (err) {
+          caught = err;
+        }
+      },
+      () => new Response("committed"),
+    );
+    const res = await drive(app, new Request("http://good.com/x"));
+    expect(caught).toBeInstanceOf(TypeError);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("committed");
+  });
+
+  it("post-commit c.redirect throws even over a committed 301 (was R6-3)", async () => {
+    const app = new Keala(quiet);
+    let caught: unknown;
+    app.get(
+      "/x",
+      async (c, next) => {
+        await next();
+        try {
+          c.redirect("/elsewhere");
+        } catch (err) {
+          caught = err;
+        }
       },
       () => new Response(null, { status: 301, headers: { location: "/first" } }),
     );
     const res = await drive(app, new Request("http://good.com/x"));
-    // c.status reports 301 after the commit; redirect() must observe the same
-    // value and only default to 302 when the current status is NOT a redirect.
+    expect(caught).toBeInstanceOf(TypeError);
     expect(res.status).toBe(301);
-    expect(res.headers.get("location")).toBe("/elsewhere");
+    expect(res.headers.get("location")).toBe("/first"); // the commit survives
   });
 
-  it("locks: post-commit c.status override wins over the commit (flag 32)", async () => {
+  it("a middleware may replace the committed response by returning a new one", async () => {
     const app = new Keala(quiet);
     app.get(
       "/x",
       async (c, next) => {
         await next();
-        c.status = 404;
+        // Commit-aware read, then the supported replacement pattern.
+        return new Response(null, { status: 304, headers: { etag: c.resHeader("ETag") } });
       },
-      () => new Response("committed"),
-    );
-    const res = await drive(app, new Request("http://good.com/x"));
-    expect(res.status).toBe(404);
-  });
-
-  it("locks: post-commit c.message override wins (flag 64), pre-commit staging superseded", async () => {
-    const app = new Keala(quiet);
-    app.get(
-      "/x",
-      async (c, next) => {
-        await next();
-        c.message = "After Commit";
-      },
-      async (c) => {
-        c.message = "Staged";
-        return new Response("ok");
+      (c) => {
+        c.setHeader("ETag", '"v1"');
+        return c.text("body");
       },
     );
     const res = await drive(app, new Request("http://good.com/x"));
-    expect(res.statusText).toBe("After Commit");
-
-    const app2 = new Keala(quiet);
-    app2.get("/x", async (c) => {
-      c.message = "Staged";
-      return new Response("ok");
-    });
-    const res2 = await drive(app2, new Request("http://good.com/x"));
-    expect(res2.statusText).toBe(""); // the commit superseded the staging
-  });
-
-  it("locks: post-commit body write replaces the committed body (flag 128)", async () => {
-    const app = new Keala(quiet);
-    app.get(
-      "/x",
-      async (c, next) => {
-        await next();
-        c.body = "replaced";
-      },
-      () => new Response("committed"),
-    );
-    const res = await drive(app, new Request("http://good.com/x"));
-    expect(await res.text()).toBe("replaced");
-  });
-
-  it("locks: post-commit 204 drops content-describing headers", async () => {
-    const app = new Keala(quiet);
-    app.get(
-      "/x",
-      async (c, next) => {
-        await next();
-        c.status = 204;
-      },
-      () =>
-        new Response("body", {
-          headers: { "content-type": "text/plain", "content-length": "4" },
-        }),
-    );
-    const res = await drive(app, new Request("http://good.com/x"));
-    expect(res.status).toBe(204);
+    expect(res.status).toBe(304);
+    expect(res.headers.get("etag")).toBe('"v1"');
     expect(res.headers.get("content-type")).toBe(null);
     expect(res.headers.get("content-length")).toBe(null);
   });

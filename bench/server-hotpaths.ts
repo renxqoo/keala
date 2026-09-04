@@ -56,7 +56,7 @@ if (caseName === "body") {
 } else if (caseName === "dirty") {
   app.use(async (c, next) => {
     await next();
-    c.set("x-late", "1");
+    c.setHeader("x-late", "1");
   });
   app.get("/text", (c) => c.text("hello"));
 } else {

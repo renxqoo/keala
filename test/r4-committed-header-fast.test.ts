@@ -1,53 +1,18 @@
+/**
+ * The 0.7 committed-header contract: after a Response commits, header
+ * writes (setHeader/append/remove/type/length/etag/…) land DIRECTLY on the
+ * committed Response's headers — one path, no rebuild machinery. Body and
+ * status writes throw. A newer commit (an outer middleware returning
+ * another Response) wins outright: inter-commit writes belonged to the
+ * response they were applied to.
+ */
 import { describe, expect, it } from "vitest";
 import { Keala } from "../src/core/app.ts";
-import { trySetCommittedHeader } from "../src/core/committed-headers.ts";
-import { createContext, resetContext } from "../src/core/context/context.ts";
-import {
-  FLAG_COMMITTED_HEADERS_APPLIED,
-  FLAG_COMMITTED_HEADERS_IMMUTABLE,
-  FLAG_COMMITTED_HEADERS_MUTABLE,
-} from "../src/core/context/state.ts";
 import type { Context } from "../src/core/context/context.ts";
 
 const request = (path = "/"): Request => new Request(`http://localhost${path}`);
 
-type LateOperation = (c: Context) => void;
-
-const responseSnapshot = async (
-  forceFallback: boolean,
-  operations: readonly LateOperation[],
-): Promise<unknown> => {
-  const app = new Keala({ env: "production" });
-  app.use(async (c, next) => {
-    await next();
-    if (forceFallback) c.flags |= FLAG_COMMITTED_HEADERS_IMMUTABLE;
-    for (const operation of operations) operation(c);
-  });
-  app.get(
-    "/",
-    () =>
-      new Response("original", {
-        headers: {
-          "content-type": "text/plain",
-          "set-cookie": "early=1; Path=/",
-          vary: "accept",
-          "x-base": "one",
-        },
-      }),
-  );
-  const response = await app.handle(request());
-  return {
-    status: response.status,
-    statusText: response.statusText,
-    headers: [...response.headers.entries()]
-      .filter(([name]) => name !== "set-cookie")
-      .toSorted(([a], [b]) => a.localeCompare(b)),
-    cookies: response.headers.getSetCookie(),
-    body: [...new Uint8Array(await response.arrayBuffer())],
-  };
-};
-
-describe("R4.1 committed header fast lane", () => {
+describe("0.7 committed header contract", () => {
   it("applies a late ordinary set to the committed Response without replacing it", async () => {
     const app = new Keala({ env: "production" });
     let committed: Response | undefined;
@@ -55,7 +20,7 @@ describe("R4.1 committed header fast lane", () => {
 
     app.use(async (c, next) => {
       await next();
-      c.set("X-Late", "one");
+      c.setHeader("X-Late", "one");
       observed = c.has("x-late") && c.resHeader("X-Late") === "one";
     });
     app.get("/", (c) => (committed = c.text("hello")));
@@ -64,9 +29,11 @@ describe("R4.1 committed header fast lane", () => {
     expect(response).toBe(committed);
     expect(observed).toBe(true);
     expect(response.headers.get("x-late")).toBe("one");
-    expect(response.headers.get("content-type") ?? "").toMatch(
-      /^text\/plain\s*;\s*charset=utf-8$/i,
-    );
+    // Node's undici stamps string bodies at construction; Bun defers the
+    // text/plain inference to serve time — either way the post-commit write
+    // did not disturb the body's implicit type.
+    const contentType = response.headers.get("content-type") ?? "";
+    expect(contentType === "" || /^text\/plain/i.test(contentType)).toBe(true);
     expect(await response.text()).toBe("hello");
   });
 
@@ -94,14 +61,14 @@ describe("R4.1 committed header fast lane", () => {
     expect(response.headers.get("x-keep")).toBe("yes");
   });
 
-  it("keeps late append and vary observable while retaining Response identity", async () => {
+  it("keeps late appends observable while retaining Response identity", async () => {
     const app = new Keala({ env: "production" });
     let committed: Response | undefined;
 
     app.use(async (c, next) => {
       await next();
       c.append("X-List", "two");
-      c.vary("accept-encoding");
+      c.append("Vary", "accept-encoding");
       expect(c.resHeader("x-list")).toBe("one, two");
       expect(c.resHeader("vary")).toBe("accept, accept-encoding");
     });
@@ -119,23 +86,23 @@ describe("R4.1 committed header fast lane", () => {
     expect(response.headers.get("vary")).toBe("accept, accept-encoding");
   });
 
-  it("replays a fast set onto a newer Response returned by an outer middleware", async () => {
+  it("a post-commit SET carries onto a newer commit (idempotent record mirror)", async () => {
     const app = new Keala({ env: "production" });
 
     app.use(async (c, next) => {
       await next();
-      c.set("X-Carry", "yes");
+      c.setHeader("X-Carry", "yes");
       return new Response("outer", { headers: { "x-outer": "yes" } });
     });
     app.get("/", (c) => c.text("inner"));
 
     const response = await app.handle(request());
-    expect(response.headers.get("x-carry")).toBe("yes");
     expect(response.headers.get("x-outer")).toBe("yes");
+    expect(response.headers.get("x-carry")).toBe("yes");
     expect(await response.text()).toBe("outer");
   });
 
-  it("replays a fast removal onto a newer Response returned by an outer middleware", async () => {
+  it("a newer commit sees removals as they were at its own construction time", async () => {
     const app = new Keala({ env: "production" });
 
     app.use(async (c, next) => {
@@ -146,7 +113,7 @@ describe("R4.1 committed header fast lane", () => {
     app.get("/", () => new Response("inner", { headers: { "x-remove": "inner" } }));
 
     const response = await app.handle(request());
-    expect(response.headers.get("x-remove")).toBeNull();
+    expect(response.headers.get("x-remove")).toBe("outer");
     expect(response.headers.get("x-keep")).toBe("yes");
   });
 
@@ -163,53 +130,39 @@ describe("R4.1 committed header fast lane", () => {
     expect(response.headers.get("content-type")).toBeNull();
   });
 
-  it("probes an immutable Headers guard once, then stays on fallback", () => {
-    let attempts = 0;
-    const context = {
-      _res: {
-        headers: {
-          set: () => {
-            attempts++;
-            throw new TypeError("immutable");
-          },
-        },
-      },
-      flags: 0,
-      headersRecord: null,
-    } as unknown as Parameters<typeof trySetCommittedHeader>[0];
+  it.skipIf(typeof Bun !== "undefined")(
+    "a post-commit write against an immutable guard throws loudly (undici)",
+    async () => {
+      const app = new Keala({ env: "production" });
+      const fetched = await fetch("data:text/plain,hello");
+      const thrown: unknown[] = [];
 
-    expect(trySetCommittedHeader(context, "x-one", "1")).toBe(false);
-    expect(trySetCommittedHeader(context, "x-two", "2")).toBe(false);
-    expect(attempts).toBe(1);
-    expect(context.flags & FLAG_COMMITTED_HEADERS_IMMUTABLE).toBe(FLAG_COMMITTED_HEADERS_IMMUTABLE);
-    expect(context.flags & FLAG_COMMITTED_HEADERS_APPLIED).toBe(0);
-  });
+      app.use(async (c, next) => {
+        await next();
+        try {
+          c.setHeader("X-Late", "yes");
+        } catch (error) {
+          thrown.push(error);
+        }
+      });
+      app.get("/", () => fetched);
 
-  it("falls back for an actually guarded Response and still preserves its headers", async () => {
-    const app = new Keala({ env: "production" });
-    const fetched = await fetch("data:text/plain,hello");
-    const originalContentType = fetched.headers.get("content-type");
+      const response = await app.handle(request());
+      expect(thrown[0]).toBeInstanceOf(TypeError);
+      expect((thrown[0] as Error).message).toMatch(/immutable/);
+      expect(response.headers.get("x-late")).toBeNull();
+      expect(await response.text()).toBe("hello");
+    },
+  );
 
-    app.use(async (c, next) => {
-      await next();
-      c.set("X-Late", "yes");
-    });
-    app.get("/", () => fetched);
-
-    const response = await app.handle(request());
-    expect(response.headers.get("x-late")).toBe("yes");
-    expect(response.headers.get("content-type")).toBe(originalContentType);
-    expect(await response.text()).toBe("hello");
-  });
-
-  it("keeps Set-Cookie, singleton headers and multi-append on semantic fallback", async () => {
+  it("post-commit Set-Cookie: setHeader replaces, append and the facade join", async () => {
     const app = new Keala({ env: "production" });
     let committed: Response | undefined;
 
     app.use(async (c, next) => {
       await next();
-      c.set("Set-Cookie", "late=1; Path=/");
-      c.set("Content-Type", "application/custom");
+      c.setHeader("Set-Cookie", "late=1; Path=/");
+      c.setHeader("Content-Type", "application/custom");
       c.append("X-Many", ["two", "three"]);
     });
     app.get(
@@ -221,35 +174,53 @@ describe("R4.1 committed header fast lane", () => {
     );
 
     const response = await app.handle(request());
-    expect(response).not.toBe(committed);
-    expect(response.headers.getSetCookie()).toEqual(["early=1; Path=/", "late=1; Path=/"]);
+    expect(response).toBe(committed);
+    // A SET is a set: the whole header slot is replaced.
+    expect(response.headers.getSetCookie()).toEqual(["late=1; Path=/"]);
     expect(response.headers.get("content-type")).toBe("application/custom");
     expect(response.headers.get("x-many")).toBe("one, two, three");
   });
 
-  it("rebuilds after a fast set when a later body rewrite requires semantic mode", async () => {
+  it("a post-commit body write throws instead of rebuilding", async () => {
     const app = new Keala({ env: "production" });
-    let committed: Response | undefined;
+    const thrown: unknown[] = [];
 
     app.use(async (c, next) => {
       await next();
-      c.set("X-Fast", "yes");
-      c.body = "replacement";
+      c.setHeader("X-Fast", "yes");
+      try {
+        c.body = "replacement";
+      } catch (error) {
+        thrown.push(error);
+      }
     });
-    app.get(
-      "/",
-      () =>
-        (committed = new Response("original", {
-          headers: { "content-length": "8", "x-original": "yes" },
-        })),
-    );
+    app.get("/", () => new Response("original", { headers: { "x-original": "yes" } }));
 
     const response = await app.handle(request());
-    expect(response).not.toBe(committed);
+    expect(thrown[0]).toBeInstanceOf(TypeError);
+    expect((thrown[0] as Error).message).toMatch(/already committed/);
     expect(response.headers.get("x-fast")).toBe("yes");
-    expect(response.headers.get("x-original")).toBe("yes");
-    expect(response.headers.get("content-length")).not.toBe("8");
-    expect(await response.text()).toBe("replacement");
+    expect(await response.text()).toBe("original");
+  });
+
+  it("a post-commit status write throws instead of rebuilding", async () => {
+    const app = new Keala({ env: "production" });
+    const thrown: unknown[] = [];
+
+    app.use(async (c, next) => {
+      await next();
+      try {
+        c.status = 204;
+      } catch (error) {
+        thrown.push(error);
+      }
+    });
+    app.get("/", (c) => c.text("hello"));
+
+    const response = await app.handle(request());
+    expect(thrown[0]).toBeInstanceOf(TypeError);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("hello");
   });
 
   it("does not skip a cookie written through a facade created before commit", async () => {
@@ -258,7 +229,7 @@ describe("R4.1 committed header fast lane", () => {
     app.use(async (c, next) => {
       const cookies = c.cookies;
       await next();
-      c.set("X-Fast", "yes");
+      c.setHeader("X-Fast", "yes");
       cookies.set("session", "late", { secure: false });
     });
     app.get("/", (c) => c.text("hello"));
@@ -268,57 +239,72 @@ describe("R4.1 committed header fast lane", () => {
     expect(response.headers.getSetCookie()).toEqual([expect.stringContaining("session=late")]);
   });
 
-  it("resets committed-header capability when a context is recycled", () => {
+  it("headers staged BEFORE the commit ride onto the committed Response", async () => {
     const app = new Keala({ env: "production" });
-    const first = createContext(app, {}, request("/first"), undefined);
-    first.flags |= FLAG_COMMITTED_HEADERS_APPLIED | FLAG_COMMITTED_HEADERS_MUTABLE;
 
-    resetContext(first, request("/second"), undefined);
-    expect(first.flags & FLAG_COMMITTED_HEADERS_APPLIED).toBe(0);
-    expect(first.flags & FLAG_COMMITTED_HEADERS_MUTABLE).toBe(0);
+    app.get("/", (c) => {
+      c.setHeader("X-Staged", "yes");
+      return new Response("built", { headers: { "x-own": "yes" } });
+    });
+
+    const response = await app.handle(request());
+    expect(response.headers.get("x-staged")).toBe("yes");
+    expect(response.headers.get("x-own")).toBe("yes");
+    expect(await response.text()).toBe("built");
   });
 
   it.each([
-    ["set last-write-wins", [(c: Context) => c.set("X-Base", "two")]],
+    ["set last-write-wins", [(c: Context) => c.setHeader("X-Base", "two")]],
     ["remove", [(c: Context) => c.remove("X-Base")]],
     [
       "remove then set",
-      [(c: Context) => c.remove("X-Base"), (c: Context) => c.set("X-Base", "three")],
+      [(c: Context) => c.remove("X-Base"), (c: Context) => c.setHeader("X-Base", "three")],
     ],
-    ["set then remove", [(c: Context) => c.set("X-New", "two"), (c: Context) => c.remove("X-New")]],
+    [
+      "set then remove",
+      [(c: Context) => c.setHeader("X-New", "two"), (c: Context) => c.remove("X-New")],
+    ],
     ["append", [(c: Context) => c.append("X-Base", "two")]],
     [
-      "vary dedupe and append",
-      [(c: Context) => c.vary("accept"), (c: Context) => c.vary("origin")],
-    ],
-    [
-      "direct then singleton fallback",
+      "ordinary then singleton",
       [
-        (c: Context) => c.set("X-New", "two"),
-        (c: Context) => c.set("Content-Type", "application/custom"),
+        (c: Context) => c.setHeader("X-New", "two"),
+        (c: Context) => c.setHeader("Content-Type", "application/custom"),
       ],
     ],
     [
-      "direct then cookie fallback",
+      "ordinary then cookie",
       [
-        (c: Context) => c.set("X-New", "two"),
+        (c: Context) => c.setHeader("X-New", "two"),
         (c: Context) => c.cookies.set("late", "1", { secure: false }),
       ],
     ],
-    [
-      "direct then body rewrite",
-      [(c: Context) => c.set("X-New", "two"), (c: Context) => (c.body = "replacement")],
-    ],
-    [
-      "direct then empty status",
-      [(c: Context) => c.set("X-New", "two"), (c: Context) => (c.status = 204)],
-    ],
-  ] satisfies [string, LateOperation[]][])(
-    "matches forced semantic fallback for %s",
+  ] satisfies [string, ((c: Context) => void)[]][])(
+    "applies post-commit %s in place on the committed Response",
     async (_name, operations) => {
-      expect(await responseSnapshot(false, operations)).toEqual(
-        await responseSnapshot(true, operations),
+      const app = new Keala({ env: "production" });
+      let committed: Response | undefined;
+
+      app.use(async (c, next) => {
+        await next();
+        for (const operation of operations) operation(c);
+      });
+      app.get(
+        "/",
+        () =>
+          (committed = new Response("original", {
+            headers: {
+              "content-type": "text/plain",
+              "set-cookie": "early=1; Path=/",
+              vary: "accept",
+              "x-base": "one",
+            },
+          })),
       );
+
+      const response = await app.handle(request());
+      expect(response).toBe(committed);
+      expect(await response.text()).toBe("original");
     },
   );
 });

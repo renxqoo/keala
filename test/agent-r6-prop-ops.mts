@@ -26,9 +26,11 @@ export const validWrites = (rng: Rng): ((c: Context) => void) => {
   const status = rng.pick([200, 201, 204, 301, 302, 304, 418] as const);
   const useCookie = rng.bool(0.3);
   return (c: Context): void => {
-    c.set(name, value);
+    // Header/cookie writes stay legal on both sides of the commit (0.7);
+    // a status write is only valid pre-commit.
+    c.setHeader(name, value);
     if (useCookie) c.cookies.set("r6", "1");
-    if (rng.bool(0.3)) c.status = status;
+    if (rng.bool(0.3) && c.res === undefined) c.status = status;
   };
 };
 
@@ -40,7 +42,7 @@ export const dangerousWrites = (rng: Rng): ((c: Context) => void) => {
     switch (rng.int(8)) {
       case 0:
         ops.push((c) => {
-          c.set(randHeaderName(rng), randHeaderValue(rng));
+          c.setHeader(randHeaderName(rng), randHeaderValue(rng));
         });
         break;
       case 1:
@@ -68,7 +70,9 @@ export const dangerousWrites = (rng: Rng): ((c: Context) => void) => {
         break;
       case 4:
         ops.push((c) => {
-          c.message = randHeaderValue(rng);
+          // 0.7: the c.message op became a body write — legal pre-commit,
+          // a loud TypeError post-commit (both belong in the zoo).
+          c.body = randString(rng, 12, PRINTABLE + CTL);
         });
         break;
       case 5:
@@ -83,7 +87,8 @@ export const dangerousWrites = (rng: Rng): ((c: Context) => void) => {
         break;
       default:
         ops.push((c) => {
-          c.vary(randHeaderValue(rng));
+          // 0.7: c.vary is gone; append("Vary", …) is the replacement.
+          c.append("Vary", randHeaderValue(rng));
         });
     }
   }

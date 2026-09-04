@@ -49,11 +49,11 @@ describe("node adapter locks correct behavior", () => {
         // Note: "/*" captures a NON-EMPTY remainder, so a root route must
         // exist for the mapped "/" target to match.
         app.options("/", (c) => {
-          c.set("Allow", "GET");
+          c.setHeader("Allow", "GET");
           c.body = "opts";
         });
         app.options("/*", (c) => {
-          c.set("Allow", "GET");
+          c.setHeader("Allow", "GET");
           c.body = "opts-star";
         });
       });

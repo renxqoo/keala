@@ -3,5 +3,4 @@ export interface RequestSettings {
   readonly proxy: boolean;
   readonly proxyIpHeader: string;
   readonly maxIpsCount?: number;
-  readonly subdomainOffset: number;
 }

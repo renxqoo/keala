@@ -313,7 +313,6 @@ describe("audit: x-forwarded-* trust chain", () => {
       headers: { ...forwarded, Host: "real.example.com" },
     });
     expect(captured?.ip).toBe(""); // no remote passed, no spoofed fallback
-    expect(captured?.ips).toEqual([]);
     expect(captured?.protocol).toBe("http");
     expect(captured?.host).toBe("real.example.com");
     expect(captured?.secure).toBe(false);
@@ -349,14 +348,14 @@ describe("audit: x-forwarded-* trust chain", () => {
     await app.handle(new Request("http://localhost:3000/", { headers: forwarded }), {
       remote: "203.0.113.9",
     });
-    // ips[0] (leftmost forwarded entry) is koa's `ip` semantics under proxy.
+    // The leftmost forwarded entry is koa's `ip` semantics under proxy (the
+    // ips accessor itself is gone in 0.7; c.ip keeps the resolution order).
     expect(captured?.ip).toBe("1.2.3.4");
-    expect(captured?.ips).toEqual(["1.2.3.4", "5.6.7.8"]);
     expect(captured?.protocol).toBe("https");
     expect(captured?.host).toBe("evil.example.com");
   });
 
-  it("maxIpsCount truncates the forwarded list from the right", async () => {
+  it("maxIpsCount truncates the forwarded chain from the right before c.ip resolves", async () => {
     const app = new Keala({ ...quiet, proxy: true, maxIpsCount: 1 });
     let captured: Context | undefined;
     app.use((c) => {
@@ -364,7 +363,6 @@ describe("audit: x-forwarded-* trust chain", () => {
       c.body = "ok";
     });
     await drive(app, "http://localhost:3000/", { headers: forwarded });
-    expect(captured?.ips).toEqual(["5.6.7.8"]);
     expect(captured?.ip).toBe("5.6.7.8");
   });
 });

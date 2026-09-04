@@ -17,7 +17,7 @@
  *   comma-joined INVALID singleton header:
  *     c.text("hi", 200, { "Content-Type": "text/plain" })
  *       keala "text/plain, text/plain; charset=utf-8"  hono "text/plain"
- *     c.set("x-foo","staged") + c.text("hi",200,{ "X-Foo":"call" })
+ *     c.setHeader("x-foo","staged") + c.text("hi",200,{ "X-Foo":"call" })
  *       keala "staged, call"  hono "call"
  *
  * R6-2 MEDIUM src/core/context/sugar.ts:180-181 (sugarHtml)
@@ -74,10 +74,10 @@ describe("R6-1 CONFIRMED-BUG: sugar per-call headers must merge in the canonical
     expect(res.headers.get("content-type")).toBe("text/plain");
   });
 
-  it("staged c.set() plus a case-mismatched per-call key produces one value, not two comma-joined", async () => {
+  it("staged c.setHeader() plus a case-mismatched per-call key produces one value, not two comma-joined", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.set("x-foo", "staged");
+      c.setHeader("x-foo", "staged");
       return c.text("hi", 200, { "X-Foo": "call" });
     });
     const res = await drive(app, new Request("http://x/r"));
@@ -160,11 +160,11 @@ describe("documents intentional divergence: duplicate param name keeps the LAST 
   });
 });
 
-describe("documents intentional divergence: a staged c.set('Content-Type') survives c.text() (hono overwrites it with its default)", () => {
+describe("documents intentional divergence: a staged c.setHeader('Content-Type') survives c.text() (hono overwrites it with its default)", () => {
   it("the staged type wins over the helper default", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.set("Content-Type", "application/xml");
+      c.setHeader("Content-Type", "application/xml");
       return c.text("hi");
     });
     const res = await drive(app, new Request("http://x/r"));
@@ -211,8 +211,8 @@ describe("documents intentional divergence: c.body = null answers 204 (koa); hon
   });
 });
 
-describe("documents intentional divergence: c.redirect() is koa's redirect (302 + Redirecting body); hono ships a bare 302", () => {
-  it("location, status and the koa body", async () => {
+describe("0.7 alignment: c.redirect() ships a bare 302 exactly like hono (the koa body is gone)", () => {
+  it("location, status and an empty body", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.redirect("/elsewhere");
@@ -220,7 +220,7 @@ describe("documents intentional divergence: c.redirect() is koa's redirect (302 
     const res = await drive(app, new Request("http://x/r"));
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/elsewhere");
-    expect(await res.text()).toBe("Redirecting to /elsewhere.");
+    expect(await res.text()).toBe("");
   });
 });
 
@@ -357,9 +357,9 @@ describe("differential locks: middleware semantics agree with hono", () => {
   it("onion order, headers written around next(), and the handler body", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
-      c.set("X-Mw", "1");
+      c.setHeader("X-Mw", "1");
       await next();
-      c.set("X-Mw-After", "a");
+      c.setHeader("X-Mw-After", "a");
     });
     app.get("/r", (c) => c.text("handler"));
     const res = await drive(app, new Request("http://x/r"));
@@ -447,7 +447,7 @@ describe("differential locks: sugar responses agree with hono where behavior is 
   it("a staged ARRAY header plus a per-call case-variant scalar resolves to the per-call value", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.set("x-multi", ["1", "2"]);
+      c.setHeader("x-multi", ["1", "2"]);
       return c.text("hi", 200, { "X-Multi": "call" });
     });
     const res = await drive(app, new Request("http://x/r"));

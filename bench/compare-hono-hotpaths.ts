@@ -136,7 +136,7 @@ if (framework === "keala") {
         // R4's immutable-capability flag. R3 ignores this unused bit and
         // naturally rebuilds, giving the fallback path an equal harness.
         if (caseName === "text-dirty-fallback") c.flags |= FORCE_IMMUTABLE_HEADERS;
-        c.set("x-late", "1");
+        c.setHeader("x-late", "1");
       });
     }
     app.get("/text", (c) => c.text("hello"));

@@ -256,7 +256,7 @@ describe("RT-F7: c.append validates header names; the record is prototype-less",
   it("the header record exposes no inherited keys", () => {
     const app = new Keala(quiet);
     app.get("/b", (c) => {
-      c.set("X-Ok", "1");
+      c.setHeader("X-Ok", "1");
       const record = c.headersRecord;
       expect(record).not.toBeNull();
       expect((record as object)["constructor"]).toBeUndefined();

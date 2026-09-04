@@ -61,7 +61,7 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
     const app = new Keala(quiet);
     app.use("/v1/*", async (c, next) => {
       await next();
-      c.set("x-scope", "yes");
+      c.setHeader("x-scope", "yes");
     });
     app.get("/v1/users", (c) => c.text("ok"));
 

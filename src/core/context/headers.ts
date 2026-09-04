@@ -1,39 +1,50 @@
-/** Response header operations shared by the public context accessors. */
+/**
+ * Response header operations shared by the public context accessors.
+ *
+ * 0.7 commit contract: before a Response is committed, writes stage into the
+ * flat `headersRecord` (zero allocation until touched). After the commit
+ * they go STRAIGHT onto the committed Response's `Headers` — the same
+ * semantics hono gives a post-`next()` `c.header()`. Post-commit SETs and
+ * REMOVEs additionally mirror into the record, an idempotent write that
+ * replays onto a newer commit and onto the error funnel's rebuilt response
+ * (secureHeaders must survive an outer middleware throwing after next()).
+ * APPENDs and direct Set-Cookie SETs touch only the response they were
+ * applied to — a re-apply would duplicate them. The one rejection is an
+ * immutable guard (a handler returned a fetched/redirected Response): a
+ * loud TypeError, because the fix — build the Response locally — is the
+ * caller's to make.
+ */
 
 import type { HeaderMap, HeaderValue } from "../../types.ts";
 import { validateHeaderName, validateHeaderValue } from "../../utils/text.ts";
-import {
-  isDirectHeader,
-  markCommittedHeadersStaged,
-  tryAppendCommittedHeader,
-  tryDeleteCommittedHeader,
-  trySetCommittedHeader,
-} from "../committed-headers.ts";
-import { FLAG_COMMITTED_HEADERS_APPLIED } from "./state.ts";
-import { isImplicitTextResponse, TEXT_PLAIN } from "./sugar.ts";
 import type { ContextState } from "./state.ts";
 
-/** Materialize staged headers and make every mirrored fast write a rebuild input. */
-export const stagedHeadersOf = (c: ContextState): HeaderMap => {
-  markCommittedHeadersStaged(c);
-  return (c.headersRecord ??= Object.create(null) as HeaderMap);
-};
-
-/** Mirror a successful in-place write for observation and newer commits. */
-const mirrorHeadersOf = (c: ContextState): HeaderMap =>
+/** Materialize the staged-header record (pre-commit writes land here). */
+export const stagedHeadersOf = (c: ContextState): HeaderMap =>
   (c.headersRecord ??= Object.create(null) as HeaderMap);
 
-/** Keep Bun 1.4's implicit c.text() type observable after an in-place write. */
-const prepareDirectResponse = (c: ContextState): boolean => {
-  const response = c._res;
-  if (
-    response !== undefined &&
-    isImplicitTextResponse(c, response) &&
-    !response.headers.has("content-type")
-  ) {
-    return trySetCommittedHeader(c, "content-type", TEXT_PLAIN);
+const IMMUTABLE = (error: unknown): TypeError =>
+  new TypeError(
+    "cannot write headers of the committed response — it carries an immutable guard (a fetched or redirected Response). Return a locally-built Response instead.",
+    { cause: error },
+  );
+
+/** The two singleton headers skip name validation (always well-formed). */
+const isSingleton = (name: string): boolean => name === "content-type" || name === "content-length";
+
+/** In-place single-header SET on the committed Response (arrays → multi-value). */
+const committedSet = (res: Response, name: string, value: string | string[]): void => {
+  try {
+    res.headers.delete(name);
+    if (Array.isArray(value)) {
+      for (const item of value) res.headers.append(name, item);
+      return;
+    }
+    res.headers.set(name, value);
+  } catch (error) {
+    if (error instanceof TypeError) throw IMMUTABLE(error);
+    throw error;
   }
-  return true;
 };
 
 export const setResponseHeader = (
@@ -51,59 +62,67 @@ export const setResponseHeader = (
     return;
   }
   const name = field.toLowerCase();
-  if (name !== "content-type" && name !== "content-length") validateHeaderName(name);
+  if (!isSingleton(name)) validateHeaderName(name);
   if (typeof value === "string") {
     validateHeaderValue(name, value);
-    if (isDirectHeader(name) && prepareDirectResponse(c) && trySetCommittedHeader(c, name, value)) {
-      mirrorHeadersOf(c)[name] = value;
+    const res = c._res;
+    if (res !== undefined) {
+      committedSet(res, name, value);
+      // Mirror the settled value into the staged record: the error funnel
+      // rebuilds from the record when a LATER middleware throws, and a
+      // re-apply through the finalizer is idempotent (delete + set).
+      // Appends and set-cookie SETs deliberately do NOT mirror — a re-apply
+      // would duplicate them (set-cookie merges are additive); the cookie
+      // facade writes the record itself, so late cookies still survive.
+      if (name !== "set-cookie") {
+        (c.headersRecord ??= Object.create(null) as HeaderMap)[name] = value;
+      }
       return;
     }
     stagedHeadersOf(c)[name] = value;
     return;
   }
-  if (name === "content-type" || name === "content-length") {
+  if (isSingleton(name)) {
     throw new TypeError(`${field} is a singleton header and cannot be set to an array`);
   }
   for (const entry of value) validateHeaderValue(name, entry);
   c.flags |= 4;
+  const res = c._res;
+  if (res !== undefined) {
+    committedSet(res, name, [...value]);
+    if (name !== "set-cookie") {
+      (c.headersRecord ??= Object.create(null) as HeaderMap)[name] = [...value];
+    }
+    return;
+  }
   stagedHeadersOf(c)[name] = [...value];
 };
 
 export const appendResponseHeader = (c: ContextState, field: string, value: HeaderValue): void => {
   const name = field.toLowerCase();
-  if (name !== "content-type" && name !== "content-length") validateHeaderName(name);
+  if (!isSingleton(name)) validateHeaderName(name);
   const next = typeof value === "string" ? [value] : [...value];
   for (const entry of next) validateHeaderValue(name, entry);
-  const singleton = name === "content-type" || name === "content-length";
+  const singleton = isSingleton(name);
   if (singleton && next.length > 1) {
     throw new TypeError(`${field} is a singleton header and cannot be set to an array`);
   }
-  let existing = c.headersRecord?.[name];
-  if (existing === undefined && c._res !== undefined && name !== "set-cookie") {
-    const committed = c._res.headers.get(name);
-    if (committed !== null && committed.length > 0) existing = committed;
-  }
-  if (singleton && existing !== undefined) {
-    throw new TypeError(`${field} is a singleton header and cannot be appended to`);
-  }
-  // One append is atomic. Multi-entry input stays on Semantic so an exotic
-  // Headers implementation cannot fail halfway through the mutation.
-  if (
-    !singleton &&
-    name !== "set-cookie" &&
-    next.length === 1 &&
-    prepareDirectResponse(c) &&
-    tryAppendCommittedHeader(c, name, next[0] ?? "")
-  ) {
-    if (existing === undefined) {
-      mirrorHeadersOf(c)[name] = next[0] ?? "";
-    } else {
-      const list = Array.isArray(existing) ? [...existing] : [existing];
-      list.push(next[0] ?? "");
-      mirrorHeadersOf(c)[name] = list;
-      c.flags |= 4;
+  const res = c._res;
+  if (res !== undefined) {
+    if (singleton && res.headers.get(name) !== null) {
+      throw new TypeError(`${field} is a singleton header and cannot be appended to`);
+    }
+    try {
+      for (const entry of next) res.headers.append(name, entry);
+    } catch (error) {
+      if (error instanceof TypeError) throw IMMUTABLE(error);
+      throw error;
     }
     return;
+  }
+  const existing = c.headersRecord?.[name];
+  if (singleton && existing !== undefined) {
+    throw new TypeError(`${field} is a singleton header and cannot be appended to`);
   }
   if (existing === undefined) {
     if (next.length === 1) {
@@ -123,38 +142,18 @@ export const appendResponseHeader = (c: ContextState, field: string, value: Head
 export const removeResponseHeader = (c: ContextState, field: string): void => {
   const name = field.toLowerCase();
   if (c.headersRecord !== null) delete c.headersRecord[name];
-  if (c._res === undefined) return;
-  if (isDirectHeader(name) && prepareDirectResponse(c) && tryDeleteCommittedHeader(c, name)) {
-    // Keep a tombstone in case an outer middleware later commits a newer
-    // Response. While APPLIED remains set, the current Response is returned
-    // verbatim; a newer commit clears it and the removal is replayed.
-    (c.removedValue ??= []).push(name);
-    c.flags |= 16 | FLAG_COMMITTED_HEADERS_APPLIED;
-    return;
+  const res = c._res;
+  if (res === undefined) return;
+  try {
+    res.headers.delete(name);
+  } catch (error) {
+    if (error instanceof TypeError) throw IMMUTABLE(error);
+    throw error;
   }
-  markCommittedHeadersStaged(c);
-  (c.removedValue ??= []).push(name);
-  c.flags |= 16;
-};
-
-export const varyResponseHeader = (c: ContextState, field: string): void => {
-  if (field.includes(",") || field.includes(" ")) {
-    throw new TypeError("Vary field must be a single token");
-  }
-  const staged = c.headersRecord?.["vary"];
-  const stagedText = staged === undefined ? "" : Array.isArray(staged) ? staged.join(", ") : staged;
-  const committedText = c._res !== undefined ? (c._res.headers.get("vary") ?? "") : "";
-  const current = stagedText.length > 0 ? stagedText : committedText;
-  const tokens = current
-    .split(",")
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0);
-  if (!tokens.some((token) => token.toLowerCase() === field.toLowerCase())) tokens.push(field);
-  setResponseHeader(c, "Vary", tokens.join(", "));
 };
 
 // Post-commit reads fall back to the committed Response's own headers:
-// `if (!c.has("x-frame-options")) c.set(...)` guards must see what the
+// `if (!c.has("x-frame-options")) c.setHeader(...)` guards must see what the
 // handler's Response already carries, or they silently clobber the
 // developer's explicit value with a default.
 const committedHeader = (c: ContextState, field: string): string | undefined => {

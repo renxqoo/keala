@@ -47,64 +47,9 @@ describe("branch coverage: protocol and proxy", () => {
   });
 });
 
-describe("branch coverage: freshness", () => {
-  it("matches weak etags", async () => {
-    const app = new Keala();
-    let ctx: Context | undefined;
-    app.use(async (c) => {
-      ctx = c;
-      c.status = 200;
-      c.etag = 'W/"v1"';
-      c.body = "x";
-    });
-    await app.handle(new Request("http://localhost/", { headers: { "If-None-Match": 'W/"v1"' } }));
-    expect(ctx?.fresh).toBe(true);
-  });
-
-  it("is stale when if-modified-since predates lastModified", async () => {
-    const app = new Keala();
-    let ctx: Context | undefined;
-    app.use(async (c) => {
-      ctx = c;
-      c.status = 200;
-      c.lastModified = new Date(Date.UTC(2030, 0, 1));
-      c.body = "x";
-    });
-    await app.handle(
-      new Request("http://localhost/", {
-        headers: { "If-Modified-Since": "Thu, 01 Jan 2020 00:00:00 GMT" },
-      }),
-    );
-    expect(ctx?.fresh).toBe(false);
-  });
-
-  it("is stale on an unparsable if-modified-since", async () => {
-    const app = new Keala();
-    let ctx: Context | undefined;
-    app.use(async (c) => {
-      ctx = c;
-      c.status = 200;
-      c.lastModified = new Date(Date.UTC(2030, 0, 1));
-      c.body = "x";
-    });
-    await app.handle(
-      new Request("http://localhost/", { headers: { "If-Modified-Since": "not a date" } }),
-    );
-    expect(ctx?.fresh).toBe(false);
-  });
-
-  it("is stale when no validators exist at all", async () => {
-    const app = new Keala();
-    let ctx: Context | undefined;
-    app.use(async (c) => {
-      ctx = c;
-      c.status = 200;
-      c.body = "x";
-    });
-    await app.handle(new Request("http://localhost/", { headers: { "If-None-Match": '"zzz"' } }));
-    expect(ctx?.fresh).toBe(false);
-  });
-});
+// 0.7: the "branch coverage: freshness" suite is gone — c.fresh (the
+// request.ts private copy) was deleted; conditional.ts owns the single
+// freshness implementation now.
 
 describe("branch coverage: negotiation corners", () => {
   it("skips non-matching subtype wildcards", () => {

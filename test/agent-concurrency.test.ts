@@ -17,6 +17,10 @@
  *    green 语义锁定 locks.
  *
  * Koa baseline: .parity/koa/lib/{request,context,application}.js (v3.2.1).
+ *
+ * 0.7 migration: the "same-request interleaving: query cache" suite is gone —
+ * requests are read-only now (url/path/search/querystring setters deleted),
+ * so there is no rewrite-driven cache invalidation left to lock.
  */
 
 import { describe, expect, it } from "vitest";
@@ -27,116 +31,7 @@ const quiet = { env: "test" } as const;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------------------------------------
-// 1. Same-request async interleaving: the query cache across await points
-// ---------------------------------------------------------------------------
-describe("same-request interleaving: query cache", () => {
-  it("语义锁定: re-reading query after a downstream ctx.url rewrite reflects the new value", async () => {
-    // Koa keys _querycache by the querystring string, so a url rewrite makes
-    // the next read re-parse. Our single-slot cache must be invalidated by
-    // the url setter (src/core/context/request.ts set url).
-    const observed: unknown[] = [];
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      observed.push(c.query("a"), c.query("b"));
-      await next();
-      observed.push(c.query("a"), c.query("b"));
-    });
-    app.use(async (c) => {
-      c.url = "/rewritten?b=2";
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/?a=1"));
-    expect(observed).toEqual(["1", undefined, undefined, "2"]);
-  });
-
-  it("语义锁定: a path rewrite keeps the query string values", async () => {
-    const observed: unknown[] = [];
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      await next();
-      observed.push(c.path, c.querystring, c.query("a"));
-    });
-    app.use(async (c) => {
-      c.path = "/moved";
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/orig?a=1"));
-    expect(observed).toEqual(["/moved", "a=1", "1"]);
-  });
-
-  // CONFIRMED-BUG (parity): a path rewrite must keep the CACHED query object.
-  // Koa's query getter caches by the querystring string
-  // (.parity/koa/lib/request.js get query), and `set path` only replaces the
-  // pathname — the querystring is unchanged, so the same cache entry survives
-  // and in-place mutations made upstream of `await next()` stay visible.
-  // Repro: middleware A reads query and mutates the cached object, awaits;
-  // middleware B rewrites only the path; A re-reads. Expected (Koa): the
-  // identity is preserved and the mutation is visible. Actual: the
-  // `set path` delegates to the url setter, which unconditionally nulls
-  // `queryValue`, so the re-read returns a fresh parse and the mutation is
-  // silently dropped.
-  // Root cause: src/core/context/request.ts set path (writes through
-  // `this.url = ...`, whose setter resets the query cache) — it should update
-  // urlValue without touching queryValue because the querystring is intact.
-  it("CONFIRMED-BUG: a path rewrite keeps the cached query object and its mutations", async () => {
-    const app = new Keala(quiet);
-    const observed: unknown[] = [];
-    app.use(async (c, next) => {
-      c.querystring += "&touched=yes";
-      await next();
-      observed.push(c.query("touched"));
-    });
-    app.use(async (c) => {
-      c.path = "/moved";
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/orig?a=1"));
-    expect(observed).toEqual(["yes"]);
-  });
-
-  it("语义锁定: re-reading query after a downstream ctx.search rewrite reflects the new value", async () => {
-    const observed: unknown[] = [];
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      observed.push(c.query("a"), c.query("c"));
-      await next();
-      observed.push(c.query("a"), c.query("c"));
-    });
-    app.use(async (c) => {
-      c.search = "?c=3";
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/?a=1"));
-    expect(observed).toEqual(["1", undefined, undefined, "3"]);
-  });
-
-  // Fixed (was an inherited koa CONFIRMED-BUG): the querystring setter now carries
-  // Koa's same-value guard, so the cached query object survives an identical
-  // assignment (src/core/context/request.ts set querystring).
-  // RETIRED with the koa query map (0.6.2): its subject was the query-map
-  // cache identity across an identical querystring assignment. With targeted
-  // reads there is no cached object to preserve; the identical-assignment
-  // no-op guard lives in the querystring setter and is code-path trivial.
-
-  // keala follows koa here (design contract #8 lists `query` among the five
-  // cache-invalidating url writers): the assignment rewrites the query string
-  // and the next read re-parses the stringified form. koa's verbatim-stash
-  // deviation is gone, so this now locks plain Koa semantics.
-  it("语义锁定(koa parity): query= rewrites the query string and re-parses on read", async () => {
-    const app = new Keala(quiet);
-    const observed: unknown[] = [];
-    app.use(async (c) => {
-      c.querystring = "page=2&tags=a&tags=b";
-      observed.push(c.querystring, c.query("page"), c.queries("tags"));
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/?old=1"));
-    expect(observed).toEqual(["page=2&tags=a&tags=b", "2", ["a", "b"]]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 2. Cross-request isolation under concurrency
+// 1. Cross-request isolation under concurrency
 // ---------------------------------------------------------------------------
 describe("concurrent isolation", () => {
   const buildApp = () => {
@@ -144,7 +39,7 @@ describe("concurrent isolation", () => {
     const router = new Router();
     router.get("/user/:id", async (c) => {
       await delay(Number(c.params?.["id"]) % 3);
-      c.set("X-Path", "param");
+      c.setHeader("X-Path", "param");
       c.body = `user:${c.params?.["id"]}:${c.query("tag") ?? "none"}`;
     });
     router.get("/static", (c) => {
@@ -302,7 +197,7 @@ describe("error path lifecycle", () => {
     const app = new Keala(quiet);
     app.onError((e) => void errors.push(e));
     app.use(async (c) => {
-      c.set("X-Custom", "leak");
+      c.setHeader("X-Custom", "leak");
       c.append("Set-Cookie", "sid=dead; Path=/");
       c.status = 200;
       c.body = "partial";
@@ -381,21 +276,5 @@ describe("error path lifecycle", () => {
     const res = await app.handle(new Request("http://localhost:3000/get-only"));
     expect(res.status).toBe(410);
     expect(res.headers.get("allow")).toBe(null);
-  });
-
-  // Fixed (was an inherited koa CONFIRMED-BUG): buildErrorResponse now resets
-  // `messageValue`, so a custom status phrase set before the failure cannot
-  // leak onto the error response's status line.
-  it("语义锁定: the error response does not inherit the failed response's custom statusText", async () => {
-    const app = new Keala(quiet);
-    app.onError(() => {});
-    app.use(async (c) => {
-      c.status = 500;
-      c.message = "Custom Phrase";
-      throw createError(500, "boom");
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(500);
-    expect(res.statusText).toBe("");
   });
 });

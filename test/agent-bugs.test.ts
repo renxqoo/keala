@@ -1,10 +1,9 @@
 /**
- * Agent-audit regression locks API: request url/query cache chain,
- * freshness (fresh@0.5.2 semantics), Referrer handling, redirect status
+ * Agent-audit regression locks API: Referrer handling, redirect status
  * classification, emitter edges, router mount/trie encoding, is() array
  * form and the compose next() guard.
  *
- * migration notes:
+ * migration notes (0.7):
  *  - One flat Context: no `ctx.request` / `ctx.response` facades; response
  *    headers are read via `c.resHeader`.
  *  - The app exposes a single-slot onError mapper (R4.3); the old emitter
@@ -14,6 +13,10 @@
  *    url (route-table merge semantics). The query-visibility intent is kept.
  *  - response.is() no longer exists (type negotiation is request-side);
  *    that case was dropped — see the migration report.
+ *  - 0.7 deleted the request url/path rewrite cache-chain suite and the
+ *    c.fresh suite (requests are read-only; freshness lives in
+ *    conditional.ts / the etag middleware), and c.back()/redirect("back")
+ *    (open-redirect surface — callers read c.header("referrer") instead).
  */
 
 import { describe, expect, it } from "vitest";
@@ -39,131 +42,7 @@ const probe = async (
   return captured;
 };
 
-describe("agent audit: request url/query cache chain", () => {
-  it("re-assigning url invalidates the parsed query cache", async () => {
-    const c = await probe({ url: "http://localhost:3000/old?a=1" });
-    expect(c.query("a")).toBe("1"); // read before the rewrite
-    c.url = "/new?b=2";
-    expect(c.url).toBe("/new?b=2");
-    expect(c.querystring).toBe("b=2");
-    expect(c.search).toBe("?b=2");
-    expect(c.query("b")).toBe("2");
-    expect(c.originalUrl).toBe("/old?a=1");
-  });
-
-  it("url rewrites to a query-less target clear the parsed query", async () => {
-    const c = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
-    expect([c.query("a"), c.query("b")]).toEqual(["1", "2"]);
-    c.url = "/plain";
-    expect(c.querystring).toBe("");
-    expect(c.query("a")).toBeUndefined();
-  });
-
-  it("path setter rewrites the pathname while keeping the query string", async () => {
-    const c = await probe({ url: "http://localhost:3000/old?a=1&b=2" });
-    const before = c.query("a");
-    c.path = "/rewritten";
-    expect(c.path).toBe("/rewritten");
-    expect(c.url).toBe("/rewritten?a=1&b=2");
-    expect(c.querystring).toBe("a=1&b=2");
-    expect(c.query("a")).toBe(before); // same query, re-read after the rewrite
-    expect(c.originalUrl).toBe("/old?a=1&b=2");
-  });
-
-  it("path setter works without a query on the bare context", async () => {
-    const c = await probe({ url: "http://localhost:3000/a/b" });
-    c.path = "/c";
-    expect(c.path).toBe("/c");
-    expect(c.url).toBe("/c");
-    expect(c.querystring).toBe("");
-  });
-});
-
-describe("agent audit: freshness (fresh@0.5.2 semantics)", () => {
-  const freshProbe = async (
-    responseSetup: (c: Context) => void,
-    headers: Record<string, string>,
-  ): Promise<boolean> => {
-    let fresh: boolean | undefined;
-    const app = new Keala(quiet);
-    app.get("/", (c) => {
-      c.status = 200;
-      responseSetup(c);
-      fresh = c.fresh;
-      c.body = "x";
-    });
-    await app.handle(new Request("http://localhost:3000/", { headers }));
-    return fresh === true;
-  };
-
-  it("Cache-Control: no-cache forces a stale response even when the etag matches", async () => {
-    const fresh = await freshProbe(
-      (c) => {
-        c.etag = "v1";
-      },
-      { "if-none-match": '"v1"', "cache-control": "no-cache" },
-    );
-    expect(fresh).toBe(false);
-  });
-
-  it("a matching etag is not enough when If-Modified-Since has no validator", async () => {
-    const fresh = await freshProbe(
-      (c) => {
-        c.etag = "v1";
-      },
-      { "if-none-match": '"v1"', "if-modified-since": "Mon, 01 Jan 2024 00:00:00 GMT" },
-    );
-    expect(fresh).toBe(false);
-  });
-
-  it("a matching etag with an outdated If-Modified-Since is stale (both validators)", async () => {
-    const fresh = await freshProbe(
-      (c) => {
-        c.etag = "v1";
-        c.lastModified = new Date(Date.UTC(2025, 0, 1));
-      },
-      {
-        "if-none-match": '"v1"',
-        "if-modified-since": "Mon, 01 Jan 2024 00:00:00 GMT", // predates Last-Modified
-      },
-    );
-    expect(fresh).toBe(false);
-  });
-
-  it("etag and last-modified both matching is fresh", async () => {
-    const fresh = await freshProbe(
-      (c) => {
-        c.etag = "v1";
-        c.lastModified = new Date(Date.UTC(2024, 0, 1));
-      },
-      {
-        "if-none-match": '"v1"',
-        "if-modified-since": "Mon, 01 Jan 2024 00:00:00 GMT",
-      },
-    );
-    expect(fresh).toBe(true);
-  });
-
-  it("If-None-Match without a response etag never falls back to last-modified", async () => {
-    const fresh = await freshProbe(
-      (c) => {
-        c.lastModified = new Date(Date.UTC(2020, 0, 1));
-      },
-      {
-        "if-none-match": '"unrelated"',
-        "if-modified-since": "Wed, 01 Jan 2025 00:00:00 GMT",
-      },
-    );
-    expect(fresh).toBe(false);
-  });
-
-  it("If-None-Match: * means fresh with no validators at all", async () => {
-    const fresh = await freshProbe(() => {}, { "if-none-match": "*" });
-    expect(fresh).toBe(true);
-  });
-});
-
-describe("agent audit: Referrer alias and back()", () => {
+describe("agent audit: Referrer alias", () => {
   it("get() reads the Referer header through both spellings", async () => {
     const c = await probe({
       url: "http://localhost:3000/",
@@ -172,27 +51,6 @@ describe("agent audit: Referrer alias and back()", () => {
     expect(c.get("Referrer")).toBe("http://localhost:3000/login");
     expect(c.get("referrer")).toBe("http://localhost:3000/login");
     expect(c.get("Referer")).toBe("http://localhost:3000/login");
-  });
-
-  it("back() redirects to a same-origin Referer from a real request", async () => {
-    const app = new Keala(quiet);
-    app.get("/target", (c) => c.back("/alt"));
-    const res = await app.handle(
-      new Request("http://example.com:3000/target", {
-        headers: { Referer: "http://example.com:3000/login" },
-      }),
-    );
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("http://example.com:3000/login");
-  });
-
-  it('redirect("back") resolves through the Referer header', async () => {
-    const app = new Keala(quiet);
-    app.get("/", (c) => c.redirect("back"));
-    const res = await app.handle(
-      new Request("http://example.com/", { headers: { Referer: "/previous" } }),
-    );
-    expect(res.headers.get("location")).toBe("/previous");
   });
 });
 
@@ -217,29 +75,14 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
     expect(res.headers.get("location")).toBe("/next");
   });
 
-  it("redirect() keeps 305 (a real redirect status)", async () => {
+  it("redirect() honors an explicit 305 code (a real redirect status)", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
-      c.status = 305;
-      c.redirect("/proxy");
+      c.redirect("/proxy", 305);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(305);
     expect(res.headers.get("location")).toBe("/proxy");
-  });
-
-  it("redirect() resets a custom status message when coercing to 302", async () => {
-    let message = "";
-    const app = new Keala(quiet);
-    app.get("/", (c) => {
-      c.status = 404;
-      c.message = "Custom Phrase";
-      c.redirect("/elsewhere");
-      message = c.message;
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(302);
-    expect(message).toBe("Found");
   });
 });
 
@@ -308,7 +151,7 @@ describe("agent audit: router mount and trie encoding", () => {
 describe("agent audit: response details", () => {
   it("length setter is a no-op while Transfer-Encoding is set", async () => {
     const c = await probe({ url: "http://localhost:3000/" });
-    c.set("Transfer-Encoding", "chunked");
+    c.setHeader("Transfer-Encoding", "chunked");
     c.length = 99;
     expect(c.resHeader("Content-Length")).toBe("");
     c.remove("Transfer-Encoding");

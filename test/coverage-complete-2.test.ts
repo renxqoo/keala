@@ -30,7 +30,7 @@ describe("coverage: response sugar combinations", () => {
   it("state headers written before the sugar merge into it", async () => {
     const app = new Keala(quiet);
     app.get("/m", (c) => {
-      c.set("X-Merged", "1");
+      c.setHeader("X-Merged", "1");
       return c.text("body");
     });
     const res = await app.handle(req("/m"));
@@ -57,7 +57,7 @@ describe("coverage: response sugar combinations", () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.status = 201;
-      c.set("x-s", "1");
+      c.setHeader("x-s", "1");
       c.body = { made: true };
     });
     const res = await app.handle(req("/s"));

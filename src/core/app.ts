@@ -129,7 +129,6 @@ export class Keala implements NativeApplication {
       proxy: options.proxy ?? false,
       proxyIpHeader: options.proxyIpHeader ?? "x-forwarded-for",
       maxIpsCount: options.maxIpsCount,
-      subdomainOffset: options.subdomainOffset ?? 2,
     });
     this.router = createRouterState();
     this.#contextProto = Object.assign(Object.create(baseContextProto) as object, {

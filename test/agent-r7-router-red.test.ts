@@ -109,24 +109,8 @@ describe("R7-QUERY-1 [MEDIUM] malformed escapes still decode valid query bytes",
   });
 });
 
-describe("R7-URL-1 [LOW] assigning query preserves URL fragments", () => {
-  it("places the serialized query before the existing fragment", async () => {
-    const app = new Keala(quiet);
-    let observed = "";
-    app.use((c) => {
-      c.url = "/resource?old=1#section";
-      c.querystring = "page=2";
-      observed = c.url;
-      c.body = "ok";
-    });
-    await app.handle(request("/"));
-
-    // querystring/search setters already use splitUrl and preserve hash. The
-    // query-object setter instead slices only at '?', dropping '#section'.
-    // Root cause: src/core/context/request.ts:177-183.
-    expect(observed).toBe("/resource?page=2#section");
-  });
-});
+// 0.7: R7-URL-1 (query-object assignment preserving URL fragments) is gone —
+// request url/querystring setters were deleted (requests are read-only).
 
 describe("R7-HTTP-1 [MEDIUM] response field values reject forbidden CTLs", () => {
   it.each(["\u0001", "\u000b", "\u001f", "\u007f"])(

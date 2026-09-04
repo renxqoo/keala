@@ -27,7 +27,7 @@ describe("branch coverage: round 3", () => {
   it("set() accepts multi-value headers", async () => {
     const app = new Keala();
     app.use(async (c) => {
-      c.set("X-Multi", ["a", "b"]);
+      c.setHeader("X-Multi", ["a", "b"]);
       c.body = "ok";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));

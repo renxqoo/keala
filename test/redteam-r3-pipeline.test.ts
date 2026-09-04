@@ -3,43 +3,22 @@
  *
  * Scope: core/respond.ts, core/context/* (context/response/request/sugar/pool/
  * decorate), core/compose.ts, core/dispatch.ts, http/errors.ts, http/status.ts.
- * Every `it()` below encodes the CORRECT behavior and FAILS against the
- * current src/ (each maps to a confirmed bug):
+ *
+ * 0.7 migration (docs/KEALA-NATIVE-API.md): the rule-4 rebuild machine is
+ * gone. PIPE-2's post-commit `c.status` downgrade now locks the commit
+ * TypeError; PIPE-2b locks the supported replacement pattern (middleware
+ * constructs and returns a new Response). PIPE-3 keeps its cache-variant
+ * concern through the surviving `c.append("Vary", …)`. PIPE-4/5/6 (c.message
+ * statusText plumbing) are deleted with the API — statusText customization
+ * no longer exists, so there is nothing left to lock.
  *
  *  [PIPE-1] HIGH  open redirect — src/utils/url.ts encodeUrlValue() keeps
- *          U+005C "\" unencoded. response.ts redirect()/back() ship e.g.
+ *          U+005C "\" unencoded. response.ts redirect() ships e.g.
  *          `Location: /\evil.com`; WHATWG URL parsing (every browser) treats
  *          "\" as "/" in special URLs, so that resolves to the authority
  *          "//evil.com" → cross-origin redirect. koa's encodeurl (whitelist)
  *          percent-encodes backslash. Trigger: any app reflecting input into
  *          c.redirect() (returnUrl pattern).
- *  [PIPE-2] MED   RFC 9110 §8.6 violation — src/core/respond.ts
- *          rebuildCommitted(): a post-commit `c.status = 204/304` (the
- *          canonical fresh-check middleware over return-style handlers) swaps
- *          the body for null but keeps the committed response's
- *          content-type/content-length. A 204 MUST NOT carry Content-Length;
- *          the state-mode path (response.ts status setter + fromState)
- *          strips these — the rebuild path has no equivalent.
- *  [PIPE-3] MED   cache corruption — src/core/context/response.ts vary():
- *          it seeds the dedupe from resHeader(), which reads ONLY the staging
- *          record. After a Response commits, the first post-commit vary()
- *          therefore REPLACES the committed `Vary` instead of appending to it
- *          (append() has committed-seeding for other headers; vary's set()
- *          path bypasses it) — downstream cache-variant headers are dropped.
- *  [PIPE-4] MED   opaque 500 from a legal c.message — response.ts message
- *          setter rejects only CR/LF, but undici's Response constructor
- *          rejects every other C0 control (and DEL) in statusText. A handler
- *          doing `c.message = \`x${raw}\`` with a stray NUL/BEL/VT/FF/ESC
- *          loses the entire response to a 500.
- *  [PIPE-5] LOW   src/core/context/sugar.ts sugarHtml(): statusInit only
- *          carries statusText when a status was passed/staged, so a staged
- *          `c.message` is dropped by c.html() — while c.text()/c.json()
- *          preserve it (locked in test/agent3-pipeline.test.ts for text).
- *  [PIPE-6] LOW   src/core/respond.ts rebuildCommitted(): the documented
- *          rule-4 contract ("a post-commit c.status/c.message overrides the
- *          reason phrase") is unimplemented for message-only overrides —
- *          `overridden` requires flags 16 && 1 and the message setter sets
- *          neither, so a message override alone never reaches the rebuild.
  *  [PIPE-7] LOW   src/core/context/context.ts cookies getter materializes
  *          `headersRecord ??= {}` — a prototype-FULL object, violating
  *          recordOf()'s documented null-proto invariant ("inherited keys
@@ -70,34 +49,43 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
     expect(resolved.host).toBe("good.com:3000"); // actual: "evil.com" — cross-origin
   });
 
-  it("PIPE-2: post-commit 204 must drop content-type/content-length (RFC 9110 MUST NOT)", async () => {
+  it("PIPE-2 (0.7): a post-commit c.status downgrade throws instead of rebuilding", async () => {
     const app = new Keala(quiet);
+    let caught: unknown;
     app.use(async (c, next) => {
       await next();
-      c.status = 204; // canonical empty-status downgrade after the commit
+      try {
+        c.status = 204; // the old empty-status downgrade — rule-4 rebuild is gone
+      } catch (err) {
+        caught = err;
+      }
     });
     app.use((c) => {
       c.status = 200;
-      c.set("Content-Length", "5");
+      c.setHeader("Content-Length", "5");
       return c.text("hello");
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(204);
-    expect(await res.text()).toBe("");
-    expect(res.headers.get("content-type")).toBe(null); // actual: text/plain; charset=utf-8
-    expect(res.headers.get("content-length")).toBe(null); // actual: "5"
+    expect(caught).toBeInstanceOf(TypeError);
+    expect((caught as Error).message).toContain("response already committed");
+    // The committed Response survives the rejected write untouched.
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("hello");
   });
 
-  it("PIPE-2b: post-commit 304 downgrade strips content headers like the state path", async () => {
+  it("PIPE-2b (0.7): a fresh-check middleware swaps in a 304 Response keeping validators", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.status = 304; // fresh-check pattern
+      // 0.7 supported pattern: construct the replacement Response by hand.
+      // Commit-aware reads (c.resHeader) deliver the staged validators.
+      const headers = new Headers();
+      const etag = c.resHeader("ETag");
+      if (etag !== "") headers.set("etag", etag);
+      return new Response(null, { status: 304, headers });
     });
     app.use((c) => {
-      c.status = 200;
-      c.set("ETag", '"v1"');
-      c.set("Content-Length", "5");
+      c.setHeader("ETag", '"v1"');
       return c.text("hello");
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
@@ -107,53 +95,18 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
     expect(res.headers.get("content-length")).toBe(null);
   });
 
-  it("PIPE-3: post-commit vary() must merge with the committed Vary, not replace it", async () => {
+  it("PIPE-3 (0.7): a post-commit c.append('Vary') merges with the committed Vary", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.vary("Accept");
+      c.append("Vary", "Accept"); // vary() is gone; append is the surviving write
     });
     app.use((c) => {
-      c.set("Vary", "Origin");
+      c.setHeader("Vary", "Origin");
       return c.text("hi");
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
     expect(res.headers.get("vary")).toBe("Origin, Accept"); // actual: "Accept"
-  });
-
-  it("PIPE-4: a NUL in c.message must not turn the response into a 500", async () => {
-    const app = new Keala(quiet);
-    app.use((c) => {
-      c.status = 200;
-      c.message = "ok\u0000marker"; // passes the CR/LF-only setter check
-      c.body = "x";
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(200); // actual: 500 (undici rejects NUL statusText)
-    expect(await res.text()).toBe("x");
-  });
-
-  it("PIPE-5: c.html() keeps a staged c.message as statusText like c.text()/c.json()", async () => {
-    const app = new Keala(quiet);
-    app.use((c) => {
-      c.message = "Custom";
-      return c.html("<b>hi</b>");
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.statusText).toBe("Custom"); // actual: "" (text() returns "Custom")
-  });
-
-  it("PIPE-6: a post-commit c.message overrides the reason phrase (rule-4 contract)", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      await next();
-      c.message = "Custom Phrase";
-      c.set("X-Late", "1"); // force the rule-4 rebuild path
-    });
-    app.use((c) => c.text("hi"));
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.headers.get("x-late")).toBe("1"); // rebuild ran
-    expect(res.statusText).toBe("Custom Phrase"); // actual: ""
   });
 
   it("PIPE-7: touching c.cookies must not put Object.prototype under the header record", async () => {

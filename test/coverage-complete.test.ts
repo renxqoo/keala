@@ -48,7 +48,7 @@ describe("coverage: mount parameter middleware merge", () => {
   it("a later mount does not clobber an existing param middleware", async () => {
     const app = new Keala(quiet);
     app.param("id", async (c, next) => {
-      c.set("X-App", "1");
+      c.setHeader("X-App", "1");
       await next();
     });
     const other = new Router();

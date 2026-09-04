@@ -94,7 +94,7 @@ describe("R5-1 security: cache() must honor no-cache/no-store/private in ANY cas
       const app = new Keala(quiet);
       app.get("/p", cache({ ttl: 60_000 }), (c) => {
         computed += 1;
-        c.set("Cache-Control", control); // handler opts out of caching
+        c.setHeader("Cache-Control", control); // handler opts out of caching
         return c.text(`private-${computed}`);
       });
       await drive(app, req("/p")); // miss — computes and (wrongly) stores
@@ -111,7 +111,7 @@ describe("R5-1 security: cache() must honor no-cache/no-store/private in ANY cas
     const app = new Keala(quiet);
     app.get("/p", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
-      c.set("Cache-Control", "private");
+      c.setHeader("Cache-Control", "private");
       return c.text(`v${computed}`);
     });
     await drive(app, req("/p"));

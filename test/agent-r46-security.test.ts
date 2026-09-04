@@ -190,8 +190,8 @@ describe("SEC-2: admission as a bypass — refusals are pre-context and context-
     const app = new Keala({ env: "test", pooling: true });
     const gate = deferred();
     app.get("/victim", async (c) => {
-      void c.set("x-victim-token", secret);
-      void c.set("content-type", "text/plain; charset=utf-8");
+      void c.setHeader("x-victim-token", secret);
+      void c.setHeader("content-type", "text/plain; charset=utf-8");
       await gate.promise;
       c.body = "victim-done";
     });

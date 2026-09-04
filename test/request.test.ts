@@ -19,36 +19,27 @@ const probe = async (
 };
 
 describe("request facade (flat context)", () => {
-  it("exposes method, url, path and originalUrl", async () => {
+  it("exposes method, url, path and the query parts", async () => {
     const ctx = await probe({
       url: "http://localhost:3000/users/42?page=2&size=10",
       method: "GET",
     });
     expect(ctx.method).toBe("GET");
     expect(ctx.url).toBe("/users/42?page=2&size=10");
-    expect(ctx.originalUrl).toBe("/users/42?page=2&size=10");
     expect(ctx.path).toBe("/users/42");
     expect(ctx.querystring).toBe("page=2&size=10");
     expect(ctx.search).toBe("?page=2&size=10");
   });
 
-  it("supports url rewriting for routing", async () => {
-    const ctx = await probe({ url: "http://localhost:3000/old?q=1", method: "GET" });
-    ctx.url = "/new";
-    expect(ctx.url).toBe("/new");
-    expect(ctx.path).toBe("/new");
-    expect(ctx.originalUrl).toBe("/old?q=1");
-  });
-
-  it("parses and caches the query", async () => {
-    const ctx = await probe({ url: "http://localhost:3000/?tags=a&tags=b", method: "GET" });
+  it("parses the query through targeted reads", async () => {
+    const ctx = await probe({
+      url: "http://localhost:3000/?page=2&tags=a&tags=b",
+      method: "GET",
+    });
     expect(ctx.query("tags")).toBe("a");
     expect(ctx.queries("tags")).toEqual(["a", "b"]);
-    // Rewrites go through the raw querystring now; targeted reads reflect
-    // the new string immediately (no map, no cache).
-    ctx.querystring = "page=2&tags=a&tags=b";
     expect(ctx.query("page")).toBe("2");
-    expect(ctx.queries("tags")).toEqual(["a", "b"]);
+    expect(ctx.query("missing")).toBeUndefined();
   });
 
   it("reads headers case-insensitively", async () => {
@@ -63,8 +54,6 @@ describe("request facade (flat context)", () => {
     expect(ctx.header("x-custom")).toBe("yes");
     // c.headers IS the raw fetch Headers (no second facade object).
     expect(ctx.headers).toBe(ctx.raw.headers);
-    expect(ctx.reqType).toBe("application/json");
-    expect(ctx.charset).toBe("utf-8");
     expect(ctx.is("json")).toBe("json");
     expect(ctx.is()).toBe("application/json");
     expect(ctx.is("html")).toBe(false);
@@ -79,7 +68,6 @@ describe("request facade (flat context)", () => {
     expect(ctx.reqLength).toBe(42);
     expect(ctx.idempotent).toBe(true);
     expect(ctx.host).toBe("localhost:3000");
-    expect(ctx.hostname).toBe("localhost");
     expect(ctx.protocol).toBe("http");
     expect(ctx.secure).toBe(false);
     expect(ctx.origin).toBe("http://localhost:3000");
@@ -95,7 +83,6 @@ describe("request facade (flat context)", () => {
     });
     await app.handle(new Request("http://localhost:3000/x"));
     expect(captured?.host).toBe("localhost:3000");
-    expect(captured?.hostname).toBe("localhost");
     expect(captured?.href).toBe("http://localhost:3000/x");
   });
 
@@ -119,7 +106,6 @@ describe("request facade (flat context)", () => {
       },
       true,
     );
-    expect(ctx.ips).toEqual(["10.0.0.1", "10.0.0.2", "10.0.0.3"]);
     expect(ctx.ip).toBe("10.0.0.1");
     expect(ctx.protocol).toBe("http");
   });
@@ -133,7 +119,8 @@ describe("request facade (flat context)", () => {
       },
       true,
     );
-    expect(ctx.ips).toEqual(["1.1.1.1", "2.2.2.2"]);
+    // No maxIpsCount: the chain is not truncated and c.ip is its first entry.
+    expect(ctx.ip).toBe("1.1.1.1");
 
     const limited = new Keala({ proxy: true, proxyIpHeader: "x-real-ip", maxIpsCount: 1 });
     let captured: Context | undefined;
@@ -146,7 +133,8 @@ describe("request facade (flat context)", () => {
         headers: { "X-Real-IP": "9.9.9.9, 8.8.8.8" },
       }),
     );
-    expect(captured?.ips).toEqual(["8.8.8.8"]);
+    // maxIpsCount truncates the trusted chain from the left; c.ip is the
+    // truncated chain's first entry.
     expect(captured?.ip).toBe("8.8.8.8");
   });
 
@@ -159,7 +147,6 @@ describe("request facade (flat context)", () => {
       },
       false,
     );
-    expect(ctx.ips).toEqual([]);
     expect(ctx.ip).toBe("");
   });
 
@@ -188,27 +175,6 @@ describe("request facade (flat context)", () => {
     expect(ctx.secure).toBe(true);
   });
 
-  it("computes subdomains", async () => {
-    const ctx = await probe({
-      url: "http://a.b.example.com:3000/",
-      method: "GET",
-      headers: { Host: "a.b.example.com:3000" },
-    });
-    expect(ctx.subdomains).toEqual(["b", "a"]);
-    const tld = await probe({
-      url: "http://example.com/",
-      method: "GET",
-      headers: { Host: "example.com" },
-    });
-    expect(tld.subdomains).toEqual([]);
-    const ipv4 = await probe({
-      url: "http://localhost:3000/",
-      method: "GET",
-      headers: { Host: "127.0.0.1:3000" },
-    });
-    expect(ipv4.subdomains).toEqual([]);
-  });
-
   it("negotiates content", async () => {
     const ctx = await probe({
       url: "http://localhost:3000/",
@@ -216,8 +182,6 @@ describe("request facade (flat context)", () => {
       headers: {
         Accept: "text/html,application/xhtml+xml;q=0.9,application/xml;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Accept-Charset": "utf-8, iso-8859-1;q=0.5",
       },
     });
     expect(ctx.accepts("html", "json")).toBe("html");
@@ -227,8 +191,6 @@ describe("request facade (flat context)", () => {
     expect(ctx.accepts()).toContain("text/html");
     expect(ctx.acceptsEncodings("br", "gzip")).toBe("gzip");
     expect(ctx.acceptsEncodings()).toContain("br");
-    expect(ctx.acceptsLanguages("en", "zh")).toBe("zh");
-    expect(ctx.acceptsCharsets("utf-8")).toBe("utf-8");
   });
 
   it("treats missing accept headers as accept-anything", async () => {
@@ -236,52 +198,6 @@ describe("request facade (flat context)", () => {
     expect(ctx.accepts("json")).toBe("json");
     expect(ctx.accepts()).toEqual([]);
     expect(ctx.acceptsEncodings("identity")).toBe("identity");
-  });
-
-  it("reports freshness against response validators", async () => {
-    const etagApp = new Keala();
-    let etagCtx: Context | undefined;
-    etagApp.use(async (c) => {
-      etagCtx = c;
-      c.status = 200;
-      c.etag = "v1";
-      c.body = "payload";
-    });
-    await etagApp.handle(
-      new Request("http://localhost:3000/", { headers: { "If-None-Match": '"v1"' } }),
-    );
-    expect(etagCtx?.fresh).toBe(true);
-    expect(etagCtx?.stale).toBe(false);
-
-    const staleApp = new Keala();
-    let staleCtx: Context | undefined;
-    staleApp.use(async (c) => {
-      staleCtx = c;
-      c.status = 200;
-      c.etag = "v2";
-      c.body = "payload";
-    });
-    await staleApp.handle(
-      new Request("http://localhost:3000/", { headers: { "If-None-Match": '"other"' } }),
-    );
-    expect(staleCtx?.fresh).toBe(false);
-  });
-
-  it("is never fresh for mutating methods or error statuses", async () => {
-    const post = await probe({ url: "http://localhost:3000/", method: "POST" });
-    expect(post.fresh).toBe(false);
-
-    const errApp = new Keala();
-    let errCtx: Context | undefined;
-    errApp.use(async (c) => {
-      errCtx = c;
-      c.status = 500;
-      c.body = "x";
-    });
-    await errApp.handle(
-      new Request("http://localhost:3000/", { headers: { "If-None-Match": "*" } }),
-    );
-    expect(errCtx?.fresh).toBe(false);
   });
 
   it("exposes cookies bound to the app keys", async () => {
@@ -324,7 +240,6 @@ describe("request facade (flat context)", () => {
   it("exposes app settings", () => {
     const app = new Keala({ keys: ["test-key"], proxyIpHeader: "x-forwarded-for" });
     expect(app.env).toBe(process.env["NODE_ENV"] ?? "development");
-    expect(app.settings.subdomainOffset).toBe(2);
     expect(app.settings.proxyIpHeader).toBe("x-forwarded-for");
     expect(app.toJSON()).toEqual({ env: app.env, proxy: false });
   });

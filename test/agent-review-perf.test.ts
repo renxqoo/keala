@@ -140,7 +140,7 @@ describe("R4.3 perf review: happy path must not feel the mapper", () => {
       for (const app of [bare, mapped]) {
         app.use(async (c, next) => {
           await next();
-          c.set("x-late", "1");
+          c.setHeader("x-late", "1");
         });
         app.get("/text", (c) => c.text("hello"));
       }

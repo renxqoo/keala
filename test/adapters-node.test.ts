@@ -33,7 +33,7 @@ describe("node adapter: request bridging", () => {
   it("serves text routes with status and headers", async () => {
     const { base } = await serve((app) => {
       app.get("/x", (c) => {
-        c.set("x-custom", "yes");
+        c.setHeader("x-custom", "yes");
         c.body = "hello node";
       });
     });

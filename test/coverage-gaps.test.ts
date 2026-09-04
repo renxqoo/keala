@@ -20,11 +20,11 @@ describe("coverage gaps", () => {
   });
 
   it("delegates response setters through the flat context", async () => {
+    // 0.7: the c.message statusText setter is gone with the API.
     const app = new Keala();
     app.use(async (c) => {
       c.type = "text/csv";
       c.length = 5;
-      c.message = "custom";
       c.lastModified = new Date(Date.UTC(2025, 0, 2));
       c.etag = "v9";
       expect(c.resHeader("Content-Type")).toBe("text/csv");
@@ -41,7 +41,6 @@ describe("coverage gaps", () => {
     });
     await probe.handle(new Request("http://localhost:3000/"));
     expect(seenLength).toBe(5);
-    expect(res.statusText).toBe("custom");
     expect(res.headers.get("etag")).toBe('"v9"');
     expect(res.headers.get("last-modified")).toBe("Thu, 02 Jan 2025 00:00:00 GMT");
   });

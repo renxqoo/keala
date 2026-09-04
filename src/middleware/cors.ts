@@ -35,6 +35,23 @@ const isAllowed = (origin: string, allow: string | string[]): boolean => {
   return list.includes(origin);
 };
 
+/**
+ * Add one `Vary` token without duplicating it. The token merge (not a bare
+ * append) matters pre-commit AND post-commit: repeated runs must never grow
+ * "Origin, Origin", and after `await next()` the handler's own Vary values
+ * must survive (cache-poisoning surface on reflected ACAO responses).
+ */
+const addVary = (c: Parameters<RouteHandler>[0], field: string): void => {
+  const existing = c.resHeader("Vary");
+  const tokens = existing
+    .split(",")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+  const lower = new Set(tokens.map((token) => token.toLowerCase()));
+  if (!lower.has(field.toLowerCase())) tokens.push(field);
+  c.setHeader("Vary", tokens.join(", "));
+};
+
 export const cors = (options: CorsOptions = {}): RouteHandler => {
   const originAllow = options.origin ?? "*";
   if (options.allowCredentials === true && originAllow === "*") {
@@ -61,18 +78,19 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
       if (!allowed) {
         // The 403 exists ONLY because of the Origin header — a shared cache
         // must key it on Origin like every other negotiated answer (below).
-        if (varyOrigin) c.vary("Origin");
+        if (varyOrigin) addVary(c, "Origin");
         if (options.reject !== undefined) return options.reject(origin);
         c.status = 403;
         return;
       }
-      c.set("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
-      c.set("Access-Control-Allow-Methods", methods);
-      if (allowHeaders !== undefined) c.set("Access-Control-Allow-Headers", allowHeaders);
-      if (options.allowCredentials === true) c.set("Access-Control-Allow-Credentials", "true");
-      if (maxAge !== undefined) c.set("Access-Control-Max-Age", String(Math.trunc(maxAge)));
+      c.setHeader("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
+      c.setHeader("Access-Control-Allow-Methods", methods);
+      if (allowHeaders !== undefined) c.setHeader("Access-Control-Allow-Headers", allowHeaders);
+      if (options.allowCredentials === true)
+        c.setHeader("Access-Control-Allow-Credentials", "true");
+      if (maxAge !== undefined) c.setHeader("Access-Control-Max-Age", String(Math.trunc(maxAge)));
       // Preflight answers carry no body and never cookies.
-      if (varyOrigin) c.vary("Origin");
+      if (varyOrigin) addVary(c, "Origin");
       c.status = 204;
       return;
     }
@@ -80,8 +98,8 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
     if (origin.length > 0 && !allowed) {
       // Same invariant as above: a rejection is an origin-dependent answer.
       // (Written BEFORE a custom reject() Response is returned, so the staged
-      // Vary rides along through the rule-4 merge onto the committed answer.)
-      if (varyOrigin) c.vary("Origin");
+      // Vary rides along onto the committed answer.)
+      if (varyOrigin) addVary(c, "Origin");
       if (options.reject !== undefined) return options.reject(origin);
       c.status = 403;
       return;
@@ -92,22 +110,15 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
     if (varyOrigin) {
       // Append semantics AFTER the handler: its own `Vary` values must never
       // erase Origin (cache poisoning surface on reflected ACAO responses).
-      // With a committed Response the staged record is empty, so the committed
-      // header value joins the combined set explicitly.
-      const committedVary = c._res?.headers.get("vary") ?? "";
-      const existing = c.resHeader("Vary") || committedVary;
-      const tokens = existing
-        .split(",")
-        .map((token) => token.trim())
-        .filter((token) => token.length > 0);
-      const lower = new Set(tokens.map((token) => token.toLowerCase()));
-      if (!lower.has("origin")) tokens.push("Origin");
-      c.set("Vary", tokens.join(", "));
+      // resHeader reads through to the committed Response's headers once one
+      // exists, so the handler's tokens join the combined set.
+      addVary(c, "Origin");
     }
     if (allowed) {
-      c.set("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
-      if (exposeHeaders !== undefined) c.set("Access-Control-Expose-Headers", exposeHeaders);
-      if (options.allowCredentials === true) c.set("Access-Control-Allow-Credentials", "true");
+      c.setHeader("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
+      if (exposeHeaders !== undefined) c.setHeader("Access-Control-Expose-Headers", exposeHeaders);
+      if (options.allowCredentials === true)
+        c.setHeader("Access-Control-Allow-Credentials", "true");
     }
   };
 };

@@ -67,7 +67,7 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
     }
     if (!accepted) {
       c.status = 401;
-      c.set("WWW-Authenticate", challenge);
+      c.setHeader("WWW-Authenticate", challenge);
       return;
     }
     await next();
@@ -117,13 +117,13 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
     }
     if (token === null) {
       c.status = 401;
-      c.set("WWW-Authenticate", challenge);
+      c.setHeader("WWW-Authenticate", challenge);
       return;
     }
     if (!(await options.verify(token))) {
       c.status = 401;
       // Present-but-rejected is `invalid_token` per RFC 6750 §3.
-      c.set("WWW-Authenticate", `${challenge}, error="invalid_token"`);
+      c.setHeader("WWW-Authenticate", `${challenge}, error="invalid_token"`);
       return;
     }
     await next();

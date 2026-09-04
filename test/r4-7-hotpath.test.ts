@@ -26,16 +26,16 @@ const serve = async (
 // non-empty header record.
 const registerStateShapes = (app: InstanceType<typeof Keala>): void => {
   app.get("/text", (c) => {
-    c.set("x-step", "1");
+    c.setHeader("x-step", "1");
     c.type = "text/plain";
     c.body = "middleware";
   });
   app.get("/json", (c) => {
-    c.set("x-step", "1");
+    c.setHeader("x-step", "1");
     c.body = { hello: "world" };
   });
   app.get("/bytes", (c) => {
-    c.set("x-step", "1");
+    c.setHeader("x-step", "1");
     c.body = new TextEncoder().encode("raw");
   });
 };
@@ -96,7 +96,7 @@ describe("R4.7 staged-header wire behavior under repeated names", () => {
   it("repeated names still reach the response wire", async () => {
     const { base } = await serve((app) => {
       app.get("/repeat", (c) => {
-        c.set("x-repeat", `v${c.url.length}`);
+        c.setHeader("x-repeat", `v${c.url.length}`);
         c.body = "ok";
       });
     });

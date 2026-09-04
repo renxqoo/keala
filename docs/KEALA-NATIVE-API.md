@@ -89,21 +89,35 @@ keala = 洋葱模型 + 双态响应 + Bun 原生快路径
 
 ## 3. 响应契约(新,一节讲完)
 
-1. **未提交**:`c.body/c.status/c.type/c.set/…` 暂存;任一 sugar
+1. **未提交**:`c.body/c.status/c.type/c.setHeader/…` 暂存;任一 sugar
    (`c.text/json/html`)或 handler 返回 Response 即**提交**。
-2. **已提交**:此后任何 `c.body/c.status/c.type/c.set/c.remove/
-c.append` 写入 → **TypeError**。中间件在 `await next()` 后仍可读
-   (`c.status/c.type/c.length/c.has/c.resHeader` 读提交值——已按
-   review 修复做成 commit-aware)。要改已提交的响应?在中间件里自己
-   构造新 Response 返回覆盖。
+2. **已提交**(2026-09-04 实施修订,更精确的最终契约):
+   - `c.body/c.status/c.redirect` 写入 → **TypeError**——要改正文,
+     在中间件里自己构造新 Response 返回覆盖。
+   - **头部写入不抛**:`c.setHeader/append/remove/type/length/etag/
+lastModified/attachment` 直接写进已提交 Response 的 `Headers`
+     (与 Hono 对 post-`next()` `c.header()` 的语义一致)。洋葱模型的
+     核心习惯用法(timing/secureHeaders/Vary/post-next 头装饰)因此
+     全部保留,而且比 rule-4 更便宜——零重建。
+   - 提交后的 SET/REMOVE 会幂等镜像进暂存记录:外层中间件事后抛错
+     时错误漏斗从头重建,防护头不丢;更新的提交(外层返回新
+     Response)也会重放这些 SET。APPEND 与 Set-Cookie 的直接 SET
+     只作用于当时那个 Response(重放会重复它们);late cookie 走
+     cookies 门面,天然写记录、不受影响。
+   - 不可变守卫(handler 返回了 fetch 来的 Response)上写入 →
+     TypeError(本地构造 Response 再返回)。
+   - 中间件在 `await next()` 后仍可读(`c.status/c.type/c.length/
+c.has/c.resHeader` 读提交值)。
 3. HEAD / 204 / 304 的线缆正确性(CL 回填、空体净化)保留——这是
    HTTP 正确性,不是 koa 税。
-4. `redirect(url, code)`:code 缺省 302,仅接受 3xx 整数(急切校验),
-   设置 Location 后提交。无 body(裁决项)。
+4. `redirect(url, code?)`:code 缺省 302,显式传入须为 3xx 整数
+   (急切校验);已 staged 的 3xx 保留。设置 Location 后提交。无
+   body(裁决项)。
 
-**删除的机器**:`rebuildCommitted`、flags 32/64/128/2048 的合并矩阵、
-`removedValue`、`headersRecord` 的 post-commit 合并、对应 parity 测试
-(~半个 respond.ts,预估 −400 行源码/−1000 行测试)。
+**删除的机器**:`rebuildCommitted`、flags 32/64/128/2048/4096/8192
+的合并矩阵、`removedValue`、`messageValue`、`implicitTextResponseValue`、
+`committed-headers.ts` 三态守卫探测、对应 parity 测试(respond.ts
+约 −40%,committed-headers.ts 整文件删除)。
 
 ## 4. 错误模型(保留,微调)
 
@@ -180,15 +194,34 @@ app.close({ drain })  app.isDraining()  app.inFlight
 app.onError(fn)  app.notFound(fn)  app.decorate(k, v)
 ```
 
-## 9. 性能预期(诚实口径)
+## 9. 性能预期(诚实口径)——已实测定论(2026-09-04)
 
 - **机制级(可测)**:finalize 分支面收敛;respond/sugar 的
   isNativeRequestSplit 13 处分支随规则简化而减;querystring/头失效
   链删除。预期 context+finalize 合计省几十~百余 ns/请求——正是
   query/param wire 差距的归因面。
-- **wire 级**:按 0.6.2 教训(建表成本消除但场景差距未收窄),不预设
-  RPS 收窄;以 R4.6 协议矩阵前后对照定论。
-- **复杂度**:−~400 行 src、−~1000+ 行测试、finalize 可读性显著上升。
+- **wire 级实测**(R4.6 协议,200conn×4s×4 轮 ABAB,K/基线配对中位数,
+  基线=2760ef4 即 0.6.2;原始样本 docs/bench/0-7-*.jsonl):
+
+  | 场景         | 运行时   | K/Hono      | K/0.6.2 基线         |
+  | ------------ | -------- | ----------- | -------------------- |
+  | query        | Bun      | 0.960       | **+2.4%**(min +1.0%) |
+  | query        | Node     | 0.852       | **+2.3%**(min +0.8%) |
+  | text         | Node     | 1.035       | +1.3%                |
+  | text         | Bun      | 0.972-0.981 | −2.0~2.4%(两腿复现)  |
+  | param        | Bun/Node | 1.000/1.041 | 0.994 / 0.994(带内)  |
+  | middleware-3 | Bun/Node | 1.024/1.580 | 0.993 / 1.003(带内)  |
+
+  结论:**query 双运行时 +2.3~2.4%,机制级预测兑现**(query Bun K/H
+  0.94→0.96);text-Node/带内场景不回归。唯一例外 text-Bun −2%:两腿
+  复现但无代码路径可归因(该场景执行面——dispatchDirect 裸快路径 +
+  createPlannedResponse——0.7 与 0.6.2 语义相同且只减不增;Node 同路径
+  +1.3% 反向佐证),判定为代码布局/环境敏感带,按"无投机复杂度"纪律
+  记录不追。
+
+- **复杂度**:净 −919 行(119 文件,+1784/−2703),respond.ts 约 −40%,
+  committed-headers.ts(三态守卫探测)整文件删除,finalize 可读性显著
+  上升。
 
 ## 10. 验收
 

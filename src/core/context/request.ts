@@ -2,20 +2,15 @@
  * Request-side context API — prototype accessors over the flat context.
  *
  * Everything reads the raw web `Request` plus lazily materialized caches
- * (`urlValue`, `queryValue`, `ipValue`, …). No second object is ever created
- * for the request side.
+ * (`urlValue`, `ipValue`, …). No second object is ever created for the
+ * request side. The request is the client's fact (0.7 contract): there are
+ * no rewriting setters — write the response, not the request.
  */
 
-import { charsetFromContentType, normalizeType } from "../../utils/mime.ts";
-import {
-  acceptableValues,
-  acceptsCharset,
-  acceptsEncoding,
-  acceptsLanguage,
-  acceptsType,
-} from "../../negotiation/accepts.ts";
+import { normalizeType } from "../../utils/mime.ts";
+import { acceptableValues, acceptsEncoding, acceptsType } from "../../negotiation/accepts.ts";
 import { typeIs } from "../../negotiation/typeis.ts";
-import { getPath, getSearch, parseHostHeader, toURL } from "../../utils/url.ts";
+import { getPath, getSearch, toURL } from "../../utils/url.ts";
 import { findAllQueryValues, findQueryValue } from "../../utils/query.ts";
 import type { Runtime } from "../../types.ts";
 import type { ContextState } from "./state.ts";
@@ -41,10 +36,10 @@ export interface RequestApi {
    */
   readonly signal: AbortSignal;
   readonly method: string;
-  url: string;
-  path: string;
-  querystring: string;
-  search: string;
+  readonly url: string;
+  readonly path: string;
+  readonly querystring: string;
+  readonly search: string;
   /**
    * Targeted query read: first value for `name` (decoded; malformed escapes
    * verbatim), `undefined` when absent. Repeated keys: `queries(name)`.
@@ -52,32 +47,22 @@ export interface RequestApi {
   query(name: string): string | undefined;
   /** All values for a repeated query key, `[]` when absent. */
   queries(name: string): string[];
-  readonly originalUrl: string;
   readonly URL: URL | null;
   readonly headers: Headers;
   readonly runtime: Runtime | undefined;
   header(field: string): string;
   get(field: string): string;
   readonly host: string;
-  readonly hostname: string;
   readonly protocol: string;
   readonly secure: boolean;
   readonly ip: string;
-  readonly ips: string[];
-  readonly subdomains: string[];
   readonly origin: string;
   readonly href: string;
   readonly idempotent: boolean;
-  readonly charset: string;
-  readonly reqType: string;
   readonly reqLength: number | undefined;
-  readonly fresh: boolean;
-  readonly stale: boolean;
   is(...types: (string | string[])[]): string | null | false;
   accepts(...types: (string | string[])[]): string | string[] | false;
   acceptsEncodings(...encodings: (string | string[])[]): string | string[] | false;
-  acceptsCharsets(...charsets: (string | string[])[]): string | string[] | false;
-  acceptsLanguages(...langs: (string | string[])[]): string | string[] | false;
 }
 
 /** Strip userinfo (`user:pass@host`) — only the authority is ever trusted. */
@@ -86,10 +71,7 @@ const stripUserinfo = (value: string): string => {
   return at === -1 ? value : value.slice(at + 1);
 };
 
-const IPV4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-const IPV6 = /^[0-9a-f]*:[0-9a-f:]*$/i;
 const IDEMPOTENT = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE"]);
-const NO_CACHE = /(?:^|,)\s*?no-cache\s*?(?:,|$)/;
 const IPV4_WITH_PORT = /^\d{1,3}(?:\.\d{1,3}){3}:\d+$/;
 const BRACKETED_WITH_PORT = /^\[[0-9a-f:]+\]:\d+$/i;
 
@@ -126,28 +108,11 @@ const authorityOf = (url: string): string => {
   return rest;
 };
 
-/** Split a path-with-search into path / search / hash / querystring. */
-const splitUrl = (
-  url: string,
-): { path: string; search: string; hash: string; querystring: string } => {
-  const hashAt = url.indexOf("#");
-  const hash = hashAt === -1 ? "" : url.slice(hashAt);
-  const body = hashAt === -1 ? url : url.slice(0, hashAt);
-  const queryAt = body.indexOf("?");
-  if (queryAt === -1) return { path: body, search: "", hash, querystring: "" };
-  return {
-    path: body.slice(0, queryAt),
-    search: body.slice(queryAt),
-    hash,
-    querystring: body.slice(queryAt + 1),
-  };
-};
-
 /** Host authority with userinfo stripped (proxy-aware, header-first). */
 const computeHost = (c: ContextState & { get(field: string): string }): string => {
   // Strip userinfo (user:pass@host) — only the authority is trusted, in
   // BOTH sources: a crafted "evil.com:fake@legitimate.com" in
-  // X-Forwarded-Host or Host must never leak into origin/href/back().
+  // X-Forwarded-Host or Host must never leak into origin/href.
   if (c.appSettings.proxy) {
     // Koa: only the first entry of a chained X-Forwarded-Host is trusted.
     const forwarded = stripUserinfo(c.get("x-forwarded-host").split(",")[0]?.trim() ?? "");
@@ -156,17 +121,6 @@ const computeHost = (c: ContextState & { get(field: string): string }): string =
   const header = stripUserinfo(c.get("host"));
   if (header.length > 0) return header;
   return authorityOf(sourceAbsoluteUrl(c.rawRequest));
-};
-
-/** Hostname from the host authority (bracketed IPv6 via WHATWG semantics). */
-const computeHostname = (host: string): string => {
-  if (host.length === 0) return "";
-  if (host.charCodeAt(0) === 91 /* "[" */) {
-    return toURL(`http://${host}/`)?.hostname ?? "";
-  }
-  const at = host.lastIndexOf("@");
-  const bare = at === -1 ? host : host.slice(at + 1);
-  return parseHostHeader(bare).hostname;
 };
 
 export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
@@ -195,37 +149,18 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     const rawUrl = sourceUrl(this.rawRequest);
     return (this.urlValue ??= `${getPath(rawUrl)}${getSearch(rawUrl)}`);
   },
-  set url(value: string) {
-    this.urlValue = value;
-    this.pathValue = null;
-    // The querystring memo is keyed by the URL — a rewrite invalidates it.
-    this.querystringValue = null;
-  },
   get path(): string {
     return this.pathValue ?? (this.pathValue = getPath(this.url));
   },
-  set path(value: string) {
-    // Koa: rewriting the pathname keeps the query string AND the parsed query
-    // cache (keyed by querystring) — upstream mutations stay visible.
-    const url = this.url;
-    const q = url.indexOf("?");
-    this.urlValue = q === -1 ? value : `${value}${url.slice(q)}`;
-    this.pathValue = null;
-  },
-  get originalUrl(): string {
-    const rawUrl = sourceUrl(this.rawRequest);
-    return (this.originalUrlValue ??= `${getPath(rawUrl)}${getSearch(rawUrl)}`);
-  },
   get querystring(): string {
-    // Single scan of the raw request target (or a rewritten url): touching
-    // only the query must not materialize the joined path+search string.
-    // Equivalent to getSearch(url).slice(1): the first "#" ends the search
-    // (even before any "?"), the first "?" starts the query. Cached in a
-    // slot: the targeted readers call this per key, and every url rewrite
-    // invalidates by assigning urlValue... which the SETTERS do — so the
-    // cache key is urlValue identity, restored below on rewrite.
+    // Single scan of the raw request target: touching only the query must
+    // not materialize the joined path+search string. Equivalent to
+    // getSearch(url).slice(1): the first "#" ends the search (even before
+    // any "?"), the first "?" starts the query. Cached in a slot: the
+    // targeted readers call this per key. The request is immutable (0.7),
+    // so the memo can never go stale.
     const cached = this.querystringValue;
-    if (cached !== null && this.urlValue === null) return cached;
+    if (cached !== null) return cached;
     const url = this.urlValue ?? sourceUrl(this.rawRequest);
     let query = -1;
     let limit = -1;
@@ -267,17 +202,6 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   queries(name: string): string[] {
     return findAllQueryValues(this.querystring, name);
   },
-  set querystring(value: string) {
-    const parts = splitUrl(this.url);
-    if (value === parts.querystring) return; // koa no-op guard
-    this.url = value.length === 0 ? parts.path + parts.hash : `${parts.path}?${value}${parts.hash}`;
-  },
-  set search(value: string) {
-    const parts = splitUrl(this.url);
-    const search = value === "" || value === "?" ? "" : value.startsWith("?") ? value : `?${value}`;
-    if (search === parts.search) return; // koa: same-value assignment is a no-op
-    this.url = parts.path + search + parts.hash;
-  },
   get URL(): URL | null {
     // Memoized: a fresh WHATWG parse (40ns + object) per access before.
     const memo = this.urlObjectValue;
@@ -309,15 +233,9 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   },
   get host(): string {
     // Memoized (45ns parse per access before; CORS-style readers call twice).
-    // NOT invalidated by url rewrites — it derives from headers, not path.
     const memo = this.hostValue;
     if (memo !== null) return memo;
     return (this.hostValue = computeHost(this));
-  },
-  get hostname(): string {
-    const memo = this.hostnameValue;
-    if (memo !== null) return memo as string;
-    return (this.hostnameValue = computeHostname(this.host)) as string;
   },
   get protocol(): string {
     if (this.appSettings.proxy) {
@@ -329,20 +247,22 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   get secure(): boolean {
     return this.protocol === "https";
   },
-  get ips(): string[] {
-    if (!this.appSettings.proxy) return [];
-    const raw = this.get(this.appSettings.proxyIpHeader);
-    if (raw.length === 0) return [];
-    const ips = raw
-      .split(",")
-      .map((ip) => stripPort(ip.trim()))
-      .filter((ip) => ip.length > 0);
-    const max = this.appSettings.maxIpsCount;
-    return max !== undefined && max > 0 ? ips.slice(-max) : ips;
-  },
   get ip(): string {
-    const proxied = this.ips[0];
-    if (proxied !== undefined) return proxied;
+    // The trusted-forward chain's first entry (after the maxIpsCount
+    // truncation the old `ips` accessor applied — `c.ips` itself is gone,
+    // but `c.ip` keeps its exact resolution order).
+    if (this.appSettings.proxy) {
+      const raw = this.get(this.appSettings.proxyIpHeader);
+      if (raw.length > 0) {
+        const chain = raw
+          .split(",")
+          .map((entry) => stripPort(entry.trim()))
+          .filter((entry) => entry.length > 0);
+        const max = this.appSettings.maxIpsCount;
+        const first = (max !== undefined && max > 0 ? chain.slice(-max) : chain)[0];
+        if (first !== undefined) return first;
+      }
+    }
     // Memo: null = unresolved, "" = resolved to no address. The resolver runs
     // exactly once either way.
     if (this.ipValue === null) {
@@ -359,47 +279,24 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     }
     return this.ipValue;
   },
-  get subdomains(): string[] {
-    const hostname = this.hostname;
-    if (hostname.length === 0 || IPV4.test(hostname) || IPV6.test(hostname)) return [];
-    return hostname.split(".").toReversed().slice(this.appSettings.subdomainOffset);
-  },
   get origin(): string {
     return `${this.protocol}://${this.host}`;
   },
   get href(): string {
-    // Koa: href is pinned to originalUrl and echoes absolute URLs verbatim.
-    const original = this.originalUrl;
-    if (original.startsWith("http://") || original.startsWith("https://")) return original;
+    // An absolute-form request target (proxy-style) echoes verbatim.
+    const url = this.url;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
     const host = this.host;
-    return host.length === 0 ? original : `${this.protocol}://${host}${original}`;
+    return host.length === 0 ? url : `${this.protocol}://${host}${url}`;
   },
   get idempotent(): boolean {
     return IDEMPOTENT.has(sourceMethod(this.rawRequest));
-  },
-  get charset(): string {
-    return charsetFromContentType(sourceHeader(this.rawRequest, "content-type") ?? "");
-  },
-  get reqType(): string {
-    return normalizeType(sourceHeader(this.rawRequest, "content-type") ?? "");
   },
   get reqLength(): number | undefined {
     const raw = sourceHeader(this.rawRequest, "content-length");
     if (raw === null || raw.length === 0) return undefined;
     const parsed = Number.parseInt(raw, 10);
     return Number.isNaN(parsed) ? undefined : parsed;
-  },
-  get stale(): boolean {
-    return !this.fresh;
-  },
-  get fresh(): boolean {
-    const method = sourceMethod(this.rawRequest);
-    if (method !== "GET" && method !== "HEAD") return false;
-    const status = this.statusValue;
-    if ((status >= 200 && status < 300) || status === 304) {
-      return isFresh(this);
-    }
-    return false;
   },
   is(...types: (string | string[])[]): string | null | false {
     const contentType = sourceHeader(this.rawRequest, "content-type");
@@ -422,64 +319,4 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     if (list.length === 0) return acceptableValues(header);
     return acceptsEncoding(header, list);
   },
-  acceptsCharsets(...charsets: (string | string[])[]): string | string[] | false {
-    const header = sourceHeader(this.rawRequest, "accept-charset");
-    const list = flatten(charsets);
-    if (list.length === 0) return acceptableValues(header);
-    return acceptsCharset(header, list);
-  },
-  acceptsLanguages(...langs: (string | string[])[]): string | string[] | false {
-    const header = sourceHeader(this.rawRequest, "accept-language");
-    const list = flatten(langs);
-    if (list.length === 0) return acceptableValues(header);
-    return acceptsLanguage(header, list);
-  },
-};
-
-/**
- * `fresh` per the `fresh` package (Koa semantics): If-None-Match takes
- * precedence over If-Modified-Since, but when both are present BOTH validators
- * must hold; `Cache-Control: no-cache` always forces a full response.
- */
-const isFresh = (c: ContextState): boolean => {
-  const modifiedSince = sourceHeader(c.rawRequest, "if-modified-since");
-  const noneMatch = sourceHeader(c.rawRequest, "if-none-match");
-
-  if (modifiedSince === null && noneMatch === null) return false;
-
-  // Always stale on end-to-end reload requests (RFC 2616 §14.9.4).
-  const cacheControl = sourceHeader(c.rawRequest, "cache-control");
-  if (cacheControl !== null && NO_CACHE.test(cacheControl)) return false;
-
-  // If-None-Match takes precedence, except for the existence wildcard `*`.
-  if (noneMatch !== null && noneMatch !== "*") {
-    const etag = c.headersRecord?.["etag"];
-    const etagText = etag === undefined ? "" : Array.isArray(etag) ? etag.join(", ") : etag;
-    if (etagText.length === 0) return false;
-    if (!etagMatches(etagText, noneMatch)) return false;
-  }
-
-  // When present, If-Modified-Since must hold as well.
-  if (modifiedSince !== null) {
-    const lastModified = c.headersRecord?.["last-modified"];
-    if (lastModified === undefined) return false;
-    const modifiedAt = Date.parse(
-      Array.isArray(lastModified) ? (lastModified[0] ?? "") : lastModified,
-    );
-    const since = Date.parse(modifiedSince);
-    if (Number.isNaN(modifiedAt) || !(modifiedAt <= since)) return false;
-  }
-  return true;
-};
-
-const etagMatches = (etag: string, header: string): boolean => {
-  if (header.trim() === "*") return true;
-  for (const candidate of header.split(",")) {
-    let value = candidate.trim();
-    if (value.startsWith("W/")) value = value.slice(2);
-    let expected = etag;
-    if (expected.startsWith("W/")) expected = expected.slice(2);
-    if (value === expected) return true;
-  }
-  return false;
 };

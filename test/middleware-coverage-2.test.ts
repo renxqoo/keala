@@ -44,7 +44,7 @@ describe("coverage: compress with injected gzip", () => {
     });
     app.get("/pre", (c) => {
       c.body = "0".repeat(400);
-      c.set("Content-Encoding", "br");
+      c.setHeader("Content-Encoding", "br");
     });
     app.get("/committed", (c) => c.text("0".repeat(400)));
     expect((await app.handle(gzRequest("/obj"))).headers.get("content-encoding")).toBe("gzip");
@@ -152,7 +152,7 @@ describe("coverage: adapter drain + router mount through dispatch", () => {
     const app = new Keala(quiet);
     const api = new Router({ prefix: "/v1" });
     api.param("id", async (c, next) => {
-      c.set("X-Param-Mw", c.params?.["id"] ?? "");
+      c.setHeader("X-Param-Mw", c.params?.["id"] ?? "");
       await next();
     });
     api.get("/items/:id", (c) => c.text("item"));

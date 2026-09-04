@@ -44,7 +44,7 @@ api.get("/boom", () => {
 });
 api.post("/users", (c) => {
   c.status = 201;
-  c.set("Location", "/api/users/42");
+  c.setHeader("Location", "/api/users/42");
   c.body = { created: true };
 });
 api.get("/query", (c) => c.json({ q: c.query("q") ?? null, n: c.queries("n").length }));
@@ -53,7 +53,7 @@ api.get("/teapot", (c) => c.throw(418, "short and stout"));
 app.use(async (c, next) => {
   const start = Date.now();
   await next();
-  c.set("X-Response-Time", `${Date.now() - start}ms`);
+  c.setHeader("X-Response-Time", `${Date.now() - start}ms`);
 });
 app.mount("/", api);
 app.get("/redirect", (c) => {

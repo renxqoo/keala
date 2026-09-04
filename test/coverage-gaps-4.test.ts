@@ -6,19 +6,6 @@ import { describe, expect, it } from "vitest";
 const REAL_BUN = typeof Bun !== "undefined";
 
 import { Keala } from "../src/index.ts";
-import type { Context } from "../src/core/context/context.ts";
-
-const probe = async (url: string, headers: Record<string, string>): Promise<Context> => {
-  const app = new Keala();
-  let captured: Context | undefined;
-  app.use(async (c) => {
-    captured = c;
-    c.body = "probed";
-  });
-  await app.handle(new Request(url, { headers }));
-  if (captured === undefined) throw new Error("probe did not run");
-  return captured;
-};
 
 describe("branch coverage: final round", () => {
   it("catches synchronous middleware throws without a promise", async () => {
@@ -73,17 +60,16 @@ describe("branch coverage: final round", () => {
     expect(res.headers.get("content-length")).toBe("4");
   });
 
-  it("combines custom status text with multi-value headers", async () => {
+  it("combines a 201 status with multi-value Set-Cookie headers", async () => {
+    // 0.7: the c.message statusText half of the old lock is gone with the API.
     const app = new Keala();
     app.use(async (c) => {
       c.status = 201;
-      c.message = "with cookies";
       c.append("Set-Cookie", ["a=1; Path=/", "b=2; Path=/"]);
       c.body = "created";
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(201);
-    expect(res.statusText).toBe("with cookies");
     expect([...res.headers.getSetCookie()]).toEqual(["a=1; Path=/", "b=2; Path=/"]);
   });
 
@@ -109,63 +95,7 @@ describe("branch coverage: final round", () => {
     expect(streamLength).toBeUndefined(); // streams have no known length (koa)
   });
 
-  it("argless acceptsCharsets/Languages through the context", async () => {
-    const ctx = await probe("http://localhost:3000/", {
-      "Accept-Charset": "utf-8, ascii;q=0.5",
-      "Accept-Language": "fr-CA, fr;q=0.8",
-    });
-    expect(ctx.acceptsCharsets()).toEqual(["utf-8", "ascii"]);
-    expect(ctx.acceptsLanguages()).toEqual(["fr-ca", "fr"]);
-    const bare = await probe("http://localhost:3000/", {});
-    expect(bare.acceptsCharsets()).toEqual([]);
-    expect(bare.acceptsLanguages()).toEqual([]);
-  });
-
-  it("falls back to last-modified when etag lacks if-none-match", async () => {
-    const app = new Keala();
-    let freshWithEtag: boolean | undefined;
-    app.use(async (c) => {
-      c.status = 200;
-      c.etag = "v1";
-      c.lastModified = new Date(Date.UTC(2024, 0, 1));
-      freshWithEtag = c.fresh;
-      c.body = "x";
-    });
-    await app.handle(
-      new Request("http://localhost:3000/", {
-        headers: { "If-Modified-Since": "Mon, 01 Jan 2024 00:00:00 GMT" },
-      }),
-    );
-    expect(freshWithEtag).toBe(true);
-  });
-
-  it("matches any etag against If-None-Match: *", async () => {
-    const app = new Keala();
-    let freshStar: boolean | undefined;
-    app.use(async (c) => {
-      c.status = 200;
-      c.etag = "anything";
-      freshStar = c.fresh;
-      c.body = "x";
-    });
-    await app.handle(new Request("http://localhost:3000/", { headers: { "If-None-Match": "*" } }));
-    expect(freshStar).toBe(true);
-  });
-
-  it("is stale when only if-none-match is absent and lastModified is unset", async () => {
-    const app = new Keala();
-    let freshNoValidators: boolean | undefined;
-    app.use(async (c) => {
-      c.status = 200;
-      c.etag = "v1";
-      freshNoValidators = c.fresh;
-      c.body = "x";
-    });
-    await app.handle(
-      new Request("http://localhost:3000/", {
-        headers: { "If-Modified-Since": "Mon, 01 Jan 2024 00:00:00 GMT" },
-      }),
-    );
-    expect(freshNoValidators).toBe(false);
-  });
+  // 0.7 deletions: the argless acceptsCharsets/acceptsLanguages context
+  // methods and the c.fresh freshness locks are gone with the APIs (parse
+  // the Accept-* headers yourself; conditional.ts owns freshness).
 });

@@ -89,9 +89,9 @@ export const rateLimit = (options: RateLimitOptions = {}): RouteHandler => {
       buckets.set(key, { count: 1, resetAt: now + windowMs });
       takeSlot();
       if (emitHeaders) {
-        c.set("RateLimit-Limit", String(limit));
-        c.set("RateLimit-Remaining", String(limit - 1));
-        c.set("RateLimit-Reset", String(Math.ceil(windowMs / 1000)));
+        c.setHeader("RateLimit-Limit", String(limit));
+        c.setHeader("RateLimit-Remaining", String(limit - 1));
+        c.setHeader("RateLimit-Reset", String(Math.ceil(windowMs / 1000)));
       }
       return next();
     }
@@ -114,9 +114,9 @@ export const rateLimit = (options: RateLimitOptions = {}): RouteHandler => {
     }
     bucket.count++;
     if (emitHeaders) {
-      c.set("RateLimit-Limit", String(limit));
-      c.set("RateLimit-Remaining", String(limit - bucket.count));
-      c.set("RateLimit-Reset", String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
+      c.setHeader("RateLimit-Limit", String(limit));
+      c.setHeader("RateLimit-Remaining", String(limit - bucket.count));
+      c.setHeader("RateLimit-Reset", String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
     }
     return next();
   };

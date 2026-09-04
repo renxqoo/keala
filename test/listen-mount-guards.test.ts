@@ -39,4 +39,21 @@ describe("listen and mount guards", () => {
     expect(full.listen.development).toBe(true);
     expect(typeof full.listen.onServeError).toBe("function");
   });
+
+  it("parseListenArgs accepts positional args, numeric strings and extra bag keys", () => {
+    const onListen = () => {};
+    const parsed = parseListenArgs([3000, "0.0.0.0", onListen]);
+    expect(parsed.listen.port).toBe(3000);
+    expect(parsed.hostname).toBe("0.0.0.0");
+    expect(parsed.onListen).toBe(onListen);
+    expect(parseListenArgs(["8080"]).listen.port).toBe(8080);
+    const bag = parseListenArgs([
+      { port: 99, hostname: "h", idleTimeout: 9, nativeRoutes: false, websocket: true },
+    ]);
+    expect(bag.listen.port).toBe(99);
+    expect(bag.hostname).toBe("h");
+    expect(bag.listen.idleTimeout).toBe(9);
+    expect(bag.listen.nativeRoutes).toBe(false);
+    expect(bag.listen.websocket).toBe(true);
+  });
 });

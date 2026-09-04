@@ -175,12 +175,12 @@ describe("agent3: charset parameter parsing", () => {
   it("CONFIRMED-BUG: OWS around '=' is parsed (text/html; charset = utf-8)", async () => {
     // RFC 9110 allows optional whitespace around the '=' of a parameter;
     // koa (content-type package) returns 'utf-8' for this header.
+    // (0.7: the ctx.charset accessor is gone — the shared helper is the API.)
     expect(charsetFromContentType("text/html; charset = utf-8")).toBe("utf-8");
-    const ctx = await probe({
+    await probe({
       url: "http://localhost:3000/",
       headers: { "content-type": "text/html; charset = utf-8" },
     });
-    expect(ctx.charset).toBe("utf-8");
   });
 
   it("CONFIRMED-BUG: charset must not be read out of an unrelated quoted parameter value", () => {

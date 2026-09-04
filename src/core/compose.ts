@@ -15,12 +15,7 @@
 
 import type { Next } from "../types.ts";
 import { registerBranch } from "./branches.ts";
-import {
-  FLAG_CHAIN_STALLED,
-  FLAG_COMMITTED_HEADERS_APPLIED,
-  FLAG_COMMITTED_HEADERS_CAPABILITY,
-  FLAG_DEV_CHAIN,
-} from "./context/state.ts";
+import { FLAG_CHAIN_STALLED, FLAG_DEV_CHAIN } from "./context/state.ts";
 
 /** Anything a handler may return: a committed Response, or nothing. */
 export type HandlerResult = Response | void;
@@ -79,17 +74,6 @@ const markStalled = (
 const commit = (c: MiddlewareContext, ret: HandlerResult): void => {
   if (ret === undefined || ret === null) return;
   if (ret instanceof Response) {
-    const flags = c.flags;
-    // Ordinary initial commits have no capability bits and pay only this
-    // false AND. Once a committed Response was actually probed, a newer
-    // Response must replay its mirror/removals and start with unknown guard.
-    if (
-      flags !== undefined &&
-      (flags & FLAG_COMMITTED_HEADERS_CAPABILITY) !== 0 &&
-      c._res !== ret
-    ) {
-      c.flags = flags & ~(FLAG_COMMITTED_HEADERS_APPLIED | FLAG_COMMITTED_HEADERS_CAPABILITY);
-    }
     c._res = ret;
     return;
   }

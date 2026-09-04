@@ -1,18 +1,25 @@
 /**
  * Response-side context API — prototype accessors over the flat context.
  *
- * State mode: handlers write `c.status / c.body / c.set(...)`; the finalizer
- * (`core/respond.ts`) converts the accumulated state into a web `Response`
- * exactly once, preferring the bare-Response fast path (hono-consistent
- * content-type behavior: the runtime adds `text/plain` / `application/json`).
+ * State mode: handlers write `c.status / c.body / c.setHeader(...)`; the
+ * finalizer (`core/respond.ts`) converts the accumulated state into a web
+ * `Response` exactly once, preferring the bare-Response fast path
+ * (hono-consistent content-type behavior: the runtime adds `text/plain` /
+ * `application/json`).
+ *
+ * 0.7 commit contract: once a Response is committed (a sugar return or a
+ * handler-returned Response), `c.body`/`c.status`/`c.redirect` throw —
+ * return a new Response to replace it. Header writes stay open on both
+ * sides of the commit: pre-commit they stage, post-commit they land
+ * directly on the committed Response's headers.
  */
 
 import type { HeaderValue, ResponseBody } from "../../types.ts";
-import { isEmptyStatus, isRedirectStatus, statusMessage } from "../../http/status.ts";
+import { isEmptyStatus, isRedirectStatus } from "../../http/status.ts";
 import { expandContentType } from "../../utils/mime.ts";
-import { contentDisposition, escapeHtml, validateHeaderValue } from "../../utils/text.ts";
+import { contentDisposition, validateHeaderValue } from "../../utils/text.ts";
 import { byteLengthOf, encodeUrlValue } from "../../utils/url.ts";
-import { sugarText, sugarJson, sugarHtml, TEXT_PLAIN, TEXT_HTML } from "./sugar.ts";
+import { sugarText, sugarJson, sugarHtml } from "./sugar.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestApi } from "./request.ts";
 import {
@@ -21,13 +28,10 @@ import {
   removeResponseHeader,
   responseHeaderValue,
   setResponseHeader,
-  stagedHeadersOf,
-  varyResponseHeader,
 } from "./headers.ts";
 
 export interface ResponseApi {
   status: number;
-  message: string;
   body: ResponseBody;
   get type(): string;
   set type(value: string | null | undefined);
@@ -36,24 +40,29 @@ export interface ResponseApi {
   lastModified: Date | undefined;
   /** Committed response (dual-mode return style); undefined in state mode. */
   readonly res: Response | undefined;
-  readonly headerSent: boolean;
-  set(field: string | Record<string, HeaderValue>, value?: HeaderValue): void;
+  setHeader(field: string | Record<string, HeaderValue>, value?: HeaderValue): void;
   append(field: string, value: HeaderValue): void;
   remove(field: string): void;
-  vary(field: string): void;
   has(field: string): boolean;
   resHeader(field: string): string;
   attachment(
     filename?: string,
     options?: { fallback?: string | false; type?: "attachment" | "inline" | string },
   ): void;
-  redirect(url: string, alt?: string): void;
-  back(alt?: string): void;
+  /**
+   * Redirect with an explicit target and code (default 302). Eagerly
+   * validated: the code must be a 3xx integer. Sets `Location` and the
+   * status — no body (the 0.7 adjudication; koa's "Redirecting to X"
+   * text/html body is gone). Throws once a response is committed.
+   */
+  redirect(url: string, code?: number): void;
   /** Response sugar (return style) — hono-compatible signatures. */
   text(body: string, status?: number, headers?: Record<string, HeaderValue>): Response;
   json(body: unknown, status?: number, headers?: Record<string, HeaderValue>): Response;
   html(body: string, status?: number, headers?: Record<string, HeaderValue>): Response;
 }
+
+const COMMITTED = "response already committed — return a new Response to replace it";
 
 const normalizeDispositionType = (type: string | undefined): string => {
   if (type === undefined) return "attachment";
@@ -82,7 +91,7 @@ const clearTouchedLength = (c: ContextState): void => {
  * origin; when it lands on another host, encode the leading bytes (the exact
  * treatment `\` already gets) so the Location stays a same-origin path.
  * Explicit `scheme://` targets never reach here — those are the developer's
- * deliberate absolute redirects (koa parity).
+ * deliberate absolute redirects.
  */
 const neutralizeForeignAuthority = (host: string, raw: string): string => {
   if (host.length === 0) return raw;
@@ -106,9 +115,6 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
   get res(): Response | undefined {
     return this._res;
   },
-  get headerSent(): boolean {
-    return false;
-  },
   get status(): number {
     // A committed Response (return style) is the response — post-next
     // middleware must observe its status, not the stale state default.
@@ -118,13 +124,8 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (typeof code !== "number" || !Number.isInteger(code) || code < 200 || code > 599) {
       throw new TypeError(`Invalid status code: ${JSON.stringify(code)}`);
     }
+    if (this._res !== undefined) throw new TypeError(COMMITTED);
     this.flags |= 1;
-    // A status write AFTER a Response committed is a rewrite of that response
-    // — flag it so the finalizer rebuilds with THIS status (32) instead of
-    // returning the commit verbatim. Only a POST-commit write carries that
-    // authority: pre-commit staging was superseded by the commit itself.
-    if (this._res !== undefined) this.flags |= 16 | 32;
-    if (this.statusValue !== code) this.messageValue = "";
     this.statusValue = code;
     if (isEmptyStatus(code)) {
       // Koa: empty statuses carry no body and no content headers.
@@ -137,36 +138,12 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       }
     }
   },
-  get message(): string {
-    // Commit-aware like `status`: a returned Response's reason phrase is
-    // what observers should see after `await next()`.
-    if (this._res !== undefined) return this._res.statusText;
-    return this.messageValue || statusMessage(this.statusValue);
-  },
-  set message(value: string) {
-    if (typeof value !== "string" || value.includes("\r") || value.includes("\n")) {
-      throw new TypeError("Invalid status message: CR/LF are not allowed");
-    }
-    // Control characters beyond CR/LF (NUL, BEL, …) do not throw here — they
-    // make the message INELIGIBLE as statusText instead (the finalizer falls
-    // back to the standard reason phrase), the same way non-latin-1 messages
-    // already behave. Throwing would cost the entire response over a phrase.
-    this.messageValue = value;
-    // A message write AFTER a Response committed rewrites that response's
-    // reason phrase — flag the rebuild (16) and mark messageValue as the
-    // winning statusText (64). It must NOT hand the stale pre-commit status
-    // to the rebuild; only flag 32 does that.
-    if (this._res !== undefined) this.flags |= 16 | 64;
-  },
   get body(): ResponseBody {
     return this.bodyValue;
   },
   set body(value: ResponseBody) {
+    if (this._res !== undefined) throw new TypeError(COMMITTED);
     this.bodyValue = value;
-    // A body write AFTER a Response committed replaces that response's body
-    // on the rule-4 rebuild — the user's latest intent (post-commit writes
-    // were silently dropped before, shipping stale bodies).
-    if (this._res !== undefined) this.flags |= 16 | 128;
     if (value === null || value === undefined) {
       // Koa 3: clearing a JSON-typed body yields the literal "null".
       if (!isEmptyStatus(this.statusValue) && this.type === "application/json") {
@@ -175,10 +152,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       }
       if (value === null) this.flags |= 2;
       if (!isEmptyStatus(this.statusValue)) {
-        // The implicit 204 is an explicit status as far as koa is concerned —
-        // and a POST-commit reset must rewrite the committed status on the
-        // rule-4 rebuild (flag 32), not silently strand a bodied 200.
-        if (this._res !== undefined) this.flags |= 16 | 32;
+        // The implicit 204 is an explicit status as far as koa is concerned.
         this.statusValue = 204;
       }
       this.flags |= 1;
@@ -204,26 +178,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       return;
     }
     if (value instanceof Blob) {
-      stagedHeadersOf(this)["content-length"] = String(value.size);
-      return;
-    }
-    if (value instanceof Response) {
-      // Koa 3: a web Response can be assigned directly; status and headers win.
-      if (value.status >= 200 && value.status <= 599) {
-        this.statusValue = value.status;
-        this.flags |= 1;
-      }
-      // Drop any stale length FIRST — the response's own (authoritative)
-      // headers are copied right after and re-establish it when present.
-      this.remove("Content-Length");
-      for (const key of value.headers.keys()) {
-        // set-cookie is multi-value: get() would join values with ", " and
-        // collapse distinct cookies — append each individually.
-        if (key === "set-cookie") continue;
-        this.set(key, value.headers.get(key) ?? "");
-      }
-      for (const cookie of value.headers.getSetCookie()) this.append("Set-Cookie", cookie);
-      this.bodyValue = value.body;
+      this.setHeader("Content-Length", String(value.size));
       return;
     }
     // Plain object: stored as-is; the finalizer serializes via Response.json.
@@ -255,7 +210,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       return;
     }
     validateHeaderValue("content-type", full);
-    stagedHeadersOf(this)["content-type"] = full;
+    setResponseHeader(this, "Content-Type", full);
   },
   get length(): number | undefined {
     // Commit-aware: the committed Response's declared length is the wire
@@ -279,11 +234,16 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     return undefined;
   },
   set length(value: number) {
-    // Koa: Content-Length is never written alongside Transfer-Encoding.
-    if (this.headersRecord?.["transfer-encoding"] !== undefined) return;
-    const n = Math.trunc(Number(value));
-    this.flags |= 8;
-    stagedHeadersOf(this)["content-length"] = String(Number.isNaN(n) ? 0 : n);
+    // Content-Length is never written alongside Transfer-Encoding — the
+    // staged record drives the pre-commit check; the committed response's
+    // own headers answer post-commit.
+    if (
+      this.headersRecord?.["transfer-encoding"] === undefined &&
+      this._res?.headers.has("transfer-encoding") !== true
+    ) {
+      const n = Math.trunc(Number(value));
+      setResponseHeader(this, "Content-Length", String(Number.isNaN(n) ? 0 : n));
+    }
   },
   get etag(): string {
     return this.resHeader("ETag");
@@ -293,7 +253,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       this.remove("ETag");
       return;
     }
-    this.set("ETag", value.startsWith('"') || value.startsWith("W/") ? value : `"${value}"`);
+    this.setHeader("ETag", value.startsWith('"') || value.startsWith("W/") ? value : `"${value}"`);
   },
   get lastModified(): Date | undefined {
     const raw = this.resHeader("Last-Modified");
@@ -306,7 +266,7 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
       throw new TypeError("lastModified must be a Date or a parseable date string");
     }
-    this.set("Last-Modified", date.toUTCString());
+    this.setHeader("Last-Modified", date.toUTCString());
   },
   attachment(
     filename?: string,
@@ -314,11 +274,11 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
   ) {
     const disposition = normalizeDispositionType(options?.type);
     if (filename === undefined) {
-      this.set("Content-Disposition", disposition);
+      this.setHeader("Content-Disposition", disposition);
       return;
     }
     const base = basenameOf(filename);
-    this.set("Content-Disposition", contentDisposition(base, options?.fallback, disposition));
+    this.setHeader("Content-Disposition", contentDisposition(base, options?.fallback, disposition));
     // GHSA-c5vw-j4hf-j526: never override an existing Content-Type. The
     // inference goes through expandContentType — the same expansion c.type
     // uses — so extensions resolve with their charset ("html" → text/html;
@@ -327,60 +287,37 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     if (base.lastIndexOf(".") !== -1 && !this.has("Content-Type")) {
       const ext = base.slice(base.lastIndexOf(".") + 1);
       const mime = expandContentType(ext);
-      if (mime !== null) stagedHeadersOf(this)["content-type"] = mime;
+      if (mime !== null) setResponseHeader(this, "Content-Type", mime);
     }
   },
-  back(alt?: string): void {
-    // Koa: jump back to the Referrer when it is same-origin, else alt.
-    const referrer = this.get("referrer");
-    if (referrer.length > 0) {
+  redirect(url: string, code?: number): void {
+    if (code !== undefined && (!Number.isInteger(code) || code < 300 || code > 399)) {
+      throw new TypeError(`redirect code must be a 3xx integer, got ${JSON.stringify(code)}`);
+    }
+    if (this._res !== undefined) throw new TypeError(COMMITTED);
+    // Absolute URLs are normalized through URL; Location is encodeurl'd so
+    // non-ASCII targets never break the header.
+    let target = url;
+    if (/^https?:\/\//i.test(url)) {
       try {
-        const url = new URL(referrer, this.href);
-        if (url.host === this.host) {
-          this.redirect(referrer);
-          return;
-        }
+        target = new URL(url).toString();
       } catch {
-        // fall through to alt on unparseable referrers
+        target = url;
       }
+    } else if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+      target = neutralizeForeignAuthority(this.host, url);
     }
-    this.redirect(alt || "/");
+    this.setHeader("Location", encodeUrlValue(target));
+    // An explicit code wins; without one, an already-staged 3xx (301/308
+    // carry POST-retry semantics a caller deliberately chose) is preserved.
+    if (code !== undefined) this.status = code;
+    else if (!isRedirectStatus(this.status)) this.status = 302;
+    // An explicitly-empty body: the state-mode null fallback would otherwise
+    // ship the status text ("Found") — redirects carry only Location.
+    this.bodyValue = null;
+    this.flags |= 2;
   },
-  redirect(url: string, alt = "/") {
-    if (url === "back") return this.back(alt); // one same-origin gate, both spellings
-    const raw = url;
-    // Koa: absolute URLs are normalized through URL; Location is encodeurl'd
-    // so non-ASCII targets never break the header.
-    let target = raw;
-    if (/^https?:\/\//i.test(raw)) {
-      try {
-        target = new URL(raw).toString();
-      } catch {
-        target = raw;
-      }
-    } else if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
-      target = neutralizeForeignAuthority(this.host, raw);
-    }
-    this.set("Location", encodeUrlValue(target));
-    // Through the status setter: a post-commit redirect must rewrite the
-    // committed Response's status too (flag 32) — the direct statusValue
-    // writes used here were invisible to the rule-4 rebuild, shipping
-    // Location on a 200 with the old body. The gate reads the COMMIT-AWARE
-    // status (`c.status`), so an already-committed 301/308 is preserved
-    // instead of being demoted to 302 (308 carries POST-retry semantics).
-    if (!isRedirectStatus(this.status)) {
-      this.messageValue = "";
-      this.status = 302;
-    }
-    if (this.accepts("html") === "html") {
-      this.type = TEXT_HTML;
-      this.body = `Redirecting to ${escapeHtml(target)}.`;
-    } else {
-      this.type = TEXT_PLAIN;
-      this.body = `Redirecting to ${target}.`;
-    }
-  },
-  set(field: string | Record<string, HeaderValue>, value?: HeaderValue) {
+  setHeader(field: string | Record<string, HeaderValue>, value?: HeaderValue) {
     setResponseHeader(this, field, value);
   },
   append(field: string, value: HeaderValue) {
@@ -388,9 +325,6 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
   },
   remove(field: string) {
     removeResponseHeader(this, field);
-  },
-  vary(field: string) {
-    varyResponseHeader(this, field);
   },
   has(field: string): boolean {
     return hasResponseHeader(this, field);

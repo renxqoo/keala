@@ -111,7 +111,7 @@ describe("redteam — RT-1 fast matcher ignores static tail after params", () =>
 // — koa 全部保留" and respond.ts implements it — but only on the record-empty
 // path.
 //
-// Repo:     HEAD /x, middleware does `await next(); c.set("x-late","1")`,
+// Repo:     HEAD /x, middleware does `await next(); c.setHeader("x-late","1")`,
 //           route returns c.text("hello").
 // Expect:   body "" and content-length "5" (same as the record-empty path).
 // Actual:   body "hello", content-length null.
@@ -125,7 +125,7 @@ describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("x-late", "1");
+      c.setHeader("x-late", "1");
     });
     app.get("/x", (c) => c.text("hello"));
     const res = await app.handle(req("http://localhost/x", { method: "HEAD" }));
@@ -159,7 +159,7 @@ describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
   it("green: HEAD x state-mode backfills CL and drops the body", async () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
-      c.set("x-a", "1");
+      c.setHeader("x-a", "1");
       c.body = "hello";
     });
     const res = await app.handle(req("http://localhost/s", { method: "HEAD" }));
@@ -211,7 +211,7 @@ describe("redteam — RT-3 notFound throw escapes app.handle", () => {
     const app = new Keala(quiet);
     app.get("/a", (c) => c.text("a"));
     app.notFound((c) => {
-      c.set("x-bad-name\r\ninject: 1", "v");
+      c.setHeader("x-bad-name\r\ninject: 1", "v");
       return c.text("nf");
     });
     const res = await app.handle(req("http://localhost/missing"));
@@ -246,21 +246,7 @@ describe("redteam — RT-3 notFound throw escapes app.handle", () => {
 //           getSetCookie() is never consulted.
 // ---------------------------------------------------------------------------
 
-describe("redteam — RT-4 c.body = Response collapses set-cookie", () => {
-  it("CONFIRMED-BUG(now fixed) (RT-4a): state-assigning a Response must preserve every set-cookie", async () => {
-    const app = new Keala(quiet);
-    app.get("/x", (c) => {
-      c.body = new Response("ok", {
-        headers: [
-          ["set-cookie", "a=1; Path=/"],
-          ["set-cookie", "b=2; Path=/"],
-        ],
-      });
-    });
-    const res = await app.handle(req("http://localhost/x"));
-    expect(res.headers.getSetCookie()).toEqual(["a=1; Path=/", "b=2; Path=/"]);
-  });
-
+describe("redteam — RT-4 set-cookie preservation (0.7: return-style is the only Response path)", () => {
   it("green control: return-style commit keeps both set-cookie headers", async () => {
     const app = new Keala(quiet);
     app.get(
@@ -274,7 +260,7 @@ describe("redteam — RT-4 c.body = Response collapses set-cookie", () => {
         }),
     );
     const res = await app.handle(req("http://localhost/x"));
-    expect(res.headers.getSetCookie()).toHaveLength(2);
+    expect(res.headers.getSetCookie()).toEqual(["a=1; Path=/", "b=2; Path=/"]);
   });
 });
 

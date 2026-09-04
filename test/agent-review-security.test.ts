@@ -155,7 +155,7 @@ describe("agent security review: merge abort stripping staged security headers",
   it("F2: an invalid error.header VALUE (CRLF) drops only that header, keeping staged security headers on the takeover", async () => {
     const app = boot((a) => {
       a.use((c, next) => {
-        void c.set("x-security", "on");
+        void c.setHeader("x-security", "on");
         return next();
       });
       a.get("/bad", (c) =>
@@ -175,7 +175,7 @@ describe("agent security review: merge abort stripping staged security headers",
   it("F2: an invalid error.header NAME drops only that header, keeping staged security headers on the takeover", async () => {
     const app = boot((a) => {
       a.use((c, next) => {
-        void c.set("x-security", "on");
+        void c.setHeader("x-security", "on");
         return next();
       });
       a.get("/bad2", (c) => c.throw(500, "x", { headers: { "x-fine": "kept", "bad name": "v" } }));
@@ -291,7 +291,7 @@ describe("agent security review: Set-Cookie and multi-value fidelity on error pa
   it("F4b: staged multi-value headers keep every value on a takeover", async () => {
     const app = boot((a) => {
       a.use((c, next) => {
-        void c.set("www-authenticate", ["Basic", "Bearer"]);
+        void c.setHeader("www-authenticate", ["Basic", "Bearer"]);
         return next();
       });
       a.get("/x", () => {

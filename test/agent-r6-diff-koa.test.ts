@@ -316,9 +316,10 @@ describe("r6 diff — router vs @koa/router 15.7", () => {
     app.use(router.allowedMethods());
   };
 
-  it("synthesized 405/501 responses carry the koa status-message body", async () => {
+  it("synthesized 405/501 responses match koa's status; 0.7 deliberately ships an empty body", async () => {
     // koa: allowedMethods() sets only status+Allow; koa's respond() fills the
-    // null body with ctx.message => '<message>'.
+    // null body with ctx.message => '<message>'. keala 0.7: Allow + empty
+    // body (docs/KEALA-NATIVE-API.md §2.2 — the koa parity body is gone).
     const koa = await driveKoa(
       koaApp((r) =>
         r.get("/thing", (ctx) => {
@@ -332,7 +333,7 @@ describe("r6 diff — router vs @koa/router 15.7", () => {
       method: "DELETE",
     });
     expect(bun.status).toBe(koa.status); // both 405
-    expect(bun.body).toBe(koa.body); // koa: 'Method Not Allowed'
+    expect(bun.body).toBe(""); // koa: 'Method Not Allowed' — deliberate 0.7 divergence
     const koa501 = await driveKoa(
       koaApp((r) =>
         r.get("/thing", (ctx) => {
@@ -346,7 +347,7 @@ describe("r6 diff — router vs @koa/router 15.7", () => {
       method: "MKCOL",
     });
     expect(bun501.status).toBe(koa501.status); // both 501
-    expect(bun501.body).toBe(koa501.body); // koa: 'Not Implemented'
+    expect(bun501.body).toBe(""); // koa: 'Not Implemented' — deliberate 0.7 divergence
   });
 });
 describe("r6 diff — accepts negotiation", () => {

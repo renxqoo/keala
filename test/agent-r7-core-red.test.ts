@@ -81,6 +81,7 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
     const victimStarted = deferred();
     const releaseVictim = deferred();
 
+    let lateWriteThrew: unknown = null;
     const app = new Keala({ ...quiet, pooling: true });
     app.use((c, next) => {
       if (c.path === "/early") {
@@ -91,7 +92,13 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
     });
     app.get("/early", async (c) => {
       await releaseOldBranch.promise;
-      c.body = "stale-from-request-a";
+      // 0.7: the early Response is already committed, so a late body write
+      // is a loud TypeError instead of a silent stale mutation.
+      try {
+        c.body = "stale-from-request-a";
+      } catch (error) {
+        lateWriteThrew = error;
+      }
       oldBranchMutated.resolve();
     });
     app.get("/victim", async () => {
@@ -113,6 +120,7 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
       status: 404,
       body: "Not Found",
     });
+    expect(lateWriteThrew).toBeInstanceOf(TypeError);
   });
 });
 
@@ -182,7 +190,7 @@ describe("R7 core: response headers do not wait for an open stream body", () => 
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.set("X-Late", "1");
+      c.setHeader("X-Late", "1");
     });
     app.get("/stream", () => new Response(open.body));
 

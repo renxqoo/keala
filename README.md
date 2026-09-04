@@ -258,16 +258,19 @@ Every request allocates exactly one context. Request and response live on the
 same object; everything lazy (`query`, `cookies`, `ip`, `state`) materializes
 on first touch.
 
-| Request side                                                          | Response side                                  | Sugar (return style)             |
-| --------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------- |
-| `c.raw/method/path/url/query`                                         | `c.status/body/message/type/length`            | `c.text(str, status?, headers?)` |
-| `c.get(name)` / `c.header(name)`                                      | `c.set/append/remove/vary/has/resHeader`       | `c.json(obj, status?, headers?)` |
-| `c.params` `c.query(name)` `c.queries(name)` `c.ip/ips/host/hostname` | `c.etag/lastModified/attachment/redirect/back` | `c.html(str, status?, headers?)` |
-| `c.accepts*/is/fresh/stale/charset`                                   | `c.cookies` (signed, key rotation)             | `c.throw/assert`                 |
+| Request side (read-only)                                          | Response side                             | Sugar (return style)             |
+| ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/querystring/search`                        | `c.status/body/type/length`               | `c.text(str, status?, headers?)` |
+| `c.get(name)` / `c.header(name)`                                  | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
+| `c.params` `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.etag/lastModified/attachment/redirect` | `c.html(str, status?, headers?)` |
+| `c.accepts/is` `c.signal` `c.runtime`                             | `c.cookies` (signed, key rotation)        | `c.throw/assert`                 |
 
 Dual-mode rules in one line each: **a returned `Response` commits; `c.*`
 writes are staged; the last committer wins; untouched requests hit
-`app.notFound`**. A matched path without the method answers 405 + `Allow`
+`app.notFound`**. Once committed, header writes still decorate the committed
+Response (`c.setHeader/append/remove` keep working after `await next()`),
+while `c.body/c.status/c.redirect` throw — return a new Response to replace
+a committed one (the full contract: `docs/MIGRATION-0.7.md`). A matched path without the method answers 405 + `Allow`
 (OPTIONS gets 200 + `Allow`, unknown methods 501).
 
 `c.query(name)` is a TARGETED read (0.6.2): it returns the first value for
@@ -326,7 +329,7 @@ production (rules: `DESIGN.md` §2 in the [repo](https://github.com/renxqoo/keal
 | Koa                                                     | keala                                                   |
 | ------------------------------------------------------- | ------------------------------------------------------- |
 | `ctx.request.get("x")`                                  | `c.get("x")`                                            |
-| `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.set("x", v)`                                         |
+| `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.setHeader("x", v)`                                   |
 | `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n` (same)                    |
 | `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`                 |
 | `app.use(router.routes()).use(router.allowedMethods())` | `app.get(...)` directly, or `app.mount(prefix, router)` |
@@ -414,7 +417,7 @@ app.onError((error, c) => {
 
 | Member                                                                         | Description                                                                                                                                                     |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Keala(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `subdomainOffset`, `env`                                             |
+| `new Keala(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `env`                                                                |
 | `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                      |
 | `app.use(path, ...mw)`                                                         | Exact static or trailing-`/*` scoped middleware; applies to in-scope 404/405 too                                                                                |
 | `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                               |
@@ -434,13 +437,12 @@ app.onError((error, c) => {
 
 One flat object — request side, response side and sugar share it:
 
-- Request: `raw method url path query querystring search originalUrl URL host
-hostname protocol secure ip ips subdomains origin href fresh stale idempotent
-charset reqType reqLength headers get/header is accepts acceptsEncodings
-acceptsCharsets acceptsLanguages params state` (`url`/`path`/`query` are
-  settable; rewrites invalidate the caches exactly like koa)
-- Response: `status message body type length etag lastModified attachment
-redirect back set append remove vary has resHeader cookies`
+- Request (read-only — the request is the client's fact): `raw method url
+path query(name) queries(name) querystring search URL host protocol secure
+ip origin href idempotent reqLength headers get/header is accepts
+acceptsEncodings params state signal runtime`
+- Response: `status body type length etag lastModified attachment
+redirect(url, code?) setHeader append remove has resHeader res cookies`
 - Sugar: `text/json/html(body, status?, headers?)` — return them straight from
   the handler
 - `c.throw(status, msg?, props?)`, `c.assert(cond, status, ...)`

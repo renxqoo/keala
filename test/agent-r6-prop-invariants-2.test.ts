@@ -120,13 +120,13 @@ describe("INV-8 error-path completeness", () => {
       const stageUnicode = rng.bool(0.25);
       if (fromMiddleware) {
         app.use((c) => {
-          if (stageUnicode) c.set("x-unicode", `café${randString(rng, 4, UNICODE)}中`);
+          if (stageUnicode) c.setHeader("x-unicode", `café${randString(rng, 4, UNICODE)}中`);
           throw err;
         });
         app.get("/e", (c) => c.text("never"));
       } else {
         app.use((c, next) => {
-          if (stageUnicode) c.set("x-unicode", `café${randString(rng, 4, UNICODE)}中`);
+          if (stageUnicode) c.setHeader("x-unicode", `café${randString(rng, 4, UNICODE)}中`);
           return next();
         });
         app.get("/e", () => {
@@ -296,14 +296,13 @@ describe("INV-10 compose double next", () => {
   }, 20_000);
 });
 describe("INV-11 URL semantics", () => {
-  it("random URL shapes keep c.path rooted and path+search === url === originalUrl", async () => {
+  it("random URL shapes keep c.path rooted and path+search === url", async () => {
     await runProp("url-semantics", 300, async (rng, _seed, ctx) => {
       interface UrlProbe {
         path: string;
         qs: string;
         search: string;
         url: string;
-        orig: string;
       }
       let captured: UrlProbe | null = null;
       const app = new Keala({ ...quiet });
@@ -313,7 +312,6 @@ describe("INV-11 URL semantics", () => {
           qs: c.querystring,
           search: c.search,
           url: c.url,
-          orig: c.originalUrl,
         };
         return c.text("ok");
       });
@@ -341,12 +339,13 @@ describe("INV-11 URL semantics", () => {
       }
       // path+search === url, with koa's documented exception: a URL ending in
       // a bare "?" keeps the "?" in url while search collapses to "".
+      // (0.7: originalUrl is gone — with read-only requests url IS the
+      // original, so the old url===originalUrl check is vacuous.)
       if (p.path + p.search !== p.url && !(p.qs === "" && p.url === `${p.path}?`)) {
         throw new Error(
           `path+search ${JSON.stringify(p.path + p.search)} != url ${JSON.stringify(p.url)}`,
         );
       }
-      if (p.url !== p.orig) throw new Error(`url ${p.url} != originalUrl ${p.orig}`);
     });
   }, 20_000);
 });

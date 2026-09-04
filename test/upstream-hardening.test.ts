@@ -46,7 +46,7 @@ describe("upstream hardening: compress gates", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
-      c.set("Cache-Control", "no-transform");
+      c.setHeader("Cache-Control", "no-transform");
       c.body = gzipBody;
     });
     const res = await app.handle(req("/big", gzipAccepted));
@@ -131,7 +131,7 @@ describe("upstream hardening: responseCache skip rules", () => {
     app.get("/c", (c) => c.text(`hit ${++hits}`)); // committed body: cacheable
     app.get("/s", (c) => {
       skipHits++;
-      c.set("Cache-Control", 'no-cache="Set-Cookie"');
+      c.setHeader("Cache-Control", 'no-cache="Set-Cookie"');
       return c.text(`hit ${skipHits}`);
     });
     await app.handle(req("/c"));
@@ -215,13 +215,13 @@ describe("upstream hardening: response invariants", () => {
   it("koa#1899: Content-Type cannot be set to an array (singleton header)", async () => {
     const app = new Keala(quiet);
     app.get("/a", (c) => {
-      c.set("Content-Type", ["text/html", "text/plain"]);
+      c.setHeader("Content-Type", ["text/html", "text/plain"]);
     });
     const res = await app.handle(req("/a"));
     expect(res.status).toBe(500); // the guard THROWS — never a joined header
     // The object form must be covered by the same guard.
     app.get("/b", (c) => {
-      c.set({ "Content-Type": ["text/html", "text/plain"] });
+      c.setHeader({ "Content-Type": ["text/html", "text/plain"] });
     });
     const resB = await app.handle(req("/b"));
     expect(resB.status).toBe(500);
@@ -231,7 +231,7 @@ describe("upstream hardening: response invariants", () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.body = "hello";
-      c.set("Content-Length", "5");
+      c.setHeader("Content-Length", "5");
       c.body = new ReadableStream({
         start(controller) {
           controller.enqueue(new TextEncoder().encode("a-much-longer-body"));
@@ -244,7 +244,7 @@ describe("upstream hardening: response invariants", () => {
     // A stream has unknown length by construction — an explicit stale CL
     // goes even WITHOUT a prior body.
     app.get("/s2", (c) => {
-      c.set("Content-Length", "10");
+      c.setHeader("Content-Length", "10");
       c.body = new ReadableStream({
         start(controller) {
           controller.close();
@@ -255,15 +255,8 @@ describe("upstream hardening: response invariants", () => {
     expect(res2.headers.get("content-length")).toBeNull();
   });
 
-  it("koa#1939: replacing a sized body with a Response drops the stale Content-Length", async () => {
-    const app = new Keala(quiet);
-    app.get("/r", (c) => {
-      c.set("Content-Length", "999");
-      c.body = new Response("actual");
-    });
-    const res = await app.handle(req("/r"));
-    expect(res.headers.get("content-length")).toBeNull();
-  });
+  // 0.7: koa#1939 (`c.body = new Response(...)` dropping the stale CL) is
+  // gone with the Response-as-body quirk — return the Response instead.
 });
 
 // ---------------------------------------------------------------------------
@@ -286,14 +279,16 @@ describe("upstream hardening: forwarded headers", () => {
   });
 
   it("koa#827: X-Forwarded-For entries carry stripped ports", async () => {
+    // 0.7: c.ips is gone; c.ip keeps the same stripPort treatment of the
+    // chain's leftmost entry.
     const app = new Keala({ ...quiet, proxy: true });
     app.get("/ip", (c) => {
-      c.body = `${c.ip} | ${c.ips.join(",")}`;
+      c.body = c.ip;
     });
     const res = await app.handle(
       req("/ip", { headers: { "x-forwarded-for": "23.243.1.1:38242, [::1]:8080, ::1, 5.6.7.8" } }),
     );
-    expect(await res.text()).toBe("23.243.1.1 | 23.243.1.1,[::1],::1,5.6.7.8");
+    expect(await res.text()).toBe("23.243.1.1");
   });
 });
 

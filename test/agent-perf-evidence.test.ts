@@ -23,12 +23,12 @@ app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
 app.get(
   "/mw",
   async (c, next) => {
-    c.set("X-Step", "1");
+    c.setHeader("X-Step", "1");
     await next();
-    c.set("X-Step-3", "3");
+    c.setHeader("X-Step-3", "3");
   },
   async (c, next) => {
-    c.set("X-Step-2", "2");
+    c.setHeader("X-Step-2", "2");
     await next();
   },
   (c) => c.text("middleware"),
@@ -108,7 +108,7 @@ describe("perf evidence: structural fences", () => {
   it("app.handle always settles through a Promise (DOGFOOD-R1 C1 boundary)", async () => {
     const syncApp = new Keala({ env: "test" });
     syncApp.use((c, next) => {
-      void c.set("X-Sync", "1");
+      void c.setHeader("X-Sync", "1");
       return next();
     });
     syncApp.get("/sync", (c) => c.text("ok"));

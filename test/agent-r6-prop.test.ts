@@ -10,7 +10,7 @@ import { Keala } from "../src/index.ts";
 describe("agent-r6 RED: confirmed violations", () => {
   it("R6-1 [INV-8, seed head-dirty-committed#17] non-latin-1 header value must not flood app.onerror", async () => {
     // Minimal repro of the property failure at seed 17 (ops [set,type,message,
-    // body]): a header VALUE that passes c.set() validation (only CR/LF/NUL
+    // body]): a header VALUE that passes c.setHeader() validation (only CR/LF/NUL
     // are rejected by validateHeaderValue, src/utils/text.ts:63) but is not a
     // ByteString (code unit > 0xFF) throws in the fetch Headers constructor
     // at finalize. buildErrorResponse (src/core/dispatch.ts:261-266) keeps the
@@ -27,7 +27,7 @@ describe("agent-r6 RED: confirmed violations", () => {
       onerror++;
     });
     app.get("/r", (c) => {
-      c.set("x-unicode", "café中"); // 0xE9 and 0x4E2D — not a ByteString
+      c.setHeader("x-unicode", "café中"); // 0xE9 and 0x4E2D — not a ByteString
       c.body = "ok";
       return undefined;
     });
@@ -45,7 +45,7 @@ describe("agent-r6 RED: confirmed violations", () => {
     // connection (the client reads the body bytes as the next response).
     const app = new Keala({ ...quiet });
     app.get("/r", (c) => {
-      c.set("x-unicode", "café中");
+      c.setHeader("x-unicode", "café中");
       c.body = "ok";
       return undefined;
     });
@@ -67,10 +67,9 @@ describe("agent-r6 RED: confirmed violations", () => {
     });
     app.use(async (c, next) => {
       await next();
-      c.set("x-unicode", "café中"); // the poison write (seed 17's `set` op)
-      c.type = "bogus"; // seed 17's `type` op
-      c.message = "fine"; // seed 17's `message` op
-      c.body = "late-body"; // seed 17's `body` op
+      c.setHeader("x-unicode", "café中"); // the poison write (seed 17's `set` op)
+      c.type = "bogus"; // seed 17's `type` op (in-place post-commit in 0.7)
+      c.body = "late-body"; // seed 17's `body` op (0.7: throws post-commit)
     });
     app.get("/r", (c) => c.json({ a: 1 }, 200));
     const res = await app.handle(new Request("http://localhost/r", { method: "HEAD" }));
@@ -102,7 +101,7 @@ describe("agent-r6 RED: confirmed violations", () => {
       onerror++;
     });
     app.use((c) => {
-      c.set("x-unicode", "café中");
+      c.setHeader("x-unicode", "café中");
       throw new Error("handler boom");
     });
     app.get("/e", (c) => c.text("never"));
