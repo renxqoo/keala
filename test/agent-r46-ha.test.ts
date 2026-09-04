@@ -9,6 +9,7 @@
 
 import { spawn } from "node:child_process";
 import { connect, type Socket } from "node:net";
+import { existsSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Keala } from "../src/core/app.ts";
 import { startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
@@ -180,14 +181,17 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
   // Node-host only: the eval-child dance (--input-type=module -e with
   // relative dist imports) misbehaves when vitest itself runs under Bun.
   // scripts/drain-verify.ts covers natural exit for BOTH runtimes.
-  it.skipIf(typeof Bun !== "undefined")(
+  it.skipIf(
+    typeof Bun !== "undefined" || !existsSync(new URL("../dist/core/app.js", import.meta.url)),
+  )(
     "HA-7: a child exits NATURALLY after a forced drain (no leftover loop handles)",
     { timeout: 20_000 },
     async () => {
       // Failure mode: after a forced drain (timeout branch), a leftover
       // timer/socket could keep the process alive — K8s would then SIGKILL it
       // mid-bookkeeping. Expectation: once close() resolves, node exits 0
-      // naturally (no process.exit() anywhere).
+      // naturally (no process.exit() anywhere). Requires `npm run build`
+      // (the child imports ./dist) — CI builds before the suites.
       const childCode = `
 import { Keala } from "./dist/core/app.js";
 import { startNodeServer } from "./dist/adapters/node.js";

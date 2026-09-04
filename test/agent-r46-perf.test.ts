@@ -159,21 +159,30 @@ describe("agent R4.4 perf review: hot-path costs", () => {
       // CLAIM (§7): no R4.4 config → admission branch + counter inc/dec + one
       // settle-tail promise link (~+25ns vs R4.3); fresh-process floor ~458ns
       // (corroborated: `bun bench/lifecycle-overhead.ts plain` → p50 542ns).
-      // FENCE: best-of-5 median < 8000ns under vitest instrumentation
-      // (measured ~3.1µs here — vitest adds ~7x; trips only on structure).
+      // FENCE: RELATIVE to a same-process reference (a bare Response
+      // construct+consume) — absolute ns fences are not portable across
+      // machines (a CI runner measured 4.5x the M4 and tripped a static
+      // 8000ns). Measured ratio: ~4-6x the reference on M4 under vitest;
+      // the fence at 16x trips on STRUCTURE (a leaked timer chain, a
+      // per-request closure storm), not on hardware.
       const { app, run } = makeProbe({});
-      const best = (
-        await measureVariants([{ name: "plain", run }], {
-          warmup: 2_500,
-          rounds: 5,
-          perRound: 4_000,
-        })
-      )["plain"]!;
+      const reference = async (): Promise<void> => {
+        await new Response("ok").text();
+      };
+      const measured = await measureVariants(
+        [
+          { name: "plain", run },
+          { name: "reference", run: reference },
+        ],
+        { warmup: 2_500, rounds: 5, perRound: 4_000 },
+      );
+      const best = measured["plain"]!;
+      const ref = measured["reference"]!;
       console.log(
-        `PERF-1 unconfigured handle+consume: ${ns(best).toFixed(0)}ns (best-of-5 median)`,
+        `PERF-1 unconfigured handle+consume: ${ns(best).toFixed(0)}ns (${(ns(best) / ns(ref)).toFixed(1)}x the ${ns(ref).toFixed(0)}ns Response reference)`,
       );
       expect(app.inFlight).toBe(0);
-      expect(ns(best)).toBeLessThan(8_000);
+      expect(ns(best)).toBeLessThan(ns(ref) * 16);
     },
   );
 

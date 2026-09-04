@@ -399,9 +399,9 @@ describe("R4.3 perf review: error-path costs and shapes", () => {
       console.log(
         `[perf-review] toHttpError micro: http-passthrough ${nsPassthrough.toFixed(1)}ns, bare new Error ${nsNewError.toFixed(1)}ns, classify(fresh Error) ${nsClassify.toFixed(1)}ns (delta ${(nsClassify - nsNewError).toFixed(1)}ns), string ${nsString.toFixed(1)}ns`,
       );
-      // Generous fences: classification delta must stay micro (<250ns over the
-      // bare Error construction it sits on top of), passthrough < 150ns.
-      expect(nsPassthrough).toBeLessThan(150);
+      // Fences RELATIVE to the same-process Error floor — absolute ns is
+      // not portable (CI runners measure ~4x the M4).
+      expect(nsPassthrough).toBeLessThan(nsNewError * 2);
       expect(nsClassify - nsNewError).toBeLessThan(250);
       // Non-Error normalization pays one unavoidable stack capture; fence vs
       // the Error-construction floor at 4x.
