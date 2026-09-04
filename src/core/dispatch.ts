@@ -6,7 +6,7 @@
 import type { Application } from "./app.ts";
 import type { Chain, RouteHandler, RouterState } from "../router/router.ts";
 import { EMPTY_PARAMS, matchRoute } from "../router/router.ts";
-import { getPath } from "../utils/url.ts";
+import { getPath, getSearch } from "../utils/url.ts";
 import { isEmptyStatus } from "../http/status.ts";
 import { DIRECT_HANDLER, NOOP_TAIL, type HandlerResult } from "./compose.ts";
 import type { Context } from "./context/context.ts";
@@ -235,9 +235,41 @@ const dispatchDirect = (
   };
   try {
     const result = handler(c, NOOP_TAIL);
-    return result instanceof Promise
-      ? result.then(finish, (error: unknown) => errorResponse(app, c, error))
-      : finish(result);
+    if (result instanceof Promise) {
+      return result.then(finish, (error: unknown) => errorResponse(app, c, error));
+    }
+    // Sync fast path: no closure was needed — finish would only allocate
+    // one per sync request for nothing (~3-5ns + 64B each).
+    try {
+      if (result === undefined || result === null) return finalizeGuarded(app, c);
+      if (!(result instanceof Response)) {
+        if (typeof (result as PromiseLike<unknown>).then === "function") {
+          return errorResponse(
+            app,
+            c,
+            new TypeError("handler returned a promise — await it inside the handler instead"),
+          );
+        }
+        return errorResponse(
+          app,
+          c,
+          new TypeError(
+            `handler returned ${typeof result}; only Response, undefined or null are valid`,
+          ),
+        );
+      }
+      if (
+        c.headersRecord === null &&
+        method !== "HEAD" &&
+        !(isEmptyStatus(result.status) && result.body !== null)
+      ) {
+        return result;
+      }
+      c._res = result;
+      return finalizeGuarded(app, c);
+    } catch (error) {
+      return errorResponse(app, c, error);
+    }
   } catch (error) {
     return errorResponse(app, c, error);
   }
@@ -267,7 +299,14 @@ export const dispatchRequest = (
   middleware: MiddlewareStack,
   request: RequestSource,
 ): Response | Promise<Response> => {
-  const path = getPath(sourceUrl(request));
+  const rawUrl = sourceUrl(request);
+  const path = getPath(rawUrl);
+  // The path is already computed for matching — hand it to the context so
+  // c.path/c.url first-touch is a memo read (77-79ns recompute vs ~0; koa
+  // hands the same string down, hono's c.req.path is 1.2ns for this reason).
+  // url gets the full path+search view; a later rewrite invalidates both.
+  c.pathValue = path;
+  c.urlValue = `${path}${getSearch(rawUrl)}`;
   const match = matchRoute(router, path);
   if (match !== null) {
     c.params = match.params ?? EMPTY_PARAMS;

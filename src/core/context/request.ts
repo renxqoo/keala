@@ -143,6 +143,32 @@ const splitUrl = (
   };
 };
 
+/** Host authority with userinfo stripped (proxy-aware, header-first). */
+const computeHost = (c: ContextState & { get(field: string): string }): string => {
+  // Strip userinfo (user:pass@host) — only the authority is trusted, in
+  // BOTH sources: a crafted "evil.com:fake@legitimate.com" in
+  // X-Forwarded-Host or Host must never leak into origin/href/back().
+  if (c.appSettings.proxy) {
+    // Koa: only the first entry of a chained X-Forwarded-Host is trusted.
+    const forwarded = stripUserinfo(c.get("x-forwarded-host").split(",")[0]?.trim() ?? "");
+    if (forwarded.length > 0) return forwarded;
+  }
+  const header = stripUserinfo(c.get("host"));
+  if (header.length > 0) return header;
+  return authorityOf(sourceAbsoluteUrl(c.rawRequest));
+};
+
+/** Hostname from the host authority (bracketed IPv6 via WHATWG semantics). */
+const computeHostname = (host: string): string => {
+  if (host.length === 0) return "";
+  if (host.charCodeAt(0) === 91 /* "[" */) {
+    return toURL(`http://${host}/`)?.hostname ?? "";
+  }
+  const at = host.lastIndexOf("@");
+  const bare = at === -1 ? host : host.slice(at + 1);
+  return parseHostHeader(bare).hostname;
+};
+
 export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   get raw(): Request {
     return sourceRequest(this.rawRequest);
@@ -253,7 +279,10 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     this.url = parts.path + search + parts.hash;
   },
   get URL(): URL | null {
-    return toURL(sourceAbsoluteUrl(this.rawRequest));
+    // Memoized: a fresh WHATWG parse (40ns + object) per access before.
+    const memo = this.urlObjectValue;
+    if (memo !== null) return memo as URL;
+    return (this.urlObjectValue = toURL(sourceAbsoluteUrl(this.rawRequest))) as URL | null;
   },
   get headers(): Headers {
     return sourceHeaders(this.rawRequest);
@@ -279,28 +308,16 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return sourceHeader(this.rawRequest, name) ?? "";
   },
   get host(): string {
-    // Strip userinfo (user:pass@host) — only the authority is trusted, in
-    // BOTH sources: a crafted "evil.com:fake@legitimate.com" in
-    // X-Forwarded-Host or Host must never leak into origin/href/back().
-    if (this.appSettings.proxy) {
-      // Koa: only the first entry of a chained X-Forwarded-Host is trusted.
-      const forwarded = stripUserinfo(this.get("x-forwarded-host").split(",")[0]?.trim() ?? "");
-      if (forwarded.length > 0) return forwarded;
-    }
-    const header = stripUserinfo(this.get("host"));
-    if (header.length > 0) return header;
-    return authorityOf(sourceAbsoluteUrl(this.rawRequest));
+    // Memoized (45ns parse per access before; CORS-style readers call twice).
+    // NOT invalidated by url rewrites — it derives from headers, not path.
+    const memo = this.hostValue;
+    if (memo !== null) return memo;
+    return (this.hostValue = computeHost(this));
   },
   get hostname(): string {
-    const host = this.host;
-    if (host.length === 0) return "";
-    // Koa: bracketed IPv6 hosts resolve through WHATWG URL semantics.
-    if (host.charCodeAt(0) === 91 /* "[" */) {
-      return toURL(`http://${host}/`)?.hostname ?? "";
-    }
-    const at = host.lastIndexOf("@");
-    const bare = at === -1 ? host : host.slice(at + 1);
-    return parseHostHeader(bare).hostname;
+    const memo = this.hostnameValue;
+    if (memo !== null) return memo as string;
+    return (this.hostnameValue = computeHostname(this.host)) as string;
   },
   get protocol(): string {
     if (this.appSettings.proxy) {

@@ -26,6 +26,9 @@ export interface ContextState {
   params: Record<string, string> | null;
   // response side
   querystringValue: string | null;
+  hostValue: string | null;
+  hostnameValue: string | null;
+  urlObjectValue: URL | null;
   statusValue: number;
   messageValue: string;
   headersRecord: HeaderMap | null;

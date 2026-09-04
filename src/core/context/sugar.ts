@@ -93,17 +93,9 @@ const mergedHeadersOf = (
  * A ResponseInit headers value that preserves array entries (multi-value
  * headers like set-cookie) — record inits would join them into one line.
  */
-const headersInitOf = (
-  merged: Record<string, HeaderValue>,
-): Headers | Record<string, HeaderValue> => {
-  let hasArray = false;
-  for (const key of Object.keys(merged)) {
-    if (Array.isArray(merged[key])) {
-      hasArray = true;
-      break;
-    }
-  }
-  if (!hasArray) return merged;
+const headersInitOf = (merged: Record<string, HeaderValue>): Headers => {
+  // Always ONE live Headers instance (record-init Responses cost ~47ns more
+  // per construction, and the record form forces another copy inside fetch).
   const headers = new Headers();
   for (const key of Object.keys(merged)) {
     const value = merged[key] as HeaderValue;
