@@ -320,7 +320,7 @@ describe("agent r5 — locks correct behavior", () => {
     });
     const res = await drive(app, new Request("http://localhost:3000/e"));
     expect(res.status).toBe(304);
-    expect(res.headers.getSetCookie()).toEqual(["sess=1"]);
+    expect(res.headers.getSetCookie()).toEqual(["sess=1; Path=/"]);
     expect(res.headers.get("content-type")).toBeNull();
   });
 

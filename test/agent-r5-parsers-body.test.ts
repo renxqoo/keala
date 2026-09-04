@@ -60,9 +60,11 @@ describe("bodyParser locks correct behavior", () => {
     expect(await res.text()).toBe('{"a":1}/{"a":1}');
   });
 
-  it("arrayBuffer/blob share the json limit (one byte budget for data readers)", async () => {
+  it("arrayBuffer/blob own the form limit (upload-shaped byte budget)", async () => {
     const app = new Keala(quiet);
-    app.use(createBodyParser({ jsonLimit: 4 }));
+    // R4.10: raw-byte readers are budgeted by formLimit, not jsonLimit — a
+    // user who raised only formLimit used to get a 413 naming jsonLimit.
+    app.use(createBodyParser({ formLimit: 4 }));
     app.post("/", async (c) => {
       const req = (c as unknown as { req: { arrayBuffer(): Promise<Uint8Array> } }).req;
       try {

@@ -930,10 +930,14 @@ it("REVIEW-CT-35: §4 U1 — strategy null (sync AND async) admits through the g
   const firstB = asyncApp.handle(new Request("http://x/w"));
   const secondB = asyncApp.handle(new Request("http://x/w"));
   await wait(50);
-  expect(asyncApp.inFlight).toBe(2); // no phantom release
+  // R4.10 hard ceiling: the late async null lands while firstB still holds
+  // the only slot, so it REFUSES (503) instead of admitting over
+  // maxConcurrency. The SYNC null half above (secondA) still admits and
+  // holds a real slot — no phantom release either way.
+  expect(asyncApp.inFlight).toBe(1);
   gateB.resolve();
   expect((await firstB).status).toBe(200);
-  expect((await secondB).status).toBe(200);
+  expect((await secondB).status).toBe(503);
   expect(asyncApp.inFlight).toBe(0);
 });
 

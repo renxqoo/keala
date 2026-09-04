@@ -184,7 +184,8 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
   ])("valid option %j renders exactly %s", (options, expected) => {
     const header = serializeCookie("sid", "v", options);
     expect(header.startsWith("sid=v")).toBe(true);
-    expect(header.slice("sid=v".length)).toBe(expected);
+    // Path defaults to "/" (R4.10) and serializes BEFORE priority/sameSite.
+    expect(header.slice("sid=v".length)).toBe(`; Path=/${expected}`);
   });
 
   it("end-to-end: an injected option becomes a clean 500 with no Set-Cookie on the wire", async () => {
@@ -212,7 +213,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
       c.body = "ok";
     });
     const res = await drive(app, "http://localhost:3000/");
-    expect(res.headers.getSetCookie()).toEqual(["ok=1; SameSite=Strict; HttpOnly"]);
+    expect(res.headers.getSetCookie()).toEqual(["ok=1; Path=/; SameSite=Strict; HttpOnly"]);
   });
 });
 

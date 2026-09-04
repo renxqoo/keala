@@ -132,9 +132,15 @@ const acceptsGzip = (header: string): boolean => {
   return quality !== null && quality > 0;
 };
 
-/** Extensions of inherently-compressed payloads — re-compressing wastes CPU. */
+/**
+ * Inherently-compressed payload types — re-compressing wastes CPU. Matched
+ * against the media type with parameters (`application/gzip; q=…`), so the
+ * token must end at ";" or end-of-string; the full MIME spellings of the
+ * archive formats (R4.10: `application/gzip` never matched the bare `gz`
+ * token) join the extension forms.
+ */
 const COMPRESSED_TYPE =
-  /(?:^|\/)(?:png|jpe?g|gif|webp|avif|woff2?|zstd|br|zip|gz|mp4|webm|mp3|ogg|wav|pdf)(?:;|$)/;
+  /(?:^|\/)(?:png|jpe?g|gif|webp|avif|woff2?|zstd|br|zip|gz|gzip|x-gzip|x-tar|mp4|webm|mp3|ogg|wav|pdf)(?:;|$)/;
 
 export const compress = (options: CompressOptions = {}): RouteHandler => {
   const gzip = options.gzip ?? webGzip;

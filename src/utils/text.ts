@@ -106,13 +106,28 @@ export const validateHeaderValue = (name: string, value: string): void => {
 export const isValidCookieName = (name: string): boolean =>
   /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name);
 
-/** RFC 6265 cookie-octet visible range, excluding DQUOTE, comma, semicolon, backslash. */
+/**
+ * RAW cookie-value validation. The serializer percent-encodes the value
+ * (encodeURIComponent), so the WIRE form is always cookie-octet-safe no
+ * matter the input — validation only needs to reject what could smuggle
+ * header syntax through the encoding itself: CR/LF/NUL (header splitting)
+ * and the stray high control band. Space, quotes, commas, semicolons,
+ * backslashes and non-ASCII all encode cleanly and are accepted (R4.10:
+ * the encoder could never legally receive anything it would have to
+ * reject, which made spaces and non-ASCII hard errors for nothing).
+ */
 export const isValidCookieValue = (value: string): boolean => {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
-    const isCtl = code <= 0x20 || code >= 0x7f;
-    const isExcluded = code === 0x22 || code === 0x2c || code === 0x3b || code === 0x5c;
-    if (isCtl || isExcluded) return false;
+    if (
+      code === 13 ||
+      code === 10 ||
+      code === 0 ||
+      (code >= 1 && code <= 8) ||
+      (code >= 14 && code <= 31)
+    ) {
+      return false;
+    }
   }
   return true;
 };

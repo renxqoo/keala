@@ -111,14 +111,11 @@ const assertFormPartBudget = (bytes: Uint8Array, contentType: string, limit: num
     return;
   }
   if (type.startsWith("application/x-www-form-urlencoded")) {
-    const ampersand = 0x26; /* "&" */
-    let separators = 0;
-    for (let i = 0; i < bytes.length; i++) {
-      if (bytes[i] === ampersand) separators++;
-    }
+    // Same native indexOf scan the multipart branch uses (R4.10): the
+    // per-byte JS loop cost ~10.6ms of synchronous CPU on a 10MB body.
+    const parts = bytes.length === 0 ? 0 : countOccurrences(bytes, "&") + 1;
     // An EMPTY body holds zero parts — `separators + 1` would invent one and
     // reject the empty form against a zero budget.
-    const parts = bytes.length === 0 ? 0 : separators + 1;
     if (parts > limit) tooManyParts(parts);
   }
 };
@@ -275,13 +272,17 @@ class BodyReaderState implements RequestBodyFacade {
   arrayBuffer(): Promise<Uint8Array> {
     const state = this.rareState();
     if (state.arrayBuffer !== null) return state.arrayBuffer;
-    return (state.arrayBuffer = this.read((this.config as BodyReaderConfig).jsonLimit));
+    // formLimit, not jsonLimit (R4.10): raw-byte reads are upload-shaped —
+    // a user who raised only formLimit used to get a 413 naming "the
+    // 1048576 byte limit" for a body formData() accepts.
+    return (state.arrayBuffer = this.read((this.config as BodyReaderConfig).formLimit));
   }
 
   blob(): Promise<Blob> {
     const state = this.rareState();
     if (state.blob !== null) return state.blob;
-    const limit = (this.config as BodyReaderConfig).jsonLimit;
+    // formLimit for the same upload-shape reason as arrayBuffer().
+    const limit = (this.config as BodyReaderConfig).formLimit;
     return (state.blob = this.raw(limit).then((bytes) => new Blob([this.checked(bytes, limit)])));
   }
 

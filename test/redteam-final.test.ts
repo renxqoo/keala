@@ -160,21 +160,36 @@ describe("RT-F2: rejecting async ws handlers never crash the process", () => {
 });
 
 // ---------------------------------------------------------------------------
-describe("RT-F3: responseCache caches no-content-type bodies (real-Bun shape)", () => {
-  it("a bare string Response (no CT header) is cacheable", async () => {
+describe("RT-F3: responseCache capture eligibility (R4.10 contract)", () => {
+  it("a bare hand-built string Response (no CT) is DECLINED — only framework snapshots capture", async () => {
     const app = new Keala(quiet);
     let calls = 0;
     app.get("/x", cache({ ttl: 60_000 }), () => {
       calls += 1;
-      // No content-type: exactly what `new Response(string)` looks like on
-      // the real Bun runtime at cache-capture time.
+      // No content-type and no framework snapshot identity: hand-built
+      // bodies are never captured (a missing-CT byte body corrupted every
+      // replay as U+FFFD before the R4.10 audit closed the surface).
       return new Response(`plain-${calls}`);
     });
     const first = await app.handle(req("/x"));
-    expect(first.headers.get("x-cache")).toBeNull(); // computed fresh
+    expect(first.headers.get("x-cache")).toBeNull();
     const second = await app.handle(req("/x"));
+    expect(second.headers.get("x-cache")).toBeNull();
+    expect(await second.text()).toBe("plain-2");
+    expect(calls).toBe(2);
+  });
+
+  it("the sugar equivalent (c.text, no explicit CT) still caches", async () => {
+    const app = new Keala(quiet);
+    let calls = 0;
+    app.get("/s", cache({ ttl: 60_000 }), (c) => {
+      calls += 1;
+      return c.text(`sugar-${calls}`);
+    });
+    await app.handle(req("/s"));
+    const second = await app.handle(req("/s"));
     expect(second.headers.get("x-cache")).toBe("hit");
-    expect(await second.text()).toBe("plain-1");
+    expect(await second.text()).toBe("sugar-1");
     expect(calls).toBe(1);
   });
 });
@@ -271,11 +286,7 @@ describe("RT-F7: c.append validates header names; the record is prototype-less",
 describe("RT-F8: cache HEAD replay Content-Length is byte-exact", () => {
   it("non-ASCII cached bodies report UTF-8 byte length", async () => {
     const app = new Keala(quiet);
-    app.get(
-      "/u",
-      cache({ ttl: 60_000 }),
-      () => new Response("héllo", { headers: { "content-type": "text/plain" } }),
-    );
+    app.get("/u", cache({ ttl: 60_000 }), (c) => c.text("héllo"));
     await app.handle(req("/u")); // seed
     const head = await app.handle(new Request("http://localhost:3000/u", { method: "HEAD" }));
     expect(head.headers.get("x-cache")).toBe("hit");

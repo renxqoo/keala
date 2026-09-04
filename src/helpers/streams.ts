@@ -22,7 +22,12 @@ export const disableIdleTimeout = (c: Context): void => {
 };
 
 export interface StreamWriter {
-  /** Enqueue one chunk. Returns the controller's desiredSize afterwards. */
+  /**
+   * Enqueue one chunk. The ReadableStream controller exposes no drain
+   * promise, so a write is always accepted — for unbounded producers,
+   * check `desiredSize` and pause (await a timer/external signal) while
+   * it is negative, or the stream buffers everything in memory.
+   */
   write(chunk: string | Uint8Array): void;
   /** Close the stream; further writes throw. */
   close(): void;
@@ -108,23 +113,30 @@ const makeStream = (
 
 /** Generic streaming response (binary chunks). */
 export const stream = (
-  _c: Context,
+  c: Context,
   start: (writer: StreamWriter) => Promise<void> | void,
-): Response =>
-  makeStream(start, {
+): Response => {
+  // Long-lived sparse producers die at Bun's default 10s idleTimeout —
+  // SSE already opted out; stream/streamText must too (R4.10: a silent
+  // 12s gap was killed mid-response with no server-side error).
+  disableIdleTimeout(c);
+  return makeStream(start, {
     "content-type": "application/octet-stream",
     "x-content-type-options": "nosniff",
   });
+};
 
 /** Text streaming response. */
 export const streamText = (
-  _c: Context,
+  c: Context,
   start: (writer: StreamWriter) => Promise<void> | void,
-): Response =>
-  makeStream(start, {
+): Response => {
+  disableIdleTimeout(c);
+  return makeStream(start, {
     "content-type": "text/plain; charset=utf-8",
     "x-content-type-options": "nosniff",
   });
+};
 
 export interface SSEMessage {
   event?: string;

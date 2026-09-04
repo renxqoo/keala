@@ -35,6 +35,13 @@ export interface ServeStaticOptions {
   index?: string | false;
   /** Strip this prefix before resolving (mounted usage). */
   prefix?: string;
+  /**
+   * Dotfile policy. Default "ignore": leading-dot segments decline
+   * (next()) — `/.env` and `/.git/config` used to be plain 200s (R4.10).
+   * `.well-known` (RFC 8615) is always served. "allow" restores the old
+   * behavior for roots that genuinely publish dotfiles.
+   */
+  dotfiles?: "allow" | "ignore";
 }
 
 /**
@@ -44,6 +51,32 @@ export interface ServeStaticOptions {
  * trailing-slash form like "/assets/") normalize to the root/segment form so
  * every canonical prefix spelling owns the same subtree.
  */
+/**
+ * Single-range `bytes=` parse (RFC 9110 §14.1.1). Multi-range requests
+ * decline Range handling entirely (a 200 full-body answer is legal);
+ * "unsatisfiable" answers 416; null means "ignore the header".
+ */
+const parseRange = (
+  header: string,
+  size: number,
+): { start: number; end: number } | "unsatisfiable" | null => {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (match === null) return null;
+  const head = match[1] ?? "";
+  const tail = match[2] ?? "";
+  if (head === "" && tail === "") return null;
+  if (head === "") {
+    const suffix = Number(tail);
+    if (suffix === 0) return "unsatisfiable";
+    return { start: Math.max(0, size - suffix), end: size - 1 };
+  }
+  const start = Number(head);
+  if (start >= size) return "unsatisfiable";
+  const end = tail === "" ? size - 1 : Math.min(Number(tail), size - 1);
+  if (end < start) return null;
+  return { start, end };
+};
+
 const stripPrefixOf = (rawPrefix: string | undefined): string | undefined => {
   if (rawPrefix === undefined) return undefined;
   if (rawPrefix.length > 1 && rawPrefix.endsWith("/")) return rawPrefix.slice(0, -1);
@@ -56,6 +89,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
   }
   const indexName = options.index === undefined ? "index.html" : options.index;
   const prefix = stripPrefixOf(options.prefix);
+  const dotfiles = options.dotfiles ?? "ignore";
   // Resolved on the first request — keeps the path bridge out of setup.
   let rootCache: string | null = null;
 
@@ -84,6 +118,13 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     if (segments === null) throw createError(404);
     if (segments.some((s) => s.includes("\0"))) {
       throw createError(400, "null byte in path", { expose: true });
+    }
+    // Dotfile policy: RFC 8615's .well-known stays reachable regardless.
+    if (
+      dotfiles === "ignore" &&
+      segments.some((segment) => segment.startsWith(".") && segment !== ".well-known")
+    ) {
+      return next();
     }
     const clean = segments.join("/");
     if (clean.length === 0 && indexName === false) throw createError(404);
@@ -152,8 +193,37 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       return new Response(null, { status: 304, headers });
     }
     if (bunFile !== null) return new Response(bunFile(filePath), { headers });
+    // Node path. HEAD never reads the file (R4.10: a 120MB HEAD read the
+    // whole body just to strip it); Range gives the Bun path's seek parity.
+    headers["accept-ranges"] = "bytes";
+    if (c.method === "HEAD") {
+      return new Response(null, {
+        status: 200,
+        headers: { ...headers, "content-length": String(info.size) },
+      });
+    }
+    const rangeHeader = c.get("range");
+    const range = rangeHeader.length > 0 ? parseRange(rangeHeader, info.size) : null;
+    if (range === "unsatisfiable") {
+      return new Response(null, {
+        status: 416,
+        headers: { ...headers, "content-range": `bytes */${info.size}` },
+      });
+    }
     const bytes = await readFile(filePath).catch(() => null);
     if (bytes === null) throw createError(404);
-    return new Response(new Uint8Array(bytes), { headers });
+    const body = new Uint8Array(bytes);
+    if (range !== null) {
+      const length = range.end - range.start + 1;
+      return new Response(body.subarray(range.start, range.end + 1), {
+        status: 206,
+        headers: {
+          ...headers,
+          "content-length": String(length),
+          "content-range": `bytes ${range.start}-${range.end}/${info.size}`,
+        },
+      });
+    }
+    return new Response(body, { headers });
   };
 };

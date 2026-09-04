@@ -37,7 +37,8 @@ const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 describe("redteam P2: bodyParser boundaries (green)", () => {
   it("a lying small Content-Length is caught by the streamed guard when the body is read", async () => {
     const app = new Keala(quiet);
-    app.use(createBodyParser({ jsonLimit: 1000 }));
+    // arrayBuffer() owns the formLimit budget (R4.10).
+    app.use(createBodyParser({ formLimit: 1000 }));
     app.post("/x", async (c0) => {
       const c = c0 as ContextWithBody;
       c.body = `len:${(await c.req.arrayBuffer()).byteLength}`;

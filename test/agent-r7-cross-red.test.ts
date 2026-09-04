@@ -17,32 +17,40 @@ import { cache } from "../src/middleware/cache.ts";
 const request = (path = "/"): Request => new Request(`http://localhost:3000${path}`);
 
 describe("R7-CROSS-1 responseCache preserves representation bytes", () => {
-  it("replays an encoded textual Response byte-for-byte", async () => {
+  it("encoded representations are outside the capture surface; unencoded replays byte-for-byte", async () => {
+    // R4.10: the ONLY capturable bodies are unencoded framework snapshots
+    // (sugar/state-mode strings and JSON text). A pre-encoded payload is
+    // either a hand-built Response (declined — streamed and no-CT bodies
+    // corrupted replays) or a byte state body (declined by the textual
+    // guard) — the old `.text()` corruption path is structurally gone.
     const packed = new Uint8Array(gzipSync("hello"));
-    let computed = 0;
+    let encodedCalls = 0;
+    let plainCalls = 0;
     const app = new Keala({ env: "test" });
-    app.get("/encoded", cache(), () => {
-      computed++;
-      return new Response(packed, {
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-          "content-encoding": "gzip",
-        },
-      });
+    app.get("/encoded", cache(), (c) => {
+      encodedCalls++;
+      c.setHeader("Content-Type", "text/plain; charset=utf-8");
+      c.setHeader("Content-Encoding", "gzip");
+      c.body = packed;
+    });
+    app.get("/plain", cache(), (c) => {
+      plainCalls++;
+      return c.text("hello");
     });
 
     const first = await app.handle(request("/encoded"));
     const firstBytes = new Uint8Array(await first.arrayBuffer());
     const second = await app.handle(request("/encoded"));
     const secondBytes = new Uint8Array(await second.arrayBuffer());
+    expect(second.headers.get("x-cache")).toBeNull(); // declined, recomputed
+    expect(secondBytes).toEqual(firstBytes); // and STILL byte-identical
+    expect(encodedCalls).toBe(2);
 
-    // Repro: textualBody() decodes compressed bytes through Response.text().
-    // Expected: a cached representation is byte-identical. Actual: invalid
-    // UTF-8 bytes become U+FFFD and are re-encoded on the hit.
-    // Root cause: src/middleware/cache.ts:60-69.
-    expect(second.headers.get("x-cache")).toBe("hit");
-    expect(secondBytes).toEqual(firstBytes);
-    expect(computed).toBe(1);
+    await app.handle(request("/plain"));
+    const plainHit = await app.handle(request("/plain"));
+    expect(plainHit.headers.get("x-cache")).toBe("hit");
+    expect(await plainHit.text()).toBe("hello");
+    expect(plainCalls).toBe(1);
   });
 });
 

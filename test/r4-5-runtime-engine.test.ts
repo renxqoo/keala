@@ -435,7 +435,8 @@ describe("R4.5 Node body ownership and cleanup", () => {
     "handles multi-chunk, empty and oversized chunked bodies in both native and web readers",
     async () => {
       const server = await start((app) => {
-        app.use(createBodyParser({ jsonLimit: 16 }));
+        // arrayBuffer() owns the formLimit budget (R4.10).
+        app.use(createBodyParser({ formLimit: 16 }));
         app.post("/native", async (c0) => {
           const bytes = await (c0 as ContextWithBody).req.arrayBuffer();
           return c0.text(new TextDecoder().decode(bytes));

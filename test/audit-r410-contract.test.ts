@@ -94,7 +94,7 @@ describe("audit C2: the error funnel carries a sugar commit's consumed headers",
     app.get("/", (c) => c.json({ a: 1 }));
     const res = await app.handle(request("/"));
     expect(res.status).toBe(500);
-    expect(res.headers.getSetCookie()).toEqual(["session=abc"]);
+    expect(res.headers.getSetCookie()).toEqual(["session=abc; Path=/"]);
   });
 
   it("a post-commit SET mirror survives a LATER post-commit sugar call and throw", async () => {

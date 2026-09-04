@@ -36,7 +36,9 @@ const jsonBody = (value: unknown, headers: Record<string, string> = {}): Request
 describe("bodyParser: readers", () => {
   it("upgrades an existing raw memo to the stricter facade budget", async () => {
     const app = new Keala(quiet);
-    app.use(createBodyParser({ jsonLimit: 4 }));
+    // arrayBuffer() owns the formLimit budget (R4.10) — raw-byte reads are
+    // upload-shaped.
+    app.use(createBodyParser({ formLimit: 4 }));
     app.post("/x", async (c0) => {
       await readBodyLimited(c0, 16);
       await (c0 as ContextWithBody).req.arrayBuffer();
@@ -56,7 +58,7 @@ describe("bodyParser: readers", () => {
 
   it("keeps 413 authoritative when cancelling an oversized stream fails", async () => {
     const app = new Keala(quiet);
-    app.use(createBodyParser({ jsonLimit: 4 }));
+    app.use(createBodyParser({ formLimit: 4 }));
     let cancelObserved = false;
     app.post("/x", async (c0) => {
       await (c0 as ContextWithBody).req.arrayBuffer();

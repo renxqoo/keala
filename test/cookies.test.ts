@@ -64,8 +64,11 @@ describe("serializeCookie", () => {
   it("rejects invalid names and values", () => {
     expect(() => serializeCookie("bad name", "v")).toThrow(TypeError);
     expect(() => serializeCookie("bad;name", "v")).toThrow(TypeError);
-    expect(() => serializeCookie("ok", "bad;value")).toThrow(TypeError);
-    expect(() => serializeCookie("ok", "bad,value")).toThrow(TypeError);
+    // R4.10: semicolons/commas in VALUES no longer throw — the symmetric
+    // codec percent-encodes them into a wire-safe form; only header-splitting
+    // controls (CR/LF/NUL and the C0 band) stay hard errors.
+    expect(serializeCookie("ok", "bad;value")).toBe("ok=bad%3Bvalue; Path=/");
+    expect(serializeCookie("ok", "bad,value")).toBe("ok=bad%2Cvalue; Path=/");
     expect(() => serializeCookie("ok", "bad\r\nvalue")).toThrow(TypeError);
   });
 
@@ -153,7 +156,7 @@ describe("createCookies facade", () => {
     const cookies = createCookies(host);
     cookies.set("theme", "dark", { path: "/" });
     cookies.set("lang", "zh", { httpOnly: true });
-    expect(host.jar["set-cookie"]).toEqual(["theme=dark; Path=/", "lang=zh; HttpOnly"]);
+    expect(host.jar["set-cookie"]).toEqual(["theme=dark; Path=/", "lang=zh; Path=/; HttpOnly"]);
   });
 
   it("signs set values when keys exist", () => {
@@ -161,7 +164,8 @@ describe("createCookies facade", () => {
     createCookies(host).set("sid", "abc", { signed: true });
     const [value] = host.jar["set-cookie"] as string[];
     expect(value?.startsWith("sid=")).toBe(true);
-    expect(unsign((value ?? "").slice(4), ["k1"])).toBe("abc");
+    // The signed payload ends at the first attribute — Path rides along now.
+    expect(unsign((value ?? "").slice(4, (value ?? "").indexOf(";")), ["k1"])).toBe("abc");
   });
 
   it("skips duplicate names unless overwrite", () => {
@@ -169,9 +173,9 @@ describe("createCookies facade", () => {
     const cookies = createCookies(host);
     cookies.set("a", "1");
     cookies.set("a", "2");
-    expect(host.jar["set-cookie"]).toEqual(["a=1"]);
+    expect(host.jar["set-cookie"]).toEqual(["a=1; Path=/"]);
     cookies.set("a", "3", { overwrite: true });
-    expect(host.jar["set-cookie"]).toEqual(["a=3"]);
+    expect(host.jar["set-cookie"]).toEqual(["a=3; Path=/"]);
   });
 
   it("overwrites within an existing plain header value", () => {
@@ -185,8 +189,8 @@ describe("createCookies facade", () => {
     } as unknown as CookiesHost;
     const cookies = createCookies(host);
     cookies.set("new", "2");
-    expect(jar["set-cookie"]).toEqual(["old=1", "new=2"]);
+    expect(jar["set-cookie"]).toEqual(["old=1", "new=2; Path=/"]);
     cookies.set("new", "3", { overwrite: true });
-    expect(jar["set-cookie"]).toEqual(["old=1", "new=3"]);
+    expect(jar["set-cookie"]).toEqual(["old=1", "new=3; Path=/"]);
   });
 });

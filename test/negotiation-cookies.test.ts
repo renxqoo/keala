@@ -156,28 +156,30 @@ describe("negotiation matrix: is() tables", () => {
 });
 
 describe("cookies matrix: serialization option table", () => {
+  // Path defaults to "/" (R4.10, the `cookies` package behavior): rows that
+  // do not spell a Path carry the default.
   const rows: [string, Record<string, unknown>, string][] = [
-    ["plain", {}, "sid=1"],
+    ["plain", {}, "sid=1; Path=/"],
     ["path", { path: "/app" }, "sid=1; Path=/app"],
-    ["domain", { domain: "ex.com" }, "sid=1; Domain=ex.com"],
-    ["maxAge", { maxAge: 3600 }, "sid=1; Max-Age=3600"],
-    ["maxAge negative", { maxAge: -1 }, "sid=1; Max-Age=-1"],
+    ["domain", { domain: "ex.com" }, "sid=1; Domain=ex.com; Path=/"],
+    ["maxAge", { maxAge: 3600 }, "sid=1; Max-Age=3600; Path=/"],
+    ["maxAge negative", { maxAge: -1 }, "sid=1; Max-Age=-1; Path=/"],
     [
       "expires",
       { expires: new Date(Date.UTC(2025, 0, 2)) },
-      "sid=1; Expires=Thu, 02 Jan 2025 00:00:00 GMT",
+      "sid=1; Expires=Thu, 02 Jan 2025 00:00:00 GMT; Path=/",
     ],
-    ["httpOnly", { httpOnly: true }, "sid=1; HttpOnly"],
-    ["secure", { secure: true }, "sid=1; Secure"],
-    ["sameSite strict", { sameSite: "strict" }, "sid=1; SameSite=Strict"],
-    ["sameSite lax", { sameSite: "lax" }, "sid=1; SameSite=Lax"],
-    ["sameSite none", { sameSite: "none" }, "sid=1; SameSite=None"],
-    ["sameSite true", { sameSite: true }, "sid=1; SameSite=Strict"],
-    ["sameSite false", { sameSite: false }, "sid=1"],
-    ["partitioned", { partitioned: true, secure: true }, "sid=1; Partitioned; Secure"],
-    ["priority low", { priority: "low" }, "sid=1; Priority=Low"],
-    ["priority medium", { priority: "medium" }, "sid=1; Priority=Medium"],
-    ["priority high", { priority: "high" }, "sid=1; Priority=High"],
+    ["httpOnly", { httpOnly: true }, "sid=1; Path=/; HttpOnly"],
+    ["secure", { secure: true }, "sid=1; Path=/; Secure"],
+    ["sameSite strict", { sameSite: "strict" }, "sid=1; Path=/; SameSite=Strict"],
+    ["sameSite lax", { sameSite: "lax" }, "sid=1; Path=/; SameSite=Lax"],
+    ["sameSite none", { sameSite: "none" }, "sid=1; Path=/; SameSite=None"],
+    ["sameSite true", { sameSite: true }, "sid=1; Path=/; SameSite=Strict"],
+    ["sameSite false", { sameSite: false }, "sid=1; Path=/"],
+    ["partitioned", { partitioned: true, secure: true }, "sid=1; Path=/; Partitioned; Secure"],
+    ["priority low", { priority: "low" }, "sid=1; Path=/; Priority=Low"],
+    ["priority medium", { priority: "medium" }, "sid=1; Path=/; Priority=Medium"],
+    ["priority high", { priority: "high" }, "sid=1; Path=/; Priority=High"],
     [
       "everything",
       { path: "/", secure: true, httpOnly: true, sameSite: "lax" },
@@ -198,7 +200,7 @@ describe("cookies matrix: facade behaviors", () => {
       c.cookies.set("c", "3");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
-    expect([...res.headers.getSetCookie()]).toEqual(["a=1", "b=2", "c=3"]);
+    expect([...res.headers.getSetCookie()]).toEqual(["a=1; Path=/", "b=2; Path=/", "c=3; Path=/"]);
   });
 
   it("signed cookies round-trip through the facade with options intact", async () => {

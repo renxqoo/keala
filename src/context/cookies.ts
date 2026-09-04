@@ -139,9 +139,14 @@ export const serializeCookie = (
     assertHeaderSafe("cookie domain", options.domain);
     header += `; Domain=${options.domain}`;
   }
-  if (options.path !== undefined) {
-    assertHeaderSafe("cookie path", options.path);
-    header += `; Path=${options.path}`;
+  // Path defaults to "/" (the `cookies` package / koa behavior, R4.10):
+  // RFC 6265's default-path scopes a cookie set at POST /api/auth/login to
+  // /api/auth — silently NOT sent to /api/* and every other route. An
+  // explicit path (including "") always wins.
+  const path = options.path ?? "/";
+  if (path.length > 0) {
+    assertHeaderSafe("cookie path", path);
+    header += `; Path=${path}`;
   }
   if (options.priority !== undefined) {
     const prio = String(options.priority).toLowerCase();

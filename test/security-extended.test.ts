@@ -63,12 +63,27 @@ describe("security: response-splitting variant matrix", () => {
     expect(res.status).toBe(302);
   });
 
-  it.each(payloads)("cookie value blocks %p", async (payload) => {
+  it.each(payloads.filter((p) => p !== "v\u240d\u240a-not-crlf"))(
+    "cookie value blocks %p",
+    async (payload) => {
+      const res = await attack((c) => {
+        expect(() => c.cookies.set("sid", payload)).toThrow(TypeError);
+        c.body = "ok";
+      });
+      expect(res.headers.get("set-cookie")).toBe(null);
+    },
+  );
+
+  it("cookie value: non-ASCII LOOKS like breaks but percent-encodes safely (R4.10)", async () => {
+    // U+240D/U+240A are "symbol for CR/LF" glyphs, not control bytes — the
+    // symmetric codec encodes them to %E2%90%8D…, which cannot split a
+    // header. The old validator hard-rejected ALL non-ASCII, so legal
+    // Unicode values were impossible to set.
     const res = await attack((c) => {
-      expect(() => c.cookies.set("sid", payload)).toThrow(TypeError);
+      c.cookies.set("sid", "v\u240d\u240a-not-crlf");
       c.body = "ok";
     });
-    expect(res.headers.get("set-cookie")).toBe(null);
+    expect(res.headers.get("set-cookie")).toBe("sid=v%E2%90%8D%E2%90%8A-not-crlf; Path=/");
   });
 
   it.each(["__proto__", "constructor", "prototype", "a b", "a;b", "a=b", "é"])(

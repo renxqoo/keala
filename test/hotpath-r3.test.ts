@@ -294,7 +294,8 @@ describe("HOTPATH-R3 body in-flight memoization", () => {
 
   it("memoizes a declared-length 413 before the body read starts", async () => {
     const app = new Keala(quiet);
-    app.use(createBodyParser({ jsonLimit: 2 }));
+    // arrayBuffer() owns the formLimit budget (R4.10).
+    app.use(createBodyParser({ formLimit: 2 }));
     app.post("/", async (c0) => {
       const c = c0 as ContextWithBody;
       const first = c.req.arrayBuffer();

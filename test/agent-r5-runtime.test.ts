@@ -197,7 +197,7 @@ describe("agent r5 — confirmed bugs", () => {
       return c.text("ok");
     });
     const res = await drive(app, new Request("http://localhost:3000/c"));
-    expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]); // actual: ["a=1"]
+    expect(res.headers.getSetCookie()).toEqual(["a=1; Path=/", "b=2; Path=/"]); // actual: ["a=1"]
   });
 
   it("R5-4b: late c.cookies.set() after a sugar return must not vanish (same-request form)", async () => {
@@ -209,7 +209,7 @@ describe("agent r5 — confirmed bugs", () => {
       return built;
     });
     const res = await drive(app, new Request("http://localhost:3000/c"));
-    expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]); // actual: ["a=1"]
+    expect(res.headers.getSetCookie()).toEqual(["a=1; Path=/", "b=2; Path=/"]); // actual: ["a=1"]
   });
 
   it("R5-5: symbol-keyed handler properties must be swept on pool recycle", async () => {
