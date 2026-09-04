@@ -81,6 +81,13 @@ export type {
   WebSocketHandlers,
 } from "./application.ts";
 
+/** The app.get/post/… verb-shortcut signature (named form + plain form). */
+type VerbShortcut = (
+  pathOrName: string,
+  pathOrHandler?: string | RouteHandler,
+  ...rest: RouteHandler[]
+) => Application;
+
 const defaultNotFound: NotFoundHandler = () => undefined;
 export { isRouter };
 
@@ -148,6 +155,22 @@ export class Keala implements NativeApplication {
     // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
     // so dispatch can warn when global middleware swallows a matched route.
     this.router.devTrace = this.env === "development";
+    const shortcut =
+      (method: string): VerbShortcut =>
+      (pathOrName, pathOrHandler, ...rest) =>
+        routeShortcut(this, this.router, this.#middleware, method, [
+          pathOrName,
+          ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
+          ...rest,
+        ]);
+    this.get = shortcut("GET");
+    this.post = shortcut("POST");
+    this.put = shortcut("PUT");
+    this.patch = shortcut("PATCH");
+    this.delete = shortcut("DELETE");
+    this.head = shortcut("HEAD");
+    this.options = shortcut("OPTIONS");
+    this.all = shortcut("ALL");
   }
 
   get stack(): readonly RouteDef[] {
@@ -178,94 +201,17 @@ export class Keala implements NativeApplication {
     return this;
   }
 
-  get(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "GET", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
-  post(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "POST", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
-  put(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "PUT", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
-  patch(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "PATCH", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
-  delete(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "DELETE", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
-  head(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "HEAD", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
-  options(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "OPTIONS", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
-  all(
-    pathOrName: string,
-    pathOrHandler?: string | RouteHandler,
-    ...rest: RouteHandler[]
-  ): Application {
-    return routeShortcut(this, this.router, this.#middleware, "ALL", [
-      pathOrName,
-      ...(pathOrHandler !== undefined ? [pathOrHandler] : []),
-      ...rest,
-    ]);
-  }
+  // Route-verb shortcuts — installed in the constructor (one bound closure
+  // per verb per app, setup-time only; the shared body is routeShortcut).
+  declare get: VerbShortcut;
+  declare post: VerbShortcut;
+  declare put: VerbShortcut;
+  declare patch: VerbShortcut;
+  declare delete: VerbShortcut;
+  declare head: VerbShortcut;
+  declare options: VerbShortcut;
+  declare all: VerbShortcut;
+
   on(method: string, path: string, ...handlers: RouteHandler[]): Application {
     registerDef(this.router, method, path, handlers, undefined, this.#middleware);
     return this;
