@@ -70,8 +70,8 @@ listen(app, 3000);
   Bun's native routing table (zero JS per request) mirrored as ordinary
   routes; `serveStatic` uses `Bun.file` sendfile; WebSockets upgrade through
   the native socket; `streamSSE` applies Bun's official idle-timeout remedy.
-- **Battle-tested.** **1800+ tests green under both Node and real Bun
-  runtimes** (91 files), hardened against real-world attack patterns
+- **Battle-tested.** **2000+ tests green under both Node and real Bun
+  runtimes**, hardened against real-world attack patterns
   (injection, prototype pollution, request smuggling, abuse), and behavior
   verified side-by-side against koa and hono themselves. Every change
   passes four quality gates: format, lint, types, and the full test suite
@@ -119,13 +119,22 @@ import {
   requestId,
   logger,
   bodyLimit,
-  noOpFor,
   rateLimit,
+  metrics,
   timeout,
   serveStatic,
   validator,
+  validOf,
 } from "keala/middleware"; // the aggregate — or per file: keala/middleware/cors
-import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "keala";
+import {
+  createBodyParser,
+  noOpFor, // root export — a transparency declaration, not middleware tier
+  hashPassword,
+  verifyPassword,
+  streamSSE,
+  html,
+  raw,
+} from "keala";
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN: installs body readers via bodyOf(c)
 // const body = await bodyOf(c).json() — typed accessor, zero cast; the read
@@ -141,7 +150,7 @@ const m = metrics(); // counters by status class, in-flight gauge, duration buck
 app.use(m.middleware);
 app.get("/metrics", m.page); // Prometheus text exposition
 
-app.post("/users", validator(schema), (c) => c.json(c.valid)); // Standard Schema
+app.post("/users", validator(schema), (c) => c.json(validOf<{ name: string }>(c))); // Standard Schema → typed value
 app.get("/feed", (c) =>
   streamSSE(c, async (sse) => {
     sse.send({ data: tick() });
@@ -149,6 +158,8 @@ app.get("/feed", (c) =>
 );
 app.get("/page/:slug", (c) => c.html(html`<h1>${c.params.slug}</h1>`)); // auto-escaped
 app.ws("/chat", {
+  origin: ["https://app.site"], // Origin checked before upgrade; mismatch → 403
+  // (csrf() cannot guard a browser WS handshake — this option can)
   open(ws) {
     /* native Bun socket */
   },
@@ -245,7 +256,7 @@ if (
 | Component                             | Highlights                                                                                                                                                                                                                        |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `createBodyParser`                    | one bounded memoized read; every reader re-validates ITS limit (413); malformed JSON/formData → exposed 400                                                                                                                       |
-| `validator`                           | Standard Schema (zod 4 / valibot / typebox); issues → 400; result on `c.valid`                                                                                                                                                    |
+| `validator`                           | Standard Schema (zod 4 / valibot / typebox); issues → 400; typed result via `validOf<T>(c)` (the runtime slot `c.valid` is `unknown` at the type level)                                                                           |
 | `cors` / `csrf`                       | credentials require an origin whitelist; reflected origins always carry `Vary: Origin` (a constant `*` answer doesn't — it never varies); `Origin: null` rejected; genuine preflights (with `Access-Control-Request-Method`) only |
 | `etag` / `compress`                   | weak tags + 304 (If-None-Match precedence per RFC 9110); async gzip, injected for tests                                                                                                                                           |
 | `serveStatic`                         | decode → normalize → containment; null bytes 400; ANY symlink component denied (dirs included); index containment re-checked                                                                                                      |
@@ -266,16 +277,19 @@ on first touch.
 | `c.header(name)`                                       | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
 | `c.params` (never null) `c.routePath/routeName`        | `c.etag/lastModified/attachment/redirect` | `c.html(str, status?, headers?)` |
 | `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.cookies` (signed, key rotation)        | `c.throw/assert`                 |
-| `c.accepts/is` `c.signal` `c.runtime`                  |                                           |                                  |
 | `c.accepts/is` `c.signal` `c.runtime`                  | `c.cookies` (signed, key rotation)        | `c.throw/assert`                 |
 
 Dual-mode rules in one line each: **a returned `Response` commits; `c.*`
 writes are staged; the last committer wins; untouched requests hit
 `app.notFound`**. Once committed, header writes still decorate the committed
 Response (`c.setHeader/append/remove` keep working after `await next()`),
-while `c.body/c.status/c.redirect` throw — return a new Response to replace
-a committed one (the full contract: `docs/MIGRATION-0.7.md`). A matched path without the method answers 405 + `Allow`
-(OPTIONS gets 200 + `Allow`, unknown methods 501).
+while `c.body/c.status/c.redirect` throw — assigning a `Response` to
+`c.body` throws a `TypeError` too (return it instead) — and to replace a
+committed response, return a new one (full contract:
+[`docs/MIGRATION-0.7.md`](https://github.com/renxqoo/keala/blob/main/docs/MIGRATION-0.7.md),
+in the repo — the npm package ships code only). A matched path without the
+method answers 405 + `Allow` (OPTIONS gets 200 + `Allow`, unknown methods
+501).
 
 `c.query(name)` is a TARGETED read (0.6.2): it returns the first value for
 `name` (`undefined` when absent; a bare trailing key reads as `""`), decoded
@@ -346,28 +360,39 @@ framework-set `content-type` (the runtime provides `text/plain`; use `c.type`
 or the sugar for explicit types); markup sniffing is gone; object bodies keep
 their object shape on `c.body` reads.
 
+One security-relevant difference for koa migrants: koa materializes the full
+query map, keala's `c.query(name)` is a targeted scan that matches keys in
+their raw or canonical `encodeURIComponent` form. A key sent with
+**non-canonical** encoding (`a%5Fb` standing in for `a_b`) is invisible to
+`c.query("a_b")` — by design (declared in `PARITY.md`; the full map cost
+~111ns per request against a ~2ns scan). If a legacy contract genuinely
+needs such keys, parse `c.querystring` yourself — and treat
+unexpectedly-encoded keys as hostile.
+
 ## Migrating from hono
 
-| Hono                                               | keala                                                                                                      |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `new Hono()`                                       | `new Keala()`                                                                                              |
-| `app.get(path, (c) => c.json(...))`                | the same return style                                                                                      |
-| `c.req.param("id")`                                | `c.params.id`                                                                                              |
-| `c.req.query("q")`                                 | `c.query("q")` (identical idiom; `c.queries("q")` for repeats)                                             |
-| `c.req.header("x")`                                | `c.header("x")`                                                                                            |
-| `await c.req.json()`                               | `await bodyOf(c).json()` (with the bodyParser plugin) or `await c.raw.json()` (zero setup)                 |
-| `c.req.routePath()` (Route Helper)                 | `c.routePath` / `c.routeName` (properties, named routes included)                                          |
-| `app.use(mw)`                                      | the same — plus a [dev warning](#global-middleware-and-routing-order--the-1-trap) when it swallows a route |
-| `app.notFound(fn)` / `app.onError(fn)`             | `app.notFound(fn)` / `app.onError(fn)`                                                                     |
-| `hono.route("/api", subApp)`                       | `app.mount("/api", router)` (table merge; 404s fall through)                                               |
-| `app.fetch(req)` → `Response \| Promise<Response>` | `await app.handle(req)` → always `Promise<Response>`, never rejects                                        |
-| `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` — Bun.serve baked in                                                                    |
-| `new Hono({ strict: false })`                      | no strict mode: `/path` and `/path/` are the same route                                                    |
-| `new URL(c.req.url())`                             | `c.url` is path+search (koa form); the absolute URL is `c.raw.url`                                         |
-| `app.onError(fn)` shapes the error response        | the same return-a-Response contract — plus void = built-in (decline)                                       |
-| `app.notFound(fn)` may throw                       | must `return` a Response — a throw answers the generic 500 path                                            |
+| Hono                                               | keala                                                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `new Hono()`                                       | `new Keala()`                                                                                                |
+| `app.get(path, (c) => c.json(...))`                | the same return style                                                                                        |
+| `c.req.param("id")`                                | `c.params.id`                                                                                                |
+| `c.req.query("q")`                                 | `c.query("q")` (identical idiom; `c.queries("q")` for repeats)                                               |
+| `c.req.header("x")`                                | `c.header("x")`                                                                                              |
+| `await c.req.json()`                               | `await bodyOf(c).json()` (with the bodyParser plugin) or `await c.raw.json()` (zero setup)                   |
+| `c.req.routePath()` (Route Helper)                 | `c.routePath` / `c.routeName` (properties, named routes included)                                            |
+| `app.use(mw)`                                      | the same — plus a [dev warning](#global-middleware-and-routing-order--the-1-trap) when it swallows a route   |
+| `app.notFound(fn)` / `app.onError(fn)`             | `app.notFound(fn)` / `app.onError(fn)`                                                                       |
+| `hono.route("/api", subApp)`                       | `app.mount("/api", router)` (table merge; 404s fall through)                                                 |
+| `app.fetch(req)` → `Response \| Promise<Response>` | `await app.handle(req)` → always `Promise<Response>`, never rejects                                          |
+| `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` — Bun.serve baked in                                                                      |
+| `new Hono({ strict: false })`                      | no strict mode: `/path` and `/path/` are the same route                                                      |
+| `new URL(c.req.url())`                             | `c.url` is path+search (koa form); the absolute URL is `c.raw.url`                                           |
+| `app.onError(fn)` shapes the error response        | the same return-a-Response contract — plus void = built-in (decline)                                         |
+| `app.notFound(fn)` may throw                       | must not throw — return a Response **or** write state (`c.status`/`c.body`); a throw answers the generic 500 |
 
 Divergences worth knowing: `c.body` is the **response** body (hono's request
+body lives on `c.raw` or the parser plugin); middleware runs koa-style — see
+[Global middleware and routing order](#global-middleware-and-routing-order--the-1-trap).
 
 ## Error handling: onError, notFound
 
@@ -398,10 +423,67 @@ app.onError((error, c) => {
   any other non-Response return is treated as the same loud mapper failure.
 - No mapper registered + 5xx + non-test env keeps the framework console
   fallback; register `app.onError(() => {})` to silence it explicitly.
-- `app.notFound(fn)` must **return** a Response. It runs inside the
-  finalizer; a throw there lands in the generic error path.
-  body lives on `c.raw` or the parser plugin); middleware runs koa-style — see
-  [Global middleware and routing order](#global-middleware-and-routing-order--the-1-trap).
+- `c.throw(status, …)` accepts **4xx/5xx only** — an informational or
+  redirect status throws a `TypeError` instead of an `HttpError`. A redirect
+  is not an error: use `c.redirect(url, code?)` or
+  `app.redirect(source, dest, code)` (any 3xx integer is accepted and
+  preserved as registered — never silently coerced). `c.assert(cond, …)`
+  follows the same rule.
+- `app.notFound(fn)` may return a Response **or** shape the 404 with
+  state-style writes (`c.status`/`c.body`) — but it must not throw: a throw
+  there lands in the generic 500 path, losing your custom 404.
+
+## Lifecycle & overload
+
+Self-managed processes get graceful shutdown, admission control and request
+deadlines in the core — nothing is delegated to the platform:
+
+```ts
+import { Keala } from "keala";
+
+const app = new Keala({
+  env: "production",
+  requestTimeout: 30_000, // ms, 0 disables: expiry aborts c.signal → 504 funnel
+  overload: {
+    maxConcurrency: 1000, // in-flight cap (admission runs pre-context)
+    maxQueue: 100, // 0 = fail-fast 503 (default); queueing is an opt-in
+    queueTimeoutMs: 10_000,
+    retryAfterSeconds: 1, // Retry-After on 503s; 0 omits the header
+  },
+  trustedHosts: ["example.com", "*.example.com"], // forged Host → 403 pre-routing
+  unknownMethodAs404: true, // unknown verbs → 404 instead of 501
+  onStreamError: (error, c) => log(error, c.path), // observe state-mode stream failures
+});
+
+app.listen({ port: 3000, signals: true }); // SIGTERM/SIGINT → drain; 2nd signal force-closes
+
+app.get("/readyz", (c) => (app.isDraining() ? c.text("draining", 503) : c.text("ready")));
+app.onShutdown(async () => {
+  await flushMetrics(); // runs post-drain, before close() resolves; failures contained
+});
+
+const status = await app.close({ drain: 10_000, shutdownTimeout: 10_000 });
+// → { timedOut: false, inFlight: 0 }
+```
+
+- `drain` (default 30s; `0` = force now, `Infinity` = wait forever) bounds
+  in-flight requests; `shutdownTimeout` (default 10s, `0` disables) bounds
+  the `onShutdown` hooks — an over-time hook is logged and shutdown
+  continues. `close()` is idempotent (same promise on repeat calls).
+- `app.isDraining()` flips the moment `close()` begins — point your readiness
+  probe at it; `app.inFlight` is the admitted-and-unsettled count.
+- `overload.handler(req, reason)` customizes the 503 (no context exists at
+  admission time); `overload.strategy` swaps the whole saturated path —
+  `failFastAdmission` / `queueAdmission` (both exported from `keala`) are
+  the built-ins.
+- `pooling: true` recycles per-request contexts for allocation-sensitive
+  embedding only: it is a measured net throughput **loss** today (e2e
+  −11% to −38%; `docs/HOTPATH-R4-7-POOLING-AB.md` in the repo) — opt in
+  despite the cost, never for speed.
+- Full production checklist — shutdown windows vs k8s grace periods,
+  transport body caps (Bun 128MB default vs Node's explicit
+  `maxRequestBodySize`), retries/circuit-breaking, containers:
+  [docs/DEPLOY.md](https://github.com/renxqoo/keala/blob/main/docs/DEPLOY.md).
 
 ## Why it's fast
 
@@ -420,23 +502,31 @@ app.onError((error, c) => {
 
 ### Application
 
-| Member                                                                         | Description                                                                                                                                                     |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Keala(options?)`                                                          | The app class (koa-style `new`). Options: `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `env`                                                                |
-| `app.use(...mw)`                                                               | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                      |
-| `app.use(path, ...mw)`                                                         | Exact static or trailing-`/*` scoped middleware; applies to in-scope 404/405 too                                                                                |
-| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`            | Route registration; named form `app.get(name, path, ...handlers)`                                                                                               |
-| `app.on(method, path, ...handlers)`                                            | Any method, any case                                                                                                                                            |
-| `app.mount(prefix, routerOrApp)`                                               | Table-merge mount (404s fall through); applicable sub-app global/scoped middleware is prepended                                                                 |
-| `app.param(name, mw)`                                                          | Middleware for every route capturing that param                                                                                                                 |
-| `app.handle(request, runtime?)`                                                | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote?, env? }` feeds `c.ip` and websocket upgrades                            |
-| `app.listen(port?, host?, cb?)`                                                | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node` |
-| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`  | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                    |
-| `app.onError(mapper)` / `app.notFound(fn)`                                     | Single-slot error mapper (`Response \| void`) and custom 404; `env: "test"` suppresses the default console fallback                                             |
-| `app.decorate(key, value)`                                                     | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                              |
-| `app.ws(path, handlers)`                                                       | WebSocket route (Bun only; a duplicate path throws at setup)                                                                                                    |
-| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)` | Redirect routes and named-URL building                                                                                                                          |
-| `app.callback()`, `app.toJSON()`                                               | Adapters and introspection                                                                                                                                      |
+| Member                                                                                            | Description                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new Keala(options?)`                                                                             | The app class (koa-style `new`). Options (11): `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `env`, `requestTimeout`, `overload`, `trustedHosts`, `unknownMethodAs404`, `pooling`, `onStreamError` (see [Lifecycle & overload](#lifecycle--overload)) |
+| `app.use(...mw)`                                                                                  | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                                                                                                               |
+| `app.use(path, ...mw)`                                                                            | Exact static or trailing-`/*` scoped middleware; applies to in-scope 404/405 too                                                                                                                                                                         |
+| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`                               | Route registration; named form `app.get(name, path, ...handlers)`                                                                                                                                                                                        |
+| `app.on(method, path, ...handlers)`                                                               | Any method, any case                                                                                                                                                                                                                                     |
+| `app.mount(prefix, routerOrApp)`                                                                  | Table-merge mount (404s fall through); applicable sub-app global/scoped middleware is prepended                                                                                                                                                          |
+| `app.param(name, mw)`                                                                             | Middleware for every route capturing that param                                                                                                                                                                                                          |
+| `app.handle(request, runtime?)`                                                                   | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote? }` feeds `c.ip` and websocket upgrades                                                                                                                           |
+| `app.listen(port?, host?, cb?)`                                                                   | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node`                                                                                          |
+| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`                     | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                                                                                                             |
+| `app.onError(mapper)` / `app.notFound(fn)`                                                        | Single-slot error mapper (`Response \| void`) and custom 404; `env: "test"` suppresses the default console fallback                                                                                                                                      |
+| `app.decorate(key, value)`                                                                        | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                                                                                                       |
+| `app.ws(path, handlers)`                                                                          | WebSocket route (Bun only; a duplicate path throws at setup). `origin: string[] \| (c) => boolean` checks the upgrade Origin — mismatch 403                                                                                                              |
+| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)`                    | Redirect routes and named-URL building                                                                                                                                                                                                                   |
+| `app.close({ drain, shutdownTimeout })`, `app.isDraining()`, `app.inFlight`, `app.onShutdown(fn)` | Graceful shutdown surface — see [Lifecycle & overload](#lifecycle--overload)                                                                                                                                                                             |
+| `app.callback()`, `app.toJSON()`                                                                  | Adapters and introspection                                                                                                                                                                                                                               |
+
+Units are not uniform across the surface — check twice: `requestTimeout`,
+`overload.queueTimeoutMs`, `rateLimit({ windowMs })`, `cache({ ttl })` and
+the `timeout(ms)` middleware count **milliseconds**; `listen({ idleTimeout })`,
+the `retryAfterSeconds` knobs (`rateLimit`/`overload`) and cookie `maxAge`
+count **seconds**. `bodyLimit(bytes)` and `timeout(ms)` each take a single
+positional argument.
 
 ### Context
 
@@ -444,13 +534,15 @@ One flat object — request side, response side and sugar share it:
 
 - Request (read-only — the request is the client's fact): `raw method url
 path query(name) queries(name) querystring search URL host protocol secure
-ip origin href idempotent reqLength headers get/header is accepts
+ip origin href idempotent reqLength headers header is accepts
 acceptsEncodings params state signal runtime`
 - Response: `status body type length etag lastModified attachment
 redirect(url, code?) setHeader append remove has resHeader res cookies`
 - Sugar: `text/json/html(body, status?, headers?)` — return them straight from
   the handler
-- `c.throw(status, msg?, props?)`, `c.assert(cond, status, ...)`
+- `c.throw(status, msg?, props?)` (4xx/5xx only — see
+  [Error handling](#error-handling-onerror-notfound)),
+  `c.assert(cond, status, ...)`
 
 ### Cookies
 
@@ -510,8 +602,8 @@ bun run soak        # memory soak: in-process + HTTP + concurrent, heap must sta
 bun run bench       # vs hono / koa / fastify / raw / Go benchmark harness
 ```
 
-- **1800+ tests green under Node and real Bun runtimes** (91 files,
-  `bun run test` + `bun run test:bun`), including:
+- **2000+ tests green under Node and real Bun runtimes**
+  (`bun run test` + `bun run test:bun`), including:
   - `test/adapters-node.test.ts` — the Node adapter over real sockets in BOTH
     runtimes (bridging, set-cookie fanout, streaming, HEAD, 400/500/501
     failure surfaces)
@@ -548,7 +640,7 @@ src/
   http/         status table, error factory, conditional-request primitives
   negotiation/  accepts/* with q-values, type-is
   router/       static Map + pattern trie (multi-variant params) + router factory
-  middleware/   per-request pipeline factories (16) + index.ts aggregate entry
+  middleware/   per-request pipeline factories (19) + index.ts aggregate entry
   plugins/      setup-time installers (body-parser)
   helpers/      in-handler utilities (streams/SSE, html, password)
   adapters/     bun.ts (Bun.serve glue), node.ts (official node:http adapter)

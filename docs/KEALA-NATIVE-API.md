@@ -4,7 +4,8 @@
 > R411 人体工学四项(0.7.2,2026-09-05:bodyOf / c.get 退役 / params
 > 非空 / routePath)。
 > 本文是 keala 的**完整 API 参考**:每个 API 的签名、用法,以及与 Hono
-> 的逐项差异与**为什么**。设计史(裁决记录、性能实测、验收)保留在
+> 的逐项差异与**为什么**。底层原语(根入口导出的 compose/cookie
+> 签名/编译器等)在第七部分;设计史(裁决记录、性能实测、验收)保留在
 > 第六部分。对照源:keala `src/`(0.7.2)与 Hono 4.13.5
 > (`.parity/hono/src/`,逐条核对;请求面另对照 hono.dev 官方文档)。
 
@@ -60,7 +61,9 @@ process.on("SIGTERM", () => {
 ## 第二部分 Context 完整参考
 
 一个请求一个扁平 context 对象——请求侧、响应侧、糖共用一个原型,
-没有 `c.req` 门面(Hono 有;为什么见第五部分 D2)。
+核心请求面没有 `c.req` 门面(Hono 有;为什么见第五部分 D2)。唯一的
+例外是 bodyParser 插件安装的 `c.req` **正文**门面——经类型化访问器
+`bodyOf(c)` 使用(见第四部分)。
 
 ### 2.1 请求侧(全部只读)
 
@@ -123,6 +126,8 @@ c.etag = "v1"; // 自动加引号:'"v1"'(已带 " 或 W/ 则原样)
 c.lastModified = new Date(); // Date 或可解析字符串,否则 TypeError
 
 c.setHeader("X-Trace", "abc"); // 单值;对象形式 c.setHeader({ A: "1", B: 2 })
+// UX-11:undefined/null 值静默忽略(不写入);清除已写的头用 c.remove,
+// 显式空串 c.setHeader(k, "") 会覆盖为空值
 c.append("Vary", "Origin"); // 多值追加
 c.remove("X-Unwanted"); // 删除
 c.has("X-Trace"); // boolean(提交后读穿到已提交 Response)
@@ -131,7 +136,7 @@ c.attachment("report.pdf"); // Content-Disposition + 按扩展名推断类型
 c.attachment("报表.bin", { fallback: "report.bin", type: "inline" });
 
 c.redirect("/login"); // 302 + Location,空体
-c.redirect("/gone", 301); // 显式码必须 3xx 整数,否则 TypeError
+c.redirect("/gone", 301); // 显式码接受任意 3xx 整数并按注册意图保留;非 3xx 整数 TypeError
 // 开放重定向防护:`//evil.com`、`https:/evil.com` 会被中和为同源路径
 // c.redirect 之前已 staged 的 3xx(如 c.status=308)保留,不降级 302
 ```
@@ -227,8 +232,16 @@ app.onError((error, c) => {
   return c.json({ error: error.code ?? "internal" }, error.status);
 });
 // mapper 返回 undefined → 走内置信封(prod 隐藏 5xx 消息)
-// app.notFound(handler):未匹配路由;返回 Response 定制 404
+// app.notFound(handler):未匹配路由;返回 Response 或状态式写入
+// (c.status/c.body)定制 404——但不可 throw,throw 落入通用 500
 ```
+
+**`c.throw` 只接受 4xx/5xx**:传入 1xx-3xx 抛 `TypeError` 而不是
+`HttpError`(信息与重定向不是错误;`c.assert` 同规)。重定向用
+`c.redirect(url, code?)` 或 `app.redirect(source, dest, code)`——
+code 接受任意 3xx 整数并按注册意图原样保留（304/306/309+ 不会被静默改写；
+`isRedirectStatus` 的 {300-303, 305, 307, 308} 是已指派语义集，供隐式
+回退判定用）。
 
 ### 2.5 Cookies(内置签名 + 密钥轮换)
 
@@ -298,7 +311,7 @@ new Keala({
 app.get("/users/:id", handler); // 路径参数;?x? 可选段;* 通配
 app.get("/files/*", handler); // 前缀通配
 app.get("named-route", "/report", handler); // 命名路由(名在前;运行时 c.routeName 可读)
-app.post / put / patch / delete /head/inoopst / all("/x", ...handlers);
+app.post / put / patch / delete / head / options / all("/x", ...handlers);
 app.on("TRACE", "/x", handler);
 app.use(authMiddleware); // 全局洋葱层
 app.use("/admin/*", adminOnly); // 路径作用域层
@@ -326,6 +339,8 @@ const authorize = async (c, next) => {
 
 ```ts
 app.ws("/chat/:room", {
+  origin: ["https://app.site"], // 升级前校验 Origin;数组或 (c) => boolean,
+  // 不匹配 → 403(浏览器 WS 握手带 Origin 但过不了 csrf()——那是 HTTP 中间件)
   open(ws, c) {
     broadcast(c.params["room"], "joined");
   },
@@ -346,6 +361,14 @@ app.ws("/chat/:room", {
 // ws 仅 Bun;Node 侧升级请求答 501
 ```
 
+**Origin 防护(SEC-2)**:浏览器的 WS 握手不能自定义头、不带 CSRF
+token,`csrf()`(Origin/Referer 校验中间件)罩不住它——跨站页面可以
+让浏览器向你的 ws 端点发起握手。升级请求的 Origin 白名单因此是 ws
+路由的一等选项:`origin: string[]` 精确匹配(大小写不敏感;**缺失
+Origin 的握手直接拒绝**——浏览器握手必带 Origin,fail closed),或
+`(c) => boolean` 自担全部裁决;校验发生在升级之前,不匹配回答 403,
+不配置则不做 Origin 约束(旧行为)。
+
 ### 3.4 原生下沉(Bun 热路由)
 
 ```ts
@@ -360,6 +383,14 @@ app.sink(
 // 守卫:与下沉路径冲突的 JS 路由/未声明透明的中间件在注册期抛错
 // listen({ nativeRoutes: false }) 强制 JS-only
 ```
+
+`{ dir }` 下沉的目录树由 Bun 原生路由表直接服务,`serveStatic` 的
+运行期忽略式防御(dotfiles、symlink 拒绝)盖不住原生表——因此每次
+构建原生路由表(`listen()`、listen 之后的 `sink()`、每次
+`reloadNativeRoutes()`)都会重新扫描目录:发现 dotfile(`.well-known`
+豁免)或 symlink 即抛 `TypeError` 并列出违规路径(SEC-1)。要发布
+dotfile 的根目录请继续用 `serveStatic({ dotfiles: "allow" })` 的普通
+路由。
 
 ### 3.5 监听与停机
 
@@ -383,7 +414,11 @@ server.stop();
 server.stop(true); // true = 丢弃活动连接
 server.reload({ routes }); // 热更新原生路由表
 
-await app.close({ drain: 10_000 }); // → { timedOut: false, inFlight: 0 }
+await app.close({ drain: 10_000, shutdownTimeout: 10_000 });
+// → { timedOut: false, inFlight: 0 }
+// drain:默认 30s(0 立即强停;Infinity 无限等待)
+// shutdownTimeout:onShutdown 钩子的总预算,默认 10s(0 禁用);
+//   超时的钩子记录日志后继续——停机不因一个卡死的清理钩子挂死
 app.isDraining(); // readiness 探针(排水开始即 true)
 app.inFlight; // 在途计数(过载容量视图)
 
@@ -405,7 +440,7 @@ keepAliveTimeout;`http` 选项透传 node:http ServerOptions)。Bun-only 键
 ```ts
 secureHeaders({ hsts: 31536000 })   // nosniff/XFO/Referrer-Policy 默认;HSTS 可选
 requestId()                         // c.state.requestId + X-Request-ID 回显
-timing()                            // Server-Timing 总时延;c.state.timingMark(n) 记段
+timing()                            // Server-Timing 总时延;timingMark(name) 记段(见下方代码块)
 logger({ write: line => … })        // 每请求一行,含失败
 cors({ origin: ["https://app.com"], allowCredentials: true })  // 白名单必填
 csrf()                              // Origin/Referer 校验(状态变更请求)
@@ -420,7 +455,7 @@ bearerAuth({ verify: async t => user|false })
 bodyLimit(bytes)                    // 413 硬上限
 timeout(ms)                         // 路由级超时
 serveStatic({ root, index, prefix, followSymlinks, dotfiles })  // HEAD/Range/条件请求
-validator(schema)                   // Standard Schema(zod4/valibot/typebox)→ c.valid
+validator(schema)                   // Standard Schema(zod4/valibot/typebox)→ validOf<T>(c) 取值
 ```
 
 ```ts
@@ -432,6 +467,23 @@ app.post("/echo", async (c) => {
 });
 // 全部 reader 直达:bodyOf(c).text() / .arrayBuffer() / .blob() / .formData()
 // 未装插件时 bodyOf 抛带修复指引的 TypeError(不再是无指引的 undefined.req)
+
+// validator 的解析结果:validOf<T>(c) 类型化取值(c.valid 运行时存在,
+// 但框架层类型是 unknown——不要裸用):
+// import { validator, validOf } from "keala/middleware";
+app.post("/users", validator(userSchema), (c) => {
+  const user = validOf<{ name: string }>(c);
+  return c.json({ created: user.name }, 201);
+});
+
+// timing() 的记段钩子挂在 c.state 上——c.state 是 Record<string, unknown>,
+// 记段时窄化一次类型即可:
+app.use(timing());
+app.get("/report", (c) => {
+  const mark = c.state["timingMark"] as ((name: string) => void) | undefined;
+  mark?.("db"); // Server-Timing: db;dur=…(total 由中间件自己补)
+  return c.text("done");
+});
 
 // 流式助手(src/helpers)
 return stream(c, async (w) => {
@@ -576,16 +628,27 @@ koa 的人体工学(状态优先、props 收拢 expose/code/headers),少一个
 // Hono                              // keala
 c.set("message", "hi");              c.state.message = "hi";
 const m = c.get("message");          const m = c.state.message;
-// 类型化工厂:                       // 类型化扩展:
-const mw = createMiddleware<         app.decorate("db", pool);
-  { Variables: { msg: string } }>(…) c.db.query(…);   // 每个 context 固定成员
-const m = c.var.msg;
+// 类型化:泛型工厂 + 字符串键        // 类型化:声明合并 + decorate
+const mw = createMiddleware<         import { Keala, createMiddleware,
+  { Variables: { msg: string } }>(…);   type ContextExtensions } from "keala";
+const m = c.var.msg;                 declare module "keala" {
+                                       interface ContextExtensions { db: Pool }
+                                     }
+                                     const app = new Keala();
+                                     app.decorate("db", pool);
+                                     c.db.query(…);        // c.db 强类型
+                                     // 第三方中间件收窄 context:
+                                     const mw = createMiddleware<{ db: Pool }>();
 ```
 
 **为什么**:Hono 需要字符串键 + 泛型工厂给中间件变量上类型,读侧分
 `c.get`(写读)与 `c.var`(只读)两套。keala:`c.state` 是 null 原型
-普通对象(首次触碰才分配,零状态请求零成本),类型自然推导;跨中间件
-的**强类型**服务走 `decorate`(app 级一次声明)。Hono 的 `c.env`(
+普通对象(首次触碰才分配,零状态请求零成本),类型自然推导;应用级
+**强类型**服务走 `decorate` + `ContextExtensions` 声明合并——`c.db`
+的类型真的就是 `Pool`,不是 `unknown`;发布第三方中间件时用
+`createMiddleware<{ db: Pool }>()` 把依赖的扩展键收窄进 handler 签名
+(对应 Hono 的 `createMiddleware<{ Variables: … }>`,键的来源是全局
+声明合并,而非每个调用点重复的泛型参数)。Hono 的 `c.env`(
 平台绑定,如 Cloudflare KV)在 keala 无对应——keala 不面向 edge 平台
 绑定模型,平台资源经 `decorate` 或 `c.state` 注入。
 
@@ -738,11 +801,187 @@ etag 开销(R4.10 修复后):30k 行 JSON,Node +0.11ms、Bun +0.05ms
 
 1. 速查表即全 API:表面锁测试通过(§2.3;0.7.2 删 `get` 行,params/
    routePath/routeName 是直读槽位不计入表面锁)。
-2. 全门禁绿:Node 2327 / Bun 2271 测试、coverage ≥90 底线
-   (94.79/90.68/95.6/96.39)、build、soak(双运行时)/example/
+2. 全门禁绿:2000+ 用例在 Node 与 Bun 双运行时全绿、coverage ≥90
+   底线、build、soak(双运行时)/example/
    process:check;R411 抽查:命中路径 +2 属性写零位移(stash 前后
    对照,机器噪声带内)。
 3. 契约测试:提交后写入抛、请求只读、redirect 码校验、405/501 空体、
    错误漏斗防护头收割(R4.10 审计 30 项回归锁;R411 十项:
    test/r411-api-ergonomics.test.ts)。
 4. `docs/MIGRATION-0.7.md` 覆盖每个删除项的替代写法(§10 为 0.7.2)。
+
+---
+
+## 第七部分 底层原语(`keala` 根入口)
+
+框架赖以构建、且**稳定导出**的底层件。它们不是内部实现细节——嵌入式
+产品、测试替身与自定义中间件直接消费这些原语,语义被测试锁定。
+
+### 7.1 洋葱原语:`compose` / `direct` / `NOOP_TAIL`
+
+`compose(handlers)` 在注册期把中间件数组编译成嵌套调用链(每层一个小
+`next` 闭包,双 `next()` 抛错);`direct(handler)` 是无守卫的单 handler
+链——无中间件路由的快路径;`NOOP_TAIL` 是空尾巴。handler 返回的
+Response 由链 commit 进 `_res` 槽(最后提交者赢)。
+
+```ts
+import { compose, direct, NOOP_TAIL, type MiddlewareContext } from "keala";
+
+const chain = compose<MiddlewareContext>([
+  async (c, next) => {
+    await next(); // 洋葱:下游跑完再继续
+  },
+  (c) => {
+    c.state["ran"] = true; // 返回 void = 不提交
+  },
+]);
+const mc: MiddlewareContext = { state: {}, _res: undefined };
+await chain(mc, NOOP_TAIL);
+mc._res; // undefined —— 没有人提交 Response
+
+const solo = direct<MiddlewareContext>((c) => new Response("hi"));
+await solo(mc, NOOP_TAIL);
+mc._res; // Response("hi") —— 返回值被 commit 进槽位
+```
+
+### 7.2 Cookie 原语:`signCookie` / `unsignCookie` / `parseCookies` / `serializeCookie`
+
+`c.cookies` 背后的四个纯函数。签名与 Keygrip 格式兼容(`value.signature`,
+HMAC-SHA256);`unsignCookie` 恒时比较、任一 key 可验(密钥轮换);
+`parseCookies` 返回 null 原型 Map;`serializeCookie` 对名/值做 RFC 6265
+校验,违规抛 TypeError(响应拆分防线)。
+
+```ts
+import { signCookie, unsignCookie, parseCookies, serializeCookie } from "keala";
+
+const signed = signCookie("session-data", "secret-key"); // "session-data.<b64url-hmac>"
+const ok = unsignCookie(signed, ["new-key", "secret-key"]); // "session-data";验签失败 false
+
+const jar = parseCookies('a=1; b="x%20y"'); // null 原型 { a: "1", b: "x y" }
+
+const header = serializeCookie("sid", "v", { httpOnly: true, maxAge: 3600, path: "/" });
+// "sid=v; Max-Age=3600; Path=/; HttpOnly"
+```
+
+### 7.3 服务器引导:`startBunServer`
+
+`app.listen()` 的底层:为应用启动 `Bun.serve`(fetch/error/websocket/
+原生路由表全部在此接线),返回 Bun 的 `Server` 句柄。第 4 参可注入
+serve 实现——测试里替换 Bun.serve 而不动应用代码。
+
+```ts
+import { Keala, startBunServer } from "keala";
+
+const app = new Keala();
+const server = startBunServer(app, { port: 3000, signals: true });
+server.stop(); // 与 app.listen() 返回的句柄同型(reload/stopGraceful)
+```
+
+### 7.4 准入策略:`failFastAdmission` / `queueAdmission`
+
+`overload.strategy` 的两个内建值,显式注入用。默认选择是隐式的:
+`maxQueue > 0` 排队,否则 fail-fast——注入可覆盖(如 maxQueue > 0 时
+仍拒绝)。`failFastAdmission` 在到顶瞬间拒绝;`queueAdmission` FIFO
+排队至 `maxQueue`,槽位释放时同步转移,等待者超时/断开/排水即离队。
+
+```ts
+import { Keala, failFastAdmission } from "keala";
+
+const app = new Keala({
+  overload: {
+    maxConcurrency: 512,
+    maxQueue: 100, // 默认会排队——
+    strategy: failFastAdmission, // 注入后显式 fail-fast,忽略队列
+  },
+});
+```
+
+### 7.5 路由编译:`compilePattern`
+
+把路径模式编译为段 IR(静态/参数/通配 + 自定义正则),trie 与快速
+matcher 共用;畸形模式在注册前抛 TypeError。`isStatic` 决定是否进
+静态 Map,`isSimple` 识别"静态头 + 朴素参数"的快路径形态。
+
+```ts
+import { compilePattern } from "keala";
+
+const ir = compilePattern("/users/:id(\\d+)/files/*");
+// segments: static "users" → param "id"(regex ^(?:\d+)$) → static "files" → wildcard
+ir.isStatic; // false —— 含动态段,不进静态 Map
+compilePattern("/x/:bad([unclosed"); // TypeError:畸形模式注册前即失败
+```
+
+### 7.6 有界正文读取:`readBodyLimited`
+
+`createBodyParser` 与 `validator` 底下的一次性有界读取:声明长度超限
+快败(413),流式读取在边界处中止。自定义读取器(非 JSON/表单的正文
+协议)直接用它,不必装插件。
+
+```ts
+import { readBodyLimited } from "keala";
+
+app.post("/custom", async (c) => {
+  const bytes = await readBodyLimited(c, 1 << 20); // 1MiB 上限
+  return c.json({ received: bytes.byteLength });
+});
+```
+
+### 7.7 HTML 转义:`escapeHtml`
+
+`html` 标签模板使用的同一张转义表(`& < > " '` 五字符),独立导出——
+不在标签模板里也要转义时(拼属性、日志脱敏)用它,别手写。
+
+```ts
+import { escapeHtml } from "keala";
+
+escapeHtml(`<b>"x"&'y'</b>`);
+// "&lt;b&gt;&quot;x&quot;&amp;&#39;y&#39;&lt;/b&gt;"
+```
+
+### 7.8 空闲超时:`disableIdleTimeout`
+
+对当前请求关闭 Bun 的每请求空闲超时(`server.timeout(req, 0)`)——
+`streamSSE`/`streamText` 内建使用;自己手搭长响应时也需要。无 Bun
+服务器句柄时(Node、测试)是 no-op。
+
+```ts
+import { disableIdleTimeout, streamText } from "keala";
+
+app.get("/tail/:id", (c) => {
+  disableIdleTimeout(c); // 否则 Bun 默认 10s 掐断空闲流
+  return streamText(c, async (w) => {
+    /* 长连接写 */
+  });
+});
+```
+
+### 7.9 密码哈希器:`pbkdf2PasswordHasher`
+
+默认哈希器本体:WebCrypto PBKDF2-SHA-256、600k 轮、16 字节盐、恒时
+比较,产物 `pbkdf2$600000$<salt b64>$<key b64>`(Bun/Node 可移植)。
+显式传入 `hashPassword`/`verifyPassword` 以固定算法;verify 对轮数
+设界(1k-5M)——敌意哈希串不能把校验变成 CPU 炸弹,畸形数据一律
+false(失败关闭)。
+
+```ts
+import { hashPassword, pbkdf2PasswordHasher, verifyPassword } from "keala";
+
+const hasher = pbkdf2PasswordHasher();
+const hash = await hashPassword(pw, hasher); // 算法显式固定
+await verifyPassword(hash, pw, hasher); // true/false;坏数据 false
+```
+
+### 7.10 状态码工具:`statusMessage` / `isValidErrorStatus`
+
+`statusMessage(code)` 返回 IANA 短语(未知码 `""`);`isValidErrorStatus`
+只认 400-599 整数——`c.throw` 的状态校验即它。同族还导出
+`isEmptyStatus`(204/205/304,无体无内容头)与 `isRedirectStatus`
+(300-303/305/307/308)。
+
+```ts
+import { isValidErrorStatus, statusMessage } from "keala";
+
+statusMessage(429); // "Too Many Requests";statusMessage(599) === ""
+isValidErrorStatus(302); // false —— 重定向不是错误状态
+isValidErrorStatus(429); // true
+```
