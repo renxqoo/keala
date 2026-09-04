@@ -127,6 +127,7 @@ const CONTEXT_DEFAULTS = {
   ipValue: null,
   allowedValue: null,
   params: null,
+  querystringValue: null,
   statusValue: 404,
   messageValue: "",
   headersRecord: null,
@@ -242,6 +243,10 @@ export const resetContext = (
 ): Context => {
   sweepForeignKeys(c);
   clearRequestSlots(c);
+  // clearRequestSlots resets `flags` to 0 as an own property, shadowing the
+  // dev FLAG_DEV_CHAIN the app prototype installs — without this restore,
+  // every RECYCLED context silently loses stall tracing in development.
+  if (c.appValue.env === "development") c.flags |= FLAG_DEV_CHAIN;
   c.rawRequest = raw;
   if (runtime !== undefined) c.runtimeValue = runtime;
   return c;

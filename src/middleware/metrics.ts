@@ -71,7 +71,7 @@ const createRegistry = (): MetricsRegistry => {
     out += "# TYPE keala_in_flight gauge\n";
     out += `keala_in_flight ${snap.inFlight}\n`;
     out += "# HELP keala_request_duration_ms Wall-clock request duration.\n";
-    out += "# TYPE keala_request_duration_ms summary\n";
+    out += "# TYPE keala_request_duration_ms histogram\n";
     const bounds = [...snap.durationMs.buckets.entries()];
     for (const [bound, count] of bounds) {
       const label = bound === Infinity ? "+Inf" : String(bound);

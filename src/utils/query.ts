@@ -150,7 +150,11 @@ const findQueryEntry = (
  */
 const wireForms = (name: string): string[] => {
   const encoded = encodeURIComponent(name);
-  return encoded === name ? [name] : [name, encoded];
+  // `+` is the form-encoding of a space IN KEYS as well: `?user+name=1` is
+  // exactly what a browser sends for a field named "user name".
+  const plus = name.includes(" ") ? name.replaceAll(" ", "+") : null;
+  if (encoded === name) return plus === null ? [name] : [name, plus];
+  return plus === null ? [name, encoded] : [name, encoded, plus];
 };
 
 /** Decode one targeted value (the shared `decode` early-outs on plain runs). */

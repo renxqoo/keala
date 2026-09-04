@@ -25,6 +25,7 @@ export interface ContextState {
   /** Path parameters set by the router; null when unmatched. */
   params: Record<string, string> | null;
   // response side
+  querystringValue: string | null;
   statusValue: number;
   messageValue: string;
   headersRecord: HeaderMap | null;

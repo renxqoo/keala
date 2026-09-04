@@ -164,6 +164,11 @@ export class Router {
   }
 
   redirect(source: string, destination: string, code = 301): Router {
+    if (!Number.isInteger(code) || code < 300 || code > 399) {
+      // Eager contract (same as registration.ts): a bad code would 500 on
+      // every request or silently coerce to 302 at c.redirect time.
+      throw new TypeError(`redirect() code must be a 3xx integer, got ${code}`);
+    }
     // A destination PATH carrying `:params` is rebuilt from the matched
     // route's captured values (koa-router behavior); absolute URLs and
     // scheme-relative targets are verbatim Locations.

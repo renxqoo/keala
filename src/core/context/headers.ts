@@ -153,11 +153,22 @@ export const varyResponseHeader = (c: ContextState, field: string): void => {
   setResponseHeader(c, "Vary", tokens.join(", "));
 };
 
+// Post-commit reads fall back to the committed Response's own headers:
+// `if (!c.has("x-frame-options")) c.set(...)` guards must see what the
+// handler's Response already carries, or they silently clobber the
+// developer's explicit value with a default.
+const committedHeader = (c: ContextState, field: string): string | undefined => {
+  const res = c._res;
+  if (res === undefined) return undefined;
+  const value = res.headers.get(field);
+  return value === null ? undefined : value;
+};
+
 export const hasResponseHeader = (c: ContextState, field: string): boolean =>
-  c.headersRecord?.[field.toLowerCase()] !== undefined;
+  c.headersRecord?.[field.toLowerCase()] !== undefined || committedHeader(c, field) !== undefined;
 
 export const responseHeaderValue = (c: ContextState, field: string): string => {
   const raw = c.headersRecord?.[field.toLowerCase()];
-  if (raw === undefined) return "";
-  return Array.isArray(raw) ? raw.join(", ") : raw;
+  if (raw !== undefined) return Array.isArray(raw) ? raw.join(", ") : raw;
+  return committedHeader(c, field) ?? "";
 };

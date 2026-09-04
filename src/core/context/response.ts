@@ -138,6 +138,9 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     }
   },
   get message(): string {
+    // Commit-aware like `status`: a returned Response's reason phrase is
+    // what observers should see after `await next()`.
+    if (this._res !== undefined) return this._res.statusText;
     return this.messageValue || statusMessage(this.statusValue);
   },
   set message(value: string) {
@@ -227,6 +230,12 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     clearTouchedLength(this);
   },
   get type(): string {
+    // Commit-aware: a returned Response's media type wins post-commit.
+    if (this._res !== undefined) {
+      const committed = this._res.headers.get("content-type");
+      if (committed !== null) return committed.split(";")[0]?.trim().toLowerCase() ?? "";
+      return "";
+    }
     const raw = this.headersRecord?.["content-type"];
     if (raw === undefined) return "";
     const value = Array.isArray(raw) ? (raw.at(-1) ?? "") : raw;
@@ -249,6 +258,12 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     stagedHeadersOf(this)["content-type"] = full;
   },
   get length(): number | undefined {
+    // Commit-aware: the committed Response's declared length is the wire
+    // truth once a handler returned one.
+    if (this._res !== undefined) {
+      const committed = this._res.headers.get("content-length");
+      if (committed !== null) return Number.parseInt(committed, 10) || 0;
+    }
     const raw = this.headersRecord?.["content-length"];
     if (raw !== undefined) {
       const value = Array.isArray(raw) ? (raw[0] ?? "") : raw;

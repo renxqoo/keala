@@ -30,6 +30,8 @@ export interface NodeServerHandle {
   stopGraceful(options: GracefulStopOptions): Promise<{ timedOut: boolean }>;
 }
 
+const NODE_LISTEN_KEYS = new Set(["port", "hostname", "http", "signals", "onServeError"]);
+
 export interface NodeListenOptions {
   /** Listen port. Default 3000 (0 picks a free port). */
   port?: number;
@@ -175,6 +177,15 @@ const writeResponse = (
   // Never emit ambiguous framing, including for a foreign streaming Response.
   const hasTransferEncoding = out.hasHeader("transfer-encoding");
   if (hasTransferEncoding) out.removeHeader("content-length");
+  // A foreign Response we stream cannot have its declared content-length
+  // verified without consuming the body — an explicitly staged length that
+  // disagrees with the actual body desyncs keep-alive framing (the next
+  // response's bytes land inside this one's declared body). The runtime
+  // does not expose CL for string bodies, so a present header here was
+  // staged by user code; drop it and let Node frame the stream (chunked).
+  if (facts === undefined && res.body !== null && out.hasHeader("content-length")) {
+    out.removeHeader("content-length");
+  }
   if (facts === undefined && res.body === null) {
     out.end();
     return;
@@ -201,6 +212,15 @@ export const startNodeServer = (
   options: NodeListenOptions = {},
   onListen?: () => void,
 ): NodeServerHandle => {
+  for (const key of Object.keys(options)) {
+    if (!NODE_LISTEN_KEYS.has(key)) {
+      // The Bun-side listen() already refuses typos like `idleTimout`; the
+      // Node surface gets the same guard.
+      throw new TypeError(
+        `startNodeServer(): unknown option ${JSON.stringify(key)} — a typo here is silently ignored`,
+      );
+    }
+  }
   let address: { port: number; address: string } | null = null;
   let settled: (() => void) | null = null;
   let failed: ((error: Error) => void) | null = null;
@@ -382,7 +402,15 @@ export const startNodeServer = (
       address = { port: addr.port, address: addr.address };
     }
     settled?.();
-    if (onListen !== undefined) onListen();
+    if (onListen !== undefined) {
+      // Same containment as the Bun adapter: a throwing callback dies in
+      // the console, not as an uncaughtException inside 'listening'.
+      try {
+        onListen();
+      } catch (error) {
+        console.error("onListen callback threw:", error);
+      }
+    }
   });
   server.on("error", (error: Error) => {
     failed?.(error);

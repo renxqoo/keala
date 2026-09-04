@@ -26,6 +26,7 @@ import { FLAG_COMMITTED_HEADERS_APPLIED } from "./context/state.ts";
 import { createPlannedResponse, inheritResponseFacts } from "./response-plan.ts";
 import { isNativeRequestSource } from "./request-source.ts";
 
+/** Body-describing headers a 204/304 must not carry (RFC 9110 §8.6). */
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
 
 type HeaderEntries = [string, string][];
@@ -56,7 +57,6 @@ export const flattenHeaders = (record: HeaderMap): HeaderEntries => {
   return entries;
 };
 
-/** Response untouched: status never set explicitly and no body written. */
 const untouched = (c: Context): boolean => (c.flags & 1) === 0 && c.bodyValue === null;
 
 /**
@@ -71,11 +71,15 @@ const methodNotAllowed = (c: Context): Response | null => {
   const method = c.method.toUpperCase();
   const headers: HeaderMap = { allow: allowHeader };
   // koa parity: 405/501 carry the status-message body (HEAD stays bodiless).
-  const bodied = (status: number, fallback: string): Response =>
-    (c.directBodyResponseValue = new Response(statusMessage(status) || fallback, {
+  const bodied = (status: number, fallback: string): Response => {
+    // Post-next observers (logging, metrics by exact code) read c.status —
+    // the synthesized answer must be visible there, not only on the wire.
+    c.statusValue = status;
+    return (c.directBodyResponseValue = new Response(statusMessage(status) || fallback, {
       status,
       headers: { ...headers, "content-type": "text/plain; charset=utf-8" },
     }));
+  };
   if (!KNOWN_METHODS.has(method)) {
     // koa-router answers 501; unknownMethodAs404 opts into 404 instead.
     if (c.appValue.unknownMethodAs404) return null;
@@ -231,10 +235,7 @@ const jsonInit = (body: object, init: ResponseInit): Response =>
     ? (Response.json(body, init) as Response)
     : Response.json(body);
 
-/**
- * Build the Response from response state. `head` drops the body after
- * backfilling Content-Length — koa computes it from the would-be body.
- */
+/** Build the Response from response state (`head` backfills CL, drops body). */
 /**
  * Opt-in stream error observation: re-pump the body through a guard so a
  * producer failure reaches the app hook (the client just sees the stream end).

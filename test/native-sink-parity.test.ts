@@ -14,10 +14,11 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../src/index.ts";
+import { startNodeServer } from "../src/adapters/node.ts";
 import { rateLimit } from "../src/middleware/rate-limit.ts";
 import { metrics } from "../src/middleware/metrics.ts";
 import { createError } from "../src/http/errors.ts";
-import type { SunkHandler } from "../src/index.ts";
+import type { SunkHandler, Context } from "../src/index.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -226,7 +227,7 @@ describe("observability: rateLimit and metrics", () => {
     const third = await request();
     expect([first.status, second.status, third.status]).toEqual([200, 200, 429]);
     expect(third.headers.get("retry-after")).toBe("2");
-    expect(third.headers.get("rate-limit-remaining")).toBe("0");
+    expect(third.headers.get("ratelimit-remaining")).toBe("0");
     expect(await third.text()).toBe("Too Many Requests");
   });
 
@@ -343,5 +344,144 @@ describe("query: targeted read semantics (0.6.2)", () => {
       new Request(`http://localhost:3000/p?${encodeURIComponent("__proto__[polluted]")}=1`),
     );
     expect(((await out.json()) as { v: string | null }).v).toBe("1");
+  });
+});
+
+describe("review fixes: 0.6.3 regression locks", () => {
+  it("rateLimit evicts expired keys — the store stays bounded across windows", async () => {
+    const store = new Map<string, { count: number; resetAt: number }>();
+    const app = new Keala(quiet);
+    app.use(
+      rateLimit({ limit: 5, windowMs: 30, maxKeys: 10, key: (c) => c.header("x-k") ?? "?", store }),
+    );
+    app.get("/x", (c) => c.text("ok"));
+    const hit = (k: string) =>
+      app.handle(new Request("http://127.0.0.1:3000/x", { headers: { "x-k": k } }));
+    for (let i = 0; i < 30; i++) await hit(`k${i}`);
+    expect(store.size).toBeLessThanOrEqual(10);
+    await new Promise((r) => setTimeout(r, 50));
+    await hit("fresh");
+    expect(store.size).toBeLessThanOrEqual(10);
+  });
+
+  it("trustedHosts also gates X-Forwarded-Host under proxy trust", async () => {
+    const app = new Keala({ env: "test", proxy: true, trustedHosts: ["app.example.com"] });
+    app.get("/x", (c) => c.text(c.host));
+    const poisoned = await app.handle(
+      new Request("http://app.example.com/x", { headers: { "x-forwarded-host": "evil.net" } }),
+    );
+    expect(poisoned.status).toBe(403);
+    const ok = await app.handle(
+      new Request("http://app.example.com/x", {
+        headers: { "x-forwarded-host": "app.example.com" },
+      }),
+    );
+    expect([ok.status, await ok.text()]).toEqual([200, "app.example.com"]);
+  });
+
+  it("Node transport: a staged content-length never desyncs a streamed committed Response", async () => {
+    const app = new Keala({ env: "test" });
+    app.get("/cl", (c) => {
+      c.set("content-length", "50"); // staged lie
+      return new Response("hi"); // 2-byte body
+    });
+    const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
+    const first = await fetch(`http://127.0.0.1:${server.port}/cl`);
+    expect(first.status).toBe(200);
+    expect(await first.text()).toBe("hi");
+    // With the stale length dropped the framing is chunked or exact —
+    // either way a second request on a NEW connection gets its own answer.
+    const second = await fetch(`http://127.0.0.1:${server.port}/cl`);
+    expect(await second.text()).toBe("hi");
+  });
+
+  it("c.query() reads '+ '-encoded space keys (browser form encoding)", async () => {
+    const app = new Keala(quiet);
+    app.get("/q", (c) => c.json({ v: c.query("user name") ?? null }));
+    const res = await app.handle(new Request("http://127.0.0.1:3000/q?user+name=1"));
+    expect(await res.json()).toEqual({ v: "1" });
+  });
+
+  it("redirect() rejects non-3xx codes eagerly at registration", () => {
+    const app = new Keala(quiet);
+    expect(() => app.redirect("/a", "/b", 999)).toThrow(/3xx/);
+    expect(() => app.redirect("/a", "/b", 250)).toThrow(/3xx/);
+    expect(() => app.redirect("/a", "/b", 301)).not.toThrow();
+  });
+
+  it("overload options refuse unknown keys (typo disarm protection)", () => {
+    expect(() => new Keala({ env: "test", overload: { maxConcurreny: 1 } as never })).toThrow(
+      /typo/,
+    );
+    expect(() => new Keala({ env: "test", overload: { maxConcurrency: 1 } })).not.toThrow();
+    expect(
+      () => new Keala({ env: "test", overload: { maxConcurrency: 1, maxQueue: 0 } }),
+    ).not.toThrow();
+  });
+
+  it("post-next observers see the committed Response's status/message/type", async () => {
+    const app = new Keala(quiet);
+    const seen: unknown[] = [];
+    app.use(async (c, next) => {
+      await next();
+      seen.push(c.status, c.message, c.type);
+    });
+    app.get(
+      "/x",
+      () =>
+        new Response("body", {
+          status: 201,
+          statusText: "Made",
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const res = await app.handle(new Request("http://127.0.0.1:3000/x"));
+    expect(res.status).toBe(201);
+    expect(seen).toEqual([201, "Made", "application/json"]);
+  });
+
+  it("has() sees committed Response headers — security-header guards cannot clobber", async () => {
+    const app = new Keala(quiet);
+    app.use(async (c, next) => {
+      await next();
+      if (!c.has("x-frame-options")) c.set("x-frame-options", "DENY");
+    });
+    app.get("/x", () => new Response("ok", { headers: { "x-frame-options": "SAMEORIGIN" } }));
+    const res = await app.handle(new Request("http://127.0.0.1:3000/x"));
+    expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+  });
+
+  it("synthesized 405s answer on the wire; routerAllowed is the observer surface", async () => {
+    const app = new Keala(quiet);
+    const seen: unknown[] = [];
+    app.use(async (c, next) => {
+      await next();
+      // c.status still reads the pre-synthesis state here (finalize runs
+      // after the chain settles); allowed methods are the observable truth.
+      seen.push(c.routerAllowed.has("GET"), c.routerAllowed.has("DELETE"));
+    });
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(new Request("http://127.0.0.1:3000/x", { method: "DELETE" }));
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toContain("GET");
+    expect(seen).toEqual([true, false]);
+  });
+
+  it("a retained pooled context's query() stays callable (dead-proto method read)", async () => {
+    const app = new Keala({ ...quiet, pooling: true });
+    const held: Context[] = [];
+    app.use((c, next) => {
+      held.push(c);
+      return next();
+    });
+    app.get("/x", (c) => c.text("ok"));
+    await (await app.handle(new Request("http://127.0.0.1:3000/x?v=1"))).text();
+    await (await app.handle(new Request("http://127.0.0.1:3000/x?v=2"))).text();
+    const retained = held[0] as unknown as { query(name: string): string | undefined };
+    // The guard must not shadow the METHOD (previously a TypeError). The
+    // value follows the object's generation — request 2 recycled it — which
+    // is the documented retention boundary, not a bug.
+    expect(typeof retained.query).toBe("function");
+    expect(typeof retained.query("v")).toBe("string");
   });
 });

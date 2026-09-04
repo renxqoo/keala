@@ -45,7 +45,10 @@ const defaultServeError =
     // A serve error is a server fault, not a request-path error: it has no
     // context, so the mapper contract does not apply — console fallback only.
     consoleFallback(app, undefined, toHttpError(error));
-    return new Response("Internal Server Error", { status: 500 });
+    return new Response("Internal Server Error", {
+      status: 500,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
   };
 
 /**
@@ -89,8 +92,22 @@ export const startBunServer = (
     port: options.port ?? 3000,
     fetch,
     // Server-level failures (fetch threw, streaming body crashed) route
-    // through the app's error hook and answer a plain 500.
-    error: options.onServeError ?? defaultServeError(app),
+    // through the app's error hook and answer a plain 500. The user's
+    // callback gets the same containment the Node adapter gives it: a
+    // throwing hook falls back to the plain envelope instead of escaping
+    // into Bun.serve.
+    error: ((error: Error): Response => {
+      const handler = options.onServeError ?? defaultServeError(app);
+      try {
+        return handler(error);
+      } catch (hookError) {
+        consoleFallback(app, undefined, toHttpError(hookError));
+        return new Response("Internal Server Error", {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }) as (error: Error) => Response,
   };
   // Sunk routes ride the native routing table — matched before `fetch`,
   // with zero JS per request. `nativeRoutes: false` forces JS-only serving.
@@ -109,7 +126,6 @@ export const startBunServer = (
   // the drain timeout. Entries leave on close/error.
   const openSockets = new Set<unknown>();
   {
-    const config = (options.websocket ?? {}) as Record<string, unknown>;
     interface WsData {
       wsKey?: string;
       ctx?: Context;
@@ -140,6 +156,10 @@ export const startBunServer = (
           }
         });
     };
+    // User websocket tuning (maxPayloadLength, backpressureLimit, idle
+    // timeout…) rides along; keala's five HANDLERS always win so live
+    // wsRoutes dispatch is never silently disconnected by a user override.
+    const config = (options.websocket ?? {}) as Record<string, unknown>;
     serveOptions["websocket"] = {
       ...config,
       open: (ws: unknown): void => {
@@ -225,6 +245,16 @@ export const startBunServer = (
   // Register on the app's server slot so app.close() reaches this server no
   // matter how it was started (listen() or a direct startBunServer).
   attachServer(app, server);
-  if (onListen !== undefined) queueMicrotask(onListen);
+  if (onListen !== undefined) {
+    // A throwing user callback must never become an uncaughtException
+    // (process-killer): it dies loudly in the console instead.
+    queueMicrotask(() => {
+      try {
+        onListen();
+      } catch (error) {
+        console.error("onListen callback threw:", error);
+      }
+    });
+  }
   return server;
 };

@@ -55,7 +55,6 @@ export const deadProtoFor = (liveProto: object): object => {
     "lastModified",
     "url",
     "path",
-    "query",
     "querystring",
     "search",
     "state",

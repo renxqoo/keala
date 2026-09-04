@@ -293,7 +293,23 @@ const positiveInteger = (value: unknown, name: string): number => {
   return value as number;
 };
 
+const OVERLOAD_KEYS = new Set([
+  "maxConcurrency",
+  "maxQueue",
+  "queueTimeoutMs",
+  "retryAfterSeconds",
+  "handler",
+  "strategy",
+]);
+
 export const normalizeOverload = (options: OverloadOptions): LifecycleOverload => {
+  for (const key of Object.keys(options)) {
+    if (!OVERLOAD_KEYS.has(key)) {
+      // `maxConcurreny: 1` used to vanish silently — disarming capacity
+      // protection entirely. Refuse loudly instead.
+      throw new TypeError(`overload.${key} is not an overload option (typo?)`);
+    }
+  }
   if (typeof options !== "object" || options === null) {
     throw new TypeError("overload requires an options object");
   }
@@ -304,7 +320,11 @@ export const normalizeOverload = (options: OverloadOptions): LifecycleOverload =
         ? Number.POSITIVE_INFINITY
         : positiveInteger(options.maxConcurrency, "maxConcurrency");
   const maxQueue =
-    options.maxQueue === undefined ? 0 : positiveInteger(options.maxQueue, "maxQueue");
+    options.maxQueue === undefined
+      ? 0
+      : options.maxQueue === 0
+        ? 0 // 0 is the documented fail-fast default — explicit is legal
+        : positiveInteger(options.maxQueue, "maxQueue");
   const queueTimeoutMs =
     options.queueTimeoutMs === undefined
       ? 10_000

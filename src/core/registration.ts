@@ -61,6 +61,12 @@ export const registerRedirect = (
   code: number,
   middleware: MiddlewareStack,
 ): void => {
+  if (!Number.isInteger(code) || code < 300 || code > 399) {
+    // Eager contract (same as url.ts): a bad code would otherwise 500 on
+    // EVERY request (the c.status setter throws) or silently coerce to 302
+    // (c.redirect's isRedirectStatus gate).
+    throw new TypeError(`redirect() code must be a 3xx integer, got ${code}`);
+  }
   const destSegments = redirectTargetSegments(destination);
   if (destSegments !== null) assertRedirectCaptures(source, destSegments);
   registerDef(

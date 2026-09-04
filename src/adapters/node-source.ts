@@ -54,6 +54,14 @@ export class NodeRequestSource implements NativeRequestSource {
     if (requestTarget.charCodeAt(0) === 47 /* "/" */) {
       this.url = requestTarget;
     } else if (requestTarget.startsWith("http://") || requestTarget.startsWith("https://")) {
+      // A raw backslash in an absolute-form target is never valid HTTP, and
+      // WHATWG URL treats it as a path separator in special schemes — the
+      // authority this parser sees would disagree with what `new URL()`
+      // resolves (`http://evil.com\@trusted/` pins as `trusted` here but
+      // `evil.com` there). Reject rather than serve two truths.
+      if (requestTarget.includes("\\")) {
+        throw new InvalidRequestTargetError("backslash in absolute-form request-target");
+      }
       this.url = requestTarget;
     } else {
       throw new InvalidRequestTargetError("unsupported HTTP request-target");

@@ -172,7 +172,8 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
   set url(value: string) {
     this.urlValue = value;
     this.pathValue = null;
-    // The parsed query cache is keyed by the URL — a rewrite invalidates it.
+    // The querystring memo is keyed by the URL — a rewrite invalidates it.
+    this.querystringValue = null;
   },
   get path(): string {
     return this.pathValue ?? (this.pathValue = getPath(this.url));
@@ -193,7 +194,12 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     // Single scan of the raw request target (or a rewritten url): touching
     // only the query must not materialize the joined path+search string.
     // Equivalent to getSearch(url).slice(1): the first "#" ends the search
-    // (even before any "?"), the first "?" starts the query.
+    // (even before any "?"), the first "?" starts the query. Cached in a
+    // slot: the targeted readers call this per key, and every url rewrite
+    // invalidates by assigning urlValue... which the SETTERS do — so the
+    // cache key is urlValue identity, restored below on rewrite.
+    const cached = this.querystringValue;
+    if (cached !== null && this.urlValue === null) return cached;
     const url = this.urlValue ?? sourceUrl(this.rawRequest);
     let query = -1;
     let limit = -1;
@@ -206,8 +212,8 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
         break;
       }
     }
-    if (query === -1 || (limit !== -1 && query > limit)) return "";
-    return url.slice(query + 1, limit === -1 ? url.length : limit);
+    if (query === -1 || (limit !== -1 && query > limit)) return (this.querystringValue = "");
+    return (this.querystringValue = url.slice(query + 1, limit === -1 ? url.length : limit));
   },
   get search(): string {
     const qs = this.querystring;

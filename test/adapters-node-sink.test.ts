@@ -7,7 +7,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 
 import { Keala } from "../src/core/app.ts";
-import { startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
+import { listen, startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
 
 const quiet = { env: "test" } as const;
 const servers: NodeServerHandle[] = [];
@@ -61,5 +61,37 @@ describe("node adapter: sink mirrors and serve-error surface", () => {
     const mapped = await fetch(`http://127.0.0.1:${server.port}/consumed`);
     expect(mapped.status).toBe(502);
     expect(await mapped.text()).toMatch(/^mapped:/);
+  });
+});
+
+describe("review fixes: option surfaces and callback containment", () => {
+  it("startNodeServer refuses unknown option keys (typo guard parity)", () => {
+    const app = new Keala(quiet);
+    expect(() => startNodeServer(app, { port: 0, idleTimout: 99 } as never)).toThrow(
+      /unknown option/,
+    );
+    expect(() => startNodeServer(app, { port: 0 })).not.toThrow();
+  });
+
+  it("a throwing onListen callback never becomes an uncaughtException", async () => {
+    const app = new Keala(quiet);
+    app.get("/x", (c) => c.text("ok"));
+    const errors: unknown[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args[0]);
+    };
+    let server: NodeServerHandle | undefined;
+    try {
+      server = await listen(app, { port: 0, hostname: "127.0.0.1" }, undefined, () => {
+        throw new Error("cb-boom");
+      }).ready();
+      const res = await fetch(`http://127.0.0.1:${server?.port ?? -1}/x`);
+      expect([res.status, await res.text()]).toEqual([200, "ok"]);
+      expect(errors.length).toBeGreaterThan(0);
+    } finally {
+      console.error = original;
+      server?.stop(true);
+    }
   });
 });
