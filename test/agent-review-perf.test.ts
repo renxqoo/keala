@@ -413,23 +413,18 @@ describe("R4.3 perf review: error-path costs and shapes", () => {
     "c.url computation cost (eagerly evaluated by the suppressed consoleFallback on no-mapper errors)",
     { timeout: 60_000 },
     () => {
-      // consoleFallback(app, c.url, error) computes the URL string before the
-      // env/status check runs, so every no-mapper error (incl. 4xx and test
-      // env, where nothing is logged) pays one path+search parse + concat on
-      // a fresh context (urlValue is per-request). Quantify the micro cost.
+      // consoleFallback computes the URL before its env/status check, so
+      // every no-mapper error pays one path+search parse + concat.
       const url = "http://localhost:3000/boom";
-      const nsUrl = microMedian(
-        () => {
-          const path = getPath(url);
-          const search = getSearch(url);
-          return path + search;
-        },
-        200_000,
-        200_000,
-        11,
+      const fullUrl = (): string => getPath(url) + getSearch(url);
+      const nsUrl = microMedian(fullUrl, 200_000, 200_000, 11);
+      // Relative to ONE component (getPath) — absolute ns is not portable
+      // (CI runners measure ~4x the M4). The whole is ~2-3x the component.
+      const nsPath = microMedian(() => getPath(url), 200_000, 200_000, 11);
+      console.log(
+        `[perf-review] c.url micro: ${nsUrl.toFixed(1)}ns (${(nsUrl / nsPath).toFixed(1)}x getPath)`,
       );
-      console.log(`[perf-review] c.url equivalent micro: ${nsUrl.toFixed(1)}ns/string`);
-      expect(nsUrl).toBeLessThan(300); // generous; informational
+      expect(nsUrl).toBeLessThan(nsPath * 4); // generous; informational
     },
   );
 });
