@@ -12,7 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.4.0"
+          # 1.4.2: Response.redirect 不再不可变、带体 204 允许构造 —
+          # test/ 的运行时条件断言按 1.4.2 实测锁死（beb912f）。
+          bun-version: "1.4.2"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
