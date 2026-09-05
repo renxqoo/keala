@@ -52,7 +52,7 @@ describe("concurrent isolation", () => {
       throw createError(418, "teapot");
     });
     router.get("/redirect", (c) => {
-      c.redirect(`/user/${c.query("to") ?? "0"}`);
+      return c.redirect(`/user/${c.query("to") ?? "0"}`);
     });
     router.get("/cookie", (c) => {
       c.cookies.set("sid", `s-${c.query("n") ?? "0"}`, { signed: true });

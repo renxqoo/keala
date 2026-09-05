@@ -65,7 +65,7 @@ export const dangerousWrites = (rng: Rng): ((c: Context) => void) => {
         break;
       case 3:
         ops.push((c) => {
-          c.redirect(rng.pick(REDIRECT_TARGETS));
+          return c.redirect(rng.pick(REDIRECT_TARGETS));
         });
         break;
       case 4:

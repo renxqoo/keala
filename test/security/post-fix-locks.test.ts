@@ -312,7 +312,7 @@ describe("RT-F10: redirect Location uses UTF-8 percent-encoding", () => {
   it("latin-1 and astral characters encode as their UTF-8 bytes", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.redirect("/café/😀");
+      return c.redirect("/café/😀");
     });
     const res = await app.handle(req("/r"));
     expect(res.headers.get("location")).toBe("/caf%C3%A9/%F0%9F%98%80");
@@ -321,7 +321,7 @@ describe("RT-F10: redirect Location uses UTF-8 percent-encoding", () => {
   it("existing percent-escapes and safe ASCII pass through untouched", async () => {
     const app = new Keala(quiet);
     app.get("/r2", (c) => {
-      c.redirect("/a%20b?q=1&x=/y");
+      return c.redirect("/a%20b?q=1&x=/y");
     });
     const res = await app.handle(req("/r2"));
     expect(res.headers.get("location")).toBe("/a%20b?q=1&x=/y");

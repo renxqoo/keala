@@ -58,7 +58,7 @@ app.use(async (c, next) => {
 app.mount("/", api);
 app.get("/redirect", (c) => {
   c.status = 302;
-  c.redirect("/api/hello");
+  return c.redirect("/api/hello");
 });
 app.notFound((c) => c.text("nothing here", 404));
 

@@ -34,7 +34,7 @@ describe("redirect semantics", () => {
   it("c.redirect default 302 keeps Location, no body", async () => {
     const app = new Keala({ env: "test" });
     app.get("/go", (c) => {
-      c.redirect("/target");
+      return c.redirect("/target");
     });
     const res = await hit(app, "/go");
     expect(res.status).toBe(302);
@@ -47,7 +47,7 @@ describe("redirect semantics", () => {
     let caught: unknown = null;
     app.get("/go", (c) => {
       try {
-        c.redirect("/t", 999);
+        return c.redirect("/t", 999);
       } catch (err) {
         caught = err;
       }
@@ -377,7 +377,7 @@ describe("state-mode responses", () => {
     const app = new Keala({ env: "test" });
     app.get("/r", (c) => {
       c.status = 301;
-      c.redirect("/x");
+      return c.redirect("/x");
     });
     const res = await hit(app, "/r");
     expect(res.status).toBe(301);

@@ -183,7 +183,7 @@ export class Router {
         // (a bare method reference would lose the context). Cold path.
         const target =
           destSegments === null ? destination : buildURL(destSegments, (n) => c.params(n));
-        c.redirect(target, code);
+        return c.redirect(target, code);
       },
     ]);
     return this;

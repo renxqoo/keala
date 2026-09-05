@@ -19,12 +19,12 @@ import { sign, unsign } from "../../src/context/cookies.ts";
 
 const quiet = { env: "test" } as const;
 
-const attack = async (setup: (c: Context) => void, init?: RequestInit): Promise<Response> => {
+const attack = async (setup: (c: Context) => unknown, init?: RequestInit): Promise<Response> => {
   const app = new Keala(quiet);
   app.onError(() => {});
-  app.use((c) => {
-    setup(c);
-  });
+  // Propagate setup's return (U3a: `return c.redirect(...)` must become the
+  // middleware's answer, not vanish).
+  app.use((c) => setup(c) as Response | undefined);
   return app.handle(new Request("http://localhost:3000/", init));
 };
 
@@ -55,7 +55,7 @@ describe("security: response-splitting variant matrix", () => {
 
   it.each(payloads)("redirect keeps %p out of the wire as raw CR/LF", async (payload) => {
     const res = await attack((c) => {
-      c.redirect(payload);
+      return c.redirect(payload);
     });
     expect(res.headers.get("location")).not.toMatch(/[\r\n]/);
     expect(res.headers.get("set-cookie")).toBe(null);
@@ -224,7 +224,7 @@ describe("security: redirect and XSS matrix", () => {
   ])("redirect %p never emits raw markup", async (url) => {
     const res = await attack(
       (c) => {
-        c.redirect(url);
+        return c.redirect(url);
       },
       { headers: { Accept: "text/html" } },
     );
@@ -250,7 +250,7 @@ describe("security: redirect and XSS matrix", () => {
 
   it("open redirect scope: absolute external URLs are allowed but CRLF is not", async () => {
     const res = await attack((c) => {
-      c.redirect("https://example.org/away");
+      return c.redirect("https://example.org/away");
     });
     expect(res.headers.get("location")).toBe("https://example.org/away");
   });
@@ -258,7 +258,7 @@ describe("security: redirect and XSS matrix", () => {
   it("redirect status is never downgraded to 2xx by attacker input", async () => {
     const res = await attack((c) => {
       c.status = 200;
-      c.redirect("/moved");
+      return c.redirect("/moved");
     });
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);

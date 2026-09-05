@@ -80,7 +80,7 @@ export const registerRedirect = (
         // branch, not the staged-status branch. The registered intent is a
         // validated 3xx integer — 304/306/309+ are not in isRedirectStatus,
         // so the no-code call silently rewrote them to 302 on every request.
-        c.redirect(target, code);
+        return c.redirect(target, code);
       },
     ],
     undefined,

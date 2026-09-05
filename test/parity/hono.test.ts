@@ -216,7 +216,7 @@ describe("0.7 alignment: c.redirect() ships a bare 302 exactly like hono (the ko
   it("location, status and an empty body", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.redirect("/elsewhere");
+      return c.redirect("/elsewhere");
     });
     const res = await drive(app, new Request("http://x/r"));
     expect(res.status).toBe(302);

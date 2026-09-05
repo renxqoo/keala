@@ -8,10 +8,11 @@
  * `application/json`).
  *
  * 0.7 commit contract: once a Response is committed (a sugar return or a
- * handler-returned Response), `c.body`/`c.status`/`c.redirect` throw —
- * return a new Response to replace it. Header writes stay open on both
- * sides of the commit: pre-commit they stage, post-commit they land
- * directly on the committed Response's headers.
+ * handler-returned Response), `c.body`/`c.status` throw — return a new
+ * Response to replace it. Header writes stay open on both sides of the
+ * commit: pre-commit they stage, post-commit they land directly on the
+ * committed Response's headers. `c.redirect` (U3a) is a pure builder — it
+ * never throws on commit; the Response it returns wins only when returned.
  */
 
 import type { HeaderValue, ResponseBody } from "../../types.ts";
@@ -50,12 +51,19 @@ export interface ResponseApi {
     options?: { fallback?: string | false; type?: "attachment" | "inline" | string },
   ): void;
   /**
-   * Redirect with an explicit target and code (default 302). Eagerly
-   * validated: the code must be a 3xx integer. Sets `Location` and the
-   * status — no body (the 0.7 adjudication; koa's "Redirecting to X"
-   * text/html body is gone). Throws once a response is committed.
+   * Build a redirect Response with an explicit target and code (default 302,
+   * or an already-staged 3xx — read from the pre-commit status slot, so a
+   * post-commit build sees the stale staged value, not the committed
+   * status; harmless since only a returned build takes effect). Eagerly
+   * validated: the code must be a 3xx integer. Location-only body (the 0.7
+   * adjudication; koa's "Redirecting to X" text/html body is gone). U3a: a
+   * PURE builder — return it (`return c.redirect(url[, code])`); it never
+   * mutates the context, so calling it after a commit is harmless (the
+   * returned Response wins only if actually returned). A Location staged
+   * BEFORE the build overrides the target (§2.3-1 same-name rule — the
+   * opposite of the old staged form, where redirect wrote last).
    */
-  redirect(url: string, code?: number): void;
+  redirect(url: string, code?: number): Response;
   /** Response sugar (return style) — hono-compatible signatures. */
   text(body: string, status?: number, headers?: Record<string, HeaderValue>): Response;
   json(body: unknown, status?: number, headers?: Record<string, HeaderValue>): Response;
@@ -299,11 +307,10 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
       if (mime !== null) setResponseHeader(this, "Content-Type", mime);
     }
   },
-  redirect(url: string, code?: number): void {
+  redirect(url: string, code?: number): Response {
     if (code !== undefined && (!Number.isInteger(code) || code < 300 || code > 399)) {
       throw new TypeError(`redirect code must be a 3xx integer, got ${JSON.stringify(code)}`);
     }
-    if (this._res !== undefined) throw new TypeError(COMMITTED);
     // Absolute URLs are normalized through URL; Location is encodeurl'd so
     // non-ASCII targets never break the header.
     let target = url;
@@ -316,15 +323,11 @@ export const responseApi: ThisType<ContextState & ResponseApi & RequestApi> & Re
     } else if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
       target = neutralizeForeignAuthority(this.host, url);
     }
-    this.setHeader("Location", encodeUrlValue(target));
     // An explicit code wins; without one, an already-staged 3xx (301/308
     // carry POST-retry semantics a caller deliberately chose) is preserved.
-    if (code !== undefined) this.status = code;
-    else if (!isRedirectStatus(this.status)) this.status = 302;
-    // An explicitly-empty body: the state-mode null fallback would otherwise
-    // ship the status text ("Found") — redirects carry only Location.
-    this.bodyValue = null;
-    this.flags |= 2;
+    const status =
+      code !== undefined ? code : isRedirectStatus(this.statusValue) ? this.statusValue : 302;
+    return new Response(null, { status, headers: { location: encodeUrlValue(target) } });
   },
   setHeader(field: string | Record<string, HeaderValue>, value?: HeaderValue) {
     setResponseHeader(this, field, value);

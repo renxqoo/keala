@@ -262,7 +262,8 @@ test/unit/router-trie-differential.test.ts
 test/unit/surface-regressions.test.ts
 ```
 
-redirect 共 19 文件 / 62 处；attachment 7 文件（U1 后 2026-09-06 重生成——parity/koa\* 已删、parity-locks 的 redirect 已迁出）
+redirect 共 19 文件 / 62 处 → **U3a 已完成（2026-09-06）**：全部改 return 形态；
+attachment 7 文件归 U3c。c.redirect 现为纯构造器（不 mutate、不 throw-on-commit）。
 
 ## M5 src/ 内部使用者（U2/U3 模块改写清单的权威来源）
 

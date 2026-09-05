@@ -18,20 +18,23 @@ import { Keala, type Context } from "../../src/index.ts";
 
 const quiet = { env: "test" } as const;
 
-const respondWith = async (setup: (c: Context) => void, init?: RequestInit): Promise<Response> => {
+const respondWith = async (
+  setup: (c: Context) => unknown,
+  init?: RequestInit,
+): Promise<Response> => {
   const app = new Keala(quiet);
-  app.get("/", (c) => {
-    setup(c);
-  });
+  // Propagate setup's return (U3a: `return c.redirect(...)` inside setup must
+  // become the handler's answer).
+  app.get("/", (c) => setup(c) as Response | undefined);
   return app.handle(new Request("http://localhost:3000/", init)) as Promise<Response>;
 };
 
-const captureCtx = async (setup: (c: Context) => void): Promise<Context> => {
+const captureCtx = async (setup: (c: Context) => unknown): Promise<Context> => {
   let captured: Context | undefined;
   const app = new Keala(quiet);
   app.use(async (c) => {
     captured = c;
-    setup(c);
+    return setup(c) as Response | undefined;
   });
   await app.handle(new Request("http://localhost:3000/"));
   if (captured === undefined) throw new Error("probe failed");
@@ -299,7 +302,7 @@ describe("matrix: redirect status preservation", () => {
   it.each(redirectCodes)("redirect keeps explicit %d", async (code) => {
     const res = await respondWith((c) => {
       c.status = code;
-      c.redirect("/next");
+      return c.redirect("/next");
     });
     expect(res.status).toBe(code);
     expect(res.headers.get("location")).toBe("/next");
@@ -308,7 +311,7 @@ describe("matrix: redirect status preservation", () => {
   it.each([200, 201, 400, 404])("non-redirect %d becomes 302", async (code) => {
     const res = await respondWith((c) => {
       c.status = code;
-      c.redirect("/next");
+      return c.redirect("/next");
     });
     expect(res.status).toBe(302);
   });

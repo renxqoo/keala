@@ -39,7 +39,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
       // The classic reflected-redirect pattern: ?next=%2F%5Cevil.com
-      c.redirect(String(c.query("next")));
+      return c.redirect(String(c.query("next")));
     });
     const res = await drive(app, new Request("http://good.com:3000/r?next=%2F%5Cevil.com"));
     const location = res.headers.get("location") ?? "";

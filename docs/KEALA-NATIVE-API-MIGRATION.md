@@ -209,7 +209,7 @@ bun scripts/smoke.ts / bun scripts/example-check.ts（受影响时）。
 
 ---
 
-## 第三部分：MIGRATION（按单元；状态：**U1、U2 已实施（2026-09-06）**，U3-U4 待实施）
+## 第三部分：MIGRATION（按单元；状态：**U1、U2、U3a 已实施（2026-09-06）**，U3b-U4 待实施）
 
 ### U1 — koa 对齐测试退役（流程试运行单元）
 
@@ -330,6 +330,31 @@ unit/router-shadow-warn、unit/request-ergonomics（"params never null"→
 **动作**：`c.redirect` 返回 Response；registration.ts:82/group.ts:184 上抛
 return；M4 22 文件机械替换（void 调用→return）。
 **验收**：单元门；`c.redirect` void 用法 0 残留。
+
+**实施记录（2026-09-06）**：
+
+- `c.redirect(url, code?)` → **纯构造器**返回 `Response(null, {status, location})`：
+  校验（3xx 整数 TypeError）、绝对 URL 归一化、外域中和、encodeUrlValue 全部原样
+  保留；默认码规则保留（显式码 > 已 staged 的 3xx > 302，读 `statusValue`）。
+  不再 mutate context、不再 throw-on-commit——旧 0.7 契约"提交后 redirect 抛错"
+  随 staged 形态一并退役（三处行为锁改写：regression-sweep R6-C 拆成"构建不
+  生效"+"return 即替换"两锁；response.test / app-regressions R5-3 同步）。
+- registration.ts / group.ts 上抛 `return c.redirect(target, code)`；M4 19 文件
+  机械替换（语句位 `c.redirect(...)` → `return c.redirect(...)`）。
+- **机械替换的系统性副作用**：setup 型测试助手（respondWith/captureCtx/attack）
+  吞掉 setup 内 return 的 Response → 404——三处助手改传导返回值（这是 U3b/U3c
+  还会再遇的模式，已记入实施记录）。property rig 的 redirect staged/committed
+  双 style 分支坍缩为单路径（语义同化）。
+- 数学：2637→2640（+1 R6-C 拆两锁、+2 同名覆盖/Location 优先级锁）；Node/Bun 双全量绿；staged 头经
+  §2.3-1 合并规则继续搭车（applyStagedHeaders 对返回 Response 的既有行为）。
+- 验收 grep：语句位 void `c.redirect(` 0 残留（src/test/bench/examples/scripts）。
+- 对抗审查（1 CONFIRMED，已修）：**同名 Location 优先级翻转未锁未记**——旧
+  staged 形态 redirect 是 Location 最后写者；新返回形态受 §2.3-1 通用规则支配
+  （先行 staged Location 反杀 redirect 目标）。补两锁（通用同名覆盖 +
+  Location 专项，component-redteam），方法文档与文件头披露。审查另证实：
+  21 个恶意目标双树逐字节一致（中和/CRLF/编码零丢失）、staged 3xx 默认码
+  11 分支双树一致、机械替换零残留零错改、锁改写无弱化（R6-C 反而净增
+  last-committer-wins 锁）。
 
 ### U3b — middleware 先行 return 化
 

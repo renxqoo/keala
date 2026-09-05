@@ -163,23 +163,16 @@ describe("agent r5 — confirmed bugs", () => {
     expect(out?.status).toBe(500);
   });
 
-  it("R5-3 (0.7): an auth middleware redirects by replacing the committed response", async () => {
+  it("R5-3 (U3a): an auth middleware redirects by returning c.redirect over the committed response", async () => {
     const app = new Keala(quiet);
-    let caught: unknown;
     app.use(async (c, next) => {
       await next();
-      try {
-        c.redirect("/login"); // the old post-commit write — a loud TypeError now
-      } catch (err) {
-        caught = err;
-      }
-      // Supported pattern: return the replacement Response (last committer wins).
-      return new Response(null, { status: 302, headers: { location: "/login" } });
+      // The supported pattern IS c.redirect now — a pure builder whose
+      // returned Response replaces the commit (last committer wins).
+      return c.redirect("/login");
     });
     app.get("/", () => new Response("secret data"));
     const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(caught).toBeInstanceOf(TypeError);
-    expect((caught as Error).message).toContain("response already committed");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/login");
     expect(await res.text()).toBe("");

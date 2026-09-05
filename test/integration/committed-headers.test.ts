@@ -308,3 +308,34 @@ describe("0.7 committed header contract", () => {
     },
   );
 });
+
+describe("same-name staged/returned header precedence (§2.3-1)", () => {
+  it("staged headers override a returned Response's same-name header", async () => {
+    // The generic rule: staged writes win over headers the handler's
+    // returned Response carries (respond.ts applyStagedHeaders does
+    // delete+set per name).
+    const app = new Keala({ env: "test" });
+    app.get("/x", (c) => {
+      c.setHeader("X-Duel", "staged");
+      return new Response("ok", { headers: { "x-duel": "returned" } });
+    });
+    const res = await app.handle(new Request("http://localhost:3000/x"));
+    expect(res.headers.get("x-duel")).toBe("staged");
+  });
+
+  it("a staged Location overrides the redirect target (U3a priority flip)", async () => {
+    // The staged redirect form made redirect the LAST Location writer; the
+    // U3a return form is subject to §2.3-1 like every other returned header —
+    // an explicitly staged Location wins over c.redirect's target. The
+    // status still comes from the redirect (the staged record carries no
+    // status of its own).
+    const app = new Keala({ env: "test" });
+    app.get("/r", (c) => {
+      c.setHeader("Location", "/staged");
+      return c.redirect("/next");
+    });
+    const res = await app.handle(new Request("http://localhost:3000/r"));
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/staged");
+  });
+});

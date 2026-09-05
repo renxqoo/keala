@@ -230,7 +230,7 @@ describe("response facade (flat context)", () => {
   it("redirect sets Location with an empty body (0.7 adjudication)", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.redirect("/target?x=1");
+      return c.redirect("/target?x=1");
     });
     const res = await app.handle(
       new Request("http://localhost:3000/", {
@@ -246,7 +246,7 @@ describe("response facade (flat context)", () => {
   it("redirect accepts an explicit 3xx code and rejects anything else eagerly", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.redirect("/gone", 301);
+      return c.redirect("/gone", 301);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(301);
@@ -266,26 +266,23 @@ describe("response facade (flat context)", () => {
     const app = makeApp();
     app.use(async (c) => {
       c.status = 301;
-      c.redirect("/gone");
+      return c.redirect("/gone");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(301);
   });
 
-  it("redirect after a commit throws", async () => {
+  it("redirect after a commit is a harmless pure build (U3a: no throw, no effect unless returned)", async () => {
     const app = new Keala({ env: "production" });
-    const thrown: unknown[] = [];
+    let built: Response | undefined;
     app.use(async (c, next) => {
       await next();
-      try {
-        c.redirect("/late");
-      } catch (error) {
-        thrown.push(error);
-      }
+      built = c.redirect("/late"); // built, NOT returned — the commit survives
     });
     app.get("/", (c) => c.text("committed"));
     const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(thrown[0]).toBeInstanceOf(TypeError);
+    expect(built).toBeInstanceOf(Response);
+    expect(built?.status).toBe(302);
     expect(res.headers.get("location")).toBe(null);
     expect(await res.text()).toBe("committed");
   });

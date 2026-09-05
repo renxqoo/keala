@@ -76,7 +76,7 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
     const app = new Keala(quiet);
     app.get("/", (c) => {
       c.status = 304;
-      c.redirect("/next");
+      return c.redirect("/next");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(302);
@@ -86,7 +86,7 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
   it("redirect() honors an explicit 305 code (a real redirect status)", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
-      c.redirect("/proxy", 305);
+      return c.redirect("/proxy", 305);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(305);

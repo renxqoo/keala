@@ -280,25 +280,41 @@ describe("R6-C post-commit contract (0.7): writes throw, new Responses win", () 
     expect(await res.text()).toBe("committed");
   });
 
-  it("post-commit c.redirect throws even over a committed 301 (was R6-3)", async () => {
+  it("post-commit c.redirect is a pure builder (U3a): returned only when returned", async () => {
+    // Was R6-3 (the staged form threw on commit). The U3a return-form never
+    // mutates context: calling it after a commit is harmless, and the
+    // committed answer survives unless the caller actually RETURNS the new
+    // Response (last-committer-wins below locks that half).
     const app = new Keala(quiet);
-    let caught: unknown;
+    let built: Response | undefined;
     app.get(
       "/x",
       async (c, next) => {
         await next();
-        try {
-          c.redirect("/elsewhere");
-        } catch (err) {
-          caught = err;
-        }
+        built = c.redirect("/elsewhere"); // built but NOT returned
       },
       () => new Response(null, { status: 301, headers: { location: "/first" } }),
     );
     const res = await drive(app, new Request("http://good.com/x"));
-    expect(caught).toBeInstanceOf(TypeError);
+    expect(built).toBeInstanceOf(Response);
+    expect(built?.status).toBe(302);
     expect(res.status).toBe(301);
     expect(res.headers.get("location")).toBe("/first"); // the commit survives
+  });
+
+  it("a returned c.redirect replaces the committed answer (last committer wins)", async () => {
+    const app = new Keala(quiet);
+    app.get(
+      "/x",
+      async (c, next) => {
+        await next();
+        return c.redirect("/elsewhere", 308);
+      },
+      () => new Response(null, { status: 301, headers: { location: "/first" } }),
+    );
+    const res = await drive(app, new Request("http://good.com/x"));
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/elsewhere");
   });
 
   it("a middleware may replace the committed response by returning a new one", async () => {

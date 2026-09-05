@@ -42,7 +42,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   it("every relative-looking foreign target stays a same-origin path", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.redirect(String(c.query("next")));
+      return c.redirect(String(c.query("next")));
     });
     for (const next of [
       "//evil.com",
@@ -69,7 +69,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   it("locks: an explicit scheme:// target is the developer's absolute redirect", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.redirect(String(c.query("next")));
+      return c.redirect(String(c.query("next")));
     });
     const res = await drive(
       app,
@@ -84,7 +84,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
     // a safe path, not a verbatim forward.
     const app = new Keala(quiet);
     app.get("/n", (c) => {
-      c.redirect(String(c.query("next")));
+      return c.redirect(String(c.query("next")));
     });
     const a = await drive(app, new Request("http://good.com:3000/n?next=%2F%2Fevil.com"));
     expect(a.headers.get("location")).toBe("/%2Fevil.com");
@@ -95,7 +95,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   it("locks: same-origin //host targets pass through untouched", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.redirect(String(c.query("next")));
+      return c.redirect(String(c.query("next")));
     });
     const res = await drive(
       app,
@@ -281,7 +281,7 @@ describe("R6-J regex audit: 100KB hostile inputs stay linear [locks]", () => {
   it("redirect neutralization on a 100KB hostile target", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
-      c.redirect(String(c.query("next")));
+      return c.redirect(String(c.query("next")));
     });
     const target = `//${"a".repeat(100_000)}.evil.com`;
     const t0 = performance.now();

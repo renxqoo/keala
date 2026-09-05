@@ -25,7 +25,7 @@ describe("redirect code coercion (app + Router)", () => {
   it("c.redirect(url, 306) keeps 306 (explicit code path)", async () => {
     const app = new Keala({ env: "test" });
     app.get("/a", (c) => {
-      c.redirect("/b", 306);
+      return c.redirect("/b", 306);
     });
     const res = await hit(app, "/a");
     expect(res.status).toBe(306);

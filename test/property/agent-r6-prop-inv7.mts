@@ -82,7 +82,7 @@ export const lateMutations = (rng: Rng): ((c: Context, log?: string[]) => void) 
       case 7:
         ops.push((c, log) => {
           log?.push("redirect");
-          c.redirect(rng.pick(REDIRECT_TARGETS));
+          return c.redirect(rng.pick(REDIRECT_TARGETS));
         });
         break;
       case 8:
@@ -181,10 +181,9 @@ export const makeCfgHandler =
   (cfg: RespCfg): RouteHandler =>
   (c) => {
     if (cfg.body === "redirect") {
-      c.redirect("/target");
-      if (cfg.style === "committed")
-        return new Response(null, { status: 302, headers: { location: "/target" } });
-      return;
+      // U3a: redirect IS the return form — the old staged/committed style
+      // split collapsed into one path (both produced the same wire answer).
+      return c.redirect("/target");
     }
     const body =
       cfg.body === "text"

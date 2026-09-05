@@ -39,7 +39,7 @@ describe("header injection (response splitting)", () => {
   it("keeps CR/LF out of redirect Location values (percent-encodes)", async () => {
     const app = new Keala(quiet);
     app.use(async (c) => {
-      c.redirect("/ok\r\nSet-Cookie: evil=1");
+      return c.redirect("/ok\r\nSet-Cookie: evil=1");
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
     // The attack intent: no response splitting. The Location value must be a
@@ -247,7 +247,7 @@ describe("information disclosure", () => {
     // header, where encodeUrlValue percent-encodes < > " and friends.
     const app = new Keala();
     app.use(async (c) => {
-      c.redirect("/next?<script>alert(document.domain)</script>");
+      return c.redirect("/next?<script>alert(document.domain)</script>");
     });
     const res = await drive(
       app,
@@ -263,7 +263,7 @@ describe("information disclosure", () => {
   it("redirect Location values never carry raw quotes", async () => {
     const app = new Keala();
     app.use(async (c) => {
-      c.redirect('/a?x="onmouseover=alert(1)');
+      return c.redirect('/a?x="onmouseover=alert(1)');
     });
     const res = await drive(
       app,
