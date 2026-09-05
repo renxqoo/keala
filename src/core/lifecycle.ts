@@ -14,6 +14,7 @@ import { serverOf } from "./server-slot.ts";
 import type { CloseOptions, CloseStatus, OverloadOptions } from "../types.ts";
 import { normalizeOverload } from "./lifecycle-admission.ts";
 import type { LifecycleOverload, WaiterSlot } from "./lifecycle-admission.ts";
+import { repumpResponse } from "../utils/streams.ts";
 
 /** Why a request was refused at the admission gate (pre-context, pre-funnel). */
 export type OverloadReason = "concurrency" | "queue" | "draining";
@@ -135,55 +136,28 @@ export const settleRequest = (lc: LifecycleState, value: Response): Response => 
 
 /**
  * Wrap a drain-time bodied response so its in-flight slot releases only
- * when the consumer finishes (done, errored or cancelled). One release per
- * hold: a consumer cancelling with a pull parked on a slow producer makes
- * the resumed pull throw into the catch — without the guard that path
- * would release a SECOND time (pool.ts mirrors the same discipline).
+ * when the consumer finishes (done, errored or cancelled). The shared pump
+ * (utils/streams.ts) enforces the one-release discipline — a consumer
+ * cancelling with a pull parked on a slow producer makes the resumed pull
+ * throw into the read catch, and without the once-guard that path would
+ * release a SECOND time.
  */
 const holdBody = (lc: LifecycleState, value: Response): Response => {
-  // Evolving let: the reader type differs across the DOM/Bun stream libs —
-  // inferring from the assignment keeps both happy (same as pool.ts).
-  let reader;
-  try {
-    reader = value.body!.getReader();
-  } catch {
-    // Locked/unreadable: a reused Response — loud failure, and drain must
-    // not wait on it forever.
-    console.error(
-      "\n  keala: response body was locked or unreadable during drain — a handler returned a reused Response\n",
-    );
-    releaseInFlight(lc);
-    return value;
-  }
   let released = false;
   const releaseHold = (): void => {
     if (released) return;
     released = true;
     releaseInFlight(lc);
   };
-  return new Response(
-    new ReadableStream({
-      async pull(controller) {
-        try {
-          const { done, value: chunk } = await reader.read();
-          if (done) {
-            controller.close();
-            releaseHold();
-            return;
-          }
-          controller.enqueue(chunk);
-        } catch (error) {
-          releaseHold();
-          controller.error(error);
-        }
-      },
-      cancel(reason) {
-        void reader.cancel(reason).catch(() => undefined);
-        releaseHold();
-      },
-    }),
-    { status: value.status, statusText: value.statusText, headers: value.headers },
+  const wrapped = repumpResponse(value, { onLocked: releaseHold, onFinish: releaseHold });
+  if (wrapped !== null) return wrapped;
+  // Locked/unreadable: a reused Response — loud failure, and drain must
+  // not wait on it forever. (onLocked already released the slot — the
+  // pump never started.)
+  console.error(
+    "\n  keala: response body was locked or unreadable during drain — a handler returned a reused Response\n",
   );
+  return value;
 };
 
 /** Register a drain-completion callback; true when already settled. */

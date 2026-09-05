@@ -8,6 +8,7 @@ import type { IncomingMessage } from "node:http";
 import { Readable } from "node:stream";
 import { NATIVE_REQUEST_SOURCE, type NativeRequestSource } from "../core/request-source.ts";
 import { createError } from "../http/errors.ts";
+import { readAllLimited } from "../utils/streams.ts";
 import type { NodeServerHandle } from "./node.ts";
 
 export class InvalidRequestTargetError extends Error {}
@@ -266,28 +267,7 @@ export class NodeRequestSource implements NativeRequestSource {
     });
   }
 
-  async #readWebBody(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > limit) {
-        await reader.cancel().catch(() => undefined);
-        throw this.#tooLarge(limit);
-      }
-      chunks.push(value);
-    }
-    if (chunks.length === 0) return new Uint8Array(0);
-    if (chunks.length === 1) return chunks[0] as Uint8Array;
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return out;
+  #readWebBody(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
+    return readAllLimited(body, limit, () => this.#tooLarge(limit));
   }
 }

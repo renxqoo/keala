@@ -29,6 +29,7 @@ import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
 import { TEXT_PLAIN } from "./context/sugar.ts";
 import { createPlannedResponse } from "./response-plan.ts";
 import { isNativeRequestSource } from "./request-source.ts";
+import { repumpStream } from "../utils/streams.ts";
 
 /** Body-describing headers a 204/304 must not carry (RFC 9110 §8.6). */
 const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
@@ -197,63 +198,13 @@ const bodyInitOf = (body: Context["bodyValue"]): BodyData => {
   return JSON.stringify(body) ?? "null";
 };
 
-/** Build the Response from response state (`head` backfills CL, drops body). */
-/**
- * Opt-in stream error observation: re-pump the body through a guard so a
- * producer failure reaches the app hook (the client just sees the stream end).
- * The pump runs on `pull` — the source is only read as the consumer demands,
- * so backpressure passes straight through instead of buffering the whole
- * body the moment the wrapper is constructed.
- */
-const observedStream = (
-  body: ReadableStream,
-  onError: (error: Error, c: Context) => void,
-  c: Context,
-): ReadableStream => {
-  const reader = body.getReader();
-  return new ReadableStream({
-    async pull(controller) {
-      // Only the READ may fail with a producer error — controller ops after a
-      // consumer cancel/close throw benign TypeErrors that must never reach
-      // the app hook (a client abort is not a producer failure).
-      let read: IteratorResult<Uint8Array, undefined>;
-      try {
-        read = await reader.read();
-      } catch (err) {
-        onError(err instanceof Error ? err : new Error(String(err)), c);
-        try {
-          controller.error(err);
-        } catch {
-          // consumer already closed the stream
-        }
-        return;
-      }
-      if (read.done) {
-        try {
-          controller.close();
-        } catch {
-          // consumer already closed the stream
-        }
-        return;
-      }
-      try {
-        controller.enqueue(read.value);
-      } catch {
-        // consumer already closed the stream
-      }
-    },
-    cancel(reason) {
-      void reader.cancel(reason).catch(() => undefined);
-    },
-  });
-};
-
 /** JSON text of an object body, memoized on the context (one stringify). */
 const jsonTextOf = (c: Context, body: unknown): string =>
   c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(body) ?? "null");
 
 const isContextBoundBody = (body: Context["bodyValue"]): boolean => body instanceof ReadableStream;
 
+/** Build the Response from response state (`head` backfills CL, drops body). */
 const buildFromState = (c: Context, head: boolean): Response => {
   const status = c.statusValue;
   let body: Context["bodyValue"] = c.bodyValue;
@@ -297,8 +248,12 @@ const buildFromState = (c: Context, head: boolean): Response => {
   }
 
   // Opt-in error observation for streaming bodies (see AppOptions).
-  if (body instanceof ReadableStream && c.appValue.onStreamError !== undefined) {
-    body = observedStream(body, c.appValue.onStreamError, c);
+  const streamHook = c.appValue.onStreamError;
+  if (body instanceof ReadableStream && streamHook !== undefined) {
+    body = repumpStream(body, {
+      onReadError: (error) =>
+        streamHook(error instanceof Error ? error : new Error(String(error)), c),
+    });
   }
 
   const multiValue =

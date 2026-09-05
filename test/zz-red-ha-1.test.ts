@@ -194,7 +194,7 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
     const rssBefore = Math.round(process.memoryUsage().rss / 1024 / 1024);
     const chunk = Buffer.alloc(64 * 1024, 0x61);
     let sent = 0;
-    const target = 6 * 1024 * 1024;
+    const target = 24 * 1024 * 1024;
     const { promise: pumped, release: pumpDone } = deferred();
     const pump = (): void => {
       while (sent < target) {
@@ -218,7 +218,12 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
     const rssAfter = Math.round(process.memoryUsage().rss / 1024 / 1024);
     // Correct behavior: the adapter closes the socket on the early answer (or
     // otherwise stops retaining) — retained delta must be far below `sent`.
-    expect(rssAfter - rssBefore).toBeLessThan((2 * 1024) / 1024); // < 2MB
+    // Calibration 2026-09-05: the teardown window absorbs a FIXED ~3-4MB
+    // (kernel/Node buffers in flight when destroy lands; machine- and
+    // load-dependent — measured identical at 6MB and 12MB pumps), while the
+    // original bug retained ∝ sent (~everything pumped). 24MB in, <8MB kept
+    // separates the two with 2x margin on the healthy side.
+    expect(rssAfter - rssBefore).toBeLessThan(8); // MB, vs 24MB pumped
     expect(app.inFlight).toBe(0);
   }, 8000);
 });

@@ -14,6 +14,7 @@
 
 import { createError } from "../http/errors.ts";
 import { contentTypeParameters } from "../utils/mime.ts";
+import { readAllLimited } from "../utils/streams.ts";
 import type { Plugin } from "../types.ts";
 import type { Application } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
@@ -319,28 +320,8 @@ class BodyReaderState implements RequestBodyFacade {
     });
   }
 
-  private async readStream(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > limit) {
-        await reader.cancel().catch(() => undefined);
-        throw bodyTooLarge(limit);
-      }
-      chunks.push(value);
-    }
-    if (chunks.length === 1) return chunks[0] as Uint8Array;
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return out;
+  private readStream(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
+    return readAllLimited(body, limit, () => bodyTooLarge(limit));
   }
 }
 
