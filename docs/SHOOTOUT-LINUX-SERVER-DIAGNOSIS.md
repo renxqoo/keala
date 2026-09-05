@@ -13,10 +13,15 @@
 2. 该机器每轮(runa 3-8s)吞吐在 ±20% 内翻转、有节流式下漂(首发轮
    ~100-105k,后续 72-86k),ABAB 双侧中位比值被漂移偏置;配对比值的
    "赢家"逐轮互换(keala 94.0k vs hono 89.7k/94.4k 的复跑即直接证据)。
-3. 真实且可复现的结构差只有一条(已知、有记录):**动态形状路由层
-   keala trie 走访 vs hono 整表预编译 regex,隔离比值 ~1.9x(本机
-   ~100ns/请求,Mac ~40-50ns),HTTP 稀释后 ≤3%**——R413 bucket-regex
-   的已知边界(shootout 的 event/user-lookup 桶共享多动态定义,不合格)。
+3. 真实且可复现的结构差只有一条(代码级复核,见下):**动态形状路由层
+   keala ~1.9x(隔离比值;本机 ~100ns/请求,Mac ~40-50ns),HTTP 稀释后
+   ≤3%**。机制:两边都走"编译好的 regex"——hono 把整表编成每方法一个
+   大 regex,单次 `path.match()` 且 match 数组直接充当 params(matcher.js,
+   每请求 1 次分配);keala 走 bucket-regex(fastMatch 切片层对共享多
+   动态定义的桶不合格,regex 层覆盖)额外支付 `indexOf("%")` 全串扫描 +
+   首段 slice 分配 + buckets Map.get + epoch 检查 + `Object.create(null)`
+   params 对象构造(match.ts:101-127)——3-4 次额外分配/查找,量级与
+   实测差吻合。
 4. bun `--cpu-prof` 的自耗时归因在内联存在时**不可信**:profile 显示
    `splitPathSearch` 占服务器 28.6%,插桩计数证实每请求恰好调用 1 次
    (~50ns 函数),属采样器把调用点周围的内联代码计入了该帧。
@@ -47,6 +52,10 @@ context/dispatch 抵消大半),与 R413 后 Mac 结论一致。
 - **这台机器上一切中位比值都要配对**:轮内背靠背 + 首发轮换 +
   配对比值取中位与 IQR(`diag/serve-option-cost.mjs`);跨轮中位相除
   会被漂移偏置(本文开头 0.905x 的 ws 伪影即此)。
+- **`void fn()` 紧循环计时对 async 框架是否漏计**:用
+  `diag/fairness-probe.ts` 对照 void 紧循环与逐批 `await null` 排空
+  microtask 两种计时,keala/hono 双侧差值 ≤6ns——hono 的 async IIFE
+  dispatch 在无 await 分支上同步完成,`void` 方法学对差异测量成立。
 - **bun --cpu-prof 只取方向不取数字**:89/125 个样本 + 内联归因失真;
   函数级结论用插桩计数或隔离计时核实。
 
