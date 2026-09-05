@@ -71,7 +71,7 @@ const fastMatch = (fast: FastMatcher | null, path: string): RouteMatch | null =>
 const bucketRegexOf = (state: RouterState, bucket: Bucket): RegexBucket | null => {
   const cached = bucket.regex;
   if (cached !== undefined && cached.mutations === state.mutations) return cached.compiled;
-  const compiled = compileRegexBucket(state.regexIndex, bucket.first);
+  const compiled = compileRegexBucket(state.regexIndex, bucket.first, bucket.count);
   bucket.regex = { mutations: state.mutations, compiled };
   return compiled;
 };

@@ -52,6 +52,7 @@ const PROBES: ReadonlyArray<readonly [string, string, string]> = [
   ["trie 4-seg param", "GET", "/user/lookup/username/hey"],
   ["trie mixed", "GET", "/event/abcd1234/comments"],
   ["trie param-only", "GET", "/event/abcd1234"],
+  ["wildcard fallback", "GET", "/static/index.html"],
 ];
 
 const medOf = (values: number[]): number => {

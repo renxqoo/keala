@@ -11,8 +11,11 @@
 > 进程内动态形状从 1.49-1.79x 慢翻转为 **1.09-1.14x 快**,HTTP 层
 > 满跑 mixed 1.00x(±2%)/其余 0.97-1.11x 全平局、keala≈raw
 > Bun.serve,且轮间方差从 ±22-52% 收紧到 ±1-3%;红队随机表差分在
-> 实施过程中当场抓获两个快速层边界 bug(通配滑过字段检查、纯静态
-> 空泛合格),均已修复并锁死——差分测试的价值得到直接验证。
+> 实施过程中当场抓获的快速层边界 bug 一共四个(通配滑过字段检
+> 查、纯静态空泛合格、尾斜杠捕获多一个 `/`、混合桶通配遮蔽未编译
+> 模式),全部由红队差分/优先级锁当场抓获并修复——差分测试的价值
+> 得到直接验证。尾部通配随后也进了快速层(纯桶兜底组),wildcard
+> 场景安静窗口 1.00x。
 > 疑点 B 的两条建议(harness 改 dist / 收窄 core 图)未实施,维持
 > 低优先。
 
@@ -20,10 +23,10 @@
 
 ## 结论速览
 
-| 疑点 | 结论 |
-| --- | --- |
+| 疑点                       | 结论                                                                                                                                                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A. mixed 场景 hono +12-14% | **HTTP 层伪影**——安静窗口 + 静态对照组下全场景 0.97-1.00x(平局);原先 0.86-0.88x 是"首枪凹陷窗口"采样偏差。**但进程内存在真实结构差**:动态路由 keala 慢 1.49-1.79x(Δ117-198ns/req),被 Bun HTTP 栈的每请求 ~4.5µs 预算吸收(占 3-4%),平时不可见 |
-| B. Node 腿 idle +17MB | **~10MB 是测量形态税**:shootout 服务器直接 `import src/*.ts`,Node 类型剥离器内嵌 WASM(amaro)首导即 +8MB external + 共 ~37MB RSS。**发行形态(dist JS)下真实差仅 ~9.7MB**(更大 JS 图:heap 7.0 vs 3.7MB);适配器/listen 近零成本(+0.7MB) |
+| B. Node 腿 idle +17MB      | **~10MB 是测量形态税**:shootout 服务器直接 `import src/*.ts`,Node 类型剥离器内嵌 WASM(amaro)首导即 +8MB external + 共 ~37MB RSS。**发行形态(dist JS)下真实差仅 ~9.7MB**(更大 JS 图:heap 7.0 vs 3.7MB);适配器/listen 近零成本(+0.7MB)         |
 
 ---
 
@@ -50,12 +53,12 @@ hono [204k,206k,242k,243k]),中位数恰好落在凹陷窗口时就产出 0.88x�
 `diag/pipeline-micro.ts`(无 HTTP/无客户端,`app.handle` vs
 `app.fetch`,同一 12 路由表,200k×5 轮取中位):
 
-| 形状 | keala | hono | 比值 | Δ |
-| --- | ---: | ---: | ---: | ---: |
-| static /user | 177ns | 188ns | **0.94x** | −11ns |
-| 4-seg param | 449ns | 251ns | **1.79x** | +198ns |
-| mixed | 407ns | 244ns | **1.67x** | +163ns |
-| param-only | 353ns | 236ns | **1.49x** | +117ns |
+| 形状         | keala |  hono |      比值 |      Δ |
+| ------------ | ----: | ----: | --------: | -----: |
+| static /user | 177ns | 188ns | **0.94x** |  −11ns |
+| 4-seg param  | 449ns | 251ns | **1.79x** | +198ns |
+| mixed        | 407ns | 244ns | **1.67x** | +163ns |
+| param-only   | 353ns | 236ns | **1.49x** | +117ns |
 
 **动态路由全形状落后 117-198ns,静态反而快 6%**——差异不是 mixed
 特有,是所有"走 trie"的形状共有。
@@ -63,12 +66,12 @@ hono [204k,206k,242k,243k]),中位数恰好落在凹陷窗口时就产出 0.88x�
 `diag/router-micro.ts`(路由器隔离,`matchRoute` vs SmartRouter
 `.match()`,1M×5 轮)把 Δ 分成两半:
 
-| 形状 | keala 路由 | hono 路由 | 路由 Δ | 管线 Δ | 非路由 Δ |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| static | 4.0ns | 9.9ns | −6ns | −11ns | −5ns |
-| 4-seg param | 129.5ns | 48.8ns | **+81ns** | +198ns | +117ns |
-| mixed | 129.3ns | 45.0ns | **+84ns** | +163ns | +78ns |
-| param-only | 106.4ns | 40.7ns | **+66ns** | +117ns | +51ns |
+| 形状        | keala 路由 | hono 路由 |    路由 Δ | 管线 Δ | 非路由 Δ |
+| ----------- | ---------: | --------: | --------: | -----: | -------: |
+| static      |      4.0ns |     9.9ns |      −6ns |  −11ns |     −5ns |
+| 4-seg param |    129.5ns |    48.8ns | **+81ns** | +198ns |   +117ns |
+| mixed       |    129.3ns |    45.0ns | **+84ns** | +163ns |    +78ns |
+| param-only  |    106.4ns |    40.7ns | **+66ns** | +117ns |    +51ns |
 
 - **路由器差**:keala trie 匹配 106-130ns vs hono RegExpRouter 40-49ns
   (2.6-2.9x)。机制:hono 把**整张表编译成每方法一个 regex**,匹配 =
@@ -204,13 +207,13 @@ keala DIST (编译 js)      rss= 57.8  heap= 7.0  ext= 3.2
 
 ## 诊断工具清单(全部保留在 `bench/route-shootout/diag/`)
 
-| 工具 | 测什么 | 运行 |
-| --- | --- | --- |
-| `router-micro.ts` | 路由器隔离:matchRoute vs SmartRouter | `bun …/diag/router-micro.ts` |
-| `pipeline-micro.ts` | 进程内全管线 + Δ 分解 | `bun …/diag/pipeline-micro.ts` |
-| `profile-loop.ts` | CPU profile 目标(紧循环) | `bun --cpu-prof --cpu-prof-dir …/diag/ …/profile-loop.ts` |
-| `recheck-dynamic.mjs` | 安静窗口 HTTP 双栈对照 | `node …/diag/recheck-dynamic.mjs` |
-| `node-memory*.mjs`(×3) | Node 内存步进/模块二分/dist 对照 | `node --expose-gc …` |
+| 工具                   | 测什么                               | 运行                                                      |
+| ---------------------- | ------------------------------------ | --------------------------------------------------------- |
+| `router-micro.ts`      | 路由器隔离:matchRoute vs SmartRouter | `bun …/diag/router-micro.ts`                              |
+| `pipeline-micro.ts`    | 进程内全管线 + Δ 分解                | `bun …/diag/pipeline-micro.ts`                            |
+| `profile-loop.ts`      | CPU profile 目标(紧循环)             | `bun --cpu-prof --cpu-prof-dir …/diag/ …/profile-loop.ts` |
+| `recheck-dynamic.mjs`  | 安静窗口 HTTP 双栈对照               | `node …/diag/recheck-dynamic.mjs`                         |
+| `node-memory*.mjs`(×3) | Node 内存步进/模块二分/dist 对照     | `node --expose-gc …`                                      |
 
 复现口径:微基准 5 轮取中位;HTTP 复核 4 轮交错 + 首枪计入(它就是
 伪影来源,计入才能看见);内存采样前强制 GC。

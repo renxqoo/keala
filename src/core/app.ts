@@ -355,13 +355,15 @@ export class Keala implements NativeApplication {
     if (this.#requestTimeout > 0) {
       const settle = (value: Response): Response =>
         c.deadlineAnswered === true ? value : this.#settle(value);
-      return raceDeadline(
-        this,
-        this.#lifecycle,
-        c,
-        settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled, settle),
-        this.#requestTimeout,
-      );
+      const outcome = settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled, settle);
+      // A SYNCHRONOUSLY-settled response cannot hang: the deadline protects
+      // requests that might never settle, so the race (resolvers + once
+      // guard + timer arm/clear — pure churn at rate, and the measured
+      // source of the Bun-leg RSS gap under load) is skipped for the sync
+      // hot path. The timer could never have fired: the settle microtask
+      // clears it before any macrotask runs.
+      if (!(outcome instanceof Promise)) return outcome;
+      return raceDeadline(this, this.#lifecycle, c, outcome, this.#requestTimeout);
     }
     return settleNativeHandle(this.#pool, this.#poolingEnabled, c, settled, this.#settle);
   }

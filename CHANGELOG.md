@@ -15,8 +15,12 @@ R413 动态路由快速层(route-shootout 诊断 → 修复,docs/R412-SHOOTOUT-D
   4-5 个临时对象);现在按首段桶把全部合格模式(首段静态 + 纯静态/
   必选无约束参数段)编译成**按段数分组**的锚定 alternation——数斜杠
   选组、单次小 regex 执行、命名组直取,零 splitSegments/Frame/
-  ParamLink 分配。trie 仍是语义参照与兜底(转义路径、可选参数、
-  正则约束、通配、参数开头),差分测试逐路径锁死两层恒等。
+  ParamLink 分配。**尾部通配**(`/static/*`)编译为桶的独立兜底组
+  (`/(.*)`):仅当计数组未命中才执行,严格复刻 trie"通配最低优先"
+  的次序,且只在**纯桶**(桶内全部动态模式都已编译)启用——混合桶
+  的计数组未命中可能是未编译可选/约束模式的 trie 命中,兜底会让
+  通配错误抢先。trie 仍是语义参照与最终兜底(转义路径、可选参数、
+  正则约束、参数开头),差分测试逐路径锁死两层恒等。
 - **URL 预填单趟化**:`splitPathSearch` 一趟产出 path+search
   (原 getPath+getSearch 两趟)。
 - 实测(route-shootout 诊断口径,Bun):
@@ -27,17 +31,44 @@ R413 动态路由快速层(route-shootout 诊断 → 修复,docs/R412-SHOOTOUT-D
   - HTTP 层(autocannon ABAB 安静窗口):mixed 0.97→**1.00x**、
     4-seg 0.98→**1.01x**,且 keala 轮间方差显著收紧(首枪凹陷基本
     消失——每请求分配消失的 GC 红利)。
+- **尾部通配进快速层**(后续补丁):`/static/*` 编译为桶的独立兜底组
+  (`/(.*)`),仅计数组未命中才执行;安静窗口 HTTP 1.00x(231.0k vs
+  231.6k)。两个新增语义边界由锁固化:尾斜杠归一(trie 先剥一个尾
+  `/`,通配捕获不含尾斜杠——随机表差分抓获 33 例)、纯桶门(混合桶
+  禁用兜底,否则通配遮蔽未编译的可选/约束模式——agent-r5 优先级锁
+  抓获);
+- **同步结算跳过期限竞赛**(app.ts):同步返回的 Response 不可能
+  挂起,`requestTimeout` 配置下也不再 arm/clear 计时器与竞赛闭包
+  (每同步请求省 ~5 个分配;异步路径 1:1:1 计时器契约不变,
+  REVIEW-PERF-3 栅栏按新契约更新);
 - CPU 归位:mixed 场景路由自耗时 54%(splitSegments 20%)→ 41%,
   Response 构造成为第一大头(26%)。
 
-### 正确性(快速层三个边界,全部由测试锁死)
+### 内存定性(Bun 腿 steady/peak 比 hono 高 ~11MB,未关闭)
+
+实验排除了三个假设:JS 存量堆(heapUsed 差仅 0.3MB)、期限竞赛
+(requestTimeout 默认 0,基准本就未跑;同步跳过后差距不变)、context
+分配(pooling 只收回 2.3MB)。idle RSS 持平(27.0 vs 27.4MB),负载
+下双方都因 Bun HTTP 栈增长 ~+19MB,keala 的额外 ~11MB 是分配器
+arena 随分配率(每请求字符串/Response churn)的增长——soak 证实有界、
+非泄漏。Bun 无分配位点采样 profiler,精确归因待工具;候选方向是继续
+压每请求分配字节(planned-response 头部复用等)。
+
+### 正确性(快速层五个边界,全部由测试锁死)
 
 - 通配段不得进 regex 层(wildcard 的 optional:false/pattern:null 会
   滑过字段检查,被编译成单段捕获并抢优先——红队随机表差分当场抓获);
 - 纯静态模式空泛合格(零捕获组的 groupStart 指向邻路由的组,命中
   扫描错认——同一次红队差分抓获);
-- alternation 排序:首分歧静态优先(= trie DFS 序)+ 静态字面量多者
-  先的 fail-fast 次级键(后缀差异对永不共匹配,语义不变)。
+- **尾斜杠归一**:trie 先剥一个尾 `/` 再切分,通配捕获不含尾斜杠
+  (随机表差分抓到 33 例 `wildcard:"a/b/"` vs `"a/b"`);现在匹配前
+  同样归一,空捕获(`/static/` → `""`)落回 trie 的尾斜杠闸;
+- **纯桶门**:混合桶(含未编译的可选/约束模式)禁用通配兜底,
+  否则计数组未命中时通配抢在 trie 的可选/约束模式之前命中
+  (agent-r5 优先级锁当场抓获 `/a/:x?` 被 `/a/*` 遮蔽);
+- alternation 排序:首分歧按 static > param > wildcard 秩
+  (= trie DFS 弹栈序)+ 静态字面量多者先的 fail-fast 次级键
+  (后缀差异对永不共匹配,语义不变)。
 
 ### 内部
 
