@@ -57,7 +57,9 @@ const timeAwaited = async (fn: (req: Request) => unknown, ring: Request[]): Prom
     const t0 = performance.now();
     for (let i = 0; i < N; i += BATCH) {
       for (let j = 0; j < BATCH; j++) fn(ring[(i + j) % RING] as Request);
-      await null; // 排空 microtask 队列（含所有已 resolve 的 promise 续体）
+      // biome-ignore lint: the bare await IS the microtask drain under test
+      // eslint-disable-next-line unicorn/no-unnecessary-await
+      await null;
     }
     rounds.push(((performance.now() - t0) * 1e6) / N);
   }

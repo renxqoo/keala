@@ -300,18 +300,18 @@ describe("R413 bucket regex: differential against the trie", () => {
     }
   });
 
-  it("the bucket regex actually served the multi-route shapes (coverage guard)", () => {
+  it("the table regex actually served the multi-route shapes (coverage guard)", () => {
     const state = buildState();
     // First match compiles and caches; the epoch stays valid.
     expect(matchRoute(state, "/event/7/comments")?.params).toEqual({ id: "7" });
     expect(matchRoute(state, "/event/8")?.params).toEqual({ id: "8" });
-    // "event" holds 3 dynamic defs → bucket.fast is null → regex layer.
+    // "event" holds 3 dynamic defs → no slice fast matcher → regex layer.
     expect(state.buckets.get("event")?.fast ?? null).toBeNull();
-    expect(state.buckets.get("event")?.regex?.compiled ?? null).not.toBeNull();
+    expect(state.fastIndex?.table ?? null).not.toBeNull();
     // "map" is a single NON-simple def (static tail) → regex, not fast.
     expect(matchRoute(state, "/map/berlin/events")?.params).toEqual({ location: "berlin" });
     expect(state.buckets.get("map")?.fast ?? null).toBeNull();
-    expect(state.buckets.get("map")?.regex?.compiled ?? null).not.toBeNull();
+    expect(state.fastIndex?.table ?? null).not.toBeNull();
   });
 
   it("statics beat params at the first divergence (wildcard stays lowest)", () => {

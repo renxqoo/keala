@@ -1,15 +1,15 @@
 /**
- * The request-side matcher (R413 layout): staticMap → whole-router fast
- * matcher → per-bucket fast matcher → per-bucket compiled regex → trie.
- * Extracted from router.ts for the file-size budget; router.ts re-exports
+ * The request-side matcher (R413 layout, 0.7.4 whole-table): staticMap →
+ * slice fast-matchers → ONE whole-table compiled regex → trie. Extracted
+ * from router.ts for the file-size budget; router.ts re-exports
  * `matchRoute` as the public face.
  */
 
 import { decodeSegment } from "./pattern.ts";
 import { matchPattern } from "./trie.ts";
 import type { RouteTarget } from "./trie.ts";
-import { compileRegexBucket, matchBucketRegex, type RegexBucket } from "./bucket-regex.ts";
-import type { Bucket, RouteMatch, RouterState } from "./router.ts";
+import { compileTableRegex, matchTableRegex, type TableRegex } from "./bucket-regex.ts";
+import type { RouteMatch, RouterState } from "./router.ts";
 
 /** A fast matcher for a bucket with exactly one simple-shape pattern. */
 export interface FastMatcher {
@@ -67,13 +67,31 @@ const fastMatch = (fast: FastMatcher | null, path: string): RouteMatch | null =>
   return { target: fast.target, params };
 };
 
-/** Compiled bucket regex, memoized ON the bucket against the mutation epoch. */
-const bucketRegexOf = (state: RouterState, bucket: Bucket): RegexBucket | null => {
-  const cached = bucket.regex;
-  if (cached !== undefined && cached.mutations === state.mutations) return cached.compiled;
-  const compiled = compileRegexBucket(state.regexIndex, bucket.first, bucket.count);
-  bucket.regex = { mutations: state.mutations, compiled };
-  return compiled;
+/**
+ * The whole-router fast index, memoized against the mutation epoch: the
+ * per-bucket slice fast-matchers (a bucket keeps one exactly while it holds
+ * a single simple-shape dynamic) plus the ONE compiled table regex covering
+ * every eligible pattern. A late registration bumps the epoch and the next
+ * touch rebuilds from regexIndex/buckets.
+ *
+ * The matcher list is CAPPED: beyond a handful of simple buckets a flat
+ * startsWith scan costs more than the single table-regex exec that already
+ * covers those patterns, so wide tables skip the slice path entirely.
+ */
+const FAST_MATCHER_CAP = 8;
+const fastIndexOf = (state: RouterState): { matchers: FastMatcher[]; table: TableRegex | null } => {
+  const cached = state.fastIndex;
+  if (cached !== undefined && cached.mutations === state.mutations) return cached;
+  const matchers: FastMatcher[] = [];
+  if (state.buckets.size <= FAST_MATCHER_CAP) {
+    for (const bucket of state.buckets.values()) {
+      if (bucket.fast !== null) matchers.push(bucket.fast);
+    }
+  }
+  const table = compileTableRegex(state.regexIndex, state.buckets);
+  const fast = { mutations: state.mutations, matchers, table };
+  state.fastIndex = fast;
+  return fast;
 };
 
 export const matchRoute = (state: RouterState, path: string): RouteMatch | null => {
@@ -95,34 +113,19 @@ export const matchRoute = (state: RouterState, path: string): RouteMatch | null 
   if (target !== undefined) return target.staticMatch as RouteMatch;
   if (!state.hasDynamic) return null;
 
-  // The fast matcher's prefix and the bucket regex's literals/captures all
+  // The fast-matchers' prefixes and the table regex's literals/captures all
   // compare in the raw key space — escaped paths go straight to the trie
   // (whose static children do the decoded comparison canonically).
   if (!escaped) {
-    if (state.fastDynamic !== null) {
-      const matched = fastMatch(state.fastDynamic, path);
+    const fast = fastIndexOf(state);
+    const matchers = fast.matchers;
+    for (let i = 0; i < matchers.length; i++) {
+      const matched = fastMatch(matchers[i] as FastMatcher, path);
       if (matched !== null) return matched;
     }
-
-    // Bucket by first segment.
-    const firstEnd = path.indexOf("/", 1);
-    const first = firstEnd === -1 ? path.slice(1) : path.slice(1, firstEnd);
-    if (first.length > 0) {
-      const bucket = state.buckets.get(first);
-      if (bucket !== undefined) {
-        const fast = fastMatch(bucket.fast, path);
-        if (fast !== null) return fast;
-        // fast === null ⇔ the bucket holds either several dynamic patterns or
-        // a single non-simple one — exactly when the compiled bucket regex
-        // adds coverage beyond fastMatch.
-        if (bucket.fast === null) {
-          const compiled = bucketRegexOf(state, bucket);
-          if (compiled !== null) {
-            const matched = matchBucketRegex(compiled, path);
-            if (matched !== null) return matched;
-          }
-        }
-      }
+    if (fast.table !== null) {
+      const matched = matchTableRegex(fast.table, path);
+      if (matched !== null) return matched;
     }
   }
   return matchPattern(state.trieRoot, path);

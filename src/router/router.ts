@@ -4,12 +4,12 @@
  *
  * Matching order per request:
  *   1. staticMap — O(1) exact hit (plus the trailing-slash retry)
- *   2. bucket fast matcher — when the bucket holds exactly ONE dynamic
+ *   2. slice fast-matchers — every bucket holding exactly ONE dynamic
  *      pattern of "simple shape" (static head + plain params), where the
  *      matcher is provably equivalent to the trie walk
- *   3. bucket regex (R413) — multi-route buckets and static tails after
- *      params (`/event/:id/comments`): every eligible pattern compiled into
- *      ONE anchored alternation, one regex exec per request
+ *   3. table regex (R413 bucket-regex, 0.7.4 whole-table) — every eligible
+ *      pattern in the router compiled into ONE anchored alternation, one
+ *      regex exec per request, no bucket lookup / slash-count dispatch
  *   4. trie — handles every other shape (optionals, custom patterns,
  *      wildcards, param-first routes, escaped paths); its O(segments)
  *      walk is what keeps 1000-route tables fast where regex scans collapse.
@@ -19,9 +19,8 @@
  * `rebuildChains` whenever the app-level middleware stack changes.
  */
 
-import { compose, direct, type Composed, type Handler } from "../core/compose.ts";
+import type { Handler } from "../core/compose.ts";
 import type { Context } from "../core/context/context.ts";
-import { FLAG_ROUTE_REACHED } from "../core/context/state.ts";
 import {
   EMPTY_MIDDLEWARE_STACK,
   middlewareForRoute,
@@ -36,7 +35,8 @@ import {
   patternsOverlap,
 } from "./pattern.ts";
 import { canonicalKey, type FastMatcher } from "./match.ts";
-import { isRegexEligible, type EligiblePattern, type RegexBucket } from "./bucket-regex.ts";
+import { chainOf, paramChainFor, staticHeadOf } from "./chains.ts";
+import { isRegexEligible, type EligiblePattern, type TableRegex } from "./bucket-regex.ts";
 import {
   createNode,
   createTarget,
@@ -49,7 +49,7 @@ import {
 export type RouteHandler = Handler<Context>;
 
 /** All built-in chains share this signature (composed or direct). */
-export type Chain = Composed<Context>;
+export type { Chain } from "./chains.ts";
 
 export interface RouteDef {
   method: string; // uppercase, or "ALL"
@@ -86,14 +86,12 @@ const ALL = "ALL";
 export const EMPTY_PARAMS: Record<string, string> = Object.freeze(Object.create(null));
 
 export interface Bucket {
-  /** The first-segment key this bucket is indexed under (self-reference:
-   * the regex memo hangs on the bucket itself, no second map lookup). */
+  /** The first-segment key this bucket is indexed under. */
   first: string;
   fast: FastMatcher | null;
-  /** Dynamic patterns in this bucket (always present in the trie as well). */
+  /** Dynamic patterns in this bucket (always present in the trie as well);
+   * feeds the table regex's wildcard purity rule. */
   count: number;
-  /** Memoized R413 compilation, valid for the recorded mutation epoch. */
-  regex?: { mutations: number; compiled: RegexBucket | null };
 }
 
 export interface RouterState {
@@ -102,9 +100,12 @@ export interface RouterState {
   paramMiddlewares: Map<string, RouteHandler>;
   staticMap: Map<string, RouteTarget>;
   buckets: Map<string, Bucket>;
-  /** Whole-router specialization while exactly one simple dynamic def exists. */
-  fastDynamic: FastMatcher | null;
-  dynamicDefCount: number;
+  /**
+   * R413 fast layer (0.7.4 whole-table), memoized against `mutations`:
+   * the slice fast-matchers plus the ONE compiled table regex. Lazy —
+   * the first dynamic miss after a mutation epoch rebuilds it.
+   */
+  fastIndex?: { mutations: number; matchers: FastMatcher[]; table: TableRegex | null };
   trieRoot: TrieNode;
   hasDynamic: boolean;
   prefix: string;
@@ -134,8 +135,6 @@ export const createRouterState = (prefix = ""): RouterState => ({
   paramMiddlewares: new Map(),
   staticMap: new Map(),
   buckets: new Map(),
-  fastDynamic: null,
-  dynamicDefCount: 0,
   trieRoot: createNode(),
   hasDynamic: false,
   prefix: normalizePrefix(prefix),
@@ -184,7 +183,6 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
     if (!targets.includes(target)) targets.push(target);
   }
   state.hasDynamic = true;
-  state.dynamicDefCount++;
   const first = ir.segments[0] as CompiledSegment;
   if (first.kind !== "static") return targets;
   let bucket = state.buckets.get(first.value);
@@ -203,65 +201,7 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
           target: targets[0] as RouteTarget,
         }
       : null;
-  state.fastDynamic =
-    state.dynamicDefCount === 1 && ir.isSimple
-      ? {
-          prefix: staticHeadOf(ir.segments),
-          names: paramNamesOf(ir.segments),
-          target: targets[0] as RouteTarget,
-        }
-      : null;
   return targets;
-};
-
-/** Concatenate the leading static segments into a path prefix. */
-const staticHeadOf = (segments: readonly CompiledSegment[]): string => {
-  let prefix = "";
-  for (const segment of segments) {
-    if (segment.kind !== "static") break;
-    prefix += `/${segment.value}`;
-  }
-  return prefix;
-};
-
-const paramChainFor = (
-  state: RouterState,
-  segments: readonly CompiledSegment[],
-): RouteHandler[] => {
-  const chain: RouteHandler[] = [];
-  for (const name of paramNamesOf(segments)) {
-    const mw = state.paramMiddlewares.get(name);
-    if (mw !== undefined && !chain.includes(mw)) chain.push(mw);
-  }
-  return chain;
-};
-
-/**
- * Dev tracing marker (DOGFOOD-R1 C4): compiled between the global middleware
- * and the route's own layers, it flags "the route was reached" — a settled
- * chain WITHOUT this flag means a global middleware returned before next()
- * and the route handlers never ran.
- */
-const markRouteReached: RouteHandler = (c, next) => {
-  c.flags |= FLAG_ROUTE_REACHED;
-  return next();
-};
-
-const chainOf = (
-  handlers: readonly RouteHandler[],
-  appMiddleware: readonly RouteHandler[],
-  devTrace: boolean,
-): Chain => {
-  if (appMiddleware.length === 0) {
-    // No middleware ahead of the route: nothing can swallow it — the marker
-    // (and, for one handler, composition itself) is unnecessary.
-    return handlers.length === 1
-      ? direct(handlers[0] as RouteHandler)
-      : (compose(handlers) as Chain);
-  }
-  return compose(
-    devTrace ? [...appMiddleware, markRouteReached, ...handlers] : [...appMiddleware, ...handlers],
-  ) as Chain;
 };
 
 /** Index + compose the chain for ONE definition (incremental registration). */
@@ -305,8 +245,7 @@ const bindDef = (state: RouterState, def: RouteDef, middleware: MiddlewareStack)
 const resetIndex = (state: RouterState): void => {
   state.staticMap = new Map();
   state.buckets = new Map();
-  state.fastDynamic = null;
-  state.dynamicDefCount = 0;
+  state.fastIndex = undefined;
   state.trieRoot = createNode();
   state.hasDynamic = false;
   state.regexIndex = new Map();
