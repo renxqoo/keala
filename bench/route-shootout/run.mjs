@@ -22,24 +22,24 @@ const ROUNDS = Number(process.argv[4] ?? 4);
 
 const GO_DIR = "bench/route-shootout/server-go";
 const GO_BINARY = `${GO_DIR}/server-shootout-go`;
+// 以工具链为准，而不是磁盘上可能有跨平台残留的二进制（如在无 go 的
+// 机器上 rsync 来的 darwin 产物）——没有 go 就静默跳过这条腿。
+const GO_VERSION = (() => {
+  try {
+    return execSync("go version", { encoding: "utf8" }).trim().match(/go(\d+\.\d+)/)?.[1] ?? "?";
+  } catch {
+    return undefined;
+  }
+})();
 const GO_AVAILABLE =
-  existsSync(GO_BINARY) ||
+  GO_VERSION !== undefined &&
   (() => {
-    try {
-      execSync("go version", { stdio: "pipe" });
-    } catch {
-      return false;
+    if (!existsSync(GO_BINARY)) {
+      execSync("go build -o server-shootout-go .", { cwd: GO_DIR, stdio: "inherit" });
     }
-    execSync("go build -o server-shootout-go .", { cwd: GO_DIR, stdio: "inherit" });
     return true;
   })();
-const GO_LABEL = GO_AVAILABLE
-  ? `go ${
-      execSync("go version", { encoding: "utf8" })
-        .trim()
-        .match(/go(\d+\.\d+)/)?.[1] ?? "?"
-    }`
-  : "";
+const GO_LABEL = GO_AVAILABLE ? `go ${GO_VERSION}` : "";
 
 const SERVERS = [
   {
