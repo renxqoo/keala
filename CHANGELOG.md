@@ -4,7 +4,38 @@
 
 ## Unreleased
 
-性能:路由快速层整表化;测试目录按功能重组(详见下)。
+keala 原生 API 迁移(去 Koa 形态,docs/KEALA-NATIVE-API-MIGRATION.md);
+路由快速层整表化;测试目录按功能重组(详见下)。
+
+### 破坏性变更(keala 原生 API)
+
+- **`c.params("id")` 函数式**取代 `c.params["id"]`:路由产物零拷贝直达
+  (table 层 exec 数组+offset、trie 层注册期 matchNames 预挂、fast 层复用
+  split 数组),`c.paramNames/paramValues/paramOffset` 三槽;重复名三层统一
+  latest-wins;`"toString"`/`"__proto__"` 天然 miss。`paramsRecord(names,
+values, offset)` 是"要整个 map"的官方适配器(sink 镜像边界同款)。
+  实测同窗口 A/B 全形状反超旧实现 3-7ns(mixed 1.10x→1.01-1.04x vs hono,
+  两波测量;收口值见迁移文档 P1)。
+- **响应即 return**:`c.body =`/`c.status =`(写)/`c.type`/`c.length`/
+  `c.etag`/`c.lastModified`/`c.attachment()`/`c.res` 及读侧 getter 全部
+  删除。响应唯一形态 = `return c.text/json/html(body, status?, headers?)`
+  或 `return Response`;`c.status` 只读保留(观察槽)。有损映射(§2.2):
+  type→`setHeader` 完整 MIME、etag→手动引号、attachment→手写
+  Content-Disposition。
+- **`return c.redirect(url, code?)`**:纯构造器(校验/URL 归一化/外域中和/
+  encodeUrl 原样),不再 mutate、不再 throw-on-commit。同名 Location 优先级
+  翻转:先行 staged Location 反杀 redirect 目标(§2.3-1 通用规则方向)。
+- **etag/compress 重写为 post-next Response 变换**:资格门槛 = 快照身份
+  (sugar 产物;手建/流/SSE/native pass-through——新行为锁);304 干净重建
+  (无条件清洗收紧 §2.3-2);compress 替换重品牌 + 原文本 memo——任意中间件
+  顺序下 tag 恒为压缩前代表;sugar HEAD 视图品牌化(payload memo),HEAD
+  条件协商与 GET 对齐。
+- 中间件 return 化:cors(403/204)/auth(401×3)/metrics(page)字节等价迁移
+  (Node 适配器 wire 含 CT 完全逐字节等价;Bun CT 显式化为 D1 容差改善)。
+- 错误漏斗直构 Response 走 finishCommitted(merge+sanitize+HEAD 共用收尾);
+  onStreamError 重挂 committed 路径(dispatchDirect 快路径加门)。
+- koa 对齐测试退役(parity/koa\* 差分 33 用例删除;9 项唯一行为锁回迁 keala
+  原生断言);koa 仅保留 bench 性能对照选手地位。
 
 ### 性能
 
@@ -26,8 +57,6 @@
 
 测试目录整理:按"被测功能"而非"评审轮次"组织(零测试丢失,2658 项与
 coverage 95.41/91.06/96.36/97.07 与整理前逐项一致)。
-
-### 内部
 
 - `test/` 根目录只保留 7 个分类目录:`unit/`(按 src 模块)、`middleware/`
   (每中间件一文件)、`integration/`(生命周期/适配器/sink/commit 契约)、

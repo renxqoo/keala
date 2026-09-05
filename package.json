@@ -1,14 +1,13 @@
 {
   "name": "keala",
   "version": "0.7.3",
-  "description": "keala — Koa's ergonomics at Hono's speed: dual-mode onion framework for Bun 1.4+ (runs under Node too). Zero dependencies, precompiled middleware chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets.",
+  "description": "keala — an onion-model web framework with its own native API: return-style responses, zero-copy route params, precompiled chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets. Zero dependencies; runs on Bun 1.4+ and Node.",
   "keywords": [
     "bun",
     "fetch",
     "framework",
     "hono",
     "http",
-    "koa",
     "middleware",
     "onion",
     "router",

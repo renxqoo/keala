@@ -209,7 +209,7 @@ bun scripts/smoke.ts / bun scripts/example-check.ts（受影响时）。
 
 ---
 
-## 第三部分：MIGRATION（按单元；状态：**U1-U3c 已实施（2026-09-06）**，U4 待实施）
+## 第三部分：MIGRATION（按单元；状态：**U1-U4 已实施（2026-09-06）**——迁移全部单元完成）
 
 ### U1 — koa 对齐测试退役（流程试运行单元）
 
@@ -443,21 +443,52 @@ README×2 / KEALA-NATIVE-API.md / package.json / index.ts / docs-examples.test.t
 CHANGELOG；服务器干净窗口 shootout 复测（P3）。
 **验收**：全 CI 链本地复跑（含 soak/process-check）；核销清单逐项。
 
+**实施记录（2026-09-06）**：
+
+- 文档面（子代理）：README×2 定位叙事定稿（"keala 自有的 API：洋葱模型 +
+  零依赖 + Bun 原生快路径——融于单一扁平 context"）；全部示例/速查表/
+  迁移表新 API 化（~40 处×2 语言）；KEALA-NATIVE-API.md §2.2 整节重写
+  （响应唯一形态=return、头部唯一暂存面、有损映射配方含 RFC5987 例、
+  redirect 纯构造器语义）+ §2.3 速查表与表面锁逐一对齐 + §6 历史注记；
+  docs-examples.test.ts 扩 3→9 用例双运行时绿。终验 grep（README×2/
+  KEALA-NATIVE-API/docs-examples）0 命中（MIGRATION-0.7.md 为历史指南豁免）。
+- package.json：description 去 koa 定位、keywords 去 "koa"（依赖保留——
+  裁决 7 bench 对照）；CHANGELOG Unreleased 补破坏性变更全叙事；index.ts
+  头注释已随各单元同步。
+- **P3 服务器复测（192.168.31.149 干净窗口，bun 1.4.2/node 26 统一）**：
+  第一轮 Bun 腿七场景 0.97/0.97/1.02/0.97/0.89(±23%)/1.35(±66%)/0.96 →
+  **中位 0.97x**；第二轮（噪声 ±17-89%）0.97/1.08/0.72/1.03/0.95/1.08/
+  0.93 → **中位仍 0.97x**。定案：两轮中位 0.97x，低于 ≥0.98x 字面线 1pp，
+  判**噪声带内持平**（依据：迁移前同机基线中位 ≈1.0、场景噪声 ±4-89%、
+  HTTP 层平台地板稀释的诊断不变）；框架机器无回退的精确信号在隔离测量——
+  router-micro 0.80-1.22x、adapter-fresh 全形状 0.86-0.98x 全面优于 hono。
+  P3 记录为「0.97x 持平（两轮中位）」，不粉饰为达标。
+
 ---
 
-## 收口核销清单
+## 收口核销清单（2026-09-06 全项核销）
 
-- [ ] U1-U4 各自 commit + 单元门全绿 + 矩阵核销（附录 M 对照）
-- [ ] 每单元对抗审查偏差清单清零
-- [ ] 覆盖率 ≥90/90/90/90 逐单元对比核销（含 U1 删除损失的补齐证明）
-- [ ] 性能预算 P1-P5 全过（命令+基线对账）
-- [ ] 零兼容举证：src 中 `c.body =`、`c.status =`（写）、`.params[`/
-      `.params?.[`、`c.redirect(` 调用形态 均 0 命中（注释与报错文案中的
-      字样豁免两处已知位：context.ts:106 错误消息、types.ts:154 注释——
-      grep 后人工核对这两处）；types 无旧签名
-- [ ] 假绿抽查（独立确认）：无矩阵外删除/跳过、无断言弱化
-- [ ] README×2 / KEALA-NATIVE-API.md / package.json / index.ts / PARITY.md 标注完成
-- [ ] 全 CI 链绿；文档状态推进「已核销」；实施记录逐波追加（8+ 节预留）
+- [x] U1-U4 各自 commit + 单元门全绿 + 矩阵核销（附录 M 对照；U1/U2/U3a/
+      U3b/U3c/U4 六 commit）
+- [x] 每单元对抗审查偏差清单清零（合计 4+3+1+3+2 条 CONFIRMED 全修；
+      NOTE 全处置）
+- [x] 覆盖率 ≥90/90/90/90 逐单元核销（终态 95.55/90.74/96.16/97.37——
+      src 净删 ~236 语句后语句/行覆盖率反升）
+- [~] 性能预算：P1 ✓（4-seg 0.80/mixed 1.01/通配 1.17-1.22 ≤1.25）、
+  P2 ✓（adapter-fresh 0.86-0.98x 全形状优于 hono）、P3 **两轮中位
+  0.97x——低于 0.98x 字面线 1pp，判噪声带内持平**（迁移前基线 1.0、
+  场景噪声 ±4-89%；详 U4 实施记录）、P4 ✓（状态机删除的代码审查+
+  adapter 提升）、P5 ✓ratio（mixed 1.01 ≤1.05）/✗绝对值（25ns 预估
+  被 null-proto Record 实值 ~5ns 证伪，实测净省 3-7ns——如实记录）
+- [x] 零兼容举证：五项 grep src/ 0 命中；types 无旧签名（ResponseBody
+      已删）；收口 grep 家族含 `\.params\?\.` 变体
+- [x] 假绿抽查：各单元对抗审查独立复核（U3c 复核 86 条删除矩阵无一
+      借机删活行为锁、断言放宽 13 处全为 D1 容差有据）
+- [x] README×2 / KEALA-NATIVE-API.md / package.json / index.ts / PARITY.md
+      完成；CHANGELOG Unreleased 全叙事
+- [x] 全 CI 链绿（fmt/lint/tsc/vitest+coverage/build/bun 套件/smoke/
+      example-check/soak/process-check；2570 双运行时）；本状态推进
+      「已核销」；实施记录六波齐
 
 ## 实施记录（收口时逐波追加）
 
@@ -472,6 +503,15 @@ params 函数式化落地。核心设计裁决三条：①trie 是树 → termin
 假绿抓获 1 处：`Object.keys(c.params)` 对函数恒空且 tsc 放行——机械替换的
 形态面（bracket/点/展开/整体传参）之外永远还有变体，验收 grep 必须
 多形态并列。
+
+### 第 6 波 — U4（2026-09-06）
+
+定位收口。文档面子代理完成 README×2（~40 处×2 语言）与 KEALA-NATIVE-API.md
+（§2.2 重写/速查表对齐/历史注记）+ docs-examples 3→9 用例；package.json/
+CHANGELOG/index.ts/PARITY.md 齐。P3 服务器复测两轮中位 0.97x——低于 0.98x
+字面线 1pp，判噪声带内持平并如实记录（不粉饰）；隔离测量证明框架机器
+无回退。迁移六单元全部核销：2658→2570（−33 koa 差分、+15 新锁/回迁、
+−86 删除矩阵、−84 净变 → 2570），coverage 95.55/90.74/96.16/97.37。
 
 ### 第 1 波 — U1（2026-09-06）
 

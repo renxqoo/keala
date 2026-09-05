@@ -2,8 +2,8 @@
 
 [English](./README.md) | 简体中文
 
-**Koa 的人体工学 + Hono 的速度，融于同一个 context —— 基于
-[Bun 1.4+](https://bun.sh)，零依赖。**
+**keala 自有的 API：洋葱模型中间件 + 零依赖 + Bun 原生快路径 —— 融于
+单一扁平 context，在 [Bun 1.4+](https://bun.sh) 上达到 hono 级速度。**
 
 ```bash
 bun add keala
@@ -16,13 +16,9 @@ import { Keala } from "keala";
 
 const app = new Keala();
 
-app.get("/", (c) => c.text("hello keala")); // hono 风格 return
-app.get("/users/:id(\\d+)", (c) => c.json({ id: c.params.id }));
-app.get("/page", (c) => {
-  // koa 风格 state
-  c.type = "text/html";
-  c.body = "<b>hi</b>";
-});
+app.get("/", (c) => c.text("hello keala")); // return 风格
+app.get("/users/:id(\\d+)", (c) => c.json({ id: c.params("id") }));
+app.get("/page", (c) => c.html("<b>hi</b>"));
 
 app.listen(3000);
 ```
@@ -56,10 +52,11 @@ listen(app, 3000);
   内容协商、签名 Cookie、405/Allow 合成与完整洋葱模型。中间件链在
   注册时编译一次；全同步路径零 Promise 分配；路由发生在洋葱之前
   （静态路由 = 一次 `Map` 命中）。
-- **双模 API、单一扁平 context。** `return c.json(...)`（hono 式）与
-  `c.body = ...; c.status = 404`（koa 式）自由混用 —— 最后提交者胜。
-  每个请求只分配一个 context 对象；`query`、`cookies`、`ip`、`state`
-  均为首次访问时才物化。
+- **单一扁平 context、单一响应形态。** handler 以 return 作答：
+  `return c.text/json/html(body, status?, headers?)`、
+  `return c.redirect(...)` 或手建 `new Response(...)` —— 链上最后返回的
+  Response 获胜；全程无返回的链回答内置 404。每个请求只分配一个
+  context 对象；`query`、`cookies`、`ip`、`state` 均为首次访问时才物化。
 - **零运行时依赖。** 一切内置：CORS、CSRF、认证、ETag、压缩、静态
   文件、SSE、body 解析、Standard Schema 校验、WebCrypto 密码哈希、
   支持密钥轮换的签名 Cookie。
@@ -69,7 +66,7 @@ listen(app, 3000);
   空闲超时对策。
 - **久经考验。** **2000+ 测试在 Node 与真实 Bun 双运行时全绿**，
   针对注入、原型污染、请求走私、恶意滥用等真实
-  攻击手法加固，行为与 koa、hono 本尊逐项比对验证。每次变更过
+  攻击手法加固，行为与 hono 本尊逐项比对验证。每次变更过
   四道质量门（格式 / lint / 类型 / 双运行时全量测试）。
 - **安全优先的默认值。** 头写入拒绝 CRLF/NUL 与控制字节、查询与
   Cookie 映射防原型污染、RFC 6265 Cookie 校验、签名 Cookie 恒时比较、
@@ -120,7 +117,11 @@ import {
   validator,
   validOf,
 } from "keala/middleware"; // 聚合入口 —— 也可按文件导入：keala/middleware/cors
-import { createBodyParser, hashPassword, verifyPassword, streamSSE, html, raw } from "keala";
+import {
+  createBodyParser,
+  noOpFor, // 根导出 —— 透明性声明，不是中间件层
+  hashPassword,
+  verifyPassword,
 
 app.use(createBodyParser({ jsonLimit: 1024 * 1024 })); // PLUGIN：安装正文书读取器，经 bodyOf(c) 访问
 // const body = await bodyOf(c).json() —— 类型化访问器，零 cast；读取
@@ -142,7 +143,7 @@ app.get("/feed", (c) =>
     sse.send({ data: tick() });
   }),
 );
-app.get("/page/:slug", (c) => c.html(html`<h1>${c.params.slug}</h1>`)); // 自动转义
+app.get("/page/:slug", (c) => c.html(html`<h1>${c.params("slug")}</h1>`)); // 自动转义
 app.ws("/chat", {
   origin: ["https://app.site"], // 升级前校验 Origin；不匹配 403
   // （csrf() 罩不住浏览器的 WS 握手 —— 这个选项可以）
@@ -250,20 +251,22 @@ if (
 每个请求只分配一个 context。请求与响应在同一个对象上；一切惰性属性
 （`query`、`cookies`、`ip`、`state`）在首次访问时才物化。
 
-| 请求侧（只读）                                                    | 响应侧                                    | 语法糖（return 风格）            |
-| ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------- |
-| `c.raw/method/path/url/querystring/search`                        | `c.status/body/type/length`               | `c.text(str, status?, headers?)` |
-| `c.header(name)`                                                  | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
-| `c.params` `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.etag/lastModified/attachment/redirect` | `c.html(str, status?, headers?)` |
-| `c.accepts/is` `c.signal` `c.runtime`                             | `c.cookies`（签名、密钥轮换）             | `c.throw/assert`                 |
+| 请求侧（只读）                                                         | 响应侧                                    | 响应语法糖（return 风格）        |
+| ---------------------------------------------------------------------- | ----------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/querystring/search`                             | `c.status`（只读）                        | `c.text(str, status?, headers?)` |
+| `c.header(name)` `c.headers`                                           | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
+| `c.params("id")` `c.routePath/routeName` `c.queries(name)` `c.ip/host` | `return c.redirect(url, code?)`           | `c.html(str, status?, headers?)` |
+| `c.accepts/is` `c.signal` `c.runtime`                                  | `c.cookies`（签名、密钥轮换）             | `new Response(...)`              |
+|                                                                        | `c.throw/assert`                          |                                  |
 
-双模式规则各一句话：**返回的 `Response` 立即提交；`c.*` 写入先暂存；
-最后一个提交者获胜；未被写过的请求落入 `app.notFound`**。提交之后：头部
-写入仍然直接装饰已提交的 Response（`await next()` 后照常
-`c.setHeader/append/remove`），而 `c.body/c.status/c.redirect` 抛
-TypeError——给 `c.body` 赋一个 `Response` 同样抛 TypeError（应该 return
-它）——要替换已提交的响应，构造新 Response 返回（完整契约见仓库中的
-[`docs/MIGRATION-0.7.md`](https://github.com/renxqoo/keala/blob/main/docs/MIGRATION-0.7.md)，
+响应规则各一句话：**return 的 `Response` 即提交——`c.text/json/html(...)`
+或 `new Response(...)`；链上最后返回的 Response 获胜；全程无返回的链回答
+内置 404（暂存头仍会合并上去）**。return 之前的头部写入先暂存
+（`c.setHeader/c.cookies` 随构造进最终 Response），return 之后直写已提交
+Response 的 `Headers`（`await next()` 后照常 `c.setHeader/append/remove`）；
+要替换已提交的响应，构造新 Response 返回。`c.status` 只读——设置状态用
+语法糖第二参或 `new Response(..., { status })`（完整契约见仓库中的
+[`docs/KEALA-NATIVE-API-MIGRATION.md`](https://github.com/renxqoo/keala/blob/main/docs/KEALA-NATIVE-API-MIGRATION.md)，
 npm 包只发布代码）。路径命中但
 方法不匹配时回答 405 + `Allow`（OPTIONS 得到 200 + `Allow`，未知方法
 501）。
@@ -279,7 +282,7 @@ encodeURIComponent 形态匹配;非规范编码的非保留字符(`%5F` 代 `_`)
 ## 全局中间件与路由顺序 —— 头号陷阱
 
 路由发生在洋葱**之前**，但全局 `app.use()` 中间件会包裹**每条路由的
-处理函数**（koa 语义）：中间件不调用 `next()` 而直接返回 Response，
+处理函数**（洋葱模型的合同）：中间件不调用 `next()` 而直接返回 Response，
 该路由就永远不会执行 —— 下面的 `/health` 回答的是中间件的 404，
 而不是它自己的 handler：
 
@@ -317,22 +320,30 @@ pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则�
 
 ## 从 koa 迁移
 
-| Koa                                                     | keala                                               |
-| ------------------------------------------------------- | --------------------------------------------------- |
-| `ctx.request.get("x")`                                  | `c.header("x")`                                     |
-| `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.setHeader("x", v)`                               |
-| `ctx.body = x` / `ctx.status = n`                       | `c.body = x` / `c.status = n`（相同）               |
-| `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`             |
-| `app.use(router.routes()).use(router.allowedMethods())` | 直接 `app.get(...)`，或 `app.mount(prefix, router)` |
-| `new Koa({ proxy: true })`                              | `new Keala({ proxy: true })`                        |
-| `ctx.state.user`                                        | `c.state.user`（相同）                              |
-| `ctx.cookies.get/set`                                   | `c.cookies.get/set`（相同，签名 + keys）            |
+| Koa                                                     | keala                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `ctx.request.get("x")`                                  | `c.header("x")`                                                                 |
+| `ctx.response.set("x", v)` / `ctx.set(...)`             | `c.setHeader("x", v)`                                                           |
+| `ctx.body = x` / `ctx.status = n`                       | `return c.text/json(x, n)` 或 `return new Response(x, { status: n })`           |
+| `ctx.type = t` / `ctx.length = n`                       | `c.setHeader("Content-Type", t)` / `c.setHeader("Content-Length", "n")`         |
+| `ctx.etag = "v1"` / `ctx.lastModified = d`              | `c.setHeader("ETag", '"v1"')` / `c.setHeader("Last-Modified", d.toUTCString())` |
+| `ctx.attachment("f.pdf")`                               | `c.setHeader("Content-Disposition", 'attachment; filename="f.pdf"')`            |
+| `ctx.redirect(url)`                                     | `return c.redirect(url, code?)`                                                 |
+| `ctx.throw(404, "msg")` / `ctx.assert(...)`             | `c.throw(404, "msg")` / `c.assert(...)`                                         |
+| `app.use(router.routes()).use(router.allowedMethods())` | 直接 `app.get(...)`，或 `app.mount(prefix, router)`                             |
+| `new Koa({ proxy: true })`                              | `new Keala({ proxy: true })`                                                    |
+| `ctx.state.user`                                        | `c.state.user`（相同）                                                          |
+| `ctx.cookies.get/set`                                   | `c.cookies.get/set`（相同，签名 + keys）                                        |
+
+响应侧的映射有意做成手写：旧 setter 会悄悄做 MIME 简写展开、ETag 加引号、
+attachment 文件名编码这类事，`c.setHeader` 不会——请传完整值。常见场景
+直接用语法糖，content-type 由它正确带出。
 
 有意为之的差异（见仓库中的
 [`PARITY.md`](https://github.com/renxqoo/keala/blob/main/docs/PARITY.md)）：
-字符串响应体不再由框架设置
-`content-type`（运行时会默认给 `text/plain`；需要显式类型请用 `c.type`
-或语法糖）；不再做标记嗅探；对象响应体在读取 `c.body` 时保持对象形态。
+koa 的状态式响应写入已删除——一律以 return 作答；手建
+`new Response(string)` 不由框架设置 `content-type`（运行时会默认给
+`text/plain`；语法糖会显式设置）；标记嗅探从未存在过。
 
 给 koa 迁移者的一条安全提示：koa 会物化完整 query Map，而 keala 的
 `c.query(name)` 是定向扫描，键按原文或规范 `encodeURIComponent` 形态匹配。
@@ -344,26 +355,27 @@ pattern 有意只支持静态精确路径和末尾独立 `/*`；参数、正则�
 
 ## 从 hono 迁移
 
-| Hono                                               | keala                                                                                   |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `new Hono()`                                       | `new Keala()`                                                                           |
-| `app.get(path, (c) => c.json(...))`                | 相同的 return 风格                                                                      |
-| `c.req.param("id")`                                | `c.params.id`                                                                           |
-| `c.req.query("q")`                                 | `c.query("q")`（同款惯用法；重复键 `c.queries("q")`）                                   |
-| `c.req.header("x")`                                | `c.header("x")`                                                                         |
-| `await c.req.json()`                               | `await bodyOf(c).json()`（配合 bodyParser 插件）或 `await c.raw.json()`（零配置）       |
-| `app.use(mw)`                                      | 相同 —— 但吞掉路由时会给出[开发警告](#全局中间件与路由顺序--头号陷阱)                   |
-| `app.notFound(fn)` / `app.onError(fn)`             | `app.notFound(fn)` / `app.onError(fn)`                                                  |
-| `hono.route("/api", subApp)`                       | `app.mount("/api", router)`（表合并；404 自然落穿）                                     |
-| `app.fetch(req)` → `Response \| Promise<Response>` | `await app.handle(req)` → 恒为 `Promise<Response>`，永不 reject                         |
-| `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` —— Bun.serve 已内建                                                  |
-| `new Hono({ strict: false })`                      | 没有 strict 模式：`/path` 与 `/path/` 是同一条路由                                      |
-| `new URL(c.req.url())`                             | `c.url` 是 path+search（koa 形态）；绝对地址是 `c.raw.url`                              |
-| `app.onError(fn)` 产出错误响应                     | 同样返回 Response；额外支持返回 void 使用内置响应                                       |
-| `app.notFound(fn)` 可以 throw                      | 不可 throw —— 返回 Response **或**状态式写入（`c.status`/`c.body`）；throw 落入通用 500 |
+| Hono                                               | keala                                                                             |
+| -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `new Hono()`                                       | `new Keala()`                                                                     |
+| `app.get(path, (c) => c.json(...))`                | 相同的 return 风格                                                                |
+| `c.req.param("id")`                                | `c.params("id")`                                                                  |
+| `c.req.query("q")`                                 | `c.query("q")`（同款惯用法；重复键 `c.queries("q")`）                             |
+| `c.req.header("x")`                                | `c.header("x")`                                                                   |
+| `c.req.routePath()`（路由助手）                    | `c.routePath` / `c.routeName`（属性直读，含命名路由）                             |
+| `await c.req.json()`                               | `await bodyOf(c).json()`（配合 bodyParser 插件）或 `await c.raw.json()`（零配置） |
+| `app.use(mw)`                                      | 相同 —— 但吞掉路由时会给出[开发警告](#全局中间件与路由顺序--头号陷阱)             |
+| `app.notFound(fn)` / `app.onError(fn)`             | `app.notFound(fn)` / `app.onError(fn)`                                            |
+| `hono.route("/api", subApp)`                       | `app.mount("/api", router)`（表合并；404 自然落穿）                               |
+| `app.fetch(req)` → `Response \| Promise<Response>` | `await app.handle(req)` → 恒为 `Promise<Response>`，永不 reject                   |
+| `Bun.serve({ fetch: app.fetch })`                  | `app.listen(port)` —— Bun.serve 已内建                                            |
+| `new Hono({ strict: false })`                      | 没有 strict 模式：`/path` 与 `/path/` 是同一条路由                                |
+| `new URL(c.req.url())`                             | `c.url` 是 path+search（origin 形态）；绝对地址是 `c.raw.url`                     |
+| `app.onError(fn)` 产出错误响应                     | 同样返回 Response；额外支持返回 void 使用内置响应                                 |
+| `app.notFound(fn)` 可以 throw                      | 不可 throw —— 返回 Response（或不返回，用内置 404）；throw 落入通用 500           |
 
-值得知道的差异：`c.body` 是**响应**体（hono 的请求体在 `c.raw` 或解析
-插件上）；中间件按 koa 语义运行 —— 见
+值得知道的差异：响应体没有属性形态——一律以 return 作答（hono 的请求体
+在 `c.raw` 或解析插件上）；全局中间件按洋葱模型包裹每条路由 —— 见
 [全局中间件与路由顺序](#全局中间件与路由顺序--头号陷阱)。
 
 ## 错误处理：onError、notFound
@@ -391,13 +403,12 @@ app.onError((error, c) => {
 - 未注册 mapper 时，非 test 环境的 5xx 保留框架 console 兜底；注册
   `app.onError(() => {})` 可显式静默。
 - `c.throw(status, …)` 只接受 **4xx/5xx** —— 传入 1xx-3xx 会抛
-  `TypeError` 而不是 `HttpError`。重定向不是错误：用
-  `c.redirect(url, code?)` 或 `app.redirect(source, dest, code)`（code 接受
-  任意 3xx 整数并按注册意图原样保留——304/306/309+ 不会被静默改写）。
-  `c.assert(cond, …)` 遵循同一规则。
-- `app.notFound(fn)` 可以返回 Response，**或**用状态式写入
-  （`c.status`/`c.body`）塑造 404 —— 但不可 throw：其中的抛错会落入
-  通用 500 路径，丢掉你的定制 404。
+  `TypeError` 而不是 `HttpError`。重定向不是错误：
+  `return c.redirect(url, code?)` 或 `app.redirect(source, dest, code)`
+  （code 接受任意 3xx 整数并按注册意图原样保留——304/306/309+ 不会被
+  静默改写）。`c.assert(cond, …)` 遵循同一规则。
+- `app.notFound(fn)` 通过返回 Response 定制 404（不返回则用内置 404）
+  —— 但不可 throw：其中的抛错会落入通用 500 路径，丢掉你的定制 404。
 
 ## 生命周期与过载
 
@@ -417,7 +428,7 @@ const app = new Keala({
   },
   trustedHosts: ["example.com", "*.example.com"], // 伪造 Host → 路由前 403
   unknownMethodAs404: true, // 未知动词答 404 而非 501
-  onStreamError: (error, c) => log(error, c.path), // 观察状态式流体的失败
+  onStreamError: (error, c) => log(error, c.path), // 观察流体响应的失败
 });
 
 app.listen({ port: 3000, signals: true }); // SIGTERM/SIGINT → 排空；第二个信号强停
@@ -465,24 +476,24 @@ const status = await app.close({ drain: 10_000, shutdownTimeout: 10_000 });
 
 ### 应用
 
-| 成员                                                                                              | 说明                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Keala(options?)`                                                                             | 应用类（koa 风格的 `new`）。选项（11 个）：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`env`、`requestTimeout`、`overload`、`trustedHosts`、`unknownMethodAs404`、`pooling`、`onStreamError`（见[生命周期与过载](#生命周期与过载)） |
-| `app.use(...mw)`                                                                                  | 全局中间件，编译进每条路由链（延迟 `use` 会重新组合）                                                                                                                                                                                    |
-| `app.use(path, ...mw)`                                                                            | 静态精确路径或末尾 `/*` 作用域中间件；同样覆盖作用域内的 404/405                                                                                                                                                                         |
-| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`                               | 路由注册；命名形式 `app.get(name, path, ...handlers)`                                                                                                                                                                                    |
-| `app.on(method, path, ...handlers)`                                                               | 任意方法、任意大小写                                                                                                                                                                                                                     |
-| `app.mount(prefix, routerOrApp)`                                                                  | 表合并挂载（404 穿透到父级）；子应用适用的全局/作用域中间件会被前置                                                                                                                                                                      |
-| `app.param(name, mw)`                                                                             | 作用于所有捕获该参数的路由的中间件                                                                                                                                                                                                       |
-| `app.handle(request, runtime?)`                                                                   | fetch 风格处理器 → `Promise<Response>`，永不 reject；`runtime = { server?, remote? }` 为 `c.ip` 和 websocket 升级提供数据                                                                                                                |
-| `app.listen(port?, host?, cb?)`                                                                   | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `keala/node` 的 `listen()`                                                                                                    |
-| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`                     | 把静态路由沉入 Bun 原生路由表；在运行中的服务器上热重载该表                                                                                                                                                                              |
-| `app.onError(mapper)` / `app.notFound(fn)`                                                        | 单槽错误映射器（`Response \| void`）与自定义 404；`env: "test"` 抑制默认 console 兜底                                                                                                                                                    |
-| `app.decorate(key, value)`                                                                        | 扩展每个 context（安装期进行；重复/核心 key 抛错 —— 绝不静默遮蔽）                                                                                                                                                                       |
-| `app.ws(path, handlers)`                                                                          | WebSocket 路由（仅 Bun；重复路径在安装时抛错）。`origin: string[] \| (c) => boolean` 校验升级请求的 Origin —— 不匹配 403                                                                                                                 |
-| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)`                    | 重定向路由与命名 URL 构建                                                                                                                                                                                                                |
-| `app.close({ drain, shutdownTimeout })`、`app.isDraining()`、`app.inFlight`、`app.onShutdown(fn)` | 优雅停机面 —— 见[生命周期与过载](#生命周期与过载)                                                                                                                                                                                        |
-| `app.callback()`、`app.toJSON()`                                                                  | 适配与自省                                                                                                                                                                                                                               |
+| 成员                                                                                              | 说明                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new Keala(options?)`                                                                             | 应用类（以 `new` 实例化）。选项（11 个）：`keys`、`proxy`、`proxyIpHeader`、`maxIpsCount`、`env`、`requestTimeout`、`overload`、`trustedHosts`、`unknownMethodAs404`、`pooling`、`onStreamError`（见[生命周期与过载](#生命周期与过载)） |
+| `app.use(...mw)`                                                                                  | 全局中间件，编译进每条路由链（延迟 `use` 会重新组合）                                                                                                                                                                                   |
+| `app.use(path, ...mw)`                                                                            | 静态精确路径或末尾 `/*` 作用域中间件；同样覆盖作用域内的 404/405                                                                                                                                                                        |
+| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`                               | 路由注册；命名形式 `app.get(name, path, ...handlers)`                                                                                                                                                                                   |
+| `app.on(method, path, ...handlers)`                                                               | 任意方法、任意大小写                                                                                                                                                                                                                    |
+| `app.mount(prefix, routerOrApp)`                                                                  | 表合并挂载（404 穿透到父级）；子应用适用的全局/作用域中间件会被前置                                                                                                                                                                     |
+| `app.param(name, mw)`                                                                             | 作用于所有捕获该参数的路由的中间件                                                                                                                                                                                                      |
+| `app.handle(request, runtime?)`                                                                   | fetch 风格处理器 → `Promise<Response>`，永不 reject；`runtime = { server?, remote? }` 为 `c.ip` 和 websocket 升级提供数据                                                                                                               |
+| `app.listen(port?, host?, cb?)`                                                                   | 启动 `Bun.serve`；返回 Bun 的 `Server`（带 `reload()`）；`onServeError` 可选覆盖 500 处理器。Node 下请改用 `keala/node` 的 `listen()`                                                                                                   |
+| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`                     | 把静态路由沉入 Bun 原生路由表；在运行中的服务器上热重载该表                                                                                                                                                                             |
+| `app.onError(mapper)` / `app.notFound(fn)`                                                        | 单槽错误映射器（`Response \| void`）与自定义 404；`env: "test"` 抑制默认 console 兜底                                                                                                                                                   |
+| `app.decorate(key, value)`                                                                        | 扩展每个 context（安装期进行；重复/核心 key 抛错 —— 绝不静默遮蔽）                                                                                                                                                                      |
+| `app.ws(path, handlers)`                                                                          | WebSocket 路由（仅 Bun；重复路径在安装时抛错）。`origin: string[] \| (c) => boolean` 校验升级请求的 Origin —— 不匹配 403                                                                                                                |
+| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)`                    | 重定向路由与命名 URL 构建                                                                                                                                                                                                               |
+| `app.close({ drain, shutdownTimeout })`、`app.isDraining()`、`app.inFlight`、`app.onShutdown(fn)` | 优雅停机面 —— 见[生命周期与过载](#生命周期与过载)                                                                                                                                                                                       |
+| `app.callback()`、`app.toJSON()`                                                                  | 适配与自省                                                                                                                                                                                                                              |
 
 各处的时间单位并不统一，务必留意：`requestTimeout`、
 `overload.queueTimeoutMs`、`rateLimit({ windowMs })`、`cache({ ttl })` 与
@@ -495,13 +506,14 @@ const status = await app.close({ drain: 10_000, shutdownTimeout: 10_000 });
 一个扁平对象 —— 请求侧、响应侧与语法糖共享它：
 
 - 请求（只读——请求是客户端的事实）：`raw method url path query(name)
-queries(name) querystring search URL host protocol secure ip origin href
-idempotent reqLength headers header is accepts acceptsEncodings params
+queries(name) params(name) querystring search URL host protocol secure ip
+origin href idempotent reqLength headers header is accepts acceptsEncodings
 state signal runtime`
-- 响应：`status body type length etag lastModified attachment
-redirect(url, code?) setHeader append remove has resHeader res cookies`
+- 响应：`status`（只读——已提交 Response 的状态码）`redirect(url, code?)`
+  （构造重定向 Response——记得 return 它）`setHeader append remove has
+resHeader cookies`
 - 语法糖：`text/json/html(body, status?, headers?)` —— 可直接从 handler
-  返回
+  返回；手建 `new Response(...)` 以同样方式提交
 - `c.throw(status, msg?, props?)`（仅 4xx/5xx —— 见
   [错误处理](#错误处理onerrornotfound)）、`c.assert(cond, status, ...)`
 
@@ -533,9 +545,7 @@ import { Keala } from "keala";
 import { listen } from "keala/node";
 
 const app = new Keala();
-app.get("/", (c) => {
-  c.body = "hello";
-});
+app.get("/", (c) => c.text("hello"));
 listen(app, 3000, "127.0.0.1", () => console.log("up"));
 ```
 
@@ -563,17 +573,18 @@ bun run bench       # 对比 hono / koa / fastify / raw / Go 的基准装置
 
 - **2000+ 个测试在 Node 与真实 Bun 运行时下全绿**
   （`bun run test` / `bun run test:bun`），包括：
-  - `test/adapters-node.test.ts` —— Node 适配器在两个运行时下跑真实
-    socket（桥接、set-cookie 展开、流式、HEAD、400/500/501 失败面）
-  - `test/security*.test.ts` + `agent-security-audit` —— 注入 / 污染 /
-    泄露 / 滥用 / 代理信任用例（255+ 断言）
-  - `test/redteam*.test.ts` —— 开发过程中全部已确认缺陷（85+ 个）的
-    回归锁，外加 `matchRoute ≡ pure trie` 等价性模糊测试（每次运行
-    100 张随机路由表 × 120 条路径）
-  - `test/anomalies*.test.ts`、`matrix`、`agent-bugs`、
-    `agent-concurrency*` —— 从 koa 语料移植的完整异常输入与状态机矩阵
-  - `test/parity-security.test.ts` —— 安全相关的 koa 语义对齐
-    （GHSA-c5vw-j4hf-j526、redirect/back 同源、expose 门…）
+  - `test/integration/node-adapter*.test.ts` —— Node 适配器在两个运行时
+    下跑真实 socket（桥接、set-cookie 展开、流式、HEAD、400/500/501
+    失败面）
+  - `test/security/*` —— 注入 / 污染 / 泄露 / 滥用 / 代理信任用例
+    （255+ 断言）
+  - `test/security/*-redteam.test.ts` —— 开发过程中全部已确认缺陷
+    （85+ 个）的回归锁，外加 `matchRoute ≡ pure trie` 等价性模糊测试
+    （每次运行 100 张随机路由表 × 120 条路径）
+  - `test/unit/input-anomalies.test.ts`、协商矩阵、模糊与并发套件 ——
+    完整的异常输入与状态机矩阵
+  - `test/parity/hono.test.ts` —— 与 hono 本尊逐项比对验证（koa 差分
+    套件已随 koa 形态 API 一起退役；koa 只保留 bench 对照选手身份）
 - 覆盖率四个维度阈值 >90%，由 `bun run verify` 强制执行。
 - soak：48 万+ 进程内请求、3.2 万真实 HTTP 请求与并发洪泛 —— 进程内
   保留堆漂移 ≤ 0.1 B/请求（预算 1500 B）。
@@ -584,7 +595,7 @@ bun run bench       # 对比 hono / koa / fastify / raw / Go 的基准装置
   `__proto__`/`constructor`/`prototype` 不能作为头名称
 - query 与 cookie 映射使用受保护对象 —— 无原型污染
 - Cookie 值/名称在序列化前按 RFC 6265 校验
-- 5xx 错误消息在响应中隐藏（`expose` 语义与 Koa 相同）；生产 `env`
+- 5xx 错误消息在响应中隐藏（`expose` 语义）；生产 `env`
   永不泄露堆栈
 - 签名 Cookie 使用 `timingSafeEqual` 比较
 

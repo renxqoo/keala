@@ -2,11 +2,17 @@
 
 > 状态:0.7.0 已裁决定稿并实施(2026-09-04),R4.10 审计修订(同日),
 > R411 人体工学四项(0.7.2,2026-09-05:bodyOf / c.get 退役 / params
-> 非空 / routePath)。
+> 非空 / routePath);**U1-U3c 去 Koa 形态迁移已实施(2026-09-06)**——
+> `c.params("id")` 函数式取代下标/属性/解构形态;响应 setter 家族
+> (body/type/length/etag/lastModified/attachment/res 及 status 写路径)
+> 删除,响应唯一形态 = return;`c.redirect` 改纯构造器(必须 return)。
+> 行为映射、替代配方与实施记录见
+> [KEALA-NATIVE-API-MIGRATION.md](./KEALA-NATIVE-API-MIGRATION.md)。
 > 本文是 keala 的**完整 API 参考**:每个 API 的签名、用法,以及与 Hono
 > 的逐项差异与**为什么**。底层原语(根入口导出的 compose/cookie
 > 签名/编译器等)在第七部分;设计史(裁决记录、性能实测、验收)保留在
-> 第六部分。对照源:keala `src/`(0.7.2)与 Hono 4.13.5
+> 第六部分——**第六部分是历史记录**,其中引用的旧形态 API 以本部分与
+> 迁移文档为准。对照源:keala `src/`(0.7.3)与 Hono 4.13.5
 > (`.parity/hono/src/`,逐条核对;请求面另对照 hono.dev 官方文档)。
 
 ---
@@ -16,23 +22,25 @@
 ### 0. 五条原则
 
 1. **一页纸可记住**:context 公共面就是 §2.3 的速查表——多一项少一项
-   都会被测试锁死(`test/commit-0-7-contract.test.ts` 的表面锁)。
-2. **实测快的留下**:双态响应(138 vs Hono 197ns)、洋葱
-   (205 vs 602ns)、定向 query 读(~2ns)——keala 自己的赢法。
+   都会被测试锁死(`test/integration/commit-contract.test.ts` 的表面锁)。
+2. **实测快的留下**:洋葱(205 vs 602ns)、定向 query 读(~2ns)、零构造
+   params 直达(U2 实测全形状反超 3-7ns)——keala 自己的赢法。
 3. **纯 koa 语义仿真删除**:为"与 koa 一致"而非正确性必需的分支一律
-   不存在(0.7.0 已删 16 项,见第六部分 §6.2)。
-4. **已提交即冻结**:Response 提交后 `c.body/c.status/c.redirect` 写入
-   抛 `TypeError`;头部写入直写已提交 Response 的 `Headers`。零重建机器。
+   不存在(0.7.0 已删 16 项,见第六部分 §6.2;U1-U3c 迁移再把状态式
+   响应面整体删除)。
+4. **已提交即冻结**:响应一经 return 即定局;头部写入仍直写已提交
+   Response 的 `Headers`,要换响应就构造新 Response 返回。零重建机器。
 5. **请求是客户端的事实**:请求侧全部只读;要改派生值,放 `c.state`。
 
 ### 1. 定位
 
 ```
-keala = 洋葱模型 + 双态响应 + Bun 原生快路径(+ Node 官方适配器)
+keala = 洋葱模型 + 零依赖 + Bun 原生能力(+ Node 官方适配器)
 ```
 
-- 双态:handler **返回** Response(`c.text/c.json/c.html` 或自建),
-  或**状态式**写(`c.body/c.status`)。两态统一为"最后提交者赢"。
+- 返回式:handler **返回** Response——`return c.text/c.json/c.html(...)`,
+  `return c.redirect(...)` 或自建 `new Response(...)`。链上最后返回的
+  Response 获胜;全程无返回的链回答 404(暂存头仍合并上去)。
 - 生命周期/过载/优雅停机/原生路由下沉是 keala 自有资产(Hono 无对应物)。
 - 双运行时:Bun(主力,含 ws/原生路由表)与 Node(`keala/node`)。
 
@@ -47,7 +55,7 @@ app.use(async (c, next) => {
   c.setHeader("X-Response-Time", `${Math.round(performance.now() - start)}ms`);
 });
 
-app.get("/hello/:name", (c) => c.text(`hello ${c.params["name"]}`));
+app.get("/hello/:name", (c) => c.text(`hello ${c.params("name")}`));
 
 const server = app.listen(3000, "127.0.0.1");
 // 优雅停机:SIGTERM → 排空在途 → 关连接池 → 退出
@@ -80,8 +88,12 @@ c.queries("tag"); // 重复键全部值:["a","b"];缺失 []
 // 键匹配 raw 与 encodeURIComponent 两种 wire 形态;非规范编码
 // (%5F 表示 _)不参与匹配——需要时读 c.querystring 自解析
 
-c.params; // 路由参数:{ id: "12345" };永不为 null(未匹配路由的中间件读冻结空对象)
-// 访问:c.params["id"] 或 const { id } = c.params(无需可选链,0.7.2)
+c.params("id"); // 命中路由的参数值:"12345";该参数未被捕获(可选段
+// 缺席、名字不符)或未匹配路由时 undefined;重复名取最新捕获
+// 读取零分配、零构造:names/values 是路由匹配产物数组,槽位直达;
+// 数组无原型链——"toString"/"__proto__" 天然 miss。
+// 要"整个 map"(日志/链路追踪枚举):paramsRecord(names, values, offset)
+// 适配器(src/router/router.ts,sink 镜像边界同款)
 
 c.routePath; // 命中的注册模式(含 mount 前缀):"/users/:id";未匹配 ""
 c.routeName; // 命中命名路由时的名字;未命名/未匹配 undefined
@@ -113,58 +125,84 @@ c.acceptsEncodings("gzip"); // "gzip" | false
 
 ### 2.2 响应侧与提交契约
 
-**未提交**(暂存,零分配直到首次写):
+**响应唯一形态:返回**。handler/中间件以 `return c.text/c.json/c.html(...)`,
+`return c.redirect(...)` 或 `return new Response(...)` 作答;链上最后返回的
+Response 获胜(last-committer-wins),全程无返回的链回答默认 404(暂存头
+仍会合并上去)。状态式写入器(body/type/length/etag/lastModified/
+attachment/res 一族)已随 U1-U3c 迁移删除。
+
+**头部(唯一暂存面:return 前暂存,return 后直写)**:
 
 ```ts
-c.status = 201; // 200-599 整数,否则 TypeError
-c.body = "hello"; // string | Uint8Array | ReadableStream | Blob | 对象 | null
-c.body = { ok: true }; // 对象 → JSON 序列化
-c.body = null; // null → 204(未显式设状态时)
-c.type = "json"; // 简写自动展开("json" → application/json; charset=utf-8)
-c.length = 42; // content-length(与 transfer-encoding 互斥时忽略)
-c.etag = "v1"; // 自动加引号:'"v1"'(已带 " 或 W/ 则原样)
-c.lastModified = new Date(); // Date 或可解析字符串,否则 TypeError
-
 c.setHeader("X-Trace", "abc"); // 单值;对象形式 c.setHeader({ A: "1", B: 2 })
 // UX-11:undefined/null 值静默忽略(不写入);清除已写的头用 c.remove,
 // 显式空串 c.setHeader(k, "") 会覆盖为空值
-c.append("Vary", "Origin"); // 多值追加
+c.append("Vary", "Origin"); // 多值追加(content-type/length 单值头不可 append)
 c.remove("X-Unwanted"); // 删除
 c.has("X-Trace"); // boolean(提交后读穿到已提交 Response)
 c.resHeader("X-Trace"); // string;缺失 ""
-c.attachment("report.pdf"); // Content-Disposition + 按扩展名推断类型
-c.attachment("报表.bin", { fallback: "report.bin", type: "inline" });
-
-c.redirect("/login"); // 302 + Location,空体
-c.redirect("/gone", 301); // 显式码接受任意 3xx 整数并按注册意图保留;非 3xx 整数 TypeError
-// 开放重定向防护:`//evil.com`、`https:/evil.com` 会被中和为同源路径
-// c.redirect 之前已 staged 的 3xx(如 c.status=308)保留,不降级 302
+// return 之前:写入暂存记录(零分配直到首写),糖构造 Response 时消费进最终响应
+// return 之后:写入直落已提交 Response 的 Headers(与 Hono post-next 同语义)
 ```
 
-**提交**(任一糖返回,或 handler `return new Response(...)`)之后:
+**状态码**:`c.status` 是只读观察槽(已提交 Response 的状态;或 405/501/
+OPTIONS 合成答案、404 默认)。设置状态只有两个入口:
 
 ```ts
-// 抛 TypeError("response already committed"):
-c.body = "x";
-c.status = 500;
-c.redirect("/y");
-// 要替换已提交响应:构造新 Response 返回覆盖
-app.use(async (c, next) => {
-  await next();
-  const inner = c.res;
-  if (inner !== undefined && inner.status === 200) {
-    return new Response(`wrapped(${await inner.text()})`, inner);
-  }
-});
+return c.json({ ok: true }, 201); // 糖第二参
+return c.text("created", 201, { "X-App": "keala" }); // 第三参头对象
+return new Response(body, { status: 202 }); // 自建
+```
 
-// 头部写入【不抛】——直写已提交 Response 的 Headers(与 Hono 同语义):
+**已删 setter 的等价配方**(有损映射——旧 setter 悄悄做的简写展开/引号/
+编码,现在由调用者显式给出完整值):
+
+```ts
+// MIME 简写不再展开("json" 不再变成 application/json; charset=utf-8):
+c.setHeader("Content-Type", "application/json; charset=utf-8");
+c.setHeader("Content-Length", "42"); // 类型面要求字符串（HeaderValue）
+// ETag 的引号不再自动包裹(实体串必须带引号):
+c.setHeader("ETag", '"v1"'); // 弱 tag:W/"v1"
+// Date → HTTP 日期串不再自动转换:
+c.setHeader("Last-Modified", new Date().toUTCString());
+// attachment 的类型推断/RFC 5987 编码不再自动,手写 Content-Disposition:
+c.setHeader("Content-Disposition", 'attachment; filename="report.pdf"');
+c.setHeader(
+  "Content-Disposition",
+  "attachment; filename=\"report.bin\"; filename*=UTF-8''%E6%8A%A5%E8%A1%A8.bin",
+);
+// 常见场景直接用糖,content-type 由糖正确带出:
+return c.json(data); // application/json（handle 路径 Bun 带 charset）
+return c.html(page); // text/html; charset=utf-8
+```
+
+**redirect(纯构造器,必须 return)**:
+
+```ts
+return c.redirect("/login"); // 302 + Location,空体
+return c.redirect("/gone", 301); // 显式码接受任意 3xx 整数并按传入值保留;非 3xx 整数 TypeError
+// 开放重定向防护:`//evil.com`、`https:/evil.com` 会被中和为同源路径
+// c.redirect 不 mutate context——不 return 就不生效(天然无
+// throw-on-commit);构造前 staged 的同名 Location 按同名头规则反杀目标
+```
+
+**提交后(return 之后)**:
+
+```ts
+// 头部写入直写已提交 Response 的 Headers(与 Hono 同语义,不抛):
 c.setHeader("X-Late", "1");
 c.append("Vary", "Origin");
-c.type = "text/csv";
-// 读取:c.status / c.type / c.length / c.has / c.resHeader 读提交值
+c.setHeader("Content-Type", "text/csv"); // 完整值——MIME 简写 setter 已删
+// 读取:c.status(只读)/ c.has / c.resHeader 读提交值
 
-// c.res:已提交的 Response 对象(状态式下 undefined)
-c.res?.status;
+// 要替换已提交响应:构造新 Response 返回覆盖(外层是最后提交者);
+// 已提交的 Response 本体经内部提交槽 _res 观察(见 §7.1):
+app.use(async (c, next) => {
+  await next();
+  if (c._res !== undefined && c._res.status === 404) {
+    return c.text("nothing here", 404); // 覆盖内层的 404
+  }
+});
 ```
 
 **规则细则**:
@@ -198,17 +236,17 @@ return c.html("<h1>hi</h1>");
 ```ts
 // 请求(只读)
 c.method  c.url  c.path  c.querystring  c.search
-c.query(name)  c.queries(name)  c.params  c.ip  c.host  c.protocol  c.secure
+c.query(name)  c.queries(name)  c.params(name)  c.ip  c.host  c.protocol  c.secure
 c.origin  c.href  c.idempotent  c.reqLength  c.URL
 c.headers  c.header(name)  c.raw  c.signal  c.runtime
 c.routePath  c.routeName
 c.is()  c.accepts()  c.acceptsEncodings()
 
-// 响应(提交前暂存;提交后头部可写、body/status/redirect 抛)
-c.body  c.status  c.type  c.length  c.etag  c.lastModified  c.attachment
+// 响应(头部暂存/直写 + 返回式;status 只读)
 c.setHeader(k, v)  c.append(k, v)  c.remove(k)  c.has(k)  c.resHeader(k)
-c.redirect(url, code?)  c.res
+c.status  c.redirect(url, code?)
 c.text(s, status?, headers?)  c.json(x, status?, headers?)  c.html(s, …)
+return new Response(...)
 
 // 核心
 c.app  c.routerAllowed  c.state  c.cookies
@@ -232,13 +270,13 @@ app.onError((error, c) => {
   return c.json({ error: error.code ?? "internal" }, error.status);
 });
 // mapper 返回 undefined → 走内置信封(prod 隐藏 5xx 消息)
-// app.notFound(handler):未匹配路由;返回 Response 或状态式写入
-// (c.status/c.body)定制 404——但不可 throw,throw 落入通用 500
+// app.notFound(handler):未匹配路由;返回 Response 定制 404
+// (返回 undefined → 内置 404)——但不可 throw,throw 落入通用 500
 ```
 
 **`c.throw` 只接受 4xx/5xx**:传入 1xx-3xx 抛 `TypeError` 而不是
 `HttpError`(信息与重定向不是错误;`c.assert` 同规)。重定向用
-`c.redirect(url, code?)` 或 `app.redirect(source, dest, code)`——
+`return c.redirect(url, code?)` 或 `app.redirect(source, dest, code)`——
 code 接受任意 3xx 整数并按注册意图原样保留（304/306/309+ 不会被静默改写；
 `isRedirectStatus` 的 {300-303, 305, 307, 308} 是已指派语义集，供隐式
 回退判定用）。
@@ -301,7 +339,7 @@ new Keala({
     handler: (req, reason) => custom503, // 自定义拒绝响应
     strategy: customStrategy, // 可插拔策略
   },
-  onStreamError: (err, c) => log(err), // 状态式流体错误观察
+  onStreamError: (err, c) => log(err), // 流体响应错误观察
 });
 ```
 
@@ -342,7 +380,7 @@ app.ws("/chat/:room", {
   origin: ["https://app.site"], // 升级前校验 Origin;数组或 (c) => boolean,
   // 不匹配 → 403(浏览器 WS 握手带 Origin 但过不了 csrf()——那是 HTTP 中间件)
   open(ws, c) {
-    broadcast(c.params["room"], "joined");
+    broadcast(c.params("room"), "joined");
   },
   message(ws, message, c) {
     ws.send(`echo:${String(message)}`);
@@ -511,21 +549,20 @@ return streamSSE(
 Hono 是 keala 的对标与部分场景的超越对象(见第六部分性能实测)。
 以下差异**全部是有意的**,每条附理由。Hono 侧逐条核对自 4.13.5 源码。
 
-### D1. 参数:`c.params["id"]` vs `c.req.param("id")`
+### D1. 参数:`c.params("id")` vs `c.req.param("id")`
 
 ```ts
 // Hono                              // keala
 const id = c.req.param("id");
-const id = c.params["id"];
+const id = c.params("id");
 ```
 
-**为什么**:路由匹配时 keala 把参数作为普通对象预填进 context 槽位
-(dispatch 一次物化),读取是纯属性访问——零函数调用、零分配。Hono 的
+**为什么**:路由匹配产物就是数组(names/values/offset),`c.params(name)`
+一次 `lastIndexOf` + 下标读取直达——零对象构造、零物化。Hono 的
 `c.req.param()` 每次调用走 HonoRequest 门面再进 `#cachedParamData`。
 千路由规模实测 keala 匹配快 6-81x(见 §9.2);读取侧差距是同一来源。
-0.7.2 起 `c.params` 永不为 null(未匹配路由的中间件读冻结空对象),
-`const { id } = c.params` 与 Hono 的 `c.req.param()` 全量解构同款零税,
-不再需要可选链。
+U1-U3c 前的形态是预填 null-proto Record 的属性读取(构造 ~5ns/请求);
+函数化后零拷贝直达,同窗口 A/B 全形状实测再反超 3-7ns。
 
 ### D2. 查询:`c.query("q")` vs `c.req.query("q")`
 
@@ -568,43 +605,42 @@ Hono 返回 `undefined`——统一 falsy 判断,代价是区分"缺失"与"空�
 undefined。keala 的遍历面是原生 `c.headers`(大小写不敏感),该陷阱
 结构性不存在。
 
-### D4. 响应:双态(状态式 + 返回式)vs 仅返回式
+### D4. 响应:同构的返回式(差异只在覆盖面)
 
 ```ts
-// Hono(只有返回)                   // keala(两态并存)
-return c.text("hi");
-return c.text("hi"); // 糖,Hono 同签名
-return c.body("hi");
-c.body = "hi"; // 状态式,写完即走
-return c.json({ a: 1 });
-c.body = { a: 1 }; // 对象 → JSON
-c.status = 201;
-c.body = "created";
+// Hono                              // keala
+return c.text("hi"); // 两侧同签名(含 status/headers 参)
+return c.json({ a: 1 }, 201); // 两侧同签名(第二参状态码,第三参头对象)
+return c.body("hi"); // 仅 Hono 有泛型糖
+return new Response("hi"); // keala:非糖 body(流/Blob/Uint8Array)直接构造
 ```
 
-**为什么**:状态式(直接槽位写)是 keala 实测最快路径(138ns vs Hono
-糖 197ns)——省掉糖函数调用与 Response 构造包装。Hono 的 `c.body()`
-本质也是"构造并返回",只是强制走返回。keala 两态统一在"最后提交者赢":
-中间件短路(状态式)与 handler 返回(糖)平权。**已删除**:`c.body =
-someResponse` 的 koa 怪癖(0.7.0)——语义陷阱(取 `.body` 存储而非
-对象本身),直接 `return` 即可。
+**为什么**:U1-U3c 迁移把 koa 形态的状态式写入(body/type/length/
+etag/lastModified/attachment/res 一族)整体删除,keala 与 Hono 同为
+"构造并返回"。剩余差异:keala 没有 `c.body()` 泛型糖——文本/JSON/HTML
+有糖,其余 body 形态(流、Blob、Uint8Array)直接 `new Response(...)`;
+糖构造时会**消费暂存头**(`c.setHeader`/`c.cookies` 先写的内容随糖进
+最终 Response,与 Hono 的 `c.header()` 预写行为一致)。历史上曾有的
+双态(状态式 138ns vs 糖 197ns)随 staged-commit 状态机一起退役——
+commit 机器净删 ~236 语句,换来单一可推理的响应形态。
 
-### D5. 提交契约:冻结 + 就地装饰 vs 静默覆盖
+### D5. 提交契约:冻结 + 就地装饰 vs 静默替换
 
 ```ts
-// Hono:handler 返回后仍可整体替换   // keala:提交后
-c.res = newResponse;                 c.body = "x";    // ← TypeError!
-const res = c.res;                   c.status = 500;  // ← TypeError!
-c.res = new Response(res.body, …);   c.setHeader("X-Late", "1"); // ✓ 直写已提交 Headers
-                                     return new Response(…);     // ✓ 返回覆盖
+// Hono:handler 返回后仍可对响应对象  // keala:提交后只有两种合法操作
+// 整体替换(context 的 res 属性       c.setHeader("X-Late", "1"); // ✓ 直写已提交 Headers
+// 可反复赋值,身份随链流动)          c.append("Vary", "X");      // ✓
+//                                    return new Response(…);     // ✓ 返回覆盖(最后提交者赢)
+// 响应体/状态没有写路径——要换就 return 新 Response(keala 侧唯一替换形态)
 ```
 
-**为什么**:Hono 允许 `c.res =` 整体替换,响应在链上流动时身份可变,
-推理成本高;keala 0.7.0 删除了整类 rule-4 重建机器(旗标合并矩阵、
-`rebuildCommitted`),换成两条硬规则——**body/status 冻结**(写即抛,
-要换就显式构造新 Response 返回)、**头部就地写**(与 Hono 的
-post-`next()` `c.header()` 同语义)。错误漏斗会收割已提交 Response 的
-头重建错误页,防护头不丢(R4.10)。这是可预测性换灵活性的裁决。
+**为什么**:Hono 允许 handler 返回后对响应对象整体替换(context 的
+res 属性可赋值),响应在链上流动时身份可变,推理成本高;keala 把"替换"
+收敛为唯一显式形态——外层**返回**新 Response,头部则就地写(与 Hono 的
+post-`next()` `c.header()` 同语义)。0.7.0 删除整类 rule-4 重建机器
+(旗标合并矩阵、`rebuildCommitted`),U1-U3c 再删掉整个状态式写入面——
+响应一经 return 即定局。错误漏斗会收割已提交 Response 的头重建错误页,
+防护头不丢(R4.10)。这是可预测性换灵活性的裁决。
 
 ### D6. 错误:`c.throw` vs `HTTPException`
 
@@ -618,8 +654,8 @@ app.onError((err, c) => …);            headers: { "Retry-After": "1" },
                                      c.assert(cond, 401, "…");    // 条件版
 ```
 
-**为什么**:功能等价(单槽 onError、5xx 默认隐藏)。`c.throw` 沿用
-koa 的人体工学(状态优先、props 收拢 expose/code/headers),少一个
+**为什么**:功能等价(单槽 onError、5xx 默认隐藏)。`c.throw` 是
+状态优先的一站式形态(props 收拢 expose/code/headers),少一个
 导出类;`c.assert` 是 Hono 没有的便捷面。
 
 ### D7. 中间件状态:`c.state` vs `c.set()/c.var`
@@ -695,7 +731,7 @@ app.get("/ws", upgradeWebSocket(c => …));
 ```
 
 **为什么**:keala 在 Bun 上直连原生 upgrade;handler 的每个事件都带
-**同一个 context**(连接生命周期内可读 `c.params/c.state`)。代价:
+**同一个 context**(连接生命周期内可读 `c.params(name)/c.state`)。代价:
 ws 仅 Bun(Node 升级请求 501,文档明示)。
 
 ### D11. 生命周期/高可用:keala 独有面
@@ -722,8 +758,9 @@ c.href; // 绝对形态(http://host/…)
 c.origin; // "http://host"
 ```
 
-**为什么**:keala 沿 koa 的相对形态(代理/嵌入场景里原始请求目标常是
-路径形态,绝对化需要 host 解析——`c.href` 惰性做这件事)。**迁移陷阱**:
+**为什么**:keala 用相对形态(origin-form;代理/嵌入场景里原始请求
+目标常是路径形态,绝对化需要 host 解析——`c.href` 惰性做这件事)。
+**迁移陷阱**:
 Hono 老兵写 `c.url` 期待绝对 URL,keala 给相对串——要绝对用 `c.href`。
 
 ### D14. Hono 有而 keala 不做 API 的三件(配方替代)
@@ -773,14 +810,21 @@ Hono 老兵写 `c.url` 期待绝对 URL,keala 给相对串——要绝对用 `c.
 5. **不学清单**:parseBody({dot})/cloneRawRequest/全量 query()/matchedRoutes
    (配方替代,见 D14);validator 多目标独立 0.7.3 方案。
 
-### 6.2 删除的 koa 语义面(0.7.0)
+### 6.2 删除的 koa 语义面(0.7.0;U1-U3c 迁移续删)
 
-`c.message`(get/set)、`c.fresh`、`c.stale`、`c.vary`、`c.back()`/
-`c.redirect("back")`、`c.subdomains`、`c.ips`、`c.hostname`、
+0.7.0 删:`c.message`(get/set)、`c.fresh`、`c.stale`、`c.vary`、
+`c.back()`/`c.redirect("back")`、`c.subdomains`、`c.ips`、`c.hostname`、
 `c.charset`、`c.reqType`、`c.acceptsCharsets`、`c.acceptsLanguages`、
-`c.toJSON()`、`c.headerSent`、`c.originalUrl`、`c.body = <Response>`、
-koa 405/501 消息体、redirect 文本体。逐项替代写法:
+`c.toJSON()`、`c.headerSent`、`c.originalUrl`、"body 槽位直存 Response"
+的 koa 怪癖、koa 405/501 消息体、redirect 文本体。逐项替代写法:
 `docs/MIGRATION-0.7.md` §5。
+
+U1-U3c 迁移(2026-09-06)续删整个状态式响应面:params 的下标/属性/
+解构形态(→ `c.params(name)` 函数式)、响应 body/type/length/etag/
+lastModified/attachment/res 的全部访问器、status 写路径(读保留)、
+redirect 的 void staged 调用形态(→ 纯构造器,必须 return)。
+行为映射、有损映射的替代配方与实施记录:
+`docs/KEALA-NATIVE-API-MIGRATION.md`。
 
 ### 6.3 性能实测(R4.6/R4.9/R4.10 协议,vs Hono 4.13.5)
 
