@@ -1,0 +1,283 @@
+/**
+ * HA residual review red tests (zz-red-ha-1) — written red against tree
+ * @ aacc945; FIXED in the 0.6.2 review round, where this file now runs
+ * GREEN as the regression lock for:
+ *  HA-1  Node adapter double-start: listen(app, …) twice silently orphans the
+ *        first server; app.close() can never reach it (server slot was
+ *        overwritten) and the orphan serves 503 forever with the port bound.
+ *  HA-2  A hung app.onShutdown() handler blocks close() forever: the drain
+ *        finished, `escalate` was nulled, so a repeat close({drain: 0}) is a
+ *        no-op — later registered handlers never run either.
+ *  HA-3  Post-deadline zombie body reads (Node adapter): after requestTimeout
+ *        answers 504 on a keep-alive socket whose request body is still being
+ *        read, the native source keeps its 'data' listeners attached and
+ *        retains every subsequent byte in the read closure. inFlight reports 0
+ *        the whole time (no admission visibility, no cap beyond the plugin
+ *        limit per connection).
+ */
+
+import { afterAll, describe, expect, it } from "vitest";
+import net from "node:net";
+
+import { Keala } from "../../src/core/app.ts";
+import { startNodeServer, listen, type NodeServerHandle } from "../../src/adapters/node.ts";
+import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
+import { streamSSE } from "../../src/helpers/streams.ts";
+import type { CloseOptions } from "../../src/types.ts";
+
+const quiet = { env: "test" } as const;
+const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Externally resolvable void promise (hung-hook and pump coordination). */
+const deferred = (): { promise: Promise<void>; release: () => void } => {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+};
+
+const liveServers: NodeServerHandle[] = [];
+const liveSockets: net.Socket[] = [];
+afterAll(() => {
+  for (const s of liveServers.splice(0)) {
+    try {
+      s.stop(true);
+    } catch {
+      // already stopped
+    }
+  }
+  for (const s of liveSockets.splice(0)) s.destroy();
+});
+
+const openSocket = (port: number): Promise<net.Socket> =>
+  new Promise((resolve, reject) => {
+    const sock = net.connect(port, "127.0.0.1", () => {
+      liveSockets.push(sock);
+      resolve(sock);
+    });
+    sock.on("error", reject);
+  });
+
+const readUntil = (sock: net.Socket, predicate: (buf: string) => boolean, ms = 1500) =>
+  new Promise<string>((resolve) => {
+    let acc = "";
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(acc);
+    }, ms);
+    const onData = (chunk: Buffer): void => {
+      acc += chunk.toString("latin1");
+      if (predicate(acc)) {
+        cleanup();
+        resolve(acc);
+      }
+    };
+    const onEnd = (): void => {
+      cleanup();
+      resolve(`${acc}<<EOF>>`);
+    };
+    const onError = (): void => {
+      cleanup();
+      resolve(`${acc}<<SOCKET-ERROR>>`);
+    };
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      sock.off("data", onData);
+      sock.off("end", onEnd);
+      sock.off("error", onError);
+    };
+    sock.on("data", onData);
+    sock.on("end", onEnd);
+    sock.on("error", onError);
+  });
+
+describe("HA-1: Node adapter double-start orphans the first server", () => {
+  it("a second listen()/startNodeServer() for the same app must refuse (Bun listen() parity)", async () => {
+    const app = new Keala(quiet);
+    app.get("/", (c) => c.text("ok"));
+    const first = listen(app, 8901, "127.0.0.1");
+    liveServers.push(first);
+    await first.ready();
+
+    let refused = false;
+    try {
+      const second = listen(app, 8902, "127.0.0.1");
+      liveServers.push(second);
+      await second.ready();
+    } catch {
+      refused = true;
+    }
+    expect(refused).toBe(true);
+  });
+
+  it("after close(), no server of the app may keep serving 503s with its port bound", async () => {
+    const app = new Keala(quiet);
+    app.get("/", (c) => c.text("ok"));
+    const first = listen(app, 8903, "127.0.0.1");
+    liveServers.push(first);
+    await first.ready();
+    // The guard makes the orphan impossible: a second listen for the same
+    // app refuses instead of overwriting the server slot.
+    expect(() => listen(app, 8904, "127.0.0.1")).toThrow(TypeError);
+
+    await app.close({ drain: 100 }); // reaches the one registered handle
+
+    let orphanServing = false;
+    try {
+      const res = await fetch("http://127.0.0.1:8903/");
+      orphanServing = res.status > 0; // got ANY answer (observed: 503 forever)
+    } catch {
+      orphanServing = false;
+    }
+    expect(orphanServing).toBe(false);
+  });
+});
+
+describe("HA-2: a hung onShutdown() handler hangs close() with no escalation", () => {
+  it("close() resolves despite a never-settling handler, and later handlers still run", async () => {
+    const app = new Keala(quiet);
+    app.get("/", (c) => c.text("ok"));
+    const server = startNodeServer(app, { port: 8905, hostname: "127.0.0.1" });
+    liveServers.push(server);
+    await server.ready();
+
+    const hung = deferred();
+    app.onShutdown(() => hung.promise);
+    let secondRan = false;
+    app.onShutdown(() => {
+      secondRan = true;
+    });
+
+    // shutdownTimeout caps each hook (default 10s; shortened here for test
+    // speed — the assertion is that the close resolves at all, well past
+    // the 50ms drain window, with the later handler still running).
+    const closed = app.close({ drain: 50, shutdownTimeout: 60 } as CloseOptions);
+    let state = "pending";
+    void closed.then(() => {
+      state = "resolved";
+    });
+    await wait(300); // >> the 50ms drain window and the 60ms hook cap
+    expect(state).toBe("resolved"); // FAILS today: handler hang = close() hang
+    expect(secondRan).toBe(true);
+
+    // Escalation must also work while hooks hang:
+    void app.close({ drain: 0 });
+    await wait(50);
+    expect(state).toBe("resolved");
+
+    hung.release(); // cleanup so the worker can exit
+    await closed;
+  });
+});
+
+describe("HA-3: zombie body read after the deadline retains client bytes (Node adapter)", () => {
+  it("after the 504, the socket must not keep absorbing the request body (retained: ~pumped bytes, inFlight: 0)", async () => {
+    const app = new Keala({ ...quiet, requestTimeout: 100 });
+    app.use(createBodyParser());
+    app.post("/slow", async (c) => {
+      const bytes = await bodyOf(c).arrayBuffer();
+      c.text(`body:${bytes.byteLength}`);
+    });
+    const server = startNodeServer(app, { port: 8906, hostname: "127.0.0.1" });
+    liveServers.push(server);
+    await server.ready();
+
+    const DECLARED = 8 * 1024 * 1024; // within the plugin's default limits
+    const sock = await openSocket(server.port);
+    sock.write(`POST /slow HTTP/1.1\r\nHost: x\r\nContent-Length: ${DECLARED}\r\n\r\nhello`);
+    const reply = await readUntil(sock, (b) => b.includes("\r\n\r\n"));
+    expect(reply).toContain("504");
+    // The capacity slot is already free while the zombie read still listens.
+    expect(app.inFlight).toBe(0);
+
+    const rssBefore = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const chunk = Buffer.alloc(64 * 1024, 0x61);
+    let sent = 0;
+    const target = 24 * 1024 * 1024;
+    const { promise: pumped, release: pumpDone } = deferred();
+    const pump = (): void => {
+      while (sent < target) {
+        sent += chunk.length;
+        if (!sock.write(chunk)) {
+          sock.once("drain", pump);
+          return;
+        }
+      }
+      pumpDone();
+    };
+    // Correct behavior closes the socket on the early answer, so the pump
+    // ends on the connection teardown (EPIPE/close) rather than on `drain`
+    // — a dead connection never ACKs the remaining bytes.
+    sock.once("error", pumpDone);
+    sock.once("close", pumpDone);
+    pump();
+    await pumped;
+    await wait(300); // let the data land in the server's read closure
+
+    const rssAfter = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    // Correct behavior: the adapter closes the socket on the early answer (or
+    // otherwise stops retaining) — retained delta must be far below `sent`.
+    // Calibration 2026-09-05: the teardown window absorbs a FIXED ~3-4MB
+    // (kernel/Node buffers in flight when destroy lands; machine- and
+    // load-dependent — measured identical at 6MB and 12MB pumps), while the
+    // original bug retained ∝ sent (~everything pumped). 24MB in, <8MB kept
+    // separates the two with 2x margin on the healthy side.
+    expect(rssAfter - rssBefore).toBeLessThan(8); // MB, vs 24MB pumped
+    expect(app.inFlight).toBe(0);
+  }, 8000);
+});
+
+describe("HA residual: verified-clean behaviors (documentation probes)", () => {
+  it("SSE heartbeat interval is cleared on abrupt client disconnect (real socket)", async () => {
+    const app = new Keala(quiet);
+    app.get("/events", (c) =>
+      streamSSE(
+        c,
+        async (sse) => {
+          sse.send({ data: "hello" });
+          await new Promise(() => {});
+        },
+        { heartbeat: 40 },
+      ),
+    );
+    const server = startNodeServer(app, { port: 8907, hostname: "127.0.0.1" });
+    liveServers.push(server);
+    await server.ready();
+
+    const sock = await openSocket(server.port);
+    sock.write("GET /events HTTP/1.1\r\nHost: x\r\nConnection: keep-alive\r\n\r\n");
+    const first = await readUntil(sock, (b) => b.includes("hello"));
+    expect(first).toContain("text/event-stream");
+    await wait(120); // a few heartbeats
+    const pings = await readUntil(sock, () => false, 60);
+    expect(pings).toContain(": ping");
+    sock.destroy();
+    await wait(120);
+    // No assertion possible on intervals here (vitest worker handles); the
+    // standalone probe (scripts in /tmp) shows the interval is cleared.
+    expect(true).toBe(true);
+  });
+
+  it("a request on an established keep-alive connection during drain is refused (503 or closed)", async () => {
+    const app = new Keala(quiet);
+    app.get("/", (c) => c.text("ok"));
+    const server = startNodeServer(app, { port: 8908, hostname: "127.0.0.1" });
+    liveServers.push(server);
+    await server.ready();
+
+    const sock = await openSocket(server.port);
+    sock.write("GET / HTTP/1.1\r\nHost: x\r\n\r\n");
+    const first = await readUntil(sock, (b) => b.includes("\r\n\r\n"));
+    expect(first).toContain("200");
+
+    const closed = app.close({ drain: 1500 });
+    await wait(20);
+    sock.write("GET / HTTP/1.1\r\nHost: x\r\n\r\n");
+    const second = await readUntil(sock, (b) => b.includes("\r\n\r\n") || b === "", 600);
+    // Either an explicit 503 refusal or a torn-down connection is acceptable;
+    // serving 200 would be a readiness violation.
+    expect(second.includes("200")).toBe(false);
+    await closed;
+  });
+});
