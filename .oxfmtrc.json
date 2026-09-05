@@ -1,4 +1,9 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": [".parity", "bench/*-results.json"]
+  "ignorePatterns": [
+    ".parity",
+    "bench/*-results.json",
+    "bench/route-shootout/REPORT.md",
+    "bench/route-shootout/diag/CPU.*"
+  ]
 }
