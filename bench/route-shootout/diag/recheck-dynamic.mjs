@@ -1,4 +1,5 @@
-// Calm-window HTTP recheck: both dynamic shapes, keala vs hono (bun).
+// Calm-window HTTP recheck: all deficit shapes from the 2026-09-05 Linux
+// server run (statics 0.93-0.95x, wildcard 0.92x), keala vs hono (bun).
 import { spawn } from "node:child_process";
 import autocannon from "autocannon";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -32,9 +33,12 @@ const children = procs.map((p) =>
 try {
   for (const p of procs) await waitReady(p.port);
   for (const [label, path] of [
+    ["static /user (control)", "/user"],
+    ["same-radix /user/comments", "/user/comments"],
+    ["long static 6-seg", "/very/deeply/nested/route/hello/there"],
+    ["wildcard /static/*", "/static/index.html"],
     ["mixed /event/:id/comments", "/event/abcd1234/comments"],
     ["4-seg /user/lookup/username/:username", "/user/lookup/username/hey"],
-    ["static /user (control)", "/user"],
   ]) {
     const rps = { keala: [], hono: [] };
     for (let round = 0; round < 4; round++) {
