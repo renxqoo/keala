@@ -178,15 +178,25 @@ describe("immutable committed Responses", () => {
     expect(res.headers.get("x-a")).toBe("staged");
   });
 
-  it("post-commit setHeader on an immutable response answers 500 loudly", async () => {
+  it("post-commit setHeader on an immutable response answers 500 loudly (undici)", async () => {
     const app = new Keala({ env: "test" });
     app.use(async (c, next) => {
       await next();
       c.setHeader("x-late", "1");
     });
-    app.get("/", () => Response.redirect("/x", 302));
+    app.get("/", () => Response.redirect("http://localhost:3000/x", 302));
     const res = await hit(app, "/");
-    expect(res.status).toBe(500);
+    if (typeof Bun === "undefined") {
+      // undici: Response.redirect responses are immutable — the late write
+      // throws and the funnel answers 500 loudly.
+      expect(res.status).toBe(500);
+    } else {
+      // Bun ≥1.4.2: redirect responses are no longer immutable — the late
+      // write lands directly on the committed Response per the 0.7
+      // post-commit contract.
+      expect(res.status).toBe(302);
+      expect(res.headers.get("x-late")).toBe("1");
+    }
   });
 });
 

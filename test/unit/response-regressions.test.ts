@@ -191,14 +191,22 @@ describe("HEAD handling", () => {
     expect(res.status).toBe(200);
   });
 
-  it("bodied 204 Response construction is refused by undici (handler 500)", async () => {
+  it("bodied 204: undici refuses the construction (500); Bun sanitizes to a clean 204", async () => {
     const app = new Keala({ env: "test" });
     app.get("/", () => new Response("oops", { status: 204 }));
     const res = await hit(app, "/");
-    // Under Node/undici the Response constructor throws for null-body
-    // statuses with a body — the handler throw becomes a 500 through the
-    // funnel. Bun allows the construction (sanitize path is Bun-only).
-    expect(res.status).toBe(500);
+    if (typeof Bun === "undefined") {
+      // Node/undici: the Response constructor throws for null-body statuses
+      // with a body — the handler throw becomes a 500 through the funnel.
+      expect(res.status).toBe(500);
+    } else {
+      // Bun allows the construction; the empty-status sanitizer strips the
+      // body AND the headers describing it (respond.ts sanitizeEmptyStatus —
+      // the §2.3-2 semantics of the native-API migration, locked here).
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe("");
+      expect(res.headers.get("content-type")).toBeNull();
+    }
   });
 });
 
@@ -437,7 +445,12 @@ describe("pooling", () => {
     app.get("/t", (c) => c.text("hello"));
     app.get("/j", (c) => c.json({ a: 1 }));
     const t = await hit(app, "/t");
-    expect(t.headers.get("content-type")).toContain("text/plain");
+    // D1 (Bun ≥1.4.2, pooled rebuild included): sugar text carries no
+    // framework content-type — Bun materializes text/plain at send time,
+    // undici at construction. Pooling follows the same rule as the plain
+    // (non-pooled) path rather than stamping its own type.
+    const tct = t.headers.get("content-type");
+    expect(tct === null ? typeof Bun !== "undefined" : tct.includes("text/plain")).toBe(true);
     expect(await t.text()).toBe("hello");
     const j = await hit(app, "/j");
     expect(j.headers.get("content-type")).toContain("application/json");
