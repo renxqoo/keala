@@ -7,6 +7,7 @@
  */
 
 import { createError } from "../http/errors.ts";
+import { statusMessage } from "../http/status.ts";
 import { toURL } from "../utils/url.ts";
 import type { RouteHandler } from "../router/router.ts";
 
@@ -81,8 +82,7 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
         // must key it on Origin like every other negotiated answer (below).
         if (varyOrigin) addVary(c, "Origin");
         if (options.reject !== undefined) return options.reject(origin);
-        c.status = 403;
-        return;
+        return c.text(statusMessage(403) || "403", 403);
       }
       c.setHeader("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
       c.setHeader("Access-Control-Allow-Methods", methods);
@@ -92,8 +92,7 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
       if (maxAge !== undefined) c.setHeader("Access-Control-Max-Age", String(Math.trunc(maxAge)));
       // Preflight answers carry no body and never cookies.
       if (varyOrigin) addVary(c, "Origin");
-      c.status = 204;
-      return;
+      return new Response(null, { status: 204 });
     }
 
     if (origin.length > 0 && !allowed) {
@@ -102,8 +101,7 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
       // Vary rides along onto the committed answer.)
       if (varyOrigin) addVary(c, "Origin");
       if (options.reject !== undefined) return options.reject(origin);
-      c.status = 403;
-      return;
+      return c.text(statusMessage(403) || "403", 403);
     }
 
     await next();

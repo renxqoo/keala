@@ -10,6 +10,7 @@
  * helpers (`keala/helpers/password`) for PBKDF2/argon2 round-trips.
  */
 
+import { statusMessage } from "../http/status.ts";
 import type { RouteHandler } from "../router/router.ts";
 
 // ---------------------------------------------------------------------------
@@ -81,9 +82,11 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
       }
     }
     if (!accepted) {
-      c.status = 401;
-      c.setHeader("WWW-Authenticate", challenge);
-      return;
+      // U3b return form — body and header bytes match the old staged-401
+      // fallback (status-message body + challenge); the content-type becomes
+      // explicit (text/plain; charset=utf-8) instead of the runtime default
+      // — semantically equivalent, cross-runtime consistent (D1 family).
+      return c.text(statusMessage(401) || "401", 401, { "www-authenticate": challenge });
     }
     await next();
   };
@@ -131,15 +134,13 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
           : null;
     }
     if (token === null) {
-      c.status = 401;
-      c.setHeader("WWW-Authenticate", challenge);
-      return;
+      return c.text(statusMessage(401) || "401", 401, { "www-authenticate": challenge });
     }
     if (!(await options.verify(token))) {
-      c.status = 401;
       // Present-but-rejected is `invalid_token` per RFC 6750 §3.
-      c.setHeader("WWW-Authenticate", `${challenge}, error="invalid_token"`);
-      return;
+      return c.text(statusMessage(401) || "401", 401, {
+        "www-authenticate": `${challenge}, error="invalid_token"`,
+      });
     }
     await next();
   };

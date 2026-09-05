@@ -152,9 +152,9 @@ export const metrics = (): Metrics => {
     finish();
     return result as never;
   };
-  const page: RouteHandler = (c) => {
-    c.setHeader("content-type", "text/plain; version=0.0.4; charset=utf-8");
-    c.body = registry.text();
-  };
+  const page: RouteHandler = (c) =>
+    c.text(registry.text(), 200, {
+      "content-type": "text/plain; version=0.0.4; charset=utf-8",
+    });
   return { middleware, page, registry };
 };

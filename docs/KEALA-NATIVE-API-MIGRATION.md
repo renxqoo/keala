@@ -209,7 +209,7 @@ bun scripts/smoke.ts / bun scripts/example-check.ts（受影响时）。
 
 ---
 
-## 第三部分：MIGRATION（按单元；状态：**U1、U2、U3a 已实施（2026-09-06）**，U3b-U4 待实施）
+## 第三部分：MIGRATION（按单元；状态：**U1、U2、U3a、U3b 已实施（2026-09-06）**，U3c-U4 待实施）
 
 ### U1 — koa 对齐测试退役（流程试运行单元）
 
@@ -362,6 +362,22 @@ return；M4 22 文件机械替换（void 调用→return）。
 **动作**：cors.ts:84,95,105 / auth.ts:84,134,139 / metrics.ts:157 /
 headers.ts:107 改 return Response 形态（`c.status` 读保留支撑 logger/metrics）。
 **验收**：单元门；行为字节等价（现有断言不改）。
+
+**实施记录（2026-09-06）**：
+
+- cors 403×2 → `c.text(statusMessage(403)||"403", 403)`；204 preflight →
+  `new Response(null, {status:204})`（staged Allow-* 全家经 §2.3-1 通道搭车）；
+  auth 401×3 → `c.text(statusMessage(401)||"401", 401, {"www-authenticate": ...})`；
+  metrics page → `c.text(registry.text(), 200, {ct})`。headers.ts 零改动。
+- **等价口径（对抗审查双层探针定案）**：body/status/statusText/全部非 CT 头
+  在 Node+Bun 的 handle 与真实 socket wire 双层**逐字节等价**；Node 适配器
+  wire 含 CT 完全逐字节等价。唯一偏移：Bun wire 的 CT 从 runtime 默认变为
+  显式 `text/plain; charset=utf-8`（名字大小写+参数空格，D1 容差类，方向为
+  跨 runtime 一致化改善）——方案"body 字节等价"口径成立。
+- 204 staged 头搭车、reject() 自定义路径、metrics 的 c.status 观察槽
+  （经 commit 槽读路径）全部两树一致。auth.test:44 锚点核销（断言原样保留）。
+- 数学：2640 不变（行为等价单元，零测试改写除锚点注记）；双运行时 +
+  tsc/lint/fmt/build/smoke/example-check 全绿。
 
 ### U3c — setter 删除 + commit 瘦身（对抗审查重点单元）
 

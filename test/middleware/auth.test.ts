@@ -42,9 +42,8 @@ describe("basicAuth", () => {
     expect(res.status).toBe(401);
     expect(res.headers.get("www-authenticate")).toBe('Basic realm="Admin Area", charset="UTF-8"');
     // A null body on an error status falls back to the status message.
-    // U3b anchor (docs/KEALA-NATIVE-API-MIGRATION.md §U3b): basicAuth's
-    // return-ification must keep this 401 body byte-identical — verify this
-    // assertion when reworking auth.ts, then the anchor note may go.
+    // (Was the U3b byte-equivalence anchor — basicAuth's return-ification
+    // kept these bytes; the anchor is discharged.)
     expect(await res.text()).toBe("Unauthorized");
   });
 
