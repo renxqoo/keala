@@ -402,3 +402,59 @@ describe("agent security review: information disclosure sweep (contract holds)",
     }
   });
 });
+
+describe("error funnel baseline (ported from the retired koa parity suite, U1)", () => {
+  it("error responses hide 5xx messages; staged headers ride along", async () => {
+    // Headers the chain staged before the throw stay on the error response
+    // (security middleware must cover error pages); only content-DESCRIBING
+    // headers drop, and the 5xx message is never leaked.
+    const app = boot();
+    app.get("/boom", (c) => {
+      c.setHeader("X-Before", "1");
+      c.setHeader("Content-Length", "999");
+      c.cookies.set("sid", "abc");
+      c.throw(500, "secret details");
+    });
+    const res = await app.handle(requestFor("/boom"));
+    expect(res.status).toBe(500);
+    expect(res.headers.get("x-before")).toBe("1");
+    expect(res.headers.get("content-length")).toBeNull(); // describes the failed body
+    expect(await res.text()).toBe("Internal Server Error");
+    expect(res.headers.getSetCookie().length).toBe(1);
+  });
+
+  it("exposed 4xx errors surface their message", async () => {
+    const app = boot();
+    app.get("/teapot", (c) => {
+      c.throw(418, "short and stout");
+    });
+    const res = await app.handle(requestFor("/teapot"));
+    expect(res.status).toBe(418);
+    expect(await res.text()).toBe("short and stout");
+  });
+
+  it("unhandled requests answer 404 Not Found", async () => {
+    const app = boot();
+    const res = await app.handle(requestFor("/nowhere"));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
+  });
+
+  it("R4.3: the statusCode alias is gone — only .status counts; junk statuses coerce to 500", async () => {
+    const app = boot();
+    app.get("/teapot", () => {
+      const err = new Error("short and stout") as Error & { statusCode: number };
+      err.statusCode = 418;
+      throw err;
+    });
+    // No valid `.status` → wrapped as an unexposed 500 (the alias fallback
+    // chain was http-errors ecosystem compat, deleted by R4.3).
+    expect((await app.handle(requestFor("/teapot"))).status).toBe(500);
+    app.get("/junk", () => {
+      const err = new Error("junk") as Error & { status: unknown };
+      err.status = "notnumber";
+      throw err;
+    });
+    expect((await app.handle(requestFor("/junk"))).status).toBe(500);
+  });
+});

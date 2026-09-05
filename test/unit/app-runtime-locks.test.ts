@@ -220,7 +220,7 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.body).toBeNull();
   });
 
-  it("finalizer: c.status=204 then a body write stays 204/empty (koa contract)", async () => {
+  it("finalizer: c.status=204 then a body write stays 204/empty", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
       c.status = 204;

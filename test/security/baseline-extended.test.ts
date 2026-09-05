@@ -248,7 +248,7 @@ describe("security: redirect and XSS matrix", () => {
     },
   );
 
-  it("open redirect scope: absolute external URLs are allowed (koa parity) but CRLF is not", async () => {
+  it("open redirect scope: absolute external URLs are allowed but CRLF is not", async () => {
     const res = await attack((c) => {
       c.redirect("https://example.org/away");
     });
@@ -262,6 +262,17 @@ describe("security: redirect and XSS matrix", () => {
     });
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
+  });
+
+  it("an absolute target with a backslash-at stays a path, never a userinfo separator", async () => {
+    // Ported from the retired koa parity suite (U1): the \@ in
+    // "http://google.com\@apple.com" must never normalize into authority
+    // userinfo — the backslash becomes a path slash and @ lands in the PATH.
+    const app = new Keala(quiet);
+    app.get("/r", (c) => c.redirect("http://google.com\\@apple.com"));
+    const res = await app.handle(new Request("http://localhost:3000/r"));
+    expect(res.headers.get("location")).toBe("http://google.com/@apple.com");
+    expect(res.status).toBe(302);
   });
 });
 
@@ -290,7 +301,7 @@ describe("security: path traversal and routing abuse", () => {
       c.body = `${c.params.name}/${c.params.rest}`;
     });
     const res = await app.handle(new Request("http://localhost:3000/users/a%2Fb/files/c%2Fd"));
-    // Decoding is intentional (koa parity); the capture stays a value, never
+    // Decoding is intentional; the capture stays a value and never
     // re-enters routing.
     expect(await res.text()).toBe("a/b/c/d");
   });

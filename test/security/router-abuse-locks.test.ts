@@ -140,7 +140,7 @@ describe("R3-4 duplicate param names: fast matcher and trie capture different va
 });
 
 describe("R3-5 mounted param middleware runs outside the router's use() middleware", () => {
-  it("a group's use() middleware is prepended to every route — it must run before its param() middleware (koa parity)", async () => {
+  it("a group's use() middleware is prepended to every route — it must run before its param() middleware", async () => {
     const order: string[] = [];
     const app = new Keala(quiet);
     const api = new Router();

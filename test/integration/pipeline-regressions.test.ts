@@ -23,7 +23,7 @@ describe("agent3 — finalize: synthesized responses drop staged headers", () =>
   // `{ allow }` only, and a notFound handler's returned Response is sent
   // verbatim; neither consults c.headersRecord. Staged writes survive the
   // untouched check because c.setHeader() only raises flag 4, not flag 1.
-  // Expected (koa contract, cf. app.test.ts "global middleware runs for
+  // Expected (cf. app.test.ts "global middleware runs for
   // UNMATCHED paths"): middleware headers reach the client on every response.
   it("CONFIRMED-BUG: 405 synthesis drops headers staged by global middleware", async () => {
     const app = new Keala(quiet);

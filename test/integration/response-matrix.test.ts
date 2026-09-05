@@ -166,7 +166,7 @@ describe("matrix: HEAD across body kinds", () => {
   it.each(heads)(
     "HEAD %s in bare state mode backfills Content-Length from the would-be body",
     async (_label, body, length) => {
-      // koa contract: state-mode HEAD computes Content-Length from the
+      // State-mode HEAD computes Content-Length from the
       // would-be body and drops the body itself — including the bare path
       // where the header record is materialized just for the backfill.
       const res = await respondWith(

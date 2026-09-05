@@ -17,7 +17,7 @@
  *  4. `cookies.get(name, { signed: true })` failed OPEN (returned the raw
  *     attacker-controlled value) when no signing keys were configured.
  *
- * Locked semantics (Koa/reference parity, intentionally unchanged):
+ * Locked semantics (intentionally unchanged):
  *  - x-forwarded-* is fully untrusted while app.proxy is false.
  *  - No Unicode normalization (NFKC/fullwidth) anywhere: a fullwidth "proto"
  *    key never collapses into `__proto__`. Duplicate Cookie names: last wins.
@@ -232,7 +232,7 @@ describe("audit: signed cookie integrity and Keygrip compatibility", () => {
     expect(() => cookies.get("sid", { signed: true })).toThrow(/keys/);
   });
 
-  it("default unsigned read without keys keeps returning raw (koa parity)", () => {
+  it("default unsigned read without keys keeps returning raw", () => {
     const cookies = createCookies({
       cookieHeader: "sid=admin",
       requestSecure: false,

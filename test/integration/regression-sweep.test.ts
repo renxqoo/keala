@@ -358,13 +358,13 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
     }
   });
 
-  it("locks: an explicit scheme:// target is the developer's absolute redirect (koa parity)", async () => {
+  it("locks: an explicit scheme:// target is the developer's absolute redirect", async () => {
     const app = new Keala(quiet);
     app.get("/abs", (c) => c.redirect("https:////example.org/x/./y"));
     const res = await drive(app, new Request("http://good.com/abs"));
     // Matches ^https?:\/\// → normalized through new URL — deliberate, same
-    // as c.redirect("https://example.org/..."). Not an open-redirect vector
-    // beyond what koa itself allows for app-chosen absolute targets.
+    // as c.redirect("https://example.org/..."). Not an open-redirect vector:
+    // the absolute target is app-chosen, not attacker input.
     expect(res.headers.get("location")).toBe("https://example.org/x/y");
   });
 

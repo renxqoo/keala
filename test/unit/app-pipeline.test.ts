@@ -23,7 +23,7 @@ describe("app pipeline", () => {
     expect(await res.text()).toBe("x");
   });
 
-  it("global middleware runs for UNMATCHED paths (koa contract)", async () => {
+  it("global middleware runs for UNMATCHED paths", async () => {
     const app = new Keala(quiet);
     app.use((c, next) => {
       c.setHeader("X-Global", "1");

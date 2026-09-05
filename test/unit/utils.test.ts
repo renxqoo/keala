@@ -10,6 +10,7 @@ import {
 } from "../../src/utils/text.ts";
 import {
   charsetFromContentType,
+  expandContentType,
   extensionFromMime,
   mimeFromExtension,
   normalizeType,
@@ -111,6 +112,12 @@ describe("text utils", () => {
     expect(escapeHtml(`<a href="x">&'`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
   });
 
+  it("passes non-ASCII and control bytes through untouched", () => {
+    // Re-homed from the retired koa differential fuzz (U1): only the five
+    // XML entities are escaped — everything else is verbatim.
+    expect(escapeHtml("é中\0\t ")).toBe("é中\0\t ");
+  });
+
   it("builds content-disposition with ASCII fallback", () => {
     expect(contentDisposition("report.pdf")).toBe('attachment; filename="report.pdf"');
     expect(contentDisposition("报告.pdf")).toContain("filename*=UTF-8''%E6%8A%A5%E5%91%8A.pdf");
@@ -141,6 +148,21 @@ describe("mime utils", () => {
     expect(mimeFromExtension("a.tar.gz")).toBe("application/gzip");
     expect(mimeFromExtension("noext")).toBe(null);
     expect(extensionFromMime("text/html; charset=utf-8")).toBe("html");
+  });
+
+  it("'.bin' expands to application/octet-stream", () => {
+    // Re-homed from the retired koa differential (U1): binary downloads
+    // must never leak a runtime text/plain default.
+    expect(expandContentType(".bin")).toBe("application/octet-stream");
+    expect(expandContentType("bin")).toBe("application/octet-stream");
+  });
+
+  it("extension-form types expand with their charset (value lock, not self-differential)", () => {
+    // Re-homed from the retired koa differential (U1): the ".html" path goes
+    // through the same TYPE_MAP expansion as the "html" shorthand — the
+    // charset is part of the value, and no other test asserts it directly.
+    expect(expandContentType(".html")).toBe("text/html; charset=utf-8");
+    expect(expandContentType("html")).toBe("text/html; charset=utf-8");
   });
 
   it("extracts charset", () => {

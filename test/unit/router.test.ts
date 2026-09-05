@@ -129,6 +129,17 @@ describe("router: methods, 405/Allow/501/OPTIONS", () => {
     expect(miss.headers.get("allow")).toBe("HEAD, GET");
   });
 
+  it("Allow order is canonical regardless of registration order", async () => {
+    // Re-homed from the retired koa differential (U1): POST registered first
+    // must not make Allow read "POST, HEAD, GET".
+    const request = appWith((app) => {
+      app.post("/g", (c) => c.text("p"));
+      app.get("/g", (c) => c.text("g"));
+    });
+    const miss = await request("/g", { method: "PUT" });
+    expect(miss.headers.get("allow")).toBe("HEAD, GET, POST");
+  });
+
   it("an explicit OPTIONS route handles the request itself", async () => {
     const request = appWith((app) => {
       app.options("/o", (c) => c.text("custom-options"));

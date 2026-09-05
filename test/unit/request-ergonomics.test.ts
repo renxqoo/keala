@@ -180,3 +180,14 @@ describe("R411 Fix 4: c.routePath / c.routeName", () => {
     expect(observed).toBe("|undefined"); // recycled: no stale pattern leaks
   });
 });
+
+describe("c.URL (ported from the retired koa parity suite, U1)", () => {
+  it("c.URL exposes the live WHATWG URL view", async () => {
+    const app = new Keala(quiet);
+    app.get("/u", (c) => {
+      c.body = c.URL instanceof URL ? c.URL.pathname : "not a URL";
+    });
+    const res = await app.handle(req("/u"));
+    expect(await res.text()).toBe("/u");
+  });
+});

@@ -1,5 +1,16 @@
 # keala — deliberate divergences (supersedes the parity-security (archived residue) ledger below)
 
+> **Status (U1, docs/KEALA-NATIVE-API-MIGRATION.md)**: koa alignment is no
+> longer an API contract — keala keeps its own semantics. The koa
+> differential suites are retired; their keala bug/security locks were
+> preserved (error funnel → test/security/error-disclosure.test.ts, redirect
+> → test/security/baseline-extended.test.ts), and `.parity/koa` +
+> `koa.tar.gz` are archived reference material no test consumes. koa remains
+> in the repo ONLY as a bench performance comparison player
+> (bench/route-shootout, deps deliberately untouched). hono stays a live
+> reference (test/parity/hono.test.ts). The tables below are historical
+> audit records.
+
 The rewrite intentionally drops the koa three-object context in favor of
 one flat context (see docs/DESIGN.md). Semantics that CHANGED on purpose:
 
@@ -156,6 +167,10 @@ memory regression versus the Bun.file sendfile path.
 ---
 
 # Official test-suite parity matrix
+
+> Historical record (time-point audit; test paths predate the test-dir
+> reorg). The koa half of this matrix retired in U1 — see the status note at
+> the top of this file.
 
 Exhaustive per-file audit against the official suites cloned into `.parity/`:
 koa@3.2.1 (`__tests__`), @koa/router@13.0.0 (`test/`), hono@4.13.5 (`src/*.test.ts`).

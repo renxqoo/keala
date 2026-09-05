@@ -41,8 +41,8 @@ describe("INV-7 response consistency", () => {
       if (hcl !== null && gcl !== null && hcl !== gcl) {
         throw new Error(`HEAD content-length ${hcl} != GET ${gcl}`);
       }
-      // Redirect bodies legitimately override an empty cfg status to 302
-      // (koa parity) — emptiness is judged on the ACTUAL shipped status.
+      // Redirect bodies legitimately override an empty cfg status to 302 —
+      // emptiness is judged on the ACTUAL shipped status.
       if (EMPTY_CFG.has(getRes.status)) {
         if (getRes.body !== null) throw new Error(`${getRes.status} GET carries a body`);
         for (const h of ["content-type", "content-length", "transfer-encoding"]) {

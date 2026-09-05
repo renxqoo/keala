@@ -316,7 +316,7 @@ describe("C4: dev warning for routes swallowed by global middleware", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("does not warn for unmatched paths (koa's global-middleware contract)", async () => {
+  it("does not warn for unmatched paths", async () => {
     const warn = warns();
     const app = new Keala({ env: "development" });
     app.use(() => new Response(null, { status: 404 }));

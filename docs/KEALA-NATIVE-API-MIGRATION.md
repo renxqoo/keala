@@ -209,7 +209,7 @@ bun scripts/smoke.ts / bun scripts/example-check.ts（受影响时）。
 
 ---
 
-## 第三部分：MIGRATION（按单元；状态：U1-U4 均为「待实施」）
+## 第三部分：MIGRATION（按单元；状态：**U1 已实施（2026-09-06）**，U2-U4 待实施）
 
 ### U1 — koa 对齐测试退役（流程试运行单元）
 
@@ -222,6 +222,45 @@ koa-parity 断言是 U3b 行为等价锚点——标注保至 U3b 落地后再�
 **矩阵**：附录 M8（实施时生成）+ parity-locks 10 用例逐条。
 **验收**：单元门全绿（含 coverage 与基线逐项对比——删 42 用例的覆盖缺口数字
 核销，必要时补 keala 侧断言）；被删用例与矩阵一一对应。
+
+**实施记录（2026-09-06，commit 见 git log "U1"）**：
+
+- 删除 parity/koa.test.ts（17 用例）+ koa-fuzz-locks.test.ts（16 用例）+
+  agent-r6-diff-koa.deps.d.ts（negotiator 声明移至其唯一消费者旁的
+  test/integration/regression-sweep.deps.d.ts）。**数学核销：2658−33 删
+  +8 回迁新增=2634 ✓**（全量复跑 160 文件全绿）。
+- 比方案更深一层的发现：两个差分文件中的 RED 行是**已修复 bug 的回归锁**。
+  验证子代理对 22 项行为逐一 grep 判定锁存在性：13 项在存活文件已有等价锁；
+  **9 项为唯一锁，已回迁 keala 原生断言**（明细见附录 M8 回迁清单——
+  `typeIs("*/*")`、redirect 转义四子句+安全字符集、contentDisposition ASCII
+  fallback、`.bin`→octet-stream（expandContentType 层，U3c 后存活）、
+  escapeHtml 透传、外域中和精确形态、parseCookies 裸 token、Allow 顺序
+  无关性）。
+- parity-locks.test.ts 三类拆分（167→91 行）：错误类 4 条→error-disclosure
+  （404→460 行）；redirect 1 条→baseline-extended（415→426）；c.URL 1 条→
+  request-ergonomics；**setter 语义 4 条留存原文件，文件头注明 U3c 随 setter
+  整体删除、禁新增**。
+- M8 甄别（12 点位 + 甄别时补获 errors-surface:102 漏网点）：全部为 keala
+  行为锁，无一删除；"(koa parity)" 措辞降级为历史出处。auth.test.ts:44
+  标注 U3b 字节等价锚点。
+- PARITY.md 头部加状态注记（koa 仅 bench 对照、.parity/koa 归档、hono 仍为
+  活参照）；官方套件矩阵节标注为历史记录。
+- Coverage 核销（对抗审查后终态复跑）：语句/分支/函数/行与基线**四项逐项
+  相等**（5494/3838/824/4859——差分驱动的语句与分支全部被存活测试+回迁
+  断言覆盖）。
+- 对抗审查（4 条 CONFIRMED，全部修复）：①`.html`/shorthand 扩展的 charset
+  **值锁**实为自引用差分（surface-regressions 的两侧同时退化依然绿）——
+  utils.test 补 `expandContentType(".html")==="text/html; charset=utf-8"`
+  值断言；②"(koa contract)" 措辞 7 处残留（初版 grep 面漏变体）——全部
+  降级，测试不动；③附录 M2/M3/M4 以命令同源重生成（parity-locks 曾被误
+  移出 U3c 核销矩阵；attachment 8→7）；④本节数字以终态树复跑为准修正。
+- 顺手修复：oxfmt 存量违规（CHANGELOG 中文裸星号会被 formatter 损坏为
+  `agent-r46-_`——人工改写为反引号前缀等义表达；run.mjs 纯换行），单独
+  commit，否则任何 push 的 CI 都会挂。
+- 遗留（非 U1）：本机 Bun 1.4.2 下 3 个**存量**测试失败（HEAD stash 复跑
+  证实与 U1 无关）——带体 204 现被正确消毒为干净 204（恰是 §2.3-2 语义）、
+  `Response.redirect` 在 Bun 不再不可变、pooling+sugar 的 content-type——
+  均为 Bun 上游行为漂移，待独立提交修复测试期待值。
 
 ### U2 — params 函数式化
 
@@ -289,4 +328,17 @@ CHANGELOG；服务器干净窗口 shootout 复测（P3）。
 
 ## 实施记录（收口时逐波追加）
 
-（预留）
+### 第 1 波 — U1（2026-09-06）
+
+koa 对齐退役落地，流程试运行达成：方案 → 验证（锁存在性子代理 22 项逐一
+核实）→ 实施（删 3 文件、三类拆分、9 项唯一锁回迁、13 点位措辞甄别）→
+单元门 → 对抗审查（4 条 CONFIRMED：`.html` charset 值锁自引用差分漏网、
+实施记录数字失真、"(koa contract)" 措辞 7 处残留、附录 M3 矩阵 parity-locks
+被误移出——全部修复，审查者另抓出验证子代理判定"已有锁"中的 1 项实为
+弱锁）→ commit。关键数字：2658−33 删+8 回迁=2634；coverage 四项与基线
+逐项相等（5494/3838/824/4859）。
+教训三条进流程：①差分测试文件不能盲删——RED 行是修复的回归锁，删前必须
+逐行为锁存在性核验（本单元 9/33 用例因此救回）；②"已有等价锁"的判定要
+防自引用差分（两侧同时退化依然绿——值断言才算锁）；③formatter 对中文
+裸星号的损坏（`agent-r46-*`→`agent-r46-_`）说明格式化自动修复产物必须
+过人工语义审阅后才能落盘。

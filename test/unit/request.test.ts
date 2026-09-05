@@ -59,6 +59,7 @@ describe("request facade (flat context)", () => {
     expect(ctx.is("json")).toBe("json");
     expect(ctx.is()).toBe("application/json");
     expect(ctx.is("html")).toBe(false);
+    expect(ctx.is(["*/*"])).toBe("application/json");
   });
 
   it("reports length, idempotency and href", async () => {

@@ -129,6 +129,14 @@ describe("contentDisposition", () => {
       `attachment; filename="zh"; filename*=UTF-8''${encodeURIComponent("中.txt")}`,
     );
   });
+  it("an explicit fallback applies to ASCII names too, forcing extended", () => {
+    // Re-homed from the retired koa differential (U1): the fallback is an
+    // explicit legacy-client override — it must not be ignored just because
+    // the filename itself is ASCII.
+    expect(contentDisposition("file.txt", "fallback.txt")).toBe(
+      `attachment; filename="fallback.txt"; filename*=UTF-8''${encodeURIComponent("file.txt")}`,
+    );
+  });
 });
 
 describe("sugar with per-call headers", () => {

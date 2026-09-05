@@ -326,4 +326,21 @@ describe("RT-F10: redirect Location uses UTF-8 percent-encoding", () => {
     const res = await app.handle(req("/r2"));
     expect(res.headers.get("location")).toBe("/a%20b?q=1&x=/y");
   });
+
+  it("re-homed from the retired koa differential (U1): escape edge cases", async () => {
+    // A '%' not followed by two hex digits is not a valid escape and is
+    // %25-encoded; spaces become %20; braces are encoded; apostrophes stay
+    // raw; URL sub-delims and :@?#\[\] pass through.
+    const app = new Keala(quiet);
+    app.get("/e1", (c) => c.redirect("/trailing%"));
+    app.get("/e2", (c) => c.redirect("/%zz invalid"));
+    app.get("/e3", (c) => c.redirect("/a'apos"));
+    app.get("/e4", (c) => c.redirect("/{brace}"));
+    app.get("/e5", (c) => c.redirect("/a!$&()*+,;:@~[]?#=q"));
+    expect((await app.handle(req("/e1"))).headers.get("location")).toBe("/trailing%25");
+    expect((await app.handle(req("/e2"))).headers.get("location")).toBe("/%25zz%20invalid");
+    expect((await app.handle(req("/e3"))).headers.get("location")).toBe("/a'apos");
+    expect((await app.handle(req("/e4"))).headers.get("location")).toBe("/%7Bbrace%7D");
+    expect((await app.handle(req("/e5"))).headers.get("location")).toBe("/a!$&()*+,;:@~[]?#=q");
+  });
 });

@@ -4,11 +4,12 @@ import { Keala, Router, createError } from "../../src/index.ts";
 /**
  * Concurrency / interleaving / lifecycle red-team suite.
  *
- * CONFIRMED-BUG tests are written with the CORRECT (Koa-3.2.1 / design-intent)
+ * CONFIRMED-BUG tests are written with the CORRECT (design-intent)
  * expectation and currently FAIL — each one's comment carries the label
  * CONFIRMED-BUG plus the reproduction, expected-vs-actual and the root cause
- * (file:line). "语义锁定" tests encode behavior that matches Koa (or a
- * documented deliberate deviation) and must stay green.
+ * (file:line). "语义锁定" tests encode locked keala semantics (historically
+ * verified against koa 3.2.1, or documented deliberate deviations) and must
+ * stay green.
  *
  * migration notes (see docs/MIGRATION.md §2):
  *  - routing is app-level (`app.get` / `app.mount`); no router middleware API
@@ -19,7 +20,9 @@ import { Keala, Router, createError } from "../../src/index.ts";
  *    statusText leak and the lazy ip thunk were fixed and are now
  *    green 语义锁定 locks.
  *
- * Koa baseline: .parity/koa/lib/{request,context,application}.js (v3.2.1).
+ * koa is no longer a contract (docs/KEALA-NATIVE-API-MIGRATION.md U1); the
+ * `.parity/koa` clone this suite was originally audited against is archived
+ * reference material.
  *
  * 0.7 migration: the "same-request interleaving: query cache" suite is gone —
  * requests are read-only now (url/path/search/querystring setters deleted),
@@ -188,10 +191,10 @@ describe("concurrent isolation", () => {
 // 3. Error-path lifecycle
 // ---------------------------------------------------------------------------
 describe("error path lifecycle", () => {
-  it("语义锁定: a failed response keeps staged headers and set-cookie, drops the failed body (koa parity)", async () => {
-    // Verified against koa 3.2.1: the error response carries headers the
-    // chain already staged (middleware security headers must reach error
-    // pages); the failed BODY is discarded and the 5xx message stays hidden.
+  it("语义锁定: a failed response keeps staged headers and set-cookie, drops the failed body", async () => {
+    // The error response carries headers the chain already staged (middleware
+    // security headers must reach error pages); the failed BODY is discarded
+    // and the 5xx message stays hidden.
     const errors: unknown[] = [];
     const app = new Keala(quiet);
     app.onError((e) => void errors.push(e));
@@ -283,11 +286,12 @@ describe("error path lifecycle", () => {
  * races, lazy singletons, stream bodies). Part 1 lives in
  * test/agent-concurrency.test.ts.
  *
- * CONFIRMED-BUG tests are written with the CORRECT (Koa-3.2.1 / design-intent)
+ * CONFIRMED-BUG tests are written with the CORRECT (design-intent)
  * expectation and currently FAIL — each one's comment carries the label
  * CONFIRMED-BUG plus the reproduction, expected-vs-actual and the root cause
- * (file:line). "语义锁定" tests encode behavior that matches Koa (or a
- * documented deliberate deviation) and must stay green.
+ * (file:line). "语义锁定" tests encode locked keala semantics (historically
+ * verified against koa 3.2.1, or documented deliberate deviations) and must
+ * stay green.
  *
  * migration notes: the inherited koa CONFIRMED-BUGs around the lazy ip memoization
  * (undefined thunk result / null requestIP result re-consulted) are fixed in
@@ -297,7 +301,7 @@ describe("error path lifecycle", () => {
  * default; docs/DESIGN.md §4) and is carried as a labeled skip until the
  * opt-in switch ships (P2).
  *
- * Koa baseline: .parity/koa/lib/{request,context,application}.js (v3.2.1).
+ * koa is no longer a contract (docs/KEALA-NATIVE-API-MIGRATION.md U1).
  */
 
 const enc = (value: string): Uint8Array => new TextEncoder().encode(value);

@@ -40,6 +40,11 @@ describe("typeIs", () => {
     expect(typeIs("image/png", ["any"])).toBe("image/png");
   });
 
+  it("the canonical catch-all '*/*' returns the incoming type", () => {
+    expect(typeIs("application/json", ["*/*"])).toBe("application/json");
+    expect(typeIs("multipart/form-data", ["*/*"])).toBe("multipart/form-data");
+  });
+
   it("returns false on mismatch", () => {
     expect(typeIs("text/plain", ["json", "html"])).toBe(false);
     expect(typeIs("image/png", ["image/*", "text/*"]) === "text/*").toBe(false);

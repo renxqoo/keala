@@ -63,7 +63,7 @@ describe("agent audit: Referrer alias", () => {
 });
 
 describe("agent audit: redirect status classification (statuses.redirect)", () => {
-  it("matches Koa's redirect class exactly", () => {
+  it("the redirect class is exactly 300/301/302/303/305/307/308", () => {
     for (const code of [300, 301, 302, 303, 305, 307, 308]) {
       expect(isRedirectStatus(code), `isRedirectStatus(${code})`).toBe(true);
     }

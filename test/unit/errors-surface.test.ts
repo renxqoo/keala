@@ -99,9 +99,9 @@ describe("R7-NEG-3 [MEDIUM] malformed qvalues do not gain quality 1", () => {
 });
 
 describe("R7-QUERY-1 [MEDIUM] malformed escapes still decode valid query bytes", () => {
-  it("matches Node/Koa querystring recovery around a malformed escape", () => {
-    // Koa's querystring semantics recover component-by-component: '+' is a
-    // space and valid escapes remain decodable even if another '%' is bad.
+  it("recovers component-by-component around a malformed escape", () => {
+    // Query semantics recover component-by-component: '+' is a space and
+    // valid escapes remain decodable even if another '%' is bad.
     // Expected: "A %ZZB". Actual: the catch returns the entire raw component,
     // losing both plus conversion and every valid escape.
     // Root cause: src/utils/query.ts:14-19.

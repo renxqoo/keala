@@ -79,8 +79,8 @@ describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use
     });
     app.get("/dup", (c) => c.text("second"));
     await app.handle(req("/dup"));
-    // koa contract: app.use middleware runs once per request; only the
-    // matching route layers chain (@koa/router semantics).
+    // app.use middleware runs once per request; only the
+    // matching route layers chain.
     expect(globals).toBe(1);
   });
 

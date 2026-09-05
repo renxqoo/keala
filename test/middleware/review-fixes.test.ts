@@ -200,6 +200,9 @@ describe("parseCookies: charCode trim + decode early-out equivalence", () => {
     ["enc=%E4%B8%AD", { enc: "中" }],
     ["lit=%252F", { lit: "%2F" }],
     ["dec=%2F", { dec: "/" }],
+    // Re-homed from the retired koa differential (U1): a bare token (no '=')
+    // parses as a name with an empty value instead of being ignored.
+    ["bare", { bare: "" }],
     ["bad=%E4", { bad: "%E4" }],
     ["mixed=%E4%B8%AD%ZZ", { mixed: "%E4%B8%AD%ZZ" }],
     ["empty=; q=v", { empty: "", q: "v" }],

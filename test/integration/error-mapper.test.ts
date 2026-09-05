@@ -92,7 +92,7 @@ describe("agent review: mergeAbsentHeaders (takeover merge)", () => {
     const cookiesOf = (res: Response): string[] =>
       JSON.parse(JSON.stringify(res.headers.getSetCookie())) as string[];
 
-    // Decline ships both staged cookies (koa parity — staged headers ride).
+    // Decline ships both staged cookies (staged headers ride on error pages).
     const declining = boot((a) => {
       staging(a);
       a.onError(() => undefined);

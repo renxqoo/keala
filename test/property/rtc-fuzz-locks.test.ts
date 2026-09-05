@@ -66,7 +66,7 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
     }
   });
 
-  it("locks: an explicit scheme:// target is the developer's absolute redirect (koa parity)", async () => {
+  it("locks: an explicit scheme:// target is the developer's absolute redirect", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
       c.redirect(String(c.query("next")));
@@ -76,6 +76,20 @@ describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
       new Request("http://good.com:3000/r?next=https%3A%2F%2Fexample.org%2Fx"),
     );
     expect(res.headers.get("location")).toBe("https://example.org/x");
+  });
+
+  it("locks: foreign-authority relative targets neutralize to exact same-origin forms", async () => {
+    // Re-homed from the retired koa differential (U1): the neutralization is
+    // percent-encoding of the authority-introducing bytes — not a rewrite to
+    // a safe path, not a verbatim forward.
+    const app = new Keala(quiet);
+    app.get("/n", (c) => {
+      c.redirect(String(c.query("next")));
+    });
+    const a = await drive(app, new Request("http://good.com:3000/n?next=%2F%2Fevil.com"));
+    expect(a.headers.get("location")).toBe("/%2Fevil.com");
+    const b = await drive(app, new Request("http://good.com:3000/n?next=https%3A%2Fevil.com"));
+    expect(b.headers.get("location")).toBe("https%3A%2Fevil.com");
   });
 
   it("locks: same-origin //host targets pass through untouched", async () => {
