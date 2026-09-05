@@ -53,6 +53,10 @@ const PROBES = [
   "/map/berlin/events",
   "/very/deeply/nested/route/hello/there",
   "/static/index.html",
+  "/static/deep/dir/file.css",
+  "/static",
+  "/static/",
+  "/static//dbl",
   "/opt/sure",
   "/opt",
   "/digits/123",
@@ -106,19 +110,41 @@ describe("R413 bucket regex: differential against the trie", () => {
     registerDef(state, "GET", "/a/b/:y", [handler]);
     expect(matchRoute(state, "/a/b/zz")?.params).toEqual({ y: "zz" });
 
-    // A wildcard sibling must neither join the regex nor shadow the param.
-    const wild = createRouterState();
-    registerDef(wild, "GET", "/w/*", [handler]);
-    registerDef(wild, "GET", "/w/:x", [handler]);
-    expect(wild.regexIndex.has("/w/*")).toBe(false);
-    expect(matchRoute(wild, "/w/one")?.params).toEqual({ x: "one" });
-    expect(matchRoute(wild, "/w/one/two")?.params).toEqual({ wildcard: "one/two" });
+    // Wildcards now RIDE the fast layer as the bucket's fallback group:
+    // exact-count alternatives win first, the wildcard answers the rest.
+    for (const order of [
+      ["/w/*", "/w/:x"],
+      ["/w/:x", "/w/*"],
+    ]) {
+      const wild = createRouterState();
+      for (const p of order) registerDef(wild, "GET", p, [handler]);
+      expect(wild.regexIndex.has("/w/*")).toBe(true);
+      expect(matchRoute(wild, "/w/one")?.params).toEqual({ x: "one" });
+      expect(matchRoute(wild, "/w/one/two")?.params).toEqual({ wildcard: "one/two" });
+      // Trailing-slash normalization: "/w/two/" segments as [w, two], so
+      // the param still outranks the wildcard (trie agrees).
+      expect(matchRoute(wild, "/w/two/")?.params).toEqual({ x: "two" });
+      expect(matchRoute(wild, "/w/a/b/")?.params).toEqual({ wildcard: "a/b" });
+      expect(matchRoute(wild, "/w")).toBeNull(); // bare prefix is a different resource
+    }
 
-    const wildReversed = createRouterState();
-    registerDef(wildReversed, "GET", "/w/:x", [handler]);
-    registerDef(wildReversed, "GET", "/w/*", [handler]);
-    expect(matchRoute(wildReversed, "/w/one")?.params).toEqual({ x: "one" });
-    expect(matchRoute(wildReversed, "/w/one/two")?.params).toEqual({ wildcard: "one/two" });
+    // Deeper static prefix outranks a shallower wildcard (trie pop order).
+    for (const order of [
+      ["/w2/b/*", "/w2/*"],
+      ["/w2/*", "/w2/b/*"],
+    ]) {
+      const deep = createRouterState();
+      for (const p of order) registerDef(deep, "GET", p, [handler]);
+      expect(matchRoute(deep, "/w2/b/x")?.params).toEqual({ wildcard: "x" });
+      expect(matchRoute(deep, "/w2/c/x")?.params).toEqual({ wildcard: "c/x" });
+    }
+
+    // A count-group pattern beats the wildcard for its own shape.
+    const mixed = createRouterState();
+    registerDef(mixed, "GET", "/w4/:x/y", [handler]);
+    registerDef(mixed, "GET", "/w4/*", [handler]);
+    expect(matchRoute(mixed, "/w4/a/y")?.params).toEqual({ x: "a" });
+    expect(matchRoute(mixed, "/w4/a/z")?.params).toEqual({ wildcard: "a/z" });
   });
 
   it("a late registration retires the epoch and recompiles the bucket", () => {

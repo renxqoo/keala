@@ -436,20 +436,22 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
   );
 
   // -------------------------------------------------------------------------
-  // REVIEW-PERF-3 — §7.2 requestTimeout (U2): exactly 1 timer created,
-  // unref'd and cleared per configured request (sync settle included); on
-  // fire exactly one 504 Response and the zombie settle arms NO new timer.
+  // REVIEW-PERF-3 — §7.2 requestTimeout (U2): async requests arm exactly 1
+  // timer (created/unref'd/cleared 1:1:1); SYNC-settled requests skip the
+  // race outright (R413b — cannot hang, zero timers); on fire exactly one
+  // 504 Response and the zombie settle arms NO new timer.
   // -------------------------------------------------------------------------
 
   it(
-    "REVIEW-PERF-3: deadline (§7.2 U2) — 1 create/1 unref/1 clear per request incl. sync settle; fire path yields exactly one 504 and a zero-timer zombie settle",
+    "REVIEW-PERF-3: deadline (§7.2 U2) — sync settle skips the race (0 timers, R413b); async settle arms 1 create/1 unref/1 clear; fire path yields exactly one 504 and a zero-timer zombie settle",
     { timeout: 60_000 },
     async () => {
       const timers = patchTimers();
       try {
         // (a) SYNC requests on a deadline-configured app (immediate settle):
-        // the race still arms exactly one unref'd timer and clears it in the
-        // settle microtask — create:unref:clear = 1:1:1 per request.
+        // R413b skips the race entirely — a synchronously-settled response
+        // cannot hang, so arming a timer just to clear it one microtask
+        // later is pure churn. Zero timers created per sync request.
         {
           const app = new Keala({ env: "test", requestTimeout: 30_000 });
           app.get("/s", (c) => {
@@ -467,9 +469,9 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
               `unref'd ${d.unrefed}, cleared ${d.cleared}, fired ${d.fired}, live ${d.live}`,
           );
           expect(app.inFlight).toBe(0);
-          expect(d.created).toBe(N);
-          expect(d.unrefed).toBe(N);
-          expect(d.cleared).toBe(N);
+          expect(d.created).toBe(0);
+          expect(d.unrefed).toBe(0);
+          expect(d.cleared).toBe(0);
           expect(d.fired).toBe(0);
           expect(d.live).toBe(0);
           expect(d.liveUnref).toBe(0);

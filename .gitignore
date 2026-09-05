@@ -10,3 +10,4 @@ bench/route-shootout/diag/*.cpuprofile
 .claude/
 bench/route-shootout/diag/CPU.*.md
 bench/route-shootout/diag/CPU.*.cpuprofile
+bench/route-shootout/diag/heap/

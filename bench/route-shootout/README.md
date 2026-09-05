@@ -68,21 +68,22 @@ Go 基线有工具链时自动构建,没有时静默跳过。结果写 `REPORT.m
 > 两项疑点已由 `docs/R412-SHOOTOUT-DIFF-DIAGNOSIS.md` 用工具实证到
 > 根因;疑点 A 的修复(bucket-regex 快速层)以 0.7.3 落地,结论随之更新。
 
-- **HTTP 层(R413 后,见 REPORT.md)**:满跑 mixed **1.00x(±2%
-  紧带)**、其余场景 0.97-1.11x 全平局;keala vs raw Bun.serve
-  1.00-1.09x(**框架 ≈ 裸运行时天花板**)。keala 轮间噪声从 ±22-52%
-  收紧到 ±1-3%(每请求路由分配消失的 GC 红利);安静窗口复核 mixed
-  1.00x / 4-seg 1.01x / static 1.00x。首轮 REPORT 里 mixed 0.86-0.88x
-  是"首枪凹陷窗口"采样伪影;
+- **HTTP 层(R413+通配兜底后,见 REPORT.md)**:vs hono 紧带轮
+  (±3% 内)0.99-1.03x、噪声轮平局,wildcard **1.00x**(旧 0.98x 已
+  消);keala vs raw Bun.serve 0.97-1.01x(紧带轮,框架 ≈ 裸运行时
+  天花板);keala 轮间噪声从 ±22-52% 收紧(每请求路由分配消失的 GC
+  红利)。首轮 REPORT 里 mixed 0.86-0.88x 是"首枪凹陷窗口"采样伪影;
 - **进程内(R413 后)**:动态形状 keala **1.09-1.14x 快**(修复前
   1.49-1.79x 慢),static 0.95x——bucket-regex 吸收路由差距后,keala
   的 context/dispatch 机器比 hono 快 ~50ns/请求;
 - **Node 双栈**:七场景 keala(node) ≈ hono(node)(0.94-1.06x);
 - **vs Go**:Bun 栈吞吐全面高于 go net/http(1.10-1.29x),Go 赢
   内存——与主矩阵 BENCH.md 结论一致;
-- **内存**:Bun 腿 keala ≈ hono(26.7/53.5 vs 27.6/46.1MB);Node 腿
-  idle +17MB 中 ~10MB+ 是**本服务器直接 import src/\*.ts 的类型
-  剥离器 WASM 税**(dist JS 形态下真实差 +9.7MB,heap +3.3MB)。
+- **内存**:Bun 腿 idle 持平(27.7 vs 28.4MB),steady/peak 高
+  ~8-11MB——实验排除 JS 存量堆/期限竞赛/context 分配三假设后定性为
+  分配器 arena 随分配率增长(soak 证实有界非泄漏,CHANGELOG 0.7.3);
+  Node 腿 idle +19MB 中 ~10MB+ 是本服务器直接 import src/*.ts 的
+  类型剥离器 WASM 税(dist JS 形态下真实差 +9.7MB)。
 
 诊断工具在 `diag/`(路由隔离/管线分解/CPU profile/HTTP 安静窗口
 复核/Node 内存三段归因),复现命令见诊断文档。
