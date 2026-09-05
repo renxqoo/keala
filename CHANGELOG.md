@@ -2,6 +2,29 @@
 
 > 0.6.x 为 pre-1.0 系列:表面可破坏,破坏性变更在 CHANGELOG 逐条记录。
 
+## Unreleased
+
+测试目录整理:按"被测功能"而非"评审轮次"组织(零测试丢失,2658 项与
+coverage 95.41/91.06/96.36/97.07 与整理前逐项一致)。
+
+### 内部
+
+- `test/` 根目录只保留 7 个分类目录:`unit/`(按 src 模块)、`middleware/`
+  (每中间件一文件)、`integration/`(生命周期/适配器/sink/commit 契约)、
+  `security/`(红队与审计,按攻击面)、`parity/`(koa/hono 对齐)、
+  `property/`(属性测试 + `.mts` rig)、`perf/`(时序敏感围栏,独立不合并)。
+  171 个轮次命名文件(agent-r46-*、redteam-*、zz-red-*、coverage-gaps-* 等)
+  → 162 个功能命名文件,全部 ≤500 行(oxlint max-lines 门禁)。
+- 5 个超限大文件按语义拆分:`agent-r46-review-contract`(1200 行)→
+  contracts-{close,admission,deadline,strategy};`agent-r46-review-bugs`(824)→
+  review-{signals,adapters};`agent-r46-review-security`(946)→
+  admission-review-{rejection,queue,drain};`agent-r46-review-perf`(863)与
+  `agent-r46-review-ha`(697)同理。
+- 合并规则:顶层 hooks(beforeAll/afterAll)的文件独立成文件不并入他文件,
+  避免 hook 泄漏或掩盖;合并最小单位为 describe 块;轮次出处保留在
+  describe 标题内。`.mts` rig、`signal-child.ts`、`.deps.d.ts` 随消费方迁移。
+- `docs/*.md` 中指向旧测试路径的引用为历史时间点记录,保持原样。
+
 ## 0.7.3 (2026-09-05)
 
 R413 动态路由快速层(route-shootout 诊断 → 修复,docs/R412-SHOOTOUT-DIFF-DIAGNOSIS.md
