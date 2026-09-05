@@ -302,58 +302,101 @@
 
 ### 已修复（代码，45 项）
 
-| 发现 | 修复方式 | 验证 |
-|---|---|---|
-| **HA-1** | compose.ts branchLive 标志：真浮动分支（handler 先 settle、next() 仍在跑）登记；`return next()` 惯用形态不登记（不输掉 retire 竞态） | zz-red-ha-2 2/2 绿 + victim 探针 CLEAN + 8 用例回归 |
-| **HA-2** | answer() 检测**在途读取**（_pendingRead）→ `connection: close` + flush 后 disconnect+destroy；主会话修正：仅物化未读（`void c.raw`）不误杀，R4.5 排水契约保持 | zz-red-ha-1 僵尸用例绿（RSS≈0）+ r4-5-runtime-engine 57/57 |
-| **HA-3** | startNodeServer 双启守卫（对齐 app.listen 文案） | 探针亲证二次 listen 抛 TypeError |
-| **HA-4** | shutdown hooks 每 hook 超时（`shutdownTimeout` 默认 10s、0=无限），超时记日志继续；升级路径保留 | zz-red-ha-1 + agent-ha-fixes 3 用例 |
-| **PERF-7** | 僵尸分支对迟到 Response `body.cancel()` | observable-cancel 回归测试 |
-| **BUG-1** | redirect 处理器显式传 code（注册意图原样保留，304/306/309+ 不再静默 302） | 5 条红用例转绿 |
-| **BUG-2** | applyAbsentHeaders 豁免 set-cookie（staged 无条件 append） | 2 条红用例转绿 |
-| **BUG-3** | `c.body = <Response>` 抛 TypeError | 红用例转绿 |
-| **BUG-4** | direct() 编译期 guarded tail（含 DIRECT_HANDLER），二次 next() 抛同款错误 | agent-ha-fixes 精确消息断言 |
-| **BUG-6** | bodied 204/304 先合并 staged 头再 sanitize | Node 单元 + Bun e2e 10/10 |
-| **UX-7** | `c.throw` 对 1xx-3xx 抛 TypeError（createError 兜底保留） | zz-red-ux-2 重写断言绿 |
-| **SEC-1** | `assertSunkDirSafe` 扫描-拒绝（dotfile/.well-known 豁免/symlink，10000 项/64 深预算），listen/reload 每次构建原生表前重扫；PARITY.md 记录残余 TOCTOU | 原攻击资产 listen() 拒绝（主会话亲证）+ 24/24 Bun e2e |
-| **SEC-2** | `app.ws(path, { origin: string[] | (c)=>boolean })` 升级前校验，缺失 Origin fail-closed 403 | 6 用例含 mount 前缀 |
-| **SEC-5** | realm 剥 `"` 与 `\` 两类，剥空构造期报错 | 6 用例 |
-| **PERF-2** | serveStatic lean 路径（Bun、GET/HEAD、无协商头）：保留 stat+lstat 正确性，statSync 直读（async stat 23.5µs→1.07µs） | e2e **0.557→0.868**（c=1）/ 0.713（c=64） |
-| **PERF-3** | acceptsGzip 三层快速路径（lone-token charCode 零分配 + 64 memo + parser 兜底）+ Vary setHeader 形态 | 门 286→12.7ns；decline 税 670→512ns（进程内）；43 对抗头等价锁 |
-| **PERF-4** | JSON_HEADERS 共享实例两处快路径 | 双运行时构造隔离断言 |
-| **PERF-6** | tryDecode `%` 早退 + trimHeaderWs charCode | parseCookies Bun 605→341ns / Node 840→325ns |
-| **EXT-1** | `ContextExtensions` 空开接口（declare module 合并，穿透 barrel 再导出实测成立）+ `createMiddleware<C>()` 工厂 | 可证伪类型测试（改名即 7 处报错）+ 8/8 |
-| **EXT-2** | `Plugin.install(app: Application)`（惰性类型导入） | TS18046 消除 |
-| **UX-2a/DEAD-9** | `validOf<T>(c)` 官方访问器 + ContextWithValid @deprecated | 3 用例 |
-| **DEAD-1/2/3** | utils/text.ts 的 escapeHtml 副本、isStatusText、isLatin1 删除 | grep 0 残留 |
-| **DEAD-4** | ResponseInitLike 删除 | tsc 无隐藏引用 |
-| **DEAD-12/13/14/15/16** | 全部清理（rate-limit 裁决为插入序驱逐） | 各域回归 |
-| **DEAD-17/18/26** | startsWithSegments 单一定义导出；normalizePath 收敛 4 处；EMPTY_PARAMS 单源 | 133 router 域用例 |
-| **DEAD-22/23/25/28** | sweep 复用；500 信封本地去重（core 方向不倒置）；双写锚注释；孤儿注释删除 | 各域回归 |
-| **DEAD-6/27** | 零风险方案：三处 host:port 剥离与两处 authority 提取加交叉引用注释（安全边界差异显式化，不做会引入每请求分配的统一） | 注释级 |
+| 发现                    | 修复方式                                                                                                                                                      | 验证                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **HA-1**                | compose.ts branchLive 标志：真浮动分支（handler 先 settle、next() 仍在跑）登记；`return next()` 惯用形态不登记（不输掉 retire 竞态）                          | zz-red-ha-2 2/2 绿 + victim 探针 CLEAN + 8 用例回归            |
+| **HA-2**                | answer() 检测**在途读取**（_pendingRead）→ `connection: close` + flush 后 disconnect+destroy；主会话修正：仅物化未读（`void c.raw`）不误杀，R4.5 排水契约保持 | zz-red-ha-1 僵尸用例绿（RSS≈0）+ r4-5-runtime-engine 57/57     |
+| **HA-3**                | startNodeServer 双启守卫（对齐 app.listen 文案）                                                                                                              | 探针亲证二次 listen 抛 TypeError                               |
+| **HA-4**                | shutdown hooks 每 hook 超时（`shutdownTimeout` 默认 10s、0=无限），超时记日志继续；升级路径保留                                                               | zz-red-ha-1 + agent-ha-fixes 3 用例                            |
+| **PERF-7**              | 僵尸分支对迟到 Response `body.cancel()`                                                                                                                       | observable-cancel 回归测试                                     |
+| **BUG-1**               | redirect 处理器显式传 code（注册意图原样保留，304/306/309+ 不再静默 302）                                                                                     | 5 条红用例转绿                                                 |
+| **BUG-2**               | applyAbsentHeaders 豁免 set-cookie（staged 无条件 append）                                                                                                    | 2 条红用例转绿                                                 |
+| **BUG-3**               | `c.body = <Response>` 抛 TypeError                                                                                                                            | 红用例转绿                                                     |
+| **BUG-4**               | direct() 编译期 guarded tail（含 DIRECT_HANDLER），二次 next() 抛同款错误                                                                                     | agent-ha-fixes 精确消息断言                                    |
+| **BUG-6**               | bodied 204/304 先合并 staged 头再 sanitize                                                                                                                    | Node 单元 + Bun e2e 10/10                                      |
+| **UX-7**                | `c.throw` 对 1xx-3xx 抛 TypeError（createError 兜底保留）                                                                                                     | zz-red-ux-2 重写断言绿                                         |
+| **SEC-1**               | `assertSunkDirSafe` 扫描-拒绝（dotfile/.well-known 豁免/symlink，10000 项/64 深预算），listen/reload 每次构建原生表前重扫；PARITY.md 记录残余 TOCTOU          | 原攻击资产 listen() 拒绝（主会话亲证）+ 24/24 Bun e2e          |
+| **SEC-2**               | `app.ws(path, { origin: string[]                                                                                                                              | (c)=>boolean })` 升级前校验，缺失 Origin fail-closed 403       | 6 用例含 mount 前缀 |
+| **SEC-5**               | realm 剥 `"` 与 `\` 两类，剥空构造期报错                                                                                                                      | 6 用例                                                         |
+| **PERF-2**              | serveStatic lean 路径（Bun、GET/HEAD、无协商头）：保留 stat+lstat 正确性，statSync 直读（async stat 23.5µs→1.07µs）                                           | e2e **0.557→0.868**（c=1）/ 0.713（c=64）                      |
+| **PERF-3**              | acceptsGzip 三层快速路径（lone-token charCode 零分配 + 64 memo + parser 兜底）+ Vary setHeader 形态                                                           | 门 286→12.7ns；decline 税 670→512ns（进程内）；43 对抗头等价锁 |
+| **PERF-4**              | JSON_HEADERS 共享实例两处快路径                                                                                                                               | 双运行时构造隔离断言                                           |
+| **PERF-6**              | tryDecode `%` 早退 + trimHeaderWs charCode                                                                                                                    | parseCookies Bun 605→341ns / Node 840→325ns                    |
+| **EXT-1**               | `ContextExtensions` 空开接口（declare module 合并，穿透 barrel 再导出实测成立）+ `createMiddleware<C>()` 工厂                                                 | 可证伪类型测试（改名即 7 处报错）+ 8/8                         |
+| **EXT-2**               | `Plugin.install(app: Application)`（惰性类型导入）                                                                                                            | TS18046 消除                                                   |
+| **UX-2a/DEAD-9**        | `validOf<T>(c)` 官方访问器 + ContextWithValid @deprecated                                                                                                     | 3 用例                                                         |
+| **DEAD-1/2/3**          | utils/text.ts 的 escapeHtml 副本、isStatusText、isLatin1 删除                                                                                                 | grep 0 残留                                                    |
+| **DEAD-4**              | ResponseInitLike 删除                                                                                                                                         | tsc 无隐藏引用                                                 |
+| **DEAD-12/13/14/15/16** | 全部清理（rate-limit 裁决为插入序驱逐）                                                                                                                       | 各域回归                                                       |
+| **DEAD-17/18/26**       | startsWithSegments 单一定义导出；normalizePath 收敛 4 处；EMPTY_PARAMS 单源                                                                                   | 133 router 域用例                                              |
+| **DEAD-22/23/25/28**    | sweep 复用；500 信封本地去重（core 方向不倒置）；双写锚注释；孤儿注释删除                                                                                     | 各域回归                                                       |
+| **DEAD-6/27**           | 零风险方案：三处 host:port 剥离与两处 authority 提取加交叉引用注释（安全边界差异显式化，不做会引入每请求分配的统一）                                          | 注释级                                                         |
 
 ### 已修复（文档，14 项）
 
 UX-1/2/3/4/5/6/8/9/10（双 README + API 参考全面对齐，`c.get` 0 残留、底层原语第七部分、生命周期整节、11 键 options 表、断头句/乱码/假键订正）；HA-5（DEPLOY.md 生产清单：requestTimeout/overload 建议、Node-Bun 传输层上限不对称、无内建重试熔断说明、pooling 成本画像）；SEC-3（koa 迁移安全提示）；SEC-4（PARITY + path-safety 威胁模型边界）；PERF-1（无安全微优化空间——sweepForeignKeys 的 own-key 不可拦截、双 setPrototypeOf 即写守卫——pool.ts 头注释如实记录成本画像 + DEPLOY.md 谨慎开启提示）；UX-11（行为被 r4-5-core-contracts/anomalies 锁定，维持静默忽略 + API 参考 §2.2 文档化）；redirect code 口径统一为「任意 3xx 保留」（4 处）。
 
-### 维持裁决 / 待裁决（8 项）
+### 维持裁决 / 待裁决（7 项）
 
 - **SEC-3**、**DEAD-11**：PARITY.md 2026-09-04 用户裁决维持。
 - **DEAD-5**：0.7 契约（commit-0-7-contract 锁定移除）维持，docstring 已修。
-- **BUG-5**：静态遮蔽动态的设计分歧——建议 dev 警告，未实现，待维护者裁决。
 - **DEAD-7/8**：保留（API 参考已补文档/建议 @internal）。
 - **PERF-5**：对抗表 O(depth²) 剪枝未做（需应用作者自注册对抗表才触发，正常表平坦）。
 
-### 明确推迟（2 项）
+### 明确推迟（1 项）
 
-- **DEAD-20/21**（流泵/读循环骨架三份去重）：涉及本轮刚修过的热代码（pool/lifecycle/body-parser/node-source），为避免回归风险推迟到独立轮次。
 - **PERF-8**：画像型发现，其构成原语已在 PERF-3/4/6 中改善。
 
 ### 修复后基准（同机同口径配对中位数）
 
-| 场景 | 修复前 | 修复后 |
-|---|---|---|
-| serveStatic vs raw Bun.file（c=1） | 0.557 | **0.868** |
-| compress decline 税（进程内） | +670ns | **+512ns**（门 286→12.7ns） |
-| parseCookies 4-cookie（Bun/Node） | 605/840ns | **341/325ns** |
-| pooling sugar / raw（c=1） | 1.149 / 1.613 | 1.145 / 1.628（HA-1 安全修复零代价） |
+| 场景                               | 修复前        | 修复后                               |
+| ---------------------------------- | ------------- | ------------------------------------ |
+| serveStatic vs raw Bun.file（c=1） | 0.557         | **0.868**                            |
+| compress decline 税（进程内）      | +670ns        | **+512ns**（门 286→12.7ns）          |
+| parseCookies 4-cookie（Bun/Node）  | 605/840ns     | **341/325ns**                        |
+| pooling sugar / raw（c=1）         | 1.149 / 1.613 | 1.145 / 1.628（HA-1 安全修复零代价） |
+
+---
+
+## 11. 收尾轮（2026-09-05 18:0x，同分支）— DEAD-20/21 去重 + BUG-5 dev 警告
+
+§10 明确推迟的两项骨架去重与待裁决的 BUG-5，按用户指示在本轮完成。
+
+### DEAD-20/21：流骨架收敛（新模块 `src/utils/streams.ts`）
+
+- **repumpStream / repumpResponse**：「getReader + pull 泵 + 完成回调」骨架原先三份逐行同构——pool.ts（retireWithBody）/ lifecycle.ts（holdBody）/ respond.ts（observedStream），连 "Evolving let reader" 注释都有两份。统一为钩子矩阵：`onFinish`（恰一次：done / 读失败 / 取消 / 消费者中途关闭）、`onReadError`（仅生产者读失败——客户端中止永远不是泵错误）、`onLocked`（复用 Response 的锁定体，先回调再重抛 / 返 null）。三调用点的行为差异逐点保留：
+  - pool / lifecycle 原先裸调 controller.enqueue/close（消费端已关时的二次 throw 交给流机制吞掉），统一版吸收为静默分支 + finish——finish 时序不变，可观察行为等价，消掉二次 throw；
+  - respond 的 onStreamError 仅真读失败触达（helpers-streams 既有 3 用例锁死）；
+  - 锁定体的失败兜底各归调用点（pool：500 信封；lifecycle：原样返回）。
+- **readAllLimited**：body-parser.readStream 与 node-source.#readWebBody 的逐行同构循环（差异仅 413 错误构造器）收敛为注入错误工厂的单源；单 chunk 零拷贝、空体 Uint8Array(0)、超限取消源并抛注入错误，全部由单测锁死。
+- 不并入的近邻：etag.webGzip（无上限读流，无超限/取消语义）、node.ts writeStream（socket 前向泵，另一骨架）。
+
+### BUG-5：静态遮蔽动态的 dev 警告（router.ts）
+
+- 机制锁定：matchRoute 命中 staticMap 即返回，405 由 finalizer 出，trie 不被咨询——静态条目按全方法占有路径。koa-router 是注册序优先，这里静态表恒优先，**两个注册方向**都会把「静态侧缺失的方法」从动态处理器翻成 405（§4 BUG-5 只描述了静态后注册方向）。
+- 实现（registerDef 成功后，`state.devTrace` 门控——prod/测试零成本单分支）：
+  - 新静态 def：`matchPattern(trieRoot, def.path)` 找覆盖它的动态 pattern，allowed 集合比对缺口；
+  - 新动态 def：一次性 probe-trie（仅含新 pattern，终端补 target）匹配既有静态路径，比对 def 方法集（GET 含 HEAD、ALL=全方法）；
+  - 有缺口才警告（同方法重叠是常规静态优先，静默）；按「静态路径|动态 pattern|缺失方法集」去重——缺口扩大才再警告，补齐后不再扰；mount() 重注册路径天然覆盖跨路由器遮蔽。
+- 优先级本身不动（设计裁决维持），警告文案直接给修复动作（静态路径补方法或改路径）。
+
+### 测试
+
+- `test/utils-streams.test.ts`（12）：钩子矩阵（done/error/cancel/locked 各恰一次、cancel 传播、Response 信封 verbatim、readAllLimited 五形态含零拷贝与恰在限值）；
+- `test/router-shadow-warn.test.ts`（11）：两方向警告、405 行为锁定（设计不变）、同方法静默、缺口闭合/扩大、ALL/通配参与、test+prod 静默、mount 场景、无关联不警告。
+
+### zz-red-ha-1 僵尸内存用例阈值校准（既有问题，与本轮改动无关）
+
+- 现象：该用例在**干净 HEAD（3ef9859）同样失败**（孤立 3/3 复现）：RSS 增量 3MB vs 阈值 <2MB。§10 当时全绿，属机器/负载状态依赖的阈值漂移。
+- 定性实验：泵量 6MB→12MB，吸收恒定 3-4MB——**不随泵量缩放**，是拆除窗口的固定在途缓冲（内核/Node），非 HA-2 修复回归（原 bug 特征是吸收 ∝ 泵量、几乎全保留）。
+- 校准：泵量 24MB、阈值 8MB（健康侧 ≥2 倍余量，回归特征 ≥20MB 远超阈值），回到用例注释本意「retained delta must be far below sent」。校准后 3/3 稳定绿。
+
+### 门禁与基准
+
+- oxfmt / oxlint / tsc 绿；**全量 2658 用例全绿**（11 跳过，exit 0，较 §10 新增 23 条）；覆盖率 95.41% / 91.04% / 96.36% / 97.06%；smoke + example-check 通过。
+- bench-zz 配对中位数（c=1、7 轮×5s 交错）：去重后 pooling sugar **1.119**（§10 基线 1.145）、poolingRaw **1.590**（基线 1.628）——泵在每请求热路径的 poolingRaw 腿**零回归且略向好**（轮间方差内）；c=64 口径复核 sugar 1.081 / raw 2.929，方向一致。readAllLimited 所在的请求体读路径不在 bench-zz 矩阵内（异步读路径上的单层调用委托，无每请求新增分配）。
+
+| 场景（bench-zz 配对中位）      | §10 基线（c=1） | 本轮（c=1） |
+| ------------------------------ | --------------- | ----------- |
+| pooling sugar（快路径未涉泵）  | 1.145           | **1.119**   |
+| poolingRaw（泵在每请求热路径） | 1.628           | **1.590**   |

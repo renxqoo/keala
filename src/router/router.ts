@@ -41,6 +41,7 @@ import {
   createNode,
   createTarget,
   insertPattern,
+  matchPattern,
   type RouteTarget,
   type TrieNode,
 } from "./trie.ts";
@@ -318,6 +319,86 @@ export const rebuildChains = (state: RouterState, middleware: MiddlewareStack): 
   for (const def of state.defs) bindDef(state, def, middleware);
 };
 
+/**
+ * Dev-only shadow audit (review BUG-5): a staticMap entry owns its whole
+ * path for EVERY method — `matchRoute` returns the static target before the
+ * trie is ever consulted — so when a static route and a dynamic pattern
+ * cover the same path, every method the static side does not serve answers
+ * 405 even though the dynamic route has a handler. koa-router's
+ * registration order would have served those requests; here the static
+ * table always wins. The precedence stays — the silent 200→405 flip gets a
+ * development warning instead, for both registration orders. A same-method
+ * overlap is ordinary static-over-dynamic precedence and stays silent.
+ */
+const shadowWarned = new WeakMap<RouterState, Set<string>>();
+
+const warnShadowOnce = (state: RouterState, key: string, message: string): void => {
+  let seen = shadowWarned.get(state);
+  if (seen === undefined) {
+    seen = new Set();
+    shadowWarned.set(state, seen);
+  }
+  // Keyed with the missing-method list: a registration that WIDENS the gap
+  // (a new method on the dynamic side) warns again; a re-run with the same
+  // gap stays silent.
+  if (seen.has(key)) return;
+  seen.add(key);
+  console.warn(message);
+};
+
+/** Methods a def serves at match time: GET answers HEAD too, ALL answers every method ("*"). */
+const methodsOf = (method: string): string[] =>
+  method === "ALL" ? ["*"] : method === "GET" ? [method, "HEAD"] : [method];
+
+const shadowLabel = (missing: string[]): string =>
+  missing.includes("*") ? "every other method" : missing.map((m) => `${m} requests`).join(", ");
+
+const warnShadowGaps = (state: RouterState, def: RouteDef): void => {
+  if (state.staticMap.size === 0 || !state.hasDynamic) return;
+  const ir = compilePattern(def.path);
+  if (ir.isStatic) {
+    // Which dynamic pattern covers THIS concrete path? The trie is the
+    // authority (static defs never enter it).
+    const dynamic = matchPattern(state.trieRoot, def.path);
+    if (dynamic === null) return;
+    const key = def.path.indexOf("%") !== -1 ? canonicalKey(def.path) : def.path;
+    const allowed = state.staticMap.get(key)?.allowed;
+    if (allowed === undefined) return;
+    const missing: string[] = [];
+    const dynAllowed = dynamic.target.allowed;
+    if (dynAllowed.has("*") && !allowed.has("*")) missing.push("*");
+    for (const m of dynAllowed) {
+      if (m === "*" || m === "ALL") continue;
+      if (!allowed.has(m) && !allowed.has("*")) missing.push(m);
+    }
+    if (missing.length === 0) return;
+    warnShadowOnce(
+      state,
+      `${key}|${dynamic.target.pattern}|${missing.join(",")}`,
+      `keala(dev): ${def.method} ${def.path} registers a static path that dynamic ${dynamic.target.pattern} also matches — the static entry owns the path for every method, so ${shadowLabel(missing)} will answer 405 instead of reaching the dynamic handler. Register those methods on the static path too, or keep the paths distinct.`,
+    );
+    return;
+  }
+  // Dynamic def: would THIS pattern cover any existing static path? A probe
+  // trie holding only the new pattern answers exactly that — the full trie
+  // could match the concrete path through any sibling pattern.
+  const probe = createNode();
+  for (const terminal of insertPattern(probe, ir.segments)) terminal.target ??= createTarget();
+  for (const target of state.staticMap.values()) {
+    if (matchPattern(probe, target.pattern) === null) continue;
+    const missing: string[] = [];
+    for (const m of methodsOf(def.method)) {
+      if (!target.allowed.has(m) && !target.allowed.has("*")) missing.push(m);
+    }
+    if (missing.length === 0) continue;
+    warnShadowOnce(
+      state,
+      `${target.pattern}|${def.path}|${missing.join(",")}`,
+      `keala(dev): ${def.method} ${def.path} also matches the static route ${target.pattern} — the static entry owns that path for every method, so ${shadowLabel(missing)} will answer 405 instead of reaching this handler. Register those methods on the static path too, or keep the paths distinct.`,
+    );
+  }
+};
+
 /** Register one definition; returns it (callers may tag it, e.g. wsKey). */
 export const registerDef = (
   state: RouterState,
@@ -377,6 +458,7 @@ export const registerDef = (
     rebuildChains(state, middleware); // discard partial index mutations wholesale
     throw err;
   }
+  if (state.devTrace) warnShadowGaps(state, def);
   return def;
 };
 
