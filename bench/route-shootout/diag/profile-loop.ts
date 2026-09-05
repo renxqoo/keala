@@ -16,8 +16,8 @@ const TABLE: [string, string][] = [
   ["GET", "/static/*"],
 ];
 for (const [method, path] of TABLE) {
-  if (method === "GET") app.get(path, (c) => c.text(c.params["id"] ?? "x"));
-  else app.post(path, (c) => c.text(`${c.params["id"] ?? ""} comment`));
+  if (method === "GET") app.get(path, (c) => c.text(c.params("id") ?? "x"));
+  else app.post(path, (c) => c.text(`${c.params("id") ?? ""} comment`));
 }
 const req = new Request("http://x/event/abcd1234/comments");
 const t0 = performance.now();

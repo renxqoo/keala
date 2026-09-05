@@ -84,6 +84,26 @@ export const ALLOW_ORDER = KNOWN_METHOD_LIST;
 
 const ALL = "ALL";
 export const EMPTY_PARAMS: Record<string, string> = Object.freeze(Object.create(null));
+/** Match-product sentinels for param-free matches (static routes). */
+export const NO_PARAM_NAMES: ReadonlyArray<string> = Object.freeze([]);
+export const NO_PARAM_VALUES: ReadonlyArray<string> = Object.freeze([]);
+
+/**
+ * The "I need the whole map" adapter over a match product (U2): rebuild a
+ * null-proto Record from the raw arrays. Forward overwrite keeps the LATEST
+ * capture of a repeated name — the same rule `c.params(name)` reads with.
+ * Used by the sink mirror boundary (SunkHandler contract) and available to
+ * code that enumerates params (logging, tracing).
+ */
+export const paramsRecord = (
+  names: ReadonlyArray<string>,
+  values: ReadonlyArray<string>,
+  offset = 0,
+): Record<string, string> => {
+  const record: Record<string, string> = Object.create(null);
+  for (let i = 0; i < names.length; i++) record[names[i] as string] = values[i + offset] as string;
+  return record;
+};
 
 export interface Bucket {
   /** The first-segment key this bucket is indexed under. */
@@ -171,7 +191,12 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
     let target = state.staticMap.get(key);
     if (target === undefined) {
       target = createTarget();
-      target.staticMatch = Object.freeze({ target, params: null });
+      target.staticMatch = Object.freeze({
+        target,
+        names: NO_PARAM_NAMES,
+        values: NO_PARAM_VALUES,
+        offset: 0,
+      });
       state.staticMap.set(key, target);
     }
     return [target];
@@ -197,7 +222,10 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
           // Full static head ("/v1/users"), not just the first segment — the
           // matcher must skip every leading static before captures begin.
           prefix: staticHeadOf(ir.segments),
-          names: paramNamesOf(ir.segments),
+          // Frozen at registration: this array is handed to every request's
+          // `c.paramNames` — a handler's in-place write must throw, not
+          // permanently corrupt the route (U2 adversarial review).
+          names: Object.freeze(paramNamesOf(ir.segments)),
           target: targets[0] as RouteTarget,
         }
       : null;
@@ -442,7 +470,16 @@ export const pathsConflict = (a: string, b: string): boolean => {
 
 export interface RouteMatch {
   target: RouteTarget;
-  params: Record<string, string> | null;
+  /** Param names, parallel to `values` (U2: the router hands out raw arrays;
+   * `c.params(name)` reads them lazily — no per-request Record construction). */
+  names: ReadonlyArray<string>;
+  values: ReadonlyArray<string>;
+  /**
+   * Index offset of `names[0]` inside `values` (U2): the table-regex layer
+   * hands out the regex exec array itself — zero copies — and its per-route
+   * groups start at `groupStart`. Every other layer uses 0.
+   */
+  offset: number;
 }
 
 // URL building for named routes lives in ./url.ts, re-exported here — the

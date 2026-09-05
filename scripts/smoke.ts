@@ -27,15 +27,15 @@ const app = new Keala({ keys: ["smoke-secret"], env: "production" });
 const api = new Router({ prefix: "/api" });
 
 api.param("id", async (c, next) => {
-  if (!/^\d+$/.test(c.params?.["id"] ?? "")) {
+  if (!/^\d+$/.test(c.params("id") ?? "")) {
     c.throw(400, "invalid id");
   }
   await next();
 });
 
 api.get("/users/:id", async (c) => {
-  c.cookies.set("last", c.params?.["id"] ?? "", { signed: true, httpOnly: true });
-  c.body = { id: Number(c.params?.["id"]) };
+  c.cookies.set("last", c.params("id") ?? "", { signed: true, httpOnly: true });
+  c.body = { id: Number(c.params("id")) };
 });
 
 api.get("/hello", (c) => c.text("hello world"));

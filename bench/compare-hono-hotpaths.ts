@@ -127,7 +127,7 @@ if (framework === "keala") {
   } else if (caseName === "query") {
     app.get("/search/:id", (c) => {
       c.setHeader("X-Query", "hit");
-      return c.text(`${c.params["id"]} ${c.query("name")} ${c.query("page")}`);
+      return c.text(`${c.params("id")} ${c.query("name")} ${c.query("page")}`);
     });
   } else {
     if (

@@ -74,7 +74,8 @@ export const registerRedirect = (
     source,
     [
       (c) => {
-        const target = destSegments === null ? destination : buildURL(destSegments, c.params);
+        const target =
+          destSegments === null ? destination : buildURL(destSegments, (n) => c.params(n));
         // BUG-1 (0.6.2 review): the code rides through c.redirect's EXPLICIT
         // branch, not the staged-status branch. The registered intent is a
         // validated 3xx integer — 304/306/309+ are not in isRedirectStatus,

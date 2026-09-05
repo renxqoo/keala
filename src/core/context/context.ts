@@ -20,7 +20,7 @@ import { responseApi } from "./response.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestSource } from "../request-source.ts";
 import { sourceHeader } from "../request-source.ts";
-import { EMPTY_PARAMS } from "../../router/router.ts";
+import { NO_PARAM_NAMES, NO_PARAM_VALUES } from "../../router/router.ts";
 
 export interface ContextCore extends RequestApi, ResponseApi {
   readonly app: Application;
@@ -28,6 +28,12 @@ export interface ContextCore extends RequestApi, ResponseApi {
   readonly routerAllowed: Set<string>;
   readonly state: Record<string, unknown>;
   readonly cookies: CookiesFacade;
+  /**
+   * Path parameter by name (U2 functional form). `undefined` when the
+   * matched route has no such param (optionals may be absent) or no route
+   * matched at all. Repeated names keep their LATEST capture.
+   */
+  params(name: string): string | undefined;
   throw(status: number, message?: string | HttpErrorProps, props?: HttpErrorProps): never;
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void;
 }
@@ -54,6 +60,7 @@ const contextApi: ThisType<Context> & {
   readonly state: Record<string, unknown>;
   readonly cookies: CookiesFacade;
   readonly routerAllowed: Set<string>;
+  params(name: string): string | undefined;
   throw(status: number, message?: string | HttpErrorProps, props?: HttpErrorProps): never;
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void;
 } = {
@@ -95,6 +102,16 @@ const contextApi: ThisType<Context> & {
   get routerAllowed(): Set<string> {
     return (this.allowedValue ??= new Set());
   },
+  params(name: string): string | undefined {
+    // Arrays have no prototype chain to hit — "toString"/"__proto__"/"constructor"
+    // simply miss (undefined), unlike the old null-proto Record where a missed
+    // key was also undefined but construction cost ~30ns/request. lastIndexOf:
+    // for routes with a REPEATED name the latest capture wins (trie semantics
+    // — the trie dedups at construction, fast/table layers don't need to).
+    // +paramOffset: the table layer's values live inside the regex exec array.
+    const index = this.paramNames.lastIndexOf(name);
+    return index === -1 ? undefined : this.paramValues[index + this.paramOffset];
+  },
   throw(status: number, message?: string | HttpErrorProps, props?: HttpErrorProps): never {
     // UX-7 (0.6.2 review): an error status is 4xx/5xx by definition. A 1xx/
     // 2xx/3xx here is a caller bug — the funnel would coerce it to a
@@ -125,7 +142,9 @@ const CONTEXT_DEFAULTS = {
   urlValue: null,
   ipValue: null,
   allowedValue: null,
-  params: EMPTY_PARAMS,
+  paramNames: NO_PARAM_NAMES,
+  paramValues: NO_PARAM_VALUES,
+  paramOffset: 0,
   routePath: "",
   routeName: undefined,
   querystringValue: null,

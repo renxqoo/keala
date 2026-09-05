@@ -11,7 +11,7 @@ app.use(async (c, next) => {
   c.setHeader("x-artifact", "dist");
 });
 app.get("/health", (c) => c.text("ok"));
-app.get("/users/:id", (c) => c.json({ id: c.params?.id }));
+app.get("/users/:id", (c) => c.json({ id: c.params("id") }));
 app.post("/echo", async (c) => c.json(await c.req.json()));
 
 if (typeof Bun !== "undefined") {

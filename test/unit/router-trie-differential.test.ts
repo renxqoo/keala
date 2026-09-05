@@ -20,7 +20,12 @@ import { describe, expect, it } from "vitest";
 import { Keala } from "../../src/index.ts";
 import { sign } from "../../src/context/cookies.ts";
 import { compilePattern } from "../../src/router/pattern.ts";
-import { createRouterState, matchRoute, registerDef } from "../../src/router/router.ts";
+import {
+  paramsRecord,
+  createRouterState,
+  matchRoute,
+  registerDef,
+} from "../../src/router/router.ts";
 import { createNode, createTarget, insertPattern, matchPattern } from "../../src/router/trie.ts";
 import type { RouteTarget, TrieNode } from "../../src/router/trie.ts";
 
@@ -199,8 +204,13 @@ describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, fu
           const rs = (statePats.get(real.target) ?? []).toSorted().join("+");
           const ts = (refPats.get(ref.target) ?? []).toSorted().join("+");
           if (rs !== ts) problems.push(`${path}: target real=${rs} trie=${ts}`);
-          else if (norm(real.params) !== norm(ref.params))
-            problems.push(`${path}: params real=${norm(real.params)} trie=${norm(ref.params)}`);
+          else if (
+            norm(paramsRecord(real.names, real.values, real.offset)) !==
+            norm(paramsRecord(ref.names, ref.values, ref.offset))
+          )
+            problems.push(
+              `${path}: params real=${norm(paramsRecord(real.names, real.values, real.offset))} trie=${norm(paramsRecord(ref.names, ref.values, ref.offset))}`,
+            );
         }
       }
     }
@@ -217,12 +227,12 @@ describe("redteam round2 — GA-2 concurrency isolation", () => {
       c.setHeader("x-done", "1");
     });
     app.get("/text", (c) => c.text("hello"));
-    app.get("/users/:id", (c) => c.json({ id: c.params["id"], st: c.state.step }));
+    app.get("/users/:id", (c) => c.json({ id: c.params("id"), st: c.state.step }));
     app.get("/err", () => {
       throw new Error("boom");
     });
-    app.post("/users/:id/posts", (c) => c.text(`p:${c.params["id"]}`));
-    app.get("/wild/*", (c) => c.text(`w:${c.params["wildcard"]}`));
+    app.post("/users/:id/posts", (c) => c.text(`p:${c.params("id")}`));
+    app.get("/wild/*", (c) => c.text(`w:${c.params("wildcard")}`));
     app.get("/cookies", (c) => {
       c.cookies.set("s", "1", { signed: true });
       return c.text("ck");
@@ -299,11 +309,11 @@ describe("redteam round2 — GA-3 leak fence", () => {
     async () => {
       const app = new Keala({ ...quiet, keys: ["k"] });
       app.get("/text", (c) => c.text("hello"));
-      app.get("/users/:id", (c) => c.json({ id: c.params["id"] }));
+      app.get("/users/:id", (c) => c.json({ id: c.params("id") }));
       app.get("/err", () => {
         throw new Error("boom");
       });
-      app.get("/wild/*", (c) => c.text(`w:${c.params["wildcard"]}`));
+      app.get("/wild/*", (c) => c.text(`w:${c.params("wildcard")}`));
       app.get("/cookies", (c) => {
         c.cookies.set("s", "1", { signed: true });
         return c.text("ck");
@@ -398,7 +408,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
 
   it("encoded traversal in a captured param stays a decoded string (no path semantics)", async () => {
     const app = new Keala(quiet);
-    app.get("/files/:name", (c) => c.text(`f=${c.params["name"]}`));
+    app.get("/files/:name", (c) => c.text(`f=${c.params("name")}`));
     const res = await handleFlat(app, req("http://localhost/files/..%2F..%2Fetc"));
     expect([res.status, await text(res)]).toEqual([200, "f=../../etc"]);
   });

@@ -19,7 +19,7 @@ const isBun = typeof Bun !== "undefined";
 const app = new Keala({ env: "test" });
 app.get("/text", (c) => c.text("hello world"));
 app.get("/json", (c) => c.json({ hello: "world" }));
-app.get("/users/:id", (c) => c.text(`user ${c.params["id"]}`));
+app.get("/users/:id", (c) => c.text(`user ${c.params("id")}`));
 app.get(
   "/mw",
   async (c, next) => {
@@ -137,7 +137,7 @@ describe("perf evidence: structural fences", () => {
       for (const c of seen) shapes.add(Object.keys(c).join(","));
       expect(shapes.size).toBe(1);
       const shape = shapes.values().next().value as string;
-      expect(shape.startsWith("rawRequest,pathValue,urlValue,params")).toBe(true);
+      expect(shape.startsWith("rawRequest,pathValue,urlValue,paramNames,paramValues")).toBe(true);
       // Dispatch memoizes path+url eagerly (77-79ns recompute vs ~1ns per
       // slot write — hono hands the same string down for this reason), so
       // pathValue/urlValue ARE the uniform post-dispatch shape now; the lazy

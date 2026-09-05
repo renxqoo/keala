@@ -85,7 +85,7 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
       seen.push("child-scope");
       await next();
     });
-    child.get("/users/:id", (c) => c.text(c.params["id"] ?? ""));
+    child.get("/users/:id", (c) => c.text(c.params("id") ?? ""));
 
     const app = new Keala(quiet);
     app.use(
@@ -113,7 +113,7 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
       seen.push("scoped");
       await next();
     });
-    leaf.get("/:section", (c) => c.text(c.params["section"] ?? ""));
+    leaf.get("/:section", (c) => c.text(c.params("section") ?? ""));
 
     const middle = new Keala(quiet);
     middle.mount("/inner", leaf);
@@ -196,7 +196,7 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
       hits += 1;
       await next();
     });
-    app.get("/:first", (c) => c.text(c.params["first"] ?? ""));
+    app.get("/:first", (c) => c.text(c.params("first") ?? ""));
     app.get("/api", (c) => c.text("api"));
     expect(await (await app.handle(request("/other"))).text()).toBe("other");
     expect(await (await app.handle(request("/api"))).text()).toBe("api");

@@ -63,7 +63,7 @@ api.post(
   }),
   (c) => c.json({ token: "session-token" }),
 );
-api.get("/users/:id", (c) => c.json({ id: c.params["id"] }));
+api.get("/users/:id", (c) => c.json({ id: c.params("id") }));
 api.get("/events", (c) =>
   streamSSE(c, async (sse) => {
     for (let i = 0; i < 3; i++) sse.send({ event: "tick", data: i });

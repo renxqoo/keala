@@ -47,7 +47,7 @@ describe("node adapter: request bridging", () => {
     const { base } = await serve((app) => {
       app.post("/users/:id", async (c) => {
         const body = await c.raw.text();
-        return c.json({ id: c.params["id"], q: new URL(c.raw.url).searchParams.get("q"), body });
+        return c.json({ id: c.params("id"), q: new URL(c.raw.url).searchParams.get("q"), body });
       });
     });
     const res = await fetch(`${base}/users/42?q=hi`, {

@@ -153,7 +153,7 @@ describe("malformed input must never crash the process", () => {
   it("survives broken percent-encoding in paths and queries", async () => {
     const app = new Keala();
     app.get("/files/:name", (c) => {
-      c.body = String(c.params.name);
+      c.body = String(c.params("name"));
     });
     const res = await drive(app, new Request("http://localhost:3000/files/%E0%A4%A?x=%ZZ"));
     expect(res.status).toBe(200);
@@ -313,7 +313,7 @@ describe("routing abuse resistance", () => {
   it("does not match path traversal out of the wildcard scope via decode", async () => {
     const app = new Keala();
     app.get("/assets/*", (c) => {
-      c.body = `wildcard:${c.params.wildcard}`;
+      c.body = `wildcard:${c.params("wildcard")}`;
     });
     const res = await drive(app, new Request("http://localhost:3000/assets/a%2F..%2Fsecret"));
     expect(res.status).toBe(200);

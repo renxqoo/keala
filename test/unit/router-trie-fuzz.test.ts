@@ -11,6 +11,7 @@ import {
 import { Keala, Router, createError } from "../../src/index.ts";
 import { acceptsEncoding } from "../../src/negotiation/accepts.ts";
 import { typeIs } from "../../src/negotiation/typeis.ts";
+import { paramsRecord } from "../../src/router/router.ts";
 import {
   charsetFromContentType,
   extensionFromMime,
@@ -139,7 +140,10 @@ describe("redteam — GA-1 matchRoute equals the pure trie (trailing-param shape
 
     const app = new Keala(quiet);
     try {
-      for (const p of patterns) app.get(p, (c) => c.text(`${p}|${normParams(c.params)}`));
+      for (const p of patterns)
+        app.get(p, (c) =>
+          c.text(`${p}|${normParams(paramsRecord(c.paramNames, c.paramValues, c.paramOffset))}`),
+        );
     } catch {
       return [];
     }
@@ -175,8 +179,10 @@ describe("redteam — GA-1 matchRoute equals the pure trie (trailing-param shape
         problems.push(`${normPath}: target divergence real=${realPattern}`);
         continue;
       }
-      if (realParams !== normParams(ref.params)) {
-        problems.push(`${normPath}: params real=${realParams} trie=${normParams(ref.params)}`);
+      if (realParams !== normParams(paramsRecord(ref.names, ref.values, ref.offset))) {
+        problems.push(
+          `${normPath}: params real=${realParams} trie=${normParams(paramsRecord(ref.names, ref.values, ref.offset))}`,
+        );
       }
     }
     return problems;
@@ -200,7 +206,7 @@ describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
   it("CONFIRMED-BUG(now fixed) (RT-9b): static must beat the wildcard for /%61dmin", async () => {
     const app = new Keala(quiet);
     app.get("/admin", (c) => c.text("static-admin"));
-    app.get("/*", (c) => c.text(`wild:${c.params["wildcard"]}`));
+    app.get("/*", (c) => c.text(`wild:${c.params("wildcard")}`));
     expect(await text(await app.handle(req("http://localhost/%61dmin")))).toBe("static-admin");
   });
 
@@ -224,7 +230,7 @@ describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
 
   it("green witness: a dynamic route answers its encoded static prefix", async () => {
     const app = new Keala(quiet);
-    app.get("/admin/:id", (c) => c.text(`dyn:${c.params["id"]}`));
+    app.get("/admin/:id", (c) => c.text(`dyn:${c.params("id")}`));
     expect(await text(await app.handle(req("http://localhost/%61dmin/1")))).toBe("dyn:1");
   });
 });

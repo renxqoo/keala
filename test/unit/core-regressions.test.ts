@@ -49,7 +49,7 @@ describe("P1: direct() chain has no double-next() guard", () => {
 describe("P2: a later static registration shadows an earlier dynamic route for ALL methods", () => {
   it("GET /users/7 flips from 200 to 405 after POST /users/7 registers", async () => {
     const app = new Keala({ env: "test" });
-    app.get("/users/:id", (c) => c.text(`id:${c.params.id}`));
+    app.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
     expect((await hit(app, "/users/7")).status).toBe(200);
     app.post("/users/7", (c) => c.text("posted"));
     const after = await hit(app, "/users/7");

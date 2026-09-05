@@ -209,8 +209,8 @@ describe("mount-scope depth", () => {
       seen.push(c.path);
       await next();
     });
-    sub.get("/a/:id", (c) => c.text(`id:${c.params.id}`));
-    sub.get("/b/:id", (c) => c.text(`bid:${c.params.id}`));
+    sub.get("/a/:id", (c) => c.text(`id:${c.params("id")}`));
+    sub.get("/b/:id", (c) => c.text(`bid:${c.params("id")}`));
     const app = new Keala({ env: "test" });
     app.mount("/pre", sub);
     await hit(app, "/pre/a/1");

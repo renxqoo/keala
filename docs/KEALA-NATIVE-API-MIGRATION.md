@@ -209,7 +209,7 @@ bun scripts/smoke.ts / bun scripts/example-check.ts（受影响时）。
 
 ---
 
-## 第三部分：MIGRATION（按单元；状态：**U1 已实施（2026-09-06）**，U2-U4 待实施）
+## 第三部分：MIGRATION（按单元；状态：**U1、U2 已实施（2026-09-06）**，U3-U4 待实施）
 
 ### U1 — koa 对齐测试退役（流程试运行单元）
 
@@ -277,6 +277,52 @@ unit/router-shadow-warn、unit/request-ergonomics（"params never null"→
 **矩阵**：M1 35 文件（宽口径）+ M7 双命中标记 + M6 外围 18 文件（bench/examples/scripts，含 `params?.[` 形态——smoke/soak/drain/router-scale 全在，U2 单元门加跑 scripts/smoke）。
 **验收**：单元门（+smoke/soak 因 scripts 同步而加跑）；P1/P5 性能预算；`grep -rE '\.params(\?\.)?\[' src/ bench/ examples/ scripts/` = 0。
 
+**实施记录（2026-09-06）**：
+
+- **产物形态**：`RouteMatch = {target, names, values, offset}`。三构造点：fastMatch
+  （多参零拷贝复用 split 数组、单参 `[value]`）；matchTableRegex（**零拷贝**——
+  exec 数组即 values，`offset` 携带 per-route groupStart）；trie（terminal 注册期
+  预挂 `matchNames`——trie 是树、每非根节点唯一入边，terminal 名字链注册期固定；
+  命中时 values 定长倒填、names 零分配、无需去重，重复名靠读取端 lastIndexOf
+  取最新）。staticMatch 带冻结空数组 + offset 0。
+- **Context**：`paramNames/paramValues/paramOffset` 三状态槽（pooling 重置随
+  `Object.keys(CONTEXT_DEFAULTS)` 自动覆盖）；`c.params(name)` 方法 =
+  `lastIndexOf + values[i+offset]`——数组无原型链，`"toString"`/`"__proto__"`
+  天然 miss（新锁：request-ergonomics 三条——未匹配 undefined、原型名 miss、
+  重复名取最新）。
+- **性能（P1/P5 终测，同窗口 A/B vs pre-U2）**：4-seg 0.92x→**0.81x**、mixed
+  1.10x→**1.04x**、param-only 1.27x→**1.15x**、通配 1.25x→**1.17x**、bucket
+  1.17x→**1.07x**；绝对值净省 3-7ns/形状。P2 适配层 0.91-0.96x（全形状优于
+  hono）。**P5 的"净省 ≥25ns"预估不成立**——null-proto Record 实值 ~5ns 而非
+  诊断时估的 ~30ns，ratio 目标（非通配 ≤1.15x、通配 ≤1.25x、mixed ≤1.05x）
+  全部达成，记录以实测定案。
+- **过程中的两个陷阱（实施记录留档）**：①`result.slice(groupStart, …)` 对
+  RegExp exec 结果数组走 generic 慢路径，实测 ~15ns/次、一度使全部动态形状
+  回退 +8-13ns（CPU profile 定位：slice 占 38.4% 自耗时）——零拷贝 offset 设计
+  消除后反超基线；②`buildURL(destSegments, c.params)` 传裸方法引用丢失
+  `this`（redirect 全 500）——调用点改箭头包装（冷路径）。
+- **测试面**：M1 35 文件 bracket 形态 + 28 处点形态（原 grep 盲区）+ 6 处展开
+  形态 + 1 处 `Object.keys(c.params)` 假绿（函数使 keys 恒空、tsc 静默放行——
+  改槽位断言）；产物消费 6 文件走 `paramsRecord(names, values, offset)`（序无关
+  Record 比较，差分测试语义不变；另 3 个文件是槽位断言消费者）；`{...c.params}` 展开改 paramsRecord；§8 公共
+  面快照 + pooling 槽断言 + own-key 顺序栅栏同步。数学：2634+2（锁扩展）
+  = **2636**，Node/Bun 双全量绿。
+- **外围**：bench 11 + examples 2 + scripts 6（drain-server-node.mjs 与
+  artifact-server.mjs 两个 `.mjs` 先后漏扫——后者 `c.params?.id` 形态逃过
+  全部收口 grep 家族且使 process-check 当场红，由对抗审查抓获）；
+  smoke/example-check/soak 全过；sink 镜像边界 paramsRecord 重建（SunkHandler
+  签名不动；native-sink-parity 断言零改写、仅 2 行调用形态机械替换——
+  方案验证点达成）；buildURL 双形态
+  （Record | lookup），`app.url()` 公开签名不变。
+- **对抗审查（3 条 CONFIRMED，全部修复）**：①trie 中途通配入口空捕获时链比
+  matchNames 短 1，定长倒填把邻位值归因给错误名字（`/w/:x?/*` + `/w/a//`
+  → x 消失、wildcard 拿 x 的值——U2 引入的真回归）→ matchAt 链长校验回退
+  链走构建 + `//` 路径四行值锁；②三层注册期共享的 names 数组未冻结，handler
+  一次原地写永久腐蚀路由 → 三处 Object.freeze（读取零成本）；
+  ③artifact-server.mjs `c.params?.id` 漏改（process-check 红）→ 修复，
+  收口 grep 家族增补 `\.params\?\.` 变体。NOTE 项同批修复：`__proto__`
+  探测锁改 null-proto 逐键断言、R3-4 过时分歧注释改统一语义描述。
+
 ### U3a — redirect 返回化
 
 **基线**：unit/router-registration-locks（redirect 30x 语义）、unit/response
@@ -327,6 +373,18 @@ CHANGELOG；服务器干净窗口 shootout 复测（P3）。
 - [ ] 全 CI 链绿；文档状态推进「已核销」；实施记录逐波追加（8+ 节预留）
 
 ## 实施记录（收口时逐波追加）
+
+### 第 2 波 — U2（2026-09-06）
+
+params 函数式化落地。核心设计裁决三条：①trie 是树 → terminal 名字链注册期固定
+（matchNames 预挂，请求期零名字构造）；②RegExp exec 数组零拷贝直出 + offset
+寻址（slice 一个 exec 结果走 generic 路径 ~15ns——本波最大陷阱，CPU profile
+定位）；③buildURL 收 lookup 函数（redirect 零 Record 重建），但必须箭头包装
+保 `this`。性能终测全形状反超 pre-U2 基线 3-7ns（P1/P2/P5 ratio 全达；P5 的
+25ns 绝对值预估被实测证伪——null-proto Record 只值 ~5ns，如实记录）。
+假绿抓获 1 处：`Object.keys(c.params)` 对函数恒空且 tsc 放行——机械替换的
+形态面（bracket/点/展开/整体传参）之外永远还有变体，验收 grep 必须
+多形态并列。
 
 ### 第 1 波 — U1（2026-09-06）
 

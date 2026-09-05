@@ -91,7 +91,7 @@ if (framework === "keala") {
     app.get(routePath(index), (c) =>
       kind === "static"
         ? c.text(bodyForRoute(index))
-        : c.text(`${kind === "param-distinct" ? "r" : "it"}${index}:${c.params?.["id"] ?? "?"}`),
+        : c.text(`${kind === "param-distinct" ? "r" : "it"}${index}:${c.params("id") ?? "?"}`),
     );
   }
   handle = (request) => app.handle(request);

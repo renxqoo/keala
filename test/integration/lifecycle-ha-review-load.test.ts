@@ -149,7 +149,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
         if (active > peak) peak = active;
         await wait(1);
         active--;
-        c.body = `f:${c.params["id"]}`;
+        c.body = `f:${c.params("id")}`;
       });
       const results = await Promise.all(
         Array.from({ length: 500 }, (_, i) =>
@@ -203,7 +203,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
         c.body = "late";
       });
       app.get("/f/:id", (c) => {
-        c.body = `f:${c.params["id"]}`;
+        c.body = `f:${c.params("id")}`;
       });
       const unhandled = trackUnhandled();
       try {
@@ -330,12 +330,12 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
       app.get("/park/:id", async (c) => {
         entered++;
         await wait(600); // settles DURING the drain window
-        c.body = `parked:${c.params["id"]}`;
+        c.body = `parked:${c.params("id")}`;
       });
       app.get("/short/:id", async (c) => {
         entered++;
         await wait(50); // queued victims: short handlers
-        c.body = `short:${c.params["id"]}`;
+        c.body = `short:${c.params("id")}`;
       });
       app.get("/stream/:id", async () => {
         await streamGate.promise; // held until the drain is running

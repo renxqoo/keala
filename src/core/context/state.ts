@@ -22,12 +22,18 @@ export interface ContextState {
   ipValue: string | null;
   allowedValue: Set<string> | null;
   /**
-   * Path parameters set by the router. The frozen EMPTY_PARAMS sentinel when
-   * no route matched (R411 Fix 3): a handler only ever runs post-match, the
-   * unmatched-middleware case reads a frozen empty object — property reads
-   * are byte-identical to the old `params?.x` null form.
+   * Path-parameter arrays published by the router (U2: raw match product, no
+   * per-request Record). `names[i]` names `values[i]`; parallel and equal
+   * length. Frozen empties when no route matched — a handler only ever runs
+   * post-match, and the unmatched-middleware case reads `c.params(name)` →
+   * undefined. Read through the `c.params(name)` method (lastIndexOf — the
+   * LAST capture of a repeated name wins).
    */
-  params: Record<string, string>;
+  paramNames: ReadonlyArray<string>;
+  paramValues: ReadonlyArray<string>;
+  /** values-index offset for `names[0]` (the table-regex layer hands out the
+   * regex exec array itself; see RouteMatch.offset). 0 on every other layer. */
+  paramOffset: number;
 
   /**
    * The route pattern this request matched ("/users/:id", mount prefix

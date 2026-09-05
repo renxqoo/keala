@@ -88,7 +88,7 @@ describe("coverage: every method shortcut registers a working route", () => {
 
   it("the named two-argument form registers under the name", async () => {
     const app = new Keala(quiet);
-    app.get("thing", "/things/:id", (c) => c.text(c.params["id"] ?? ""));
+    app.get("thing", "/things/:id", (c) => c.text(c.params("id") ?? ""));
     expect(app.url("thing", { id: "9" })).toBe("/things/9");
     expect(await (await app.handle(req("/things/9"))).text()).toBe("9");
   });

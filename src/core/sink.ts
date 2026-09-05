@@ -44,6 +44,7 @@
 import { serveStatic } from "../middleware/serve-static.ts";
 import {
   EMPTY_PARAMS,
+  paramsRecord,
   pathsConflict,
   registerDef,
   type RouteDef,
@@ -328,7 +329,15 @@ export const registerSink = (
     // declaration diverges the native leg only), and the handler receives a
     // real Request on every runtime (native sources materialize lazily).
     const handler = (entry as NativeFnSink).handler;
-    const mirror: RouteHandler = (c) => handler(sourceRequest(c.rawRequest), c.params);
+    // The SunkHandler contract stays `(request, params: Record)` — the mirror
+    // is the boundary where the router's raw arrays become that Record (U2,
+    // router.ts paramsRecord). Slow by design: sunk handlers opted out of
+    // the onion.
+    const mirror: RouteHandler = (c) =>
+      handler(
+        sourceRequest(c.rawRequest),
+        paramsRecord(c.paramNames, c.paramValues, c.paramOffset),
+      );
     registerDef(router, "GET", path, [mirror], undefined, middleware);
     markSunk();
     return;

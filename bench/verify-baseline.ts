@@ -15,7 +15,7 @@ app.get("/text", (c) => {
   c.body = "hello world";
 });
 app.get("/users/:id", (c) => {
-  c.body = `user ${c.params?.["id"]}`;
+  c.body = `user ${c.params("id")}`;
 });
 
 const hono = new Hono();

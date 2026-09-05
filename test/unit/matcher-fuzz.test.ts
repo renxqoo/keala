@@ -4,7 +4,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { Keala } from "../../src/index.ts";
-import { matchRoute, createRouterState, registerDef } from "../../src/router/router.ts";
+import {
+  paramsRecord,
+  matchRoute,
+  createRouterState,
+  registerDef,
+} from "../../src/router/router.ts";
 
 describe("matchRoute differential fuzz (fast paths vs trie)", () => {
   // Reference: a router forced off every fast path by having many patterns.
@@ -64,7 +69,7 @@ describe("matchRoute differential fuzz (fast paths vs trie)", () => {
         const a = matchRoute(alone, path);
         const b = matchRoute(crowd, path);
         const norm = (m: ReturnType<typeof matchRoute>): unknown =>
-          m === null ? null : [m.target.pattern, m.params];
+          m === null ? null : [m.target.pattern, paramsRecord(m.names, m.values, m.offset)];
         // A pattern alone matches a superset (the crowd adds nothing for THIS
         // pattern), so equality is only required when the alone-match hits the
         // pattern itself; mismatch on hit is a fast-path divergence.
@@ -77,7 +82,9 @@ describe("matchRoute differential fuzz (fast paths vs trie)", () => {
           expect([pattern, path, norm(b)]).toEqual([
             pattern,
             path,
-            b !== null && b.target.pattern !== pattern ? norm(b) : [pattern, a.params],
+            b !== null && b.target.pattern !== pattern
+              ? norm(b)
+              : [pattern, paramsRecord(a.names, a.values, a.offset)],
           ]);
         }
       }
@@ -96,11 +103,11 @@ describe("matchRoute differential fuzz (fast paths vs trie)", () => {
 describe("pooling soak", () => {
   it("parallel mixed requests keep responses distinct", async () => {
     const app = new Keala({ env: "test", pooling: true });
-    app.get("/json/:n", (c) => c.json({ n: c.params.n }));
-    app.get("/text/:n", (c) => c.text(`t:${c.params.n}`));
+    app.get("/json/:n", (c) => c.json({ n: c.params("n") }));
+    app.get("/text/:n", (c) => c.text(`t:${c.params("n")}`));
     app.get("/hdr/:n", (c) => {
-      c.setHeader("x-n", c.params.n ?? "");
-      c.body = `h:${c.params.n}`;
+      c.setHeader("x-n", c.params("n") ?? "");
+      c.body = `h:${c.params("n")}`;
       c.type = "text/plain";
     });
     const results = await Promise.all(
@@ -130,7 +137,7 @@ describe("pooling soak", () => {
       // sync return after next(): the floating branch stays registered
       void next();
     });
-    app.get("/:n", (c) => c.text(`n:${c.params.n}`));
+    app.get("/:n", (c) => c.text(`n:${c.params("n")}`));
     const a = app.handle(new Request("http://localhost/1"));
     const b = app.handle(new Request("http://localhost/2"));
     const [ra, rb] = await Promise.all([a, b]);

@@ -290,15 +290,15 @@ describe("redteam P2: websocket (green)", () => {
     const opened: string[] = [];
     app.ws("/ws/:id", {
       open: (_ws, c) => {
-        opened.push(`${c.path}:${(c.params as Record<string, string | undefined>)["id"]}`);
+        opened.push(`${c.path}:${c.params("id")}`);
       },
     });
     const res = await app.handle(req("/ws/42"), { server });
     expect(res.status).toBe(200);
     expect(res.body).toBeNull();
     expect(upgradeCalls.map((u) => u.wsKey)).toEqual(["/ws/:id"]);
-    const ctx = upgradeCalls[0]?.ctx as { params: Record<string, string> };
-    expect(ctx.params["id"]).toBe("42");
+    const ctx = upgradeCalls[0]?.ctx as { params: (name: string) => string | undefined };
+    expect(ctx.params("id")).toBe("42");
 
     // adapter dispatch resolves handlers by the PATTERN key, not the concrete path
     let serveOptions: Record<string, unknown> | null = null;
@@ -316,7 +316,7 @@ describe("redteam P2: websocket (green)", () => {
     const seen2: string[] = [];
     app2.ws("/ws/:id", {
       open: (_ws, c) => {
-        seen2.push(String((c.params as Record<string, string | undefined>)["id"]));
+        seen2.push(String(c.params("id")));
       },
     });
     startBunServer(app2, { port: 0 }, undefined, fakeServe as never);
@@ -349,7 +349,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   it("routing: static wins over params; encoded statics match; 405 carries Allow", async () => {
     const app = new Keala(quiet);
     app.get("/users/admin", (c) => c.text("admin"));
-    app.get("/users/:id", (c) => c.text(`id:${(c.params as Record<string, string>)["id"]}`));
+    app.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
     app.get("/a%20b", (c) => c.text("encoded"));
     app.post("/only-post", (c) => c.text("posted"));
     expect(await (await app.handle(req("/users/admin"))).text()).toBe("admin");

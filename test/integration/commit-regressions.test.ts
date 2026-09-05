@@ -296,9 +296,9 @@ describe("query details", () => {
 describe("fastDynamic correctness (shared routes only)", () => {
   it("matches the trie reference on every shared shape", async () => {
     const single = new Keala({ env: "test" });
-    single.get("/users/:id", (c) => c.text(`id:${c.params.id}`));
+    single.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
     const ref = new Keala({ env: "test" });
-    ref.get("/users/:id", (c) => c.text(`id:${c.params.id}`));
+    ref.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
     ref.get("/other/:x", (c) => c.text("other"));
     const paths = [
       "/users",

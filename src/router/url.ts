@@ -17,7 +17,7 @@ const encodePathValue = (value: string): string =>
 
 export const buildURL = (
   segments: readonly CompiledSegment[],
-  params: Record<string, string>,
+  params: Record<string, string> | ((name: string) => string | undefined),
 ): string => {
   const parts: string[] = [];
   for (const segment of segments) {
@@ -29,7 +29,10 @@ export const buildURL = (
       parts.push(encodeURIComponent(segment.value));
       continue;
     }
-    const value = params[segment.value];
+    // The function form is `c.params` itself (U2): redirect destinations read
+    // the live match product with zero Record rebuilding; `app.url()` keeps
+    // the plain-object form.
+    const value = typeof params === "function" ? params(segment.value) : params[segment.value];
     if (value === undefined) {
       if (segment.optional) continue;
       throw new Error(`Missing required parameter "${segment.value}" for url()`);

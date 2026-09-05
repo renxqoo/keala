@@ -127,7 +127,7 @@ describe("agent audit: router mount and trie encoding", () => {
   it("percent-encoded static segments inside dynamic routes match", async () => {
     const app = new Keala(quiet);
     app.get("/caf%C3%A9/:id", (c) => {
-      c.body = { id: c.params["id"] };
+      c.body = { id: c.params("id") };
     });
     const res = await app.handle(new Request("http://localhost:3000/caf%C3%A9/42"));
     expect(res.status).toBe(200);
@@ -137,7 +137,7 @@ describe("agent audit: router mount and trie encoding", () => {
   it("unicode route patterns match percent-encoded requests", async () => {
     const app = new Keala(quiet);
     app.get("/café/:id", (c) => {
-      c.body = `ok:${c.params["id"]}`;
+      c.body = `ok:${c.params("id")}`;
     });
     const res = await app.handle(new Request("http://localhost:3000/caf%C3%A9/7"));
     expect(res.status).toBe(200);
@@ -147,7 +147,7 @@ describe("agent audit: router mount and trie encoding", () => {
   it("keeps %2F inside a single param segment (no path splitting)", async () => {
     const app = new Keala(quiet);
     app.get("/files/:name", (c) => {
-      c.body = `file:${c.params["name"]}`;
+      c.body = `file:${c.params("name")}`;
     });
     // %2F stays a single segment for matching purposes (no path splitting).
     const res = await app.handle(new Request("http://localhost:3000/files/a%2Fb"));

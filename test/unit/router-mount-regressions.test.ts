@@ -95,7 +95,7 @@ describe("mount + sub-app scoped middleware offset", () => {
       hits.push("mw");
       await next();
     });
-    sub.get("/users/:id", (c) => c.text(`u:${c.params.id}`));
+    sub.get("/users/:id", (c) => c.text(`u:${c.params("id")}`));
     sub.get("/ping", (c) => c.text("pong"));
     app.mount("/api", sub);
     expect(await (await hit(app, "/api/users/7")).text()).toBe("u:7");
@@ -140,10 +140,10 @@ describe("fastDynamic vs trie equivalence", () => {
   };
   it("single-dynamic app matches multi-dynamic reference", async () => {
     const single = new Keala({ env: "test" });
-    single.get("/users/:id", (c) => c.text(`id:${c.params.id}`));
+    single.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
     const ref = new Keala({ env: "test" });
-    ref.get("/users/:id", (c) => c.text(`id:${c.params.id}`));
-    ref.get("/other/:x", (c) => c.text(`x:${c.params.x}`));
+    ref.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
+    ref.get("/other/:x", (c) => c.text(`x:${c.params("x")}`));
     expect(await run(single)).toEqual(await run(ref));
   });
   it("duplicate registration keeps both handlers once each", async () => {

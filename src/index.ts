@@ -16,7 +16,7 @@
  * const app = new Keala({ keys: ["secret"] })
  *
  * app.use(cors())                                   // global onion middleware
- * app.get("/users/:id", (c) => c.json({ id: c.params.id }))   // return style
+ * app.get("/users/:id", (c) => c.json({ id: c.params("id") })) // return style
  * app.get("/page", (c) => { c.body = "hi"; c.type = "text/html" }) // state style
  *
  * app.listen(3000)

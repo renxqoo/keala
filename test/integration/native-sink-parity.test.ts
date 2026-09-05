@@ -37,9 +37,9 @@ const registerPlain = (app: InstanceType<typeof Keala>): void => {
     "/health",
     () => new Response("ok", { headers: { "content-type": "text/plain; charset=utf-8" } }),
   );
-  app.get("/users/:id", (c) => Response.json({ id: c.params["id"] ?? null }));
+  app.get("/users/:id", (c) => Response.json({ id: c.params("id") ?? null }));
   app.get("/users/:id/posts/:pid", (c) =>
-    Response.json({ user: c.params["id"] ?? null, post: c.params["pid"] ?? null }),
+    Response.json({ user: c.params("id") ?? null, post: c.params("pid") ?? null }),
   );
 };
 

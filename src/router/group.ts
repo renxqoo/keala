@@ -179,8 +179,10 @@ export class Router {
         // BUG-1 (0.6.2 review, mirrors registration.ts): pass the code
         // through c.redirect's EXPLICIT branch — the no-code call's
         // isRedirectStatus gate silently rewrote 304/306/309+ to 302.
-        // c.params is never null post-R411 (the ?? {} fallback was dead).
-        const target = destSegments === null ? destination : buildURL(destSegments, c.params);
+        // c.params is the U2 functional reader; the arrow keeps `this` bound
+        // (a bare method reference would lose the context). Cold path.
+        const target =
+          destSegments === null ? destination : buildURL(destSegments, (n) => c.params(n));
         c.redirect(target, code);
       },
     ]);

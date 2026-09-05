@@ -48,23 +48,19 @@ const fastMatch = (fast: FastMatcher | null, path: string): RouteMatch | null =>
     if (rest.length <= 1) return null;
     const value = rest.slice(1);
     if (value.indexOf("/") !== -1) return null;
-    const params: Record<string, string> = Object.create(null);
     // matchRoute only enters a fast matcher after proving the whole path has
     // no "%". The trie owns escaped-path decoding; scanning this capture a
     // second time would be redundant fixed work on every plain param route.
-    params[names[0] as string] = value;
-    return { target: fast.target, params };
+    return { target: fast.target, names, values: [value], offset: 0 };
   }
   if (rest.length <= 1) return null;
   const parts = rest.slice(1).split("/");
   if (parts.length !== names.length) return null;
-  const params: Record<string, string> = Object.create(null);
   for (let i = 0; i < parts.length; i++) {
-    const part = parts[i] as string;
-    if (part.length === 0) return null;
-    params[names[i] as string] = part;
+    if ((parts[i] as string).length === 0) return null;
   }
-  return { target: fast.target, params };
+  // The split array IS the values array — zero per-request construction.
+  return { target: fast.target, names, values: parts, offset: 0 };
 };
 
 /**

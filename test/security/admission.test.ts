@@ -227,10 +227,10 @@ describe("SEC-3: request.signal trust — aborts are self-scoped, never capacity
     app.get("/w/:id", async (c) => {
       live += 1;
       peak = Math.max(peak, live);
-      order.push(`start:${c.params["id"]}`);
+      order.push(`start:${c.params("id")}`);
       await wait(15);
       live -= 1;
-      order.push(`end:${c.params["id"]}`);
+      order.push(`end:${c.params("id")}`);
     });
     const first = app.handle(new Request("http://x/w/0"));
     const controllerA = new AbortController();

@@ -7,7 +7,7 @@ import {
   resetContext,
   type Context,
 } from "../../src/core/context/context.ts";
-import { EMPTY_PARAMS } from "../../src/router/router.ts";
+import { NO_PARAM_NAMES, NO_PARAM_VALUES } from "../../src/router/router.ts";
 import { deadProtoFor } from "../../src/core/context/pool.ts";
 /**
  * Context recycling semantics .
@@ -27,7 +27,8 @@ const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
   const c = createContext(app, baseContextProto, new Request("http://localhost:3000/a?x=1"), {
     remote: "1.1.1.1",
   });
-  c.params = { id: "7" };
+  c.paramNames = ["id"];
+  c.paramValues = ["7"];
   c.routerAllowed.add("GET");
   c.state["step"] = 1;
   c.setHeader("X-Used", "yes");
@@ -73,7 +74,8 @@ describe("resetContext recycling semantics", () => {
     expect(recycled.has("X-Used")).toBe(false);
     expect(recycled.resHeader("set-cookie")).toBe("");
     expect(Object.keys(recycled.state)).toEqual([]);
-    expect(recycled.params).toBe(EMPTY_PARAMS);
+    expect(recycled.paramNames).toBe(NO_PARAM_NAMES);
+    expect(recycled.paramValues).toBe(NO_PARAM_VALUES);
     expect(recycled.ip).toBe("2.2.2.2");
     // Unsigned read: the app carries signing keys, and a signed read of an
     // unsigned value fails closed (by design) — the point here is that the
@@ -119,7 +121,7 @@ describe("request isolation (fresh context per request)", () => {
   it("serial requests never observe stale state", async () => {
     const app = new Keala(quiet);
     app.get("/a/:id", (c) => {
-      c.state["id"] = c.params["id"];
+      c.state["id"] = c.params("id");
       c.setHeader("X-Run", String(c.state["id"]));
       c.body = JSON.stringify({ id: c.state["id"], q: c.query("v") ?? null });
     });
@@ -154,9 +156,9 @@ describe("request isolation (fresh context per request)", () => {
   it("concurrent interleaved requests keep isolated contexts", async () => {
     const app = new Keala(quiet);
     app.get("/slow/:tag", async (c) => {
-      const mine = c.params["tag"] as string;
+      const mine = c.params("tag") as string;
       await new Promise((resolve) => setTimeout(resolve, mine === "a" ? 15 : 2));
-      c.body = `${mine}:${c.params["tag"]}`;
+      c.body = `${mine}:${c.params("tag")}`;
     });
     const results = await Promise.all([
       app.handle(new Request("http://localhost:3000/slow/a")),
@@ -226,7 +228,7 @@ describe("request isolation (fresh context per request)", () => {
 describe("guarded pooling", () => {
   it("recycles contexts across requests with identical behavior", async () => {
     const app = new Keala({ ...quiet, pooling: true });
-    app.get("/x/:id", (c) => c.text(`id:${c.params["id"]}`));
+    app.get("/x/:id", (c) => c.text(`id:${c.params("id")}`));
     for (let i = 0; i < 5; i++) {
       const res = await app.handle(new Request(`http://localhost:3000/x/${i}`));
       expect(await res.text()).toBe(`id:${i}`);

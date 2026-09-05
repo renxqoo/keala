@@ -61,6 +61,7 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { Keala } from "../../src/core/app.ts";
+import { paramsRecord } from "../../src/router/router.ts";
 import type { Context } from "../../src/core/context/context.ts";
 const quiet = { env: "test" } as const;
 const drive = (app: InstanceType<typeof Keala>, req: Request) => app.handle(req);
@@ -114,8 +115,8 @@ describe("documents intentional divergence: trailing slash is optional (koa-rout
   it("static, param and optional-param routes answer their trailing-slash form", async () => {
     const app = new Keala(quiet);
     app.get("/plain/static", (c) => c.text("static"));
-    app.get("/users/:id", (c) => c.json({ ...c.params }));
-    app.get("/opt/:x?", (c) => c.json({ ...c.params }));
+    app.get("/users/:id", (c) => c.json(paramsRecord(c.paramNames, c.paramValues, c.paramOffset)));
+    app.get("/opt/:x?", (c) => c.json(paramsRecord(c.paramNames, c.paramValues, c.paramOffset)));
     for (const [path, want] of [
       ["/plain/static/", "static"],
       ["/users/42/", '{"id":"42"}'],
@@ -131,7 +132,7 @@ describe("documents intentional divergence: trailing slash is optional (koa-rout
 describe("documents intentional divergence: '/w/*' requires the '/w/' prefix (hono also answers '/w')", () => {
   it("the bare prefix without a slash is a different resource; '/w/' captures the empty wildcard", async () => {
     const app = new Keala(quiet);
-    app.get("/w/*", (c) => c.json({ ...c.params }));
+    app.get("/w/*", (c) => c.json(paramsRecord(c.paramNames, c.paramValues, c.paramOffset)));
     const bare = await drive(app, new Request("http://x/w"));
     expect(bare.status).toBe(404);
     const empty = await drive(app, new Request("http://x/w/"));
@@ -154,7 +155,7 @@ describe("documents intentional divergence: static beats param regardless of reg
 describe("documents intentional divergence: duplicate param name keeps the LAST capture (express/@koa/router; hono keeps the first)", () => {
   it("/:x/:x resolves to the later segment", async () => {
     const app = new Keala(quiet);
-    app.get("/:x/:x", (c) => c.json({ ...c.params }));
+    app.get("/:x/:x", (c) => c.json(paramsRecord(c.paramNames, c.paramValues, c.paramOffset)));
     const res = await drive(app, new Request("http://x/1/2"));
     expect(await res.text()).toBe('{"x":"2"}');
   });
@@ -280,7 +281,7 @@ describe("documents intentional divergence: HEAD backfills Content-Length from t
 describe("documents intentional divergence: c.path stays percent-encoded (koa; hono decodes with decodeURI)", () => {
   it("params decode, the path does not", async () => {
     const app = new Keala(quiet);
-    app.get("/r/:p", (c) => c.json({ path: c.path, p: c.params.p }));
+    app.get("/r/:p", (c) => c.json({ path: c.path, p: c.params("p") }));
     const res = await drive(app, new Request("http://x/r/a%20b"));
     expect(await res.text()).toBe('{"path":"/r/a%20b","p":"a b"}');
   });
@@ -289,7 +290,9 @@ describe("documents intentional divergence: c.path stays percent-encoded (koa; h
 describe("documents intentional divergence: a custom param pattern is tested per SEGMENT (keala trie contract); hono's {…} patterns can span '/'", () => {
   it("'/file/:f(.+\\.png)' does not match multi-segment values", async () => {
     const app = new Keala(quiet);
-    app.get("/file/:f(.+\\.png)", (c) => c.json({ ...c.params }));
+    app.get("/file/:f(.+\\.png)", (c) =>
+      c.json(paramsRecord(c.paramNames, c.paramValues, c.paramOffset)),
+    );
     const nested = await drive(app, new Request("http://x/file/dir/a.png"));
     expect(nested.status).toBe(404);
     const flat = await drive(app, new Request("http://x/file/a.png"));
@@ -340,7 +343,7 @@ describe("differential locks: matching agrees with hono on the encoded-path matr
   for (const [koaPath, honoPath, reqPath, status, params] of CASES) {
     it(`${koaPath} matches ${reqPath} identically on both frameworks`, async () => {
       const kApp = new Keala(quiet);
-      kApp.get(koaPath, (c) => c.json({ ...c.params }));
+      kApp.get(koaPath, (c) => c.json(paramsRecord(c.paramNames, c.paramValues, c.paramOffset)));
       const hApp = new Hono();
       hApp.get(honoPath, (c) => c.json(c.req.param()));
 

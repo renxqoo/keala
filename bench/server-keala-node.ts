@@ -34,12 +34,12 @@ app.get("/json", (c) => c.json({ hello: "world" }));
 if (sink === "param") {
   app.sink("/users/:id", (_request, params) => new Response(`user ${params["id"]}`));
 } else {
-  app.get("/users/:id", (c) => c.text(`user ${c.params["id"]}`));
+  app.get("/users/:id", (c) => c.text(`user ${c.params("id")}`));
 }
 
 app.get("/search/:id", (c) => {
   c.setHeader("X-Query", "hit");
-  return c.text(`${c.params["id"]} ${c.query("name")} ${c.query("page")}`);
+  return c.text(`${c.params("id")} ${c.query("name")} ${c.query("page")}`);
 });
 
 app.post("/echo-safe", async (c) => c.json(await bodyOf(c).json()));

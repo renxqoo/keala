@@ -263,15 +263,15 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
       });
       const slowGate = deferred();
       app.get("/fast/:id", (c) => {
-        c.body = `fast:${c.params["id"]}`;
+        c.body = `fast:${c.params("id")}`;
       });
       app.get("/slow/:id", async (c) => {
         await slowGate.promise;
-        c.body = `slow:${c.params["id"]}`;
+        c.body = `slow:${c.params("id")}`;
       });
       app.get("/stream/:id", (c) =>
         Promise.resolve(
-          new Response(chunkedBody(1, `s${c.params["id"]};`, 24), {
+          new Response(chunkedBody(1, `s${c.params("id")};`, 24), {
             headers: { "content-type": "text/plain" },
           }),
         ),

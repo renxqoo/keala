@@ -9,7 +9,19 @@ import {
   type TrieNode,
 } from "../../src/router/trie.ts";
 import { Keala } from "../../src/core/app.ts";
-import { createRouterState, matchRoute, registerDef } from "../../src/router/router.ts";
+import {
+  createRouterState,
+  matchRoute,
+  paramsRecord,
+  registerDef,
+  type RouteMatch,
+} from "../../src/router/router.ts";
+import type { TrieMatch } from "../../src/router/trie.ts";
+
+/** The readable params view of a (possibly null) match product (U2). */
+const paramsOf = (m: RouteMatch | TrieMatch | null): Record<string, string> | null =>
+  m === null ? null : paramsRecord(m.names, m.values, m.offset);
+
 /**
  * Trie unit semantics: pattern IR compilation and the dynamic-match source of
  * truth (priority, optionals, custom patterns, wildcards, encoding).
@@ -92,7 +104,7 @@ describe("trie matching", () => {
       expect(match).toBeNull();
       return;
     }
-    expect(match?.params).toEqual(params);
+    expect(paramsOf(match)).toEqual(params);
   });
 
   it("static beats param beats wildcard at the same position", () => {
@@ -101,8 +113,8 @@ describe("trie matching", () => {
       setTargets(root, pattern);
     }
     expect(matchPattern(root, "/shop/new")?.target).toBeDefined();
-    expect(matchPattern(root, "/shop/abc")?.params).toEqual({ name: "abc" });
-    expect(matchPattern(root, "/shop/new/extra")?.params).toEqual({
+    expect(paramsOf(matchPattern(root, "/shop/abc"))).toEqual({ name: "abc" });
+    expect(paramsOf(matchPattern(root, "/shop/new/extra"))).toEqual({
       wildcard: "new/extra",
     });
   });
@@ -115,14 +127,29 @@ describe("trie matching", () => {
 
   it("request escapes decode in captures; %2F stays one segment", () => {
     const root = withTarget("/u/:name");
-    expect(matchPattern(root, "/u/%E4%B8%AD")?.params).toEqual({ name: "中" });
-    expect(matchPattern(root, "/u/a%2Fb")?.params).toEqual({ name: "a/b" });
+    expect(paramsOf(matchPattern(root, "/u/%E4%B8%AD"))).toEqual({ name: "中" });
+    expect(paramsOf(matchPattern(root, "/u/a%2Fb"))).toEqual({ name: "a/b" });
   });
 
   it("empty segments never match params (404, not empty capture)", () => {
     const root = withTarget("/a/:x");
     expect(matchPattern(root, "/a/")).toBeNull();
     expect(matchPattern(root, "/a//b")).toBeNull();
+  });
+
+  it("trailing empty-segment paths never misattribute a neighbor's capture (U2 review)", () => {
+    // The mid-path wildcard entry point skips its link when the captured
+    // rest is empty — the terminal's precomputed matchNames then has one
+    // MORE name than the chain has links. The positional backfill used to
+    // hand the param's value to the wildcard and drop the param; the chain
+    // fallback keeps names aligned with actual captures.
+    const root = withTarget("/w/:x/*");
+    expect(paramsOf(matchPattern(root, "/w/a/"))).toEqual({ x: "a", wildcard: "" });
+    expect(paramsOf(matchPattern(root, "/w/a//"))).toEqual({ x: "a" });
+    const opt = withTarget("/w/:x?/*");
+    expect(paramsOf(matchPattern(opt, "/w/a//"))).toEqual({ x: "a" });
+    const bare = withTarget("/w/*");
+    expect(paramsOf(matchPattern(bare, "/w//"))).toEqual({});
   });
 
   it("conflicting param names at one position throw at insert", () => {
@@ -296,20 +323,20 @@ describe("R413 bucket regex: differential against the trie", () => {
       }
       expect(fast, path).not.toBeNull();
       expect(fast?.target, path).toBe(slow.target);
-      expect(fast?.params ?? null, path).toEqual(slow.params);
+      expect(fast === null ? null : paramsOf(fast), path).toEqual(paramsOf(slow));
     }
   });
 
   it("the table regex actually served the multi-route shapes (coverage guard)", () => {
     const state = buildState();
     // First match compiles and caches; the epoch stays valid.
-    expect(matchRoute(state, "/event/7/comments")?.params).toEqual({ id: "7" });
-    expect(matchRoute(state, "/event/8")?.params).toEqual({ id: "8" });
+    expect(paramsOf(matchRoute(state, "/event/7/comments"))).toEqual({ id: "7" });
+    expect(paramsOf(matchRoute(state, "/event/8"))).toEqual({ id: "8" });
     // "event" holds 3 dynamic defs → no slice fast matcher → regex layer.
     expect(state.buckets.get("event")?.fast ?? null).toBeNull();
     expect(state.fastIndex?.table ?? null).not.toBeNull();
     // "map" is a single NON-simple def (static tail) → regex, not fast.
-    expect(matchRoute(state, "/map/berlin/events")?.params).toEqual({ location: "berlin" });
+    expect(paramsOf(matchRoute(state, "/map/berlin/events"))).toEqual({ location: "berlin" });
     expect(state.buckets.get("map")?.fast ?? null).toBeNull();
     expect(state.fastIndex?.table ?? null).not.toBeNull();
   });
@@ -318,7 +345,7 @@ describe("R413 bucket regex: differential against the trie", () => {
     const state = createRouterState();
     registerDef(state, "GET", "/a/:x/tail", [handler]);
     registerDef(state, "GET", "/a/b/:y", [handler]);
-    expect(matchRoute(state, "/a/b/zz")?.params).toEqual({ y: "zz" });
+    expect(paramsOf(matchRoute(state, "/a/b/zz"))).toEqual({ y: "zz" });
 
     // Wildcards now RIDE the fast layer as the bucket's fallback group:
     // exact-count alternatives win first, the wildcard answers the rest.
@@ -329,12 +356,12 @@ describe("R413 bucket regex: differential against the trie", () => {
       const wild = createRouterState();
       for (const p of order) registerDef(wild, "GET", p, [handler]);
       expect(wild.regexIndex.has("/w/*")).toBe(true);
-      expect(matchRoute(wild, "/w/one")?.params).toEqual({ x: "one" });
-      expect(matchRoute(wild, "/w/one/two")?.params).toEqual({ wildcard: "one/two" });
+      expect(paramsOf(matchRoute(wild, "/w/one"))).toEqual({ x: "one" });
+      expect(paramsOf(matchRoute(wild, "/w/one/two"))).toEqual({ wildcard: "one/two" });
       // Trailing-slash normalization: "/w/two/" segments as [w, two], so
       // the param still outranks the wildcard (trie agrees).
-      expect(matchRoute(wild, "/w/two/")?.params).toEqual({ x: "two" });
-      expect(matchRoute(wild, "/w/a/b/")?.params).toEqual({ wildcard: "a/b" });
+      expect(paramsOf(matchRoute(wild, "/w/two/"))).toEqual({ x: "two" });
+      expect(paramsOf(matchRoute(wild, "/w/a/b/"))).toEqual({ wildcard: "a/b" });
       expect(matchRoute(wild, "/w")).toBeNull(); // bare prefix is a different resource
     }
 
@@ -345,25 +372,25 @@ describe("R413 bucket regex: differential against the trie", () => {
     ]) {
       const deep = createRouterState();
       for (const p of order) registerDef(deep, "GET", p, [handler]);
-      expect(matchRoute(deep, "/w2/b/x")?.params).toEqual({ wildcard: "x" });
-      expect(matchRoute(deep, "/w2/c/x")?.params).toEqual({ wildcard: "c/x" });
+      expect(paramsOf(matchRoute(deep, "/w2/b/x"))).toEqual({ wildcard: "x" });
+      expect(paramsOf(matchRoute(deep, "/w2/c/x"))).toEqual({ wildcard: "c/x" });
     }
 
     // A count-group pattern beats the wildcard for its own shape.
     const mixed = createRouterState();
     registerDef(mixed, "GET", "/w4/:x/y", [handler]);
     registerDef(mixed, "GET", "/w4/*", [handler]);
-    expect(matchRoute(mixed, "/w4/a/y")?.params).toEqual({ x: "a" });
-    expect(matchRoute(mixed, "/w4/a/z")?.params).toEqual({ wildcard: "a/z" });
+    expect(paramsOf(matchRoute(mixed, "/w4/a/y"))).toEqual({ x: "a" });
+    expect(paramsOf(matchRoute(mixed, "/w4/a/z"))).toEqual({ wildcard: "a/z" });
   });
 
   it("a late registration retires the epoch and recompiles the bucket", () => {
     const state = createRouterState();
     registerDef(state, "GET", "/n/:a", [handler]);
-    expect(matchRoute(state, "/n/1")?.params).toEqual({ a: "1" });
+    expect(paramsOf(matchRoute(state, "/n/1"))).toEqual({ a: "1" });
     registerDef(state, "GET", "/n/:a/x", [handler]);
-    expect(matchRoute(state, "/n/1/x")?.params).toEqual({ a: "1" });
-    expect(matchRoute(state, "/n/1")?.params).toEqual({ a: "1" });
+    expect(paramsOf(matchRoute(state, "/n/1/x"))).toEqual({ a: "1" });
+    expect(paramsOf(matchRoute(state, "/n/1"))).toEqual({ a: "1" });
   });
 });
 
@@ -371,9 +398,9 @@ describe("R413 bucket regex: end-to-end contract", () => {
   it("params, routePath and routeName read the same target through the fast layer", async () => {
     const app = new Keala(quiet);
     app.get("comments", "/event/:id/comments", (c) =>
-      c.text(`${c.params["id"]}:${c.routePath}:${c.routeName ?? ""}`),
+      c.text(`${c.params("id")}:${c.routePath}:${c.routeName ?? ""}`),
     );
-    app.get("/event/:id", (c) => c.text(`bare:${c.params["id"]}`));
+    app.get("/event/:id", (c) => c.text(`bare:${c.params("id")}`));
     const res = await app.handle(new Request("http://x/event/42/comments"));
     expect(await res.text()).toBe("42:/event/:id/comments:comments");
     expect(await (await app.handle(new Request("http://x/event/42"))).text()).toBe("bare:42");
@@ -381,8 +408,8 @@ describe("R413 bucket regex: end-to-end contract", () => {
 
   it("escaped paths keep trie semantics (decoded params, canonical statics)", async () => {
     const app = new Keala(quiet);
-    app.get("/user/lookup/username/:username", (c) => c.text(c.params["username"]!));
-    app.get("/event/:id/comments", (c) => c.text(c.params["id"]!));
+    app.get("/user/lookup/username/:username", (c) => c.text(c.params("username")!));
+    app.get("/event/:id/comments", (c) => c.text(c.params("id")!));
     const name = await app.handle(new Request("http://x/user/lookup/username/caf%C3%A9"));
     expect(await name.text()).toBe("café");
     const encoded = await app.handle(new Request("http://x/event/%31%32%33/comments"));

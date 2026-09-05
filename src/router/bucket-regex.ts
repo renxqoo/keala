@@ -168,7 +168,10 @@ export const compileTableRegex = (
         names.push(segment.value);
       }
       sources.push(source);
-      routes.push({ target, names, groupStart: groupCount + 1 });
+      // Frozen at registration (see the fast matcher's names): the exec
+      // array is handed out zero-copy, but the name array a handler sees via
+      // `c.paramNames` must reject in-place writes (U2 adversarial review).
+      routes.push({ target, names: Object.freeze(names), groupStart: groupCount + 1 });
       groupCount += names.length;
     }
   };
@@ -188,7 +191,12 @@ export const compileTableRegex = (
 export const matchTableRegex = (
   table: TableRegex,
   path: string,
-): { target: RouteTarget; params: Record<string, string> } | null => {
+): {
+  target: RouteTarget;
+  names: ReadonlyArray<string>;
+  values: ReadonlyArray<string>;
+  offset: number;
+} | null => {
   // Trie semantics: ONE trailing "/" is stripped before segmenting — the
   // empty-capture case ("/static/" → wildcard:"") misses here on purpose
   // and falls back to the trie, whose trailing-slash gate owns it.
@@ -200,12 +208,10 @@ export const matchTableRegex = (
   for (let i = 0; i < routes.length; i++) {
     const route = routes[i] as RegexRoute;
     if (result[route.groupStart] !== undefined) {
-      const params: Record<string, string> = Object.create(null);
-      const names = route.names;
-      for (let n = 0; n < names.length; n++) {
-        params[names[n] as string] = result[route.groupStart + n] as string;
-      }
-      return { target: route.target, params };
+      // Zero-copy: the exec array IS the values store; `offset` carries the
+      // per-route group start (slicing a RegExp result array walks the
+      // generic path — measured ~15ns/call, the single biggest U2 regression).
+      return { target: route.target, names: route.names, values: result, offset: route.groupStart };
     }
   }
   return null; // unreachable: a matched alternative always sets its groups

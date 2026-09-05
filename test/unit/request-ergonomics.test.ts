@@ -81,19 +81,43 @@ describe("R411 Fix 1: bodyOf(c)", () => {
   });
 });
 
-describe("R411 Fix 3: params is never null", () => {
-  it("an unmatched middleware reads a frozen empty object, not null", async () => {
+describe("U2: params is a functional read (never an object)", () => {
+  it("an unmatched middleware reads undefined for every name, never null", async () => {
     const app = new Keala(quiet);
     let observed: unknown = "unset";
     app.use(async (c, next) => {
       await next();
-      observed = c.params;
+      observed = c.params("id");
     });
     const res = await app.handle(req("/nowhere"));
     expect(res.status).toBe(404);
-    expect(observed).not.toBe(null);
-    expect(Object.keys(observed as object)).toEqual([]);
-    expect(Object.isFrozen(observed as object)).toBe(true);
+    expect(observed).toBe(undefined);
+  });
+
+  it("prototype names miss (no Record to pollute), missing/optional names miss", async () => {
+    const app = new Keala(quiet);
+    // null-proto: a plain object literal would swallow the "__proto__" write
+    // through its setter and the assertion would never see the probe value.
+    const seen: Record<string, unknown> = Object.create(null);
+    app.get("/u/:id/:rest?", (c) => {
+      for (const name of ["id", "rest", "toString", "__proto__", "constructor", "missing"]) {
+        seen[name] = c.params(name);
+      }
+      return c.text("ok");
+    });
+    await app.handle(req("/u/42"));
+    expect(seen["id"]).toBe("42");
+    expect(seen["rest"]).toBe(undefined); // optional, absent
+    expect(seen["toString"]).toBe(undefined);
+    expect(seen["__proto__"]).toBe(undefined);
+    expect(seen["constructor"]).toBe(undefined);
+    expect(seen["missing"]).toBe(undefined);
+  });
+
+  it("repeated names keep the LATEST capture", async () => {
+    const app = new Keala(quiet);
+    app.get("/dup/:x/:x", (c) => c.text(c.params("x") ?? "none"));
+    expect(await (await app.handle(req("/dup/1/2"))).text()).toBe("2");
   });
 });
 
@@ -103,7 +127,7 @@ describe("R411 Fix 4: c.routePath / c.routeName", () => {
     let seen = "";
     app.get("/users/:id", (c) => {
       seen = c.routePath;
-      return c.text(`user ${c.params["id"]}`);
+      return c.text(`user ${c.params("id")}`);
     });
     const res = await app.handle(req("/users/7"));
     expect(await res.text()).toBe("user 7");

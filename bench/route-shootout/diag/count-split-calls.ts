@@ -12,8 +12,8 @@ import { Keala } from "../../../src/index.ts";
 const app = new Keala({ env: "production" });
 app.get("/user", (c) => c.text("user"));
 app.get("/user/comments", (c) => c.text("user/comments"));
-app.get("/event/:id/comments", (c) => c.text(c.params["id"]!));
-app.get("/static/*", (c) => c.text(c.params["wildcard"]!));
+app.get("/event/:id/comments", (c) => c.text(c.params("id")!));
+app.get("/static/*", (c) => c.text(c.params("wildcard")!));
 app.get("/debug/count", (c) =>
   c.json({ calls: (globalThis as { __splitCalls?: number }).__splitCalls ?? 0 }),
 );

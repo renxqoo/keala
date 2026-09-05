@@ -47,7 +47,17 @@ import { Keala, type Application } from "../../src/core/app.ts";
 import type { Context } from "../../src/core/context/context.ts";
 import { Router } from "../../src/router/group.ts";
 import { compilePattern } from "../../src/router/pattern.ts";
-import { createNode, createTarget, insertPattern, matchPattern } from "../../src/router/trie.ts";
+import {
+  createNode,
+  createTarget,
+  insertPattern,
+  matchPattern,
+  type TrieMatch,
+} from "../../src/router/trie.ts";
+import { paramsRecord } from "../../src/router/router.ts";
+
+const paramsOf = (m: TrieMatch | null): Record<string, string> | null =>
+  m === null ? null : paramsRecord(m.names, m.values, m.offset);
 
 const buildTrie = (patterns: readonly string[]) => {
   const root = createNode();
@@ -95,7 +105,7 @@ describe("red team: trie matching", () => {
     const optionalLast = buildTrie(["/users/:id", "/users/:id?"]);
     expect(matchPattern(optionalFirst, "/users")).not.toBeNull();
     expect(matchPattern(optionalLast, "/users")).not.toBeNull();
-    expect(matchPattern(optionalLast, "/users/5")?.params).toEqual({ id: "5" });
+    expect(paramsOf(matchPattern(optionalLast, "/users/5"))).toEqual({ id: "5" });
   });
 
   // Fixed (2026-08-31): a trie position now carries multiple param VARIANTS
@@ -139,16 +149,16 @@ describe("red team: trie matching", () => {
     expect(segments[1]?.optional).toBe(true);
     const root = buildTrie(["/users/:id(\\d+)?"]);
     expect(matchPattern(root, "/users")).not.toBeNull();
-    expect(matchPattern(root, "/users/7")?.params).toEqual({ id: "7" });
+    expect(paramsOf(matchPattern(root, "/users/7"))).toEqual({ id: "7" });
   });
 
   it("[T4] assigns consecutive optional params left-to-right", () => {
     const root = buildTrie(["/a/:x?/:y?"]);
-    expect(matchPattern(root, "/a/1")?.params).toEqual({ x: "1" });
-    expect(matchPattern(root, "/a/1/2")?.params).toEqual({ x: "1", y: "2" });
+    expect(paramsOf(matchPattern(root, "/a/1"))).toEqual({ x: "1" });
+    expect(paramsOf(matchPattern(root, "/a/1/2"))).toEqual({ x: "1", y: "2" });
 
     const withTail = buildTrie(["/a/:x?/:y?/z"]);
-    expect(matchPattern(withTail, "/a/1/z")?.params).toEqual({ x: "1" });
+    expect(paramsOf(matchPattern(withTail, "/a/1/z"))).toEqual({ x: "1" });
   });
 });
 
@@ -208,7 +218,7 @@ describe("red team: router", () => {
       (app) => {
         const child = new Router();
         child.get("/items/:sku", (c) => {
-          c.body = { sku: c.params["sku"] };
+          c.body = { sku: c.params("sku") };
         });
         app.mount("/shop", child);
       },
@@ -222,7 +232,7 @@ describe("red team: router", () => {
       (app) => {
         const child = new Router();
         child.get("/items/:sku", (c) => {
-          c.body = { sku: c.params["sku"] };
+          c.body = { sku: c.params("sku") };
         });
         app.mount("/shop", child);
       },

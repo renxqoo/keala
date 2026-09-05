@@ -23,13 +23,13 @@ app.get("/fast", (c) => {
 });
 
 app.get("/slow/:ms", async (c) => {
-  const ms = Number(c.params?.["ms"] ?? 50);
+  const ms = Number(c.params("ms") ?? 50);
   await new Promise((resolve) => setTimeout(resolve, ms));
   c.body = `slow-${ms}`;
 });
 
 app.get("/stream/:chunks", (c) => {
-  const chunks = Number(c.params?.["chunks"] ?? 5);
+  const chunks = Number(c.params("chunks") ?? 5);
   return streamText(c, async (w) => {
     for (let i = 0; i < chunks; i++) {
       await new Promise((resolve) => setTimeout(resolve, 15));

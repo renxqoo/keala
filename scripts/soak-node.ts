@@ -21,7 +21,7 @@ app.use(async (c, next) => {
 });
 app.get("/text", (c) => c.text("hello world"));
 app.get("/json", (c) => c.json({ hello: "world", list: [1, 2, 3] }));
-app.get("/users/:id", (c) => c.text(`user ${c.params?.["id"]}`));
+app.get("/users/:id", (c) => c.text(`user ${c.params("id")}`));
 app.get("/boom", () => {
   throw new Error("soak-boom");
 });

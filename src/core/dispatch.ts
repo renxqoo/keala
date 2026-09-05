@@ -5,7 +5,7 @@
 
 import type { Application } from "./app.ts";
 import type { Chain, RouteHandler, RouterState } from "../router/router.ts";
-import { EMPTY_PARAMS, matchRoute } from "../router/router.ts";
+import { matchRoute } from "../router/router.ts";
 import { splitPathSearch } from "../utils/url.ts";
 import { isEmptyStatus } from "../http/status.ts";
 import { DIRECT_HANDLER, NOOP_TAIL, type HandlerResult } from "./compose.ts";
@@ -317,7 +317,9 @@ export const dispatchRequest = (
   c.urlValue = search.length === 0 ? path : path + search;
   const match = matchRoute(router, path);
   if (match !== null) {
-    c.params = match.params ?? EMPTY_PARAMS;
+    c.paramNames = match.names;
+    c.paramValues = match.values;
+    c.paramOffset = match.offset;
     // Matched-pattern facts (R411 Fix 4), published beside params: visible
     // to every chain layer, the 405 path below and post-next() observers —
     // metrics labels and span names get the route TEMPLATE, never the

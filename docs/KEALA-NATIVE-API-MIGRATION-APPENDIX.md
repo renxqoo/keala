@@ -1,48 +1,16 @@
 # 附录 M — 受影响面实录（grep 生成 2026-09-06，实施时随单元推进复核刷新）
 
-## M1 test/ 中使用 .params（任意接收者，含 ?. 形态）的文件（U2 机械替换面——c.params 与 matchRoute/matchPattern 产物消费都在内）
+## M1 test/ 中使用 .params（任意接收者，含 ?. 形态）的文件（U2 机械替换面 — **已完成 2026-09-06**）
 
 > 命令：grep -rlE '\.params(\?\.)?\[' test/
 
-```
-test/integration/concurrency.test.ts
-test/integration/context-lifecycle.test.ts
-test/integration/lifecycle-contracts-strategy.test.ts
-test/integration/lifecycle-ha-review-load.test.ts
-test/integration/lifecycle-ha-review-shutdown.test.ts
-test/integration/lifecycle-overload.test.ts
-test/integration/lifecycle-review-signals.test.ts
-test/integration/native-sink-parity.test.ts
-test/integration/node-adapter.test.ts
-test/integration/overload-failure-modes.test.ts
-test/integration/pooling-wire.test.ts
-test/integration/pooling.test.ts
-test/middleware/cache.test.ts
-test/middleware/coverage-topups.test.ts
-test/middleware/upstream-hardening.test.ts
-test/perf/evidence-budgets.test.ts
-test/property/invariants-routing.test.ts
-test/property/rtc-fuzz-locks.test.ts
-test/security/admission.test.ts
-test/security/component-redteam.test.ts
-test/security/router-abuse-2.test.ts
-test/security/router-abuse-locks.test.ts
-test/security/router-abuse.test.ts
-test/unit/app-pipeline.test.ts
-test/unit/app-runtime-locks.test.ts
-test/unit/app-scoped-use.test.ts
-test/unit/app-surface.test.ts
-test/unit/request-ergonomics.test.ts
-test/unit/router-matching-locks.test.ts
-test/unit/router-registration-locks.test.ts
-test/unit/router-trie-differential.test.ts
-test/unit/router-trie-fuzz.test.ts
-test/unit/router-trie.test.ts
-test/unit/router.test.ts
-test/unit/surface-regressions.test.ts
-```
-
-共 35 文件 / 123 处
+U2 处置：35 文件/123 处 bracket 形态 + 28 处 `.params.x` 点形态（原 M1 grep 的盲区，
+甄别时补获）+ 6 处 `{ ...c.params }` 展开形态 + `Object.keys(c.params)` 假绿 1 处
+（invariants-routing:208——函数使 Object.keys 恒空、tsc 静默放行，已改槽位断言）
+全部改写为 `c.params(name)` 函数式。match 产物消费（9 文件）改走
+`paramsRecord(names, values, offset)`。终态 grep（含 bench/examples/scripts 与
+`.mjs`）零残留（bench/server-koa.mjs 的 `ctx.params.id` 是 koa 对照选手自身 API，
+保留）。
 
 ## M2 test/ 中使用 Koa 式响应 setter 赋值的文件（U3 改写/删除面）
 
@@ -329,34 +297,14 @@ src/core/respond.ts:88:  // Post-next observers (logging, metrics by exact code)
 src/core/registration.ts:66:    // EVERY request (the c.status setter throws).
 ```
 
-## M6 bench/examples/scripts 消费方（随所属单元机械同步）
+## M6 bench/examples/scripts 消费方（随所属单元机械同步 — **params 面已完成 2026-09-06**）
 
-```
--- c.params[ ：
-bench/compare-hono-hotpaths.ts
-bench/route-shootout/diag/count-split-calls.ts
-bench/route-shootout/diag/keala-bun-prof.ts
-bench/route-shootout/diag/profile-loop.ts
-bench/route-shootout/servers/keala-bun.ts
-bench/route-shootout/servers/keala-node.ts
-bench/server-keala-node.ts
-bench/server-keala.ts
-bench/verify-hotpaths.ts
-examples/app-node.ts
-examples/app.ts
--- 响应 setter：
-bench/lifecycle-overhead.ts
-bench/server-keala-node.ts
-bench/server-keala.ts
-bench/verify-baseline.ts
-examples/app-node.ts
-examples/app.ts
-scripts/drain-server-node.mjs
-scripts/drain-server.ts
-scripts/smoke.ts
-scripts/soak-node.ts
-scripts/soak.ts
-```
+U2 处置：bench 11 文件 + examples 2 + scripts 6（smoke/soak/soak-node/drain-server/
+drain-server-node.mjs/artifact-server.mjs——两个 `.mjs` 先后漏扫，后者
+`c.params?.id` 点形态逃过 bracket/点收口 grep 家族且使 process-check 红，由
+U2 对抗审查抓获）全部函数式化。响应 setter 面归 U3c。
+**收口 grep 家族（U2 后增补）**：`\.params(\?\.)?\[`、`\.params\?\.`、
+`\b(c|ctx)\.params\.[A-Za-z_]`、`\.\.\.c\.params`、`Object\.keys\(c\.params\)`。
 
 ## M7 双命中文件（同时命中 M1 与 M2，两个单元都要过，防漏改标记）
 

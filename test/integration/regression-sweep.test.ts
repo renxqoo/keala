@@ -118,7 +118,7 @@
  *         createTarget()`), so the layers of BOTH patterns accumulate on
  *         ONE target — and the skip terminal (matched by `/x`, which the
  *         required pattern cannot match) dispatches into that shared chain:
- *         `h1` RUNS for `GET /x` with `c.params.a === undefined`. Real
+ *         `h1` RUNS for `GET /x` with `c.params("a") === undefined`. Real
  *         hono (verified live): `/x` runs only the optional route; express
  *         path-to-regexp: `/x/:a` never matches `/x`. A required-param
  *         handler executing without its param is a per-request NPE factory.

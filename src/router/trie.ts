@@ -69,11 +69,24 @@ export interface TrieNode {
   paramMore: ParamChild[] | null;
   wildcard: ParamChild | null;
   target: RouteTarget | null;
+  /**
+   * The param-name sequence of every path reaching this TERMINAL, set by
+   * insertPattern (U2: the trie is a tree — one inbound edge per non-root
+   * node, so a terminal's name chain is fixed at registration). The match
+   * hands this array straight to the product: zero per-request name
+   * construction. Repeated names stay repeated — the reader's lastIndexOf
+   * takes the latest capture. Null on non-terminals and on tries wired by
+   * hand instead of insertPattern (the matcher falls back to chain walking).
+   */
+  matchNames: string[] | null;
 }
 
 export interface TrieMatch {
   target: RouteTarget;
-  params: Record<string, string> | null;
+  names: ReadonlyArray<string>;
+  values: ReadonlyArray<string>;
+  /** See RouteMatch.offset — always 0 for trie products. */
+  offset: number;
 }
 
 export const createNode = (): TrieNode => ({
@@ -82,6 +95,7 @@ export const createNode = (): TrieNode => ({
   paramMore: null,
   wildcard: null,
   target: null,
+  matchNames: null,
 });
 
 export const createTarget = (): RouteTarget => ({
@@ -145,7 +159,7 @@ export const matchPattern = (root: TrieNode, path: string): TrieMatch | null => 
     const { node, index, params } = frame;
 
     if (index === segments.length) {
-      if (node.target !== null) return { target: node.target, params: recordOf(params) };
+      if (node.target !== null) return matchAt(node, params);
       // A trailing wildcard with an EMPTY capture answers the bare
       // prefix+"/" (buildURL emits exactly that for {wildcard: ""}) — and the
       // ROOT wildcard ("/*") answers "/" itself: express/hono semantics, and
@@ -227,17 +241,62 @@ export const matchPattern = (root: TrieNode, path: string): TrieMatch | null => 
   return null;
 };
 
-const recordOf = (link: ParamLink | null): Record<string, string> => {
-  const params: Record<string, string> = Object.create(null);
+/** Frozen empties for zero-param terminal hits (see matchAt). */
+const EMPTY_MATCH_NAMES: string[] = Object.freeze([]) as unknown as string[];
+const EMPTY_MATCH_VALUES: string[] = Object.freeze([]) as unknown as string[];
+
+/**
+ * Build the match product at a terminal. The fast path uses the terminal's
+ * registration-time `matchNames` (zero per-request name construction): the
+ * cons-list is newest-first and exactly as long as the name chain, so the
+ * values array is preallocated and filled back-to-front — no dedup needed
+ * (repeated names stay repeated; the reader's lastIndexOf takes the latest
+ * capture). `matchOf` below is the fallback for hand-wired tries whose
+ * terminals carry no matchNames.
+ */
+const matchAt = (node: TrieNode, params: ParamLink | null): TrieMatch => {
+  const target = node.target as RouteTarget;
+  const names = node.matchNames;
+  if (names === null) return matchOf(target, params);
+  const len = names.length;
+  if (len === 0) return { target, names: EMPTY_MATCH_NAMES, values: EMPTY_MATCH_VALUES, offset: 0 };
+  // Fixed-length prealloc (Array.from keeps the oxlint gate happy; the
+  // backfill below makes every slot own — no holes survive).
+  const values = Array.from<string>({ length: len });
+  let i = len;
+  let count = 0;
+  for (let current = params; current !== null; current = current.next) {
+    values[--i] = current.value;
+    count++;
+  }
+  // Chain shorter than the registered name chain: the mid-path wildcard
+  // entry point skips its link when the captured rest is EMPTY ("/w/a//"
+  // trailing-empty-segment form — the other entry point, :168, does add the
+  // "" capture). Positional backfill would misattribute the neighbor's
+  // value to the missing name; rebuild from the chain instead (matchOf
+  // dedups by name, immune to the length mismatch). U2 adversarial review.
+  if (count !== len) return matchOf(target, params);
+  return { target, names, values, offset: 0 };
+};
+
+/**
+ * Fallback product builder from the cons-list alone. The list is newest-first;
+ * first append wins, so the LATEST capture of a repeated name survives
+ * (express/@koa/router semantics — the same rule `c.params(name)` reads
+ * with via lastIndexOf).
+ */
+const matchOf = (target: RouteTarget, link: ParamLink | null): TrieMatch => {
+  const names: string[] = [];
+  const values: string[] = [];
   let current = link;
   while (current !== null) {
-    // The cons-list is newest-first; first assignment wins, so the LATEST
-    // capture of a repeated name is the one that survives (express and
-    // @koa/router semantics, and what the fast matcher does too).
-    if (!(current.name in params)) params[current.name] = current.value;
+    if (!names.includes(current.name)) {
+      names.push(current.name);
+      values.push(current.value);
+    }
     current = current.next;
   }
-  return params;
+  return { target, names, values, offset: 0 };
 };
 
 /** Split an already-normalized path into segments (no trailing slash). */
@@ -276,8 +335,18 @@ const variantFor = (node: TrieNode, pattern: RegExp | null): ParamChild | undefi
  * plain `:id`.
  */
 export const insertPattern = (root: TrieNode, segments: readonly CompiledSegment[]): TrieNode[] => {
+  // The param-name chain to the current recursion depth (U2): snapshotted
+  // onto each terminal as its matchNames. push/pop around the consume edges;
+  // skip edges and statics add nothing.
+  const names: string[] = [];
   const insert = (node: TrieNode, i: number): TrieNode[] => {
-    if (i === segments.length) return [node];
+    if (i === segments.length) {
+      // Frozen: handed to `c.paramNames` per request — in-place writes must
+      // throw rather than corrupt the route (U2 adversarial review).
+      if (node.matchNames === null)
+        node.matchNames = Object.freeze(names.slice()) as unknown as string[];
+      return [node];
+    }
     const segment = segments[i] as CompiledSegment;
     if (segment.kind === "wildcard") {
       if (node.wildcard === null) {
@@ -288,7 +357,10 @@ export const insertPattern = (root: TrieNode, segments: readonly CompiledSegment
           skipNode: null,
         };
       }
-      return insert(node.wildcard.node, i + 1);
+      names.push("wildcard");
+      const terminals = insert(node.wildcard.node, i + 1);
+      names.pop();
+      return terminals;
     }
     if (segment.kind === "param") {
       if (node.param === null) {
@@ -318,7 +390,9 @@ export const insertPattern = (root: TrieNode, segments: readonly CompiledSegment
       }
       const variant = variantFor(node, segment.pattern);
       if (variant === undefined) throw new TypeError("unreachable param variant");
+      names.push(segment.value);
       const consumed = insert(variant.node, i + 1);
+      names.pop();
       if (!segment.optional) return consumed;
       // The remainder is reachable WITHOUT consuming this param — but only
       // through the dedicated skip subtree, so required-param siblings can

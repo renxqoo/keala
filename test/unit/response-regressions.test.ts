@@ -213,7 +213,7 @@ describe("HEAD handling", () => {
 describe("router edges", () => {
   it("optional param: both shapes work, params never null", async () => {
     const app = new Keala({ env: "test" });
-    app.get("/a/:b?", (c) => c.json({ b: c.params.b ?? null }));
+    app.get("/a/:b?", (c) => c.json({ b: c.params("b") ?? null }));
     const a = await (await hit(app, "/a")).text();
     const b = await (await hit(app, "/a/x")).text();
     expect(a).toBe('{"b":null}');
@@ -222,14 +222,14 @@ describe("router edges", () => {
 
   it("wildcard root answers /", async () => {
     const app = new Keala({ env: "test" });
-    app.get("/*", (c) => c.text(`w:${c.params.wildcard}`));
+    app.get("/*", (c) => c.text(`w:${c.params("wildcard")}`));
     expect(await (await hit(app, "/")).text()).toBe("w:");
     expect(await (await hit(app, "/x/y")).text()).toBe("w:x/y");
   });
 
   it("percent-encoded param is decoded once", async () => {
     const app = new Keala({ env: "test" });
-    app.get("/u/:name", (c) => c.text(c.params.name ?? ""));
+    app.get("/u/:name", (c) => c.text(c.params("name") ?? ""));
     expect(await (await hit(app, "/u/a%20b")).text()).toBe("a b");
     expect(await (await hit(app, "/u/a%2Fb")).text()).toBe("a/b");
   });
@@ -237,7 +237,7 @@ describe("router edges", () => {
   it("static route prefers exact over dynamic; 405 Allow lists methods", async () => {
     const app = new Keala({ env: "test" });
     app.get("/users/all", (c) => c.text("all"));
-    app.get("/users/:id", (c) => c.text(`id:${c.params.id}`));
+    app.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
     expect(await (await hit(app, "/users/all")).text()).toBe("all");
     expect(await (await hit(app, "/users/7")).text()).toBe("id:7");
     app.post("/users/7", (c) => c.text("posted"));
