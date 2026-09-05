@@ -24,15 +24,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
-import { startBunServer } from "../src/adapters/bun.ts";
-import { bodyOf, createBodyParser } from "../src/plugins/body-parser.ts";
-import { validator, type StandardSchema } from "../src/middleware/validator.ts";
-import { cors, csrf } from "../src/middleware/cors.ts";
-import { serveStatic } from "../src/middleware/serve-static.ts";
-import { streamSSE } from "../src/helpers/streams.ts";
-import { html, raw } from "../src/helpers/html.ts";
-import { Router } from "../src/router/group.ts";
+import { Keala } from "../../src/core/app.ts";
+import { startBunServer } from "../../src/adapters/bun.ts";
+import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
+import { validator, type StandardSchema } from "../../src/middleware/validator.ts";
+import { cors, csrf } from "../../src/middleware/cors.ts";
+import { serveStatic } from "../../src/middleware/serve-static.ts";
+import { streamSSE } from "../../src/helpers/streams.ts";
+import { html, raw } from "../../src/helpers/html.ts";
+import { Router } from "../../src/router/group.ts";
 
 const quiet = { env: "test", silent: true } as const;
 const req = (path: string, init: RequestInit = {}): Request =>

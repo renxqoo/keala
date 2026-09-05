@@ -28,8 +28,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
-import type { Context } from "../src/core/context/context.ts";
+import { Keala } from "../../src/core/app.ts";
+import type { Context } from "../../src/core/context/context.ts";
 import {
   createCookies,
   parseCookies,
@@ -37,11 +37,11 @@ import {
   sign,
   unsign,
   type CookieOptions,
-} from "../src/context/cookies.ts";
-import { acceptsCharset, acceptsEncoding, acceptsType } from "../src/negotiation/accepts.ts";
-import { typeIs } from "../src/negotiation/typeis.ts";
-import { expandShorthand, extensionFromMime, mimeFromExtension } from "../src/utils/mime.ts";
-import { parseQuery } from "../src/utils/query.ts";
+} from "../../src/context/cookies.ts";
+import { acceptsCharset, acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
+import { typeIs } from "../../src/negotiation/typeis.ts";
+import { expandShorthand, extensionFromMime, mimeFromExtension } from "../../src/utils/mime.ts";
+import { parseQuery } from "../../src/utils/query.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: InstanceType<typeof Keala>, url: string, init?: RequestInit) =>

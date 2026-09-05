@@ -43,11 +43,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala, type Application } from "../src/core/app.ts";
-import type { Context } from "../src/core/context/context.ts";
-import { Router } from "../src/router/group.ts";
-import { compilePattern } from "../src/router/pattern.ts";
-import { createNode, createTarget, insertPattern, matchPattern } from "../src/router/trie.ts";
+import { Keala, type Application } from "../../src/core/app.ts";
+import type { Context } from "../../src/core/context/context.ts";
+import { Router } from "../../src/router/group.ts";
+import { compilePattern } from "../../src/router/pattern.ts";
+import { createNode, createTarget, insertPattern, matchPattern } from "../../src/router/trie.ts";
 
 const buildTrie = (patterns: readonly string[]) => {
   const root = createNode();

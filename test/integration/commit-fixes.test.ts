@@ -7,9 +7,9 @@
  * and zz-red-ux-2.
  */
 import { describe, expect, it } from "vitest";
-import { Keala } from "../src/index.ts";
-import { finalize } from "../src/core/respond.ts";
-import type { Context } from "../src/index.ts";
+import { Keala } from "../../src/index.ts";
+import { finalize } from "../../src/core/respond.ts";
+import type { Context } from "../../src/index.ts";
 
 const hit = async (
   app: InstanceType<typeof Keala>,

@@ -15,9 +15,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
-import { startNodeServer } from "../src/adapters/node.ts";
-import type { CloseOptions } from "../src/types.ts";
+import { Keala } from "../../src/core/app.ts";
+import { startNodeServer } from "../../src/adapters/node.ts";
+import type { CloseOptions } from "../../src/types.ts";
 
 const quiet = { env: "test" } as const;
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

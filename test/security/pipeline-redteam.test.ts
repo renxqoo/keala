@@ -29,7 +29,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala, type Application } from "../src/core/app.ts";
+import { Keala, type Application } from "../../src/core/app.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, request: Request) => app.handle(request);

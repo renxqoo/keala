@@ -61,10 +61,10 @@ import { join } from "node:path";
 import { connect } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Keala, type Application } from "../src/core/app.ts";
-import { startBunServer, type ServeImplementation } from "../src/adapters/bun.ts";
-import { listen, type NodeServerHandle } from "../src/adapters/node.ts";
-import { createError } from "../src/http/errors.ts";
+import { Keala, type Application } from "../../src/core/app.ts";
+import { startBunServer, type ServeImplementation } from "../../src/adapters/bun.ts";
+import { listen, type NodeServerHandle } from "../../src/adapters/node.ts";
+import { createError } from "../../src/http/errors.ts";
 
 const quiet = { env: "test", silent: true } as const;
 const req = (path: string, init: RequestInit = {}): Request =>

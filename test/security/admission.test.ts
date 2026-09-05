@@ -10,8 +10,8 @@
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
-import type { NodeServerHandle } from "../src/adapters/node.ts";
+import { Keala } from "../../src/core/app.ts";
+import type { NodeServerHandle } from "../../src/adapters/node.ts";
 
 const deferred = <T = void>(): { promise: Promise<T>; resolve: (value: T) => void } => {
   let resolve!: (value: T) => void;

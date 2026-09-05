@@ -14,8 +14,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Keala } from "../src/core/app.ts";
-import { startNodeServer, type NodeServerHandle } from "../src/adapters/node.ts";
+import { Keala } from "../../src/core/app.ts";
+import { startNodeServer, type NodeServerHandle } from "../../src/adapters/node.ts";
 
 const deferred = <T = void>(): { promise: Promise<T>; resolve: (value: T) => void } => {
   let resolve!: (value: T) => void;
@@ -282,7 +282,7 @@ describe("SEC-8: signal bridge — request input cannot synthesize process signa
   // only real process signals reach the bridge; no request path reaches
   // process.kill/emit/exit anywhere in src.
   it("SEC-8a: signal-shaped requests leave the bridge untouched; src has no process control", async () => {
-    const srcDir = fileURLToPath(new URL("../src", import.meta.url));
+    const srcDir = fileURLToPath(new URL("../../src", import.meta.url));
     for (const file of srcFilesUnder(srcDir).filter((f) => f.endsWith(".ts"))) {
       expect(readFileSync(file, "utf8")).not.toMatch(/process\s*\.\s*(kill|exit|emit|abort)\s*\(/);
     }

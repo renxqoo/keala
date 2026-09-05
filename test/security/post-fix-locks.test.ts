@@ -14,12 +14,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { Keala, startBunServer, type ServeImplementation } from "../src/index.ts";
-import { createBodyParser } from "../src/plugins/body-parser.ts";
-import { cache } from "../src/middleware/cache.ts";
-import { csrfToken } from "../src/middleware/csrf-token.ts";
-import { etag } from "../src/middleware/etag.ts";
-import { validator } from "../src/middleware/validator.ts";
+import { Keala, startBunServer, type ServeImplementation } from "../../src/index.ts";
+import { createBodyParser } from "../../src/plugins/body-parser.ts";
+import { cache } from "../../src/middleware/cache.ts";
+import { csrfToken } from "../../src/middleware/csrf-token.ts";
+import { etag } from "../../src/middleware/etag.ts";
+import { validator } from "../../src/middleware/validator.ts";
 
 const quiet = { env: "test" } as const;
 const readJson = (body: unknown): { json(): Promise<unknown> } =>

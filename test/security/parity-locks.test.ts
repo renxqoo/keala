@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
+import { Keala } from "../../src/core/app.ts";
 
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 

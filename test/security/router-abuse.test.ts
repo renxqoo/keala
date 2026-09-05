@@ -30,10 +30,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala, Router } from "../src/index.ts";
-import { compilePattern } from "../src/router/pattern.ts";
-import { createRouterState, matchRoute, registerDef } from "../src/router/router.ts";
-import { createNode, createTarget, insertPattern, matchPattern } from "../src/router/trie.ts";
+import { Keala, Router } from "../../src/index.ts";
+import { compilePattern } from "../../src/router/pattern.ts";
+import { createRouterState, matchRoute, registerDef } from "../../src/router/router.ts";
+import { createNode, createTarget, insertPattern, matchPattern } from "../../src/router/trie.ts";
 
 const quiet = { env: "test", silent: true } as const;
 const req = (url: string, init: RequestInit = {}): Request => new Request(url, init);

@@ -146,14 +146,14 @@
  */
 import { describe, expect, it } from "vitest";
 import Negotiator from "negotiator";
-import { Keala, type Application } from "../src/index.ts";
-import { cache } from "../src/middleware/cache.ts";
+import { Keala, type Application } from "../../src/index.ts";
+import { cache } from "../../src/middleware/cache.ts";
 import {
   acceptsCharset,
   acceptsEncoding,
   acceptsLanguage,
   acceptsType,
-} from "../src/negotiation/accepts.ts";
+} from "../../src/negotiation/accepts.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, req: Request) => app.handle(req);

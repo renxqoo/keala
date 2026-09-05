@@ -52,9 +52,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
-import { Router } from "../src/router/group.ts";
-import { compilePattern } from "../src/router/pattern.ts";
+import { Keala } from "../../src/core/app.ts";
+import { Router } from "../../src/router/group.ts";
+import { compilePattern } from "../../src/router/pattern.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);

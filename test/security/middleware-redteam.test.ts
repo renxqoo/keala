@@ -49,12 +49,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
-import { csrf } from "../src/middleware/cors.ts";
-import { cache } from "../src/middleware/cache.ts";
-import { compress } from "../src/middleware/etag.ts";
-import { secureHeaders, requestId } from "../src/middleware/headers.ts";
-import { createError } from "../src/http/errors.ts";
+import { Keala } from "../../src/core/app.ts";
+import { csrf } from "../../src/middleware/cors.ts";
+import { cache } from "../../src/middleware/cache.ts";
+import { compress } from "../../src/middleware/etag.ts";
+import { secureHeaders, requestId } from "../../src/middleware/headers.ts";
+import { createError } from "../../src/http/errors.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);

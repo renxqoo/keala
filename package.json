@@ -76,11 +76,12 @@
     "bench": "node bench/run.mjs",
     "smoke": "bun scripts/smoke.ts",
     "drain-verify": "npm run build && bun scripts/drain-verify.ts",
-    "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage && bun scripts/smoke.ts && bun scripts/example-check.ts",
+    "verify": "oxfmt --check && oxlint && tsc --noEmit && node scripts/test-size-guard.mjs && vitest run --coverage && bun scripts/smoke.ts && bun scripts/example-check.ts",
     "soak": "bun scripts/soak.ts",
     "example:check": "bun scripts/example-check.ts",
     "process:check": "node scripts/process-check.mjs",
-    "soak:node": "node --experimental-strip-types --expose-gc scripts/soak-node.ts"
+    "soak:node": "node --experimental-strip-types --expose-gc scripts/soak-node.ts",
+    "test:size": "node scripts/test-size-guard.mjs"
   },
   "devDependencies": {
     "@hono/node-server": "2.1.1",

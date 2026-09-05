@@ -15,8 +15,8 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { Keala } from "../src/core/app.ts";
-import { createError } from "../src/http/errors.ts";
+import { Keala } from "../../src/core/app.ts";
+import { createError } from "../../src/http/errors.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: InstanceType<typeof Keala>, request: Request) => app.handle(request);

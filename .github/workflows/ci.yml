@@ -21,6 +21,8 @@ jobs:
       - run: bunx oxfmt --check
       - run: bunx oxlint
       - run: bunx tsc --noEmit
+      # Test-file size invariant from the 0.7.4 test reorg: no file over 500 lines.
+      - run: node scripts/test-size-guard.mjs
       # Build BEFORE the suites: HA-7 spawns a child that imports ./dist —
       # a fresh checkout without this ordering fails the test on a missing
       # module, not on behavior.

@@ -9,8 +9,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { connect } from "node:net";
 
-import { Keala } from "../src/core/app.ts";
-import { startNodeServer } from "../src/adapters/node.ts";
+import { Keala } from "../../src/core/app.ts";
+import { startNodeServer } from "../../src/adapters/node.ts";
 
 const requestFor = (path: string, init?: RequestInit): Request =>
   new Request(`http://localhost:3000${path}`, init);
