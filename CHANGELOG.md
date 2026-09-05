@@ -4,6 +4,26 @@
 
 ## Unreleased
 
+性能:路由快速层整表化;测试目录按功能重组(详见下)。
+
+### 性能
+
+- **整表单 regex 快速层**(router):R413 的 per-bucket regex 升级为
+  整表编译——全部 eligible 动态模式进一个 anchored alternation
+  (exact 按 trie 优先级排序在前、通配兜底在后),动态匹配省掉首段
+  slice 分配、buckets Map 查找、slash 计数与 byCount 二级查找。
+  fastDynamic/bucket.fast 合并为 fastIndex 切片数组(≤8 桶启用,宽表
+  走整表 regex 防线性 startsWith 退化);通配兜底纯度规则从桶级改为
+  首段级。路由隔离实测(Mac / Linux 服务器,vs hono RegExpRouter):
+  4 段参数 2.05x/1.94x → **0.90x/0.95x**,mixed 2.23x/1.93x →
+  1.09x/1.11x,wildcard 1.94x/1.91x → 1.29x/1.26x;适配层(完整
+  serve 路径)全形状 ≥ hono。剩余差为 params Record 构造(公开契约,
+  见 docs/SHOOTOUT-LINUX-SERVER-DIAGNOSIS.md 的分层归因)。
+- 链装配抽出 `router/chains.ts`,router.ts 521→460 行(修复先在的
+  oxlint max-lines 违规)。
+
+### 内部
+
 测试目录整理:按"被测功能"而非"评审轮次"组织(零测试丢失,2658 项与
 coverage 95.41/91.06/96.36/97.07 与整理前逐项一致)。
 
