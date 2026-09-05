@@ -33,7 +33,7 @@ coverage 95.41/91.06/96.36/97.07 与整理前逐项一致)。
   (每中间件一文件)、`integration/`(生命周期/适配器/sink/commit 契约)、
   `security/`(红队与审计,按攻击面)、`parity/`(koa/hono 对齐)、
   `property/`(属性测试 + `.mts` rig)、`perf/`(时序敏感围栏,独立不合并)。
-  171 个轮次命名文件(agent-r46-*、redteam-*、zz-red-*、coverage-gaps-* 等)
+  171 个轮次命名文件(`agent-r46-`/`redteam-`/`zz-red-`/`coverage-gaps-` 前缀等)
   → 162 个功能命名文件,全部 ≤500 行(oxlint max-lines 门禁)。
 - 5 个超限大文件按语义拆分:`agent-r46-review-contract`(1200 行)→
   contracts-{close,admission,deadline,strategy};`agent-r46-review-bugs`(824)→

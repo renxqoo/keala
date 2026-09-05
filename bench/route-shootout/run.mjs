@@ -26,7 +26,11 @@ const GO_BINARY = `${GO_DIR}/server-shootout-go`;
 // 机器上 rsync 来的 darwin 产物）——没有 go 就静默跳过这条腿。
 const GO_VERSION = (() => {
   try {
-    return execSync("go version", { encoding: "utf8" }).trim().match(/go(\d+\.\d+)/)?.[1] ?? "?";
+    return (
+      execSync("go version", { encoding: "utf8" })
+        .trim()
+        .match(/go(\d+\.\d+)/)?.[1] ?? "?"
+    );
   } catch {
     return undefined;
   }
