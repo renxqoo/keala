@@ -158,11 +158,11 @@ describe("compress: Vary staging without append's array form", () => {
     expect(res.headers.get("vary")).toBe("Accept-Encoding");
   });
 
-  it("state-mode decline (pre-commit staging) carries the same Vary", async () => {
+  it("identity decline still carries the same Vary (staged post-next)", async () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/t", (c) => {
-      c.body = "tiny-body";
+      return c.text("tiny-body");
     });
     const res = await app.handle(req("/t", { headers: { "accept-encoding": "identity" } }));
     expect(res.headers.get("vary")).toBe("Accept-Encoding");

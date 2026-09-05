@@ -73,10 +73,7 @@ api.get("/events", (c) =>
 app.mount("/", api);
 app.get("/docs/*", serveStatic({ root: "./examples/public", prefix: "/docs" }));
 
-app.notFound((c) => {
-  c.status = 404;
-  c.body = "nothing here";
-});
+app.notFound((c) => c.text("nothing here", 404));
 
 const port = Number(process.argv[2] ?? 3188);
 listen(app, port, "127.0.0.1", () => {

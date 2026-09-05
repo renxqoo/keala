@@ -112,10 +112,7 @@ app.ws("/chat", {
   },
 });
 
-app.notFound((c) => {
-  c.status = 404;
-  c.body = "nothing here";
-});
+app.notFound((c) => c.text("nothing here", 404));
 
 const port = Number(process.argv[2] ?? 3100);
 const server = app.listen({ port });

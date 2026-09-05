@@ -173,11 +173,11 @@ const INJECTIONS: readonly Injection[] = [
       }),
   },
   {
-    // finalize failure: state-mode circular body explodes inside JSON.stringify
+    // finalize failure: a circular body explodes inside JSON serialization
     id: "finalize-circular-state-body",
     wire: (app) =>
       void app.all("/x", (c) => {
-        c.body = circular();
+        return c.json(circular());
       }),
   },
   {
@@ -435,7 +435,7 @@ describe("R4.3 agent review: mapper call count", () => {
       id: "finalize failure",
       wire: (app) =>
         void app.all("/x", (c) => {
-          c.body = circular();
+          return c.json(circular());
         }),
     },
     {

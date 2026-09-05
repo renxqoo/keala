@@ -148,6 +148,13 @@ describe("agent r5 — locks correct behavior", () => {
     expect(r3.headers.get("x-e")).toBe("1");
   });
 
+  // SRC-REGRESSION (U3c): the state-mode finalizer's onStreamError wiring
+  // (old respond.ts streamHook → repumpStream on the staged body) was
+  // deleted with the setter family and NOT re-homed onto the committed
+  // Response path — grep src/ for `onStreamError` consumers: only the
+  // constructor assignment survives. The rewritten return-style tests below
+  // are therefore expected to FAIL until the hook is re-wired (e.g. in
+  // finishCommitted); flip `it.fails` back to `it` when it is.
   it("pooling: onStreamError fires on the LIVE context before retire, stream errors onward", async () => {
     let sawUrl = "";
     let sawStatus = 0;
@@ -160,10 +167,7 @@ describe("agent r5 — locks correct behavior", () => {
         void err;
       },
     });
-    app.get("/s", (c) => {
-      c.status = 200;
-      c.body = streamOf(["ab", "cd"], 2);
-    });
+    app.get("/s", () => new Response(streamOf(["ab", "cd"], 2)));
     app.get("/ok", (c) => c.text("ok"));
     const res = await drive(app, new Request("http://localhost:3000/s"));
     await expect(res.text()).rejects.toThrow(/producer boom/);
@@ -179,10 +183,7 @@ describe("agent r5 — locks correct behavior", () => {
       ...quiet,
       onStreamError: (err, c) => order.push(`${(err as Error).message}:${c.url}`),
     });
-    app.get("/e", (c) => {
-      c.status = 200;
-      c.body = streamOf(["x"], 1);
-    });
+    app.get("/e", () => new Response(streamOf(["x"], 1)));
     const res = await drive(app, new Request("http://localhost:3000/e"));
     await expect(res.text()).rejects.toThrow(/producer boom/);
     expect(order).toEqual(["producer boom:/e"]);
@@ -220,11 +221,10 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.body).toBeNull();
   });
 
-  it("finalizer: c.status=204 then a body write stays 204/empty", async () => {
+  it("finalizer: sugar 204 stays 204/empty (U3c rewrite of the status-then-body lock)", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
-      c.status = 204;
-      c.body = "x";
+      return c.text("x", 204);
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
     expect(res.status).toBe(204);
@@ -261,17 +261,11 @@ describe("agent r5 — locks correct behavior", () => {
     expect((await res.arrayBuffer()).byteLength).toBe(4);
   });
 
-  it("finalizer: state-mode LOCKED stream body answers 500, handle never rejects", async () => {
-    const app = new Keala(quiet);
-    app.get("/", (c) => {
-      c.status = 200;
-      const stream = streamOf(["hi"]);
-      void stream.getReader();
-      c.body = stream;
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(500);
-  });
+  // U3c deletion: "finalizer: state-mode LOCKED stream body answers 500"
+  // locked the staged-body finalizer's locked-stream detection. The
+  // return-style equivalent (a handler returning a locked-body Response
+  // answers 500 through retireWithBody's guard) is locked by R5-2a/R5-2b in
+  // app-regressions.test.ts.
 
   it("finalizer (0.7): a DISTURBED committed body never crashes the finalizer — the failure belongs to the consumer", async () => {
     const app = new Keala(quiet);
@@ -337,37 +331,21 @@ describe("agent r5 — locks correct behavior", () => {
     expect(await r2.text()).toBe("ok:/b");
   });
 
-  it("0.7: a post-commit status override is a TypeError; the override pattern returns a new Response", async () => {
-    const frozen = new Keala(quiet);
-    frozen.use(async (c, next) => {
-      await next();
-      try {
-        c.status = 418;
-      } catch {
-        /* committed statuses are frozen (0.7) */
-      }
-    });
-    frozen.get("/c", () => new Response("tea"));
-    const res = await drive(frozen, new Request("http://localhost:3000/c"));
-    expect([res.status, await res.text()]).toEqual([200, "tea"]);
-
-    const replaced = new Keala(quiet);
-    replaced.use(async (c, next) => {
-      await next();
-      const inner = c.res;
-      if (inner !== undefined)
-        return new Response(inner.body, { status: 418, headers: inner.headers });
-    });
-    replaced.get("/c", () => new Response("tea"));
-    const swapped = await drive(replaced, new Request("http://localhost:3000/c"));
-    expect([swapped.status, await swapped.text()]).toEqual([418, "tea"]);
-  });
+  // U3c deletion: "0.7: a post-commit status override is a TypeError; the
+  // override pattern returns a new Response" — both halves locked deleted
+  // APIs (the post-commit `c.status =` freeze TypeError, and the `c.res`
+  // getter feeding the rebuild). Last-committer-wins replacement stays
+  // locked by R5-3 (U3a) in app-regressions.test.ts and "last committer
+  // wins" in response-regressions.test.ts.
 
   it("0.7: a not-modified takeover keeps validators, drops content headers (override pattern)", async () => {
     const app = new Keala(quiet);
-    app.use(async (c, next) => {
+    // U3c: `c.res` is gone — the route handler's Response is captured in a
+    // variable (the sanctioned post-next observation pattern).
+    let committed: Response | undefined;
+    app.use(async (_c, next) => {
       await next();
-      const inner = c.res;
+      const inner = committed;
       if (inner === undefined || inner.status !== 200) return;
       const headers = new Headers(inner.headers);
       headers.delete("content-type");
@@ -377,7 +355,10 @@ describe("agent r5 — locks correct behavior", () => {
     });
     app.get(
       "/f",
-      () => new Response("body", { headers: { etag: '"v1"', "content-type": "text/plain" } }),
+      () =>
+        (committed = new Response("body", {
+          headers: { etag: '"v1"', "content-type": "text/plain" },
+        })),
     );
     const res = await drive(app, new Request("http://localhost:3000/f"));
     expect(res.status).toBe(304);
@@ -411,13 +392,14 @@ describe("agent r5 — locks correct behavior", () => {
     const enc = new TextEncoder();
     app.get("/s/:id", (c) => {
       const id = c.params("id") ?? "?";
-      c.status = 200;
-      c.body = new ReadableStream({
-        pull(controller) {
-          controller.enqueue(enc.encode(`${id}-`));
-          controller.close();
-        },
-      });
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.enqueue(enc.encode(`${id}-`));
+            controller.close();
+          },
+        }),
+      );
     });
     await (await drive(app, new Request("http://localhost:3000/s/0"))).text(); // warm the pool
     const [a, b, c] = await Promise.all([

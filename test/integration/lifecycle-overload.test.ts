@@ -42,7 +42,7 @@ describe("R4.6 overload: fail-fast (default maxQueue 0)", () => {
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "first";
+      return c.text("first");
     });
 
     const first: Promise<Response> = app.handle(new Request("http://x/work"));
@@ -60,7 +60,7 @@ describe("R4.6 overload: fail-fast (default maxQueue 0)", () => {
   it("capacity releases at settlement — sequential requests never queue", async () => {
     const app = new Keala({ env: "test", overload: { maxConcurrency: 1 } });
     app.get("/n", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     for (let i = 0; i < 5; i++) {
       const res = await app.handle(new Request("http://x/n"));
@@ -182,7 +182,7 @@ describe("R4.6 overload: queue (opt-in maxQueue)", () => {
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const first = app.handle(new Request("http://x/work"));
     const queued: Promise<Response> = app.handle(new Request("http://x/work"));
@@ -197,7 +197,7 @@ describe("R4.6 overload: queue (opt-in maxQueue)", () => {
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const first = app.handle(new Request("http://x/work"));
     const abort = new AbortController();
@@ -218,7 +218,7 @@ describe("R4.6 overload: queue (opt-in maxQueue)", () => {
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "served";
+      return c.text("served");
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);
@@ -251,7 +251,7 @@ describe("R4.6 overload: queue (opt-in maxQueue)", () => {
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "drained";
+      return c.text("drained");
     });
     const first = app.handle(new Request("http://x/work"));
     const queued: Promise<Response> = app.handle(new Request("http://x/work"));
@@ -273,7 +273,7 @@ describe("R4.6 overload: queue (opt-in maxQueue)", () => {
       peak = Math.max(peak, live);
       await wait(10);
       live--;
-      c.body = "ok";
+      return c.text("ok");
     });
     const handles: Promise<Response>[] = Array.from({ length: 12 }, () =>
       app.handle(new Request("http://x/work")),
@@ -353,7 +353,7 @@ describe("R4.6 upgrade U1: AdmissionStrategy injection", () => {
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const first = app.handle(new Request("http://x/work")); // admitted
     await wait(10);
@@ -387,11 +387,11 @@ describe("R4.6 upgrade U1: AdmissionStrategy injection", () => {
     const gateB = deferred();
     app.get("/work", async (c) => {
       await gateA.promise;
-      c.body = "a";
+      return c.text("a");
     });
     app.get("/wait", async (c) => {
       await gateB.promise;
-      c.body = "b";
+      return c.text("b");
     });
     const first = app.handle(new Request("http://x/work"));
     await wait(10);

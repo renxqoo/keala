@@ -20,7 +20,7 @@ const probe = async (
   let captured: Context | undefined;
   app.use(async (c) => {
     captured = c;
-    c.body = "probed";
+    return c.text("probed");
   });
   await app.handle(new Request(url, { headers }));
   if (captured === undefined) throw new Error("probe did not run");

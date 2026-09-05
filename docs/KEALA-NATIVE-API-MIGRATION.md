@@ -209,7 +209,7 @@ bun scripts/smoke.ts / bun scripts/example-check.ts（受影响时）。
 
 ---
 
-## 第三部分：MIGRATION（按单元；状态：**U1、U2、U3a、U3b 已实施（2026-09-06）**，U3c-U4 待实施）
+## 第三部分：MIGRATION（按单元；状态：**U1-U3c 已实施（2026-09-06）**，U4 待实施）
 
 ### U1 — koa 对齐测试退役（流程试运行单元）
 
@@ -390,6 +390,52 @@ dispatch/pool 瘦身；etag/compress post-next 重写；M2/M3 剩余文件改写
 examples/scripts 同步；parity-locks 第三类删除。
 **验收**：单元门；§2.5 零兼容 grep 三项 0 命中；P2/P4 测量（adapter-fresh
 前后对比）；同名头覆盖新锁。
+
+**实施记录（2026-09-06）**：
+
+- **API 删除**（response.ts −187 行实现 + 接口）：`c.body` get/set、`c.type`、
+  `c.length`、`c.etag`、`c.lastModified`、`c.attachment()`、`c.res`、`c.status`
+  写（读保留为只读观察槽）。commit-contract 的公共面快照同步。
+- **state 机器坍缩**：bodyValue 槽/flags 位 1/2/ResponseBody 类型删除；
+  buildFromState（~135 行）坍缩为「404 默认 + staged 合并」的 fromState；
+  untouched 判定恒真内联；sugar 的 staged-status 互动死代码清理；
+  dispatchDirect 快路径条件不变；error-response 慢路径改直构 Response 走
+  新抽的 `finishCommitted`（merge+sanitize+HEAD 共用收尾）；dispatchDirect
+  快路径两处 DUAL-WRITE 加 `app.onStreamError === undefined` 门（流钩子
+  app 不再绕过 finalize）。
+- **etag/compress 重写为 post-next Response 变换**（§2.3-5）：资格门槛 =
+  `directBodyResponseValue === _res` 身份（只有 sugar 构造期打标——手建/
+  流式/SSE/native planned 一律 pass-through）；JSON 道 reuse 序列化 memo，
+  text 道 clone().text()；304 重建干净（§2.3-2）；compress 替换为新 Response
+  （原头搭车、CL 删、CE 设）。
+- **测试面**（四批并行子代理）：unit 22 文件/70 处 + integration 45 文件/260
+  错 + middleware/security/property/perf/parity 42 文件 + 外围 11 文件。
+  删除矩阵 21+13+~29 条（全部"锁被删 API 自身语义"，逐条列于各批报告）；
+  parity-locks.test.ts 整文件删除（U1 预告的第三类）；property rig 重构为
+  sugar/response 双形态。**数学：2640→2560**（−80 = 删除矩阵净减）。
+- **子代理抓获 3 个真 src 缺陷（全部修复）**：①onStreamError 随 buildFromState
+  删除而断线——重挂 finishCommitted + dispatchDirect 快路径两处 DUAL-WRITE
+  加门（app.onStreamError !== undefined 才直通）；②空串多值头在 sugar/
+  applyStagedHeaders 路径上 wire（flattenHeaders 的跳过只在错误通道幸存）——
+  三处对齐；③§2.3-2 的"无条件清洗"收紧落地（脏答案才重建，干净空状态保
+  实例身份）。
+- **性能**：P2 adapter-fresh 全形状 **0.86-0.98x**（全面优于 hono，较 U2 后
+  0.91-0.96 再降）；P4 代码审查佐证（状态机分支删除）。coverage
+  95.52/90.81/96.16/97.37（≥90 全过；src 净删 236 语句/253 分支后语句/行
+  覆盖率反升）。
+- 对抗审查（2 CONFIRMED + 7 NOTE，全部处置）：①etag 外层 + compress 内层
+  组合下 etag 静默失效（替换后身份门失配）——compress 重品牌 + **原文本
+  memo 化**（tag 始终是压缩前代表——客户端 INM 比较的正是它）；②HEAD
+  sugar 无 ETag/无条件 304——sugarHead 品牌化 + payload 构造期 memo（视图
+  本身无 body 可读）。双顺序组合/HEAD text/json 四条新锁。NOTE 处置：
+  记录数字勘误（2640 基数）、"§8 快照"措辞、stale 注释清理 ×3、
+  finishCommitted 注释收窄、sugarHtml 死变量、mime/text 陈旧注释；
+  expandContentType/contentDisposition 保留（U1 回迁的函数级锁仍消费）。
+  审查另证实：删除矩阵 86 条纪律良好（无借机删活行为锁）、断言放宽
+  13 处全部 D1 容差有据、onStreamError 重挂无副作用（SSE/直通/pooling
+  归属探针双 runtime 过）、数字声称逐位复核精确。
+- 2640→2564 双运行时全绿（−80 删除矩阵 + 4 审查修复锁）；build/smoke/
+  example-check/process-check/soak 过；§2.5 零兼容 grep 五项 0 命中。
 
 ### U4 — 定位收口
 

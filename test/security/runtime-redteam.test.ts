@@ -132,7 +132,7 @@ describe("RT3-02: mount() must refuse ws registrations under a pooling parent", 
     // ever retained by a socket, and the next request answers normally.
     const parent = new Keala({ ...quiet, pooling: true });
     parent.get("/second", (c) => {
-      c.body = "second";
+      return c.text("second");
     });
     const sub = new Keala(quiet);
     sub.ws("/ws", { open: () => undefined });
@@ -256,7 +256,7 @@ describe("RT3-05: the Node adapter must not 500 a legal OPTIONS * request", () =
   it("OPTIONS * answers a non-5xx status (RFC 7231 §4.3.7 request-target)", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);

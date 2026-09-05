@@ -160,7 +160,7 @@ describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.setHeader("x-a", "1");
-      c.body = "hello";
+      return c.text("hello");
     });
     const res = await app.handle(req("http://localhost/s", { method: "HEAD" }));
     expect(await text(res)).toBe("");
@@ -305,7 +305,7 @@ describe("redteam — RT-5 sugar helpers corrupt multi-value headers", () => {
     app.get("/x", (c) => {
       c.cookies.set("sess", "1", { path: "/" });
       c.cookies.set("cart", "2", { path: "/" });
-      c.body = "hi";
+      return c.text("hi");
     });
     const res = await app.handle(req("http://localhost/x"));
     expect(res.headers.getSetCookie()).toEqual(["sess=1; Path=/", "cart=2; Path=/"]);
@@ -425,24 +425,16 @@ describe("redteam — RT-8 floating next rejection", () => {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// RT-10 (MEDIUM): the sugar helpers advertise hono-compatible signatures, but
-// hono keeps a status set beforehand (c.status(201); c.text("x") -> 201);
-// keala answers 200 (html shares the same code path). Root:
-// src/core/context/response.ts text/json/html use `status ?? 200` and never
-// consult c.statusValue.
+// RT-10: U3c resolved the divergence by deleting the status write path —
+// the sugar status parameter is the ONLY status source (hono's
+// "set beforehand" twin no longer exists to diverge).
 // ---------------------------------------------------------------------------
 
-describe("redteam — RT-10 sugar discards prior c.status", () => {
-  it("CONFIRMED-BUG(now fixed) (RT-10): sugar must keep a previously set c.status (hono parity)", async () => {
+describe("redteam — RT-10 sugar status source (U3c)", () => {
+  it("CONFIRMED-BUG(now fixed) (RT-10): the sugar status parameter is the answer's status", async () => {
     const app = new Keala(quiet);
-    app.get("/t", (c) => {
-      c.status = 201;
-      return c.text("hi");
-    });
-    app.get("/j", (c) => {
-      c.status = 201;
-      return c.json({ ok: true });
-    });
+    app.get("/t", (c) => c.text("hi", 201));
+    app.get("/j", (c) => c.json({ ok: true }, 201));
     expect((await app.handle(req("http://localhost/t"))).status).toBe(201);
     expect((await app.handle(req("http://localhost/j"))).status).toBe(201);
   });

@@ -181,7 +181,7 @@ describe("anomalies: router illegal inputs", () => {
   it("deep path (30 segments) matches and captures correctly", async () => {
     const app = new Keala(quiet);
     app.get("/a/:p1/b/:p2/c/*", (c) => {
-      c.body = `${c.params("p1")}-${c.params("p2")}-${c.params("wildcard")}`;
+      return c.text(`${c.params("p1")}-${c.params("p2")}-${c.params("wildcard")}`);
     });
     const tail = Array.from({ length: 30 }, (_, i) => `s${i}`).join("/");
     const res = await app.handle(new Request(`http://localhost:3000/a/ONE/b/TWO/c/${tail}`));
@@ -225,10 +225,11 @@ describe("anomalies: exotic requests never crash the app", () => {
   it.each(requests)("%s yields a well-formed response", async (_label, url) => {
     const app = new Keala(quiet);
     app.use((c) => {
-      // D1: a string body carries no framework content-type, so the type
-      // is set explicitly to keep the "well-formed text response" assertion.
-      c.type = "text/plain";
-      c.body = `hit:${c.path}`;
+      // Explicit type (D1: the runtime's text/plain inference materializes
+      // at different times per runtime — stage it so the "well-formed text
+      // response" assertion holds identically on both).
+      c.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return c.text(`hit:${c.path}`);
     });
     const res = await app.handle(new Request(url));
     expect([200, 404, 500]).toContain(res.status);
@@ -250,7 +251,7 @@ describe("anomalies: exotic requests never crash the app", () => {
   ])("method %s dispatches without crashing", async (method) => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/x", { method }));
     expect([200, 404, 405, 501]).toContain(res.status);

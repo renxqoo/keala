@@ -1,48 +1,27 @@
 /**
- * Finalizer: turns the context's accumulated state into a web `Response`,
- * exactly once, after the handler chain settles.
+ * Finalizer: converts the settled chain into a web `Response`, exactly once.
  *
- * Fast paths, in order of cheapness: committed Response returned as-is; bare
- * `new Response(body)` (hono-consistent content-type behavior); `Response.json`
- * for objects; init with a `Headers` instance (cheaper than a record); flattened
- * [name, value] pairs when multi-value headers exist.
+ * U3c collapsed the state machine: responses are COMMITTED (a handler return
+ * — a sugar product or a hand-built Response) or UNTOUCHED (the chain settled
+ * without one → synthesized 405/501/OPTIONS, the notFound handler, or the
+ * default 404). Staged headers (`c.setHeader` before a commit) merge onto
+ * whatever answer ships; empty statuses sanitize; HEAD strips bodies.
  *
- * 0.7 commit contract: a committed Response is returned verbatim unless the
- * request staged headers BEFORE the commit (`c.setHeader(...)` followed by
- * `return new Response(...)`) — those merge straight onto the committed
- * headers in place, with a rebuild fallback for immutable guards. There is
- * no post-commit body/status rewrite machinery: the accessors throw instead
- * (docs/KEALA-NATIVE-API.md §3).
+ * A committed Response is returned verbatim unless the request staged headers
+ * BEFORE the commit — those merge in place, with a rebuild fallback for
+ * immutable guards. There is no post-commit body/status rewrite machinery
+ * (the setters are gone; a new returned Response is the replacement).
  *
  * Inherited response contracts (docs/MIGRATION.md §3): empty-status header
- * cleanup, HEAD Content-Length for state-mode bodies and sugar HEAD returns
- * (computed from the would-be body value — committed bodies are never read),
- * and the set-cookie/multi-value precondition for the fast paths.
+ * cleanup and the set-cookie/multi-value merge preconditions.
  */
 
 import type { Application } from "./app.ts";
 import type { Context } from "./context/context.ts";
-import { byteLengthOf } from "../utils/url.ts";
-import { isEmptyStatus, statusMessage } from "../http/status.ts";
+import { isEmptyStatus } from "../http/status.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
-import { TEXT_PLAIN } from "./context/sugar.ts";
-import { createPlannedResponse } from "./response-plan.ts";
-import { isNativeRequestSource } from "./request-source.ts";
 import { repumpStream } from "../utils/streams.ts";
-
-/** Body-describing headers a 204/304 must not carry (RFC 9110 §8.6). */
-const CONTENT_HEADERS = ["content-type", "content-length", "transfer-encoding"] as const;
-
-/**
- * Shared init.headers for the JSON fast paths (PERF-4, 0.6.2 review): a
- * record init re-allocates and re-validates per response; the fetch
- * Response constructor only READS init.headers (both runtimes copy entries
- * into the new Response's own header list and never retain or mutate the
- * source), so one frozen-shape instance serves every JSON response —
- * measured 189ns record init vs 127ns shared Headers on the review matrix.
- */
-const JSON_HEADERS = new Headers({ "content-type": "application/json" });
 
 type HeaderEntries = [string, string][];
 
@@ -71,8 +50,6 @@ export const flattenHeaders = (record: HeaderMap): HeaderEntries => {
   }
   return entries;
 };
-
-const untouched = (c: Context): boolean => (c.flags & 1) === 0 && c.bodyValue === null;
 
 /**
  * 405/501/OPTIONS for a matched path whose method has no handler — evaluated
@@ -150,7 +127,8 @@ const applyStagedHeaders = (res: Response, record: HeaderMap): Response => {
       const value = record[key] as string | string[];
       if (key === "set-cookie") {
         if (Array.isArray(value)) {
-          for (const item of value) headers.append(key, item);
+          // Empty strings never become wire headers (flattenHeaders parity).
+          for (const item of value) if (item.length > 0) headers.append(key, item);
         } else {
           headers.append(key, value);
         }
@@ -158,7 +136,7 @@ const applyStagedHeaders = (res: Response, record: HeaderMap): Response => {
       }
       headers.delete(key);
       if (Array.isArray(value)) {
-        for (const item of value) headers.append(key, item);
+        for (const item of value) if (item.length > 0) headers.append(key, item);
       } else {
         headers.set(key, value);
       }
@@ -185,166 +163,72 @@ const applyStagedHeaders = (res: Response, record: HeaderMap): Response => {
 export const stripBody = (res: Response): Response =>
   new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
 
-type BodyData = string | Uint8Array | ReadableStream | Blob | null;
-
-const isStreaming = (body: unknown): body is ReadableStream | Blob =>
-  body instanceof ReadableStream || body instanceof Blob;
-
-/** Serialize per body kind: objects through native JSON, the rest verbatim. */
-const bodyInitOf = (body: Context["bodyValue"]): BodyData => {
-  if (body === null || body === undefined) return null; // empty bodies stay empty
-  if (typeof body === "string" || body instanceof Uint8Array) return body;
-  if (isStreaming(body)) return body as BodyData;
-  return JSON.stringify(body) ?? "null";
+/**
+ * The void-notFound fallback (U3c): with the response setters gone, a
+ * handler chain that settles without a Response answers the default 404 —
+ * staged headers merge onto it, HEAD strips the body (Content-Length is NOT
+ * backfilled: there is no would-be body value any more; §2.3-3).
+ */
+const fromState = (c: Context, head: boolean): Response => {
+  const base = new Response("Not Found", { status: 404 });
+  const record = c.headersRecord;
+  const merged = record !== null && countOf(record) > 0 ? applyStagedHeaders(base, record) : base;
+  return head && merged.body !== null ? stripBody(merged) : merged;
 };
 
-/** JSON text of an object body, memoized on the context (one stringify). */
-const jsonTextOf = (c: Context, body: unknown): string =>
-  c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(body) ?? "null");
-
-const isContextBoundBody = (body: Context["bodyValue"]): boolean => body instanceof ReadableStream;
-
-/** Build the Response from response state (`head` backfills CL, drops body). */
-const buildFromState = (c: Context, head: boolean): Response => {
-  const status = c.statusValue;
-  let body: Context["bodyValue"] = c.bodyValue;
-  let record = c.headersRecord;
-
-  if (isEmptyStatus(status)) {
-    if (record !== null) {
-      for (const header of CONTENT_HEADERS) delete record[header];
+/**
+ * The committed-answer closer, shared by finalize and the error funnel
+ * (U3c): merge the headers staged BEFORE the commit onto the committed
+ * Response, then the empty-status sanitation and HEAD body strip. Post-commit
+ * header writes already landed on the Response directly.
+ */
+export const finishCommitted = (c: Context, committed: Response): Response => {
+  // The merge runs BEFORE empty-status sanitation (BUG-6, 0.6.2 review): a
+  // bodied 204/304 used to early-return through the sanitizer and skip the
+  // merge entirely. Merge-first is the semantically correct order — the
+  // sanitizer then drops exactly the content-DESCRIBING names (they describe
+  // a body the empty status forbids) while staged protocol and security
+  // headers reach the wire.
+  const record = c.headersRecord;
+  const merged =
+    record !== null && countOf(record) > 0 ? applyStagedHeaders(committed, record) : committed;
+  // RFC 9110 §8.6: a 204/304 MUST NOT carry a body. U3c (§2.3-2 tightening):
+  // the sanitation is UNCONDITIONAL for empty statuses — even a bodyless
+  // answer loses content-describing headers a staged record may have merged
+  // on (a staged content-type describing a body the status forbids must
+  // never reach the wire).
+  if (isEmptyStatus(merged.status)) {
+    // Rebuild only when actually dirty (a body or a content-describing
+    // header); an already-clean 204/304 keeps its instance identity.
+    const headers = merged.headers;
+    if (
+      merged.body !== null ||
+      headers.has("content-type") ||
+      headers.has("content-length") ||
+      headers.has("transfer-encoding")
+    ) {
+      return sanitizeEmptyStatus(merged);
     }
-    body = null;
   }
-
-  if (body === null || body === undefined) {
-    if ((c.flags & 2) === 0 && !isEmptyStatus(status)) {
-      // koa: a null body falls back to the status message text.
-      body = statusMessage(status) || String(status);
-    } else {
-      body = null;
-      if (record !== null) {
-        delete record["content-length"];
-        delete record["content-type"];
-      }
-    }
-  }
-
-  if (head) {
-    // Backfill Content-Length from the would-be body, then drop it.
-    if (record?.["content-length"] === undefined) {
-      let length: number | undefined;
-      if (typeof body === "string") length = byteLengthOf(body);
-      else if (body instanceof Uint8Array) length = body.byteLength;
-      else if (body !== null && typeof body === "object" && !isStreaming(body)) {
-        length = byteLengthOf(jsonTextOf(c, body));
-      }
-      if (length !== undefined) {
-        record ??= c.headersRecord = {};
-        record["content-length"] = String(length);
-      }
-    }
-    body = null;
-  }
-
-  // Opt-in error observation for streaming bodies (see AppOptions).
+  // HEAD drops the body on every path.
+  if (c.method === "HEAD" && merged.body !== null) return stripBody(merged);
+  // Opt-in error observation for streaming bodies (see AppOptions). U3c: the
+  // wiring moved here from the (deleted) state-mode builder — committed and
+  // synthesized 405/501 answers pass through it, whatever built the Response
+  // (a notFound handler's Response is returned upstream of this closer).
   const streamHook = c.appValue.onStreamError;
-  if (body instanceof ReadableStream && streamHook !== undefined) {
-    body = repumpStream(body, {
+  if (streamHook !== undefined && merged.body instanceof ReadableStream) {
+    const observed = repumpStream(merged.body, {
       onReadError: (error) =>
         streamHook(error instanceof Error ? error : new Error(String(error)), c),
     });
+    return new Response(observed, {
+      status: merged.status,
+      statusText: merged.statusText,
+      headers: merged.headers,
+    });
   }
-
-  const multiValue =
-    (c.flags & 4) !== 0 || (record !== null && Array.isArray(record["set-cookie"]));
-  const hasRecord = record !== null && countOf(record) > 0;
-  const isObject = body !== null && typeof body === "object" && !(body instanceof Uint8Array);
-
-  // Bare fast path: default status, no custom headers — the runtime provides
-  // content-type/length.
-  if (!multiValue && !hasRecord && status === 200) {
-    if (isObject && !isStreaming(body)) {
-      if (isNativeRequestSource(c.rawRequest)) {
-        const json = jsonTextOf(c, body);
-        return createPlannedResponse(json, {}, "application/json");
-      }
-      // Memo-text construction: undici's Response.json would re-stringify
-      // the object the etag middleware (or the HEAD backfill) already
-      // serialized — the memo is the single stringify for the request.
-      return new Response(jsonTextOf(c, body), { headers: JSON_HEADERS });
-    }
-    if (
-      isNativeRequestSource(c.rawRequest) &&
-      (typeof body === "string" || body instanceof Uint8Array)
-    ) {
-      return createPlannedResponse(body, {}, typeof body === "string" ? TEXT_PLAIN : undefined);
-    }
-    return new Response(bodyInitOf(body));
-  }
-
-  if (multiValue) {
-    const flat = record === null ? [] : flattenHeaders(record);
-    return new Response(bodyInitOf(body), { status, headers: flat });
-  }
-  if (!hasRecord) {
-    // Status-only — the cheap init shape.
-    if (isObject && !isStreaming(body)) {
-      if (isNativeRequestSource(c.rawRequest)) {
-        const json = jsonTextOf(c, body);
-        return createPlannedResponse(json, { status }, "application/json");
-      }
-      return new Response(jsonTextOf(c, body), { status, headers: JSON_HEADERS });
-    }
-    if (
-      isNativeRequestSource(c.rawRequest) &&
-      (typeof body === "string" || body instanceof Uint8Array)
-    ) {
-      return createPlannedResponse(
-        body,
-        { status },
-        typeof body === "string" ? TEXT_PLAIN : undefined,
-      );
-    }
-    return new Response(bodyInitOf(body), { status });
-  }
-  // Headers-instance init (faster than a record init by ~60ns).
-  const headers = new Headers();
-  const entries = record as HeaderMap;
-  for (const key of Object.keys(entries)) {
-    const value = entries[key] as string | string[];
-    if (Array.isArray(value)) {
-      for (const item of value) headers.append(key, item);
-    } else {
-      headers.set(key, value);
-    }
-  }
-  if (isObject && !isStreaming(body)) {
-    if (isNativeRequestSource(c.rawRequest)) {
-      const json = jsonTextOf(c, body);
-      if (!headers.has("content-type")) headers.set("content-type", "application/json");
-      return createPlannedResponse(json, { status, headers });
-    }
-    if (!headers.has("content-type")) headers.set("content-type", "application/json");
-    return new Response(jsonTextOf(c, body), { status, headers });
-  }
-  if (
-    isNativeRequestSource(c.rawRequest) &&
-    (typeof body === "string" || body instanceof Uint8Array)
-  ) {
-    return createPlannedResponse(
-      body,
-      { status, headers },
-      typeof body === "string" ? TEXT_PLAIN : undefined,
-    );
-  }
-  return new Response(bodyInitOf(body), { status, headers });
-};
-
-const fromState = (c: Context, head: boolean): Response => {
-  const response = buildFromState(c, head);
-  if (!isContextBoundBody(c.bodyValue)) c.directBodyResponseValue = response;
-  return response;
+  return merged;
 };
 
 /**
@@ -371,29 +255,10 @@ export const sanitizeEmptyStatus = (res: Response): Response => {
 export const finalize = (app: Application, c: Context): Response | Promise<Response> => {
   const committed = c._res;
   if (committed !== undefined) {
-    // Headers staged BEFORE the commit merge onto the committed Response;
-    // post-commit header writes already landed there directly. The merge
-    // runs BEFORE empty-status sanitation (BUG-6, 0.6.2 review): a bodied
-    // 204/304 used to early-return through the sanitizer and skip the
-    // merge entirely. Merge-first is the semantically correct order — the
-    // sanitizer then drops exactly the content-DESCRIBING names (they
-    // describe a body the empty status forbids) while staged protocol and
-    // security headers reach the wire.
-    const record = c.headersRecord;
-    const merged =
-      record !== null && countOf(record) > 0 ? applyStagedHeaders(committed, record) : committed;
-    // RFC 9110 §8.6: a 204/304 MUST NOT carry a body. A handler returning a
-    // bodied Response with an empty status is sanitized exactly like the
-    // state-mode path (undici refuses the construction; Bun allows it).
-    if (isEmptyStatus(merged.status) && merged.body !== null) {
-      return sanitizeEmptyStatus(merged);
-    }
-    // HEAD drops the body on every path.
-    if (c.method === "HEAD" && merged.body !== null) return stripBody(merged);
-    return merged;
+    return finishCommitted(c, committed);
   }
   const head = c.method === "HEAD";
-  if (untouched(c)) {
+  {
     const record = c.headersRecord;
     const staged = record !== null && countOf(record) > 0;
     const rejected = methodNotAllowed(c);

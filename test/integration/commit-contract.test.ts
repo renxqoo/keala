@@ -28,7 +28,7 @@ describe("0.7: the request is read-only", () => {
     let ctx: Context | undefined;
     app.use((c) => {
       ctx = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     void app.handle(request());
     const c = ctx as unknown as Record<string, unknown>;
@@ -72,11 +72,13 @@ describe("0.7: commit contract", () => {
     const app = new Keala({ env: "production" });
     app.use(async (c, next) => {
       await next();
-      c.type = "application/custom";
-      c.length = 7;
-      c.etag = "v1";
-      c.lastModified = new Date(Date.UTC(2026, 8, 4));
-      c.attachment("report.pdf", { type: "inline" });
+      // U3c: the setter family is gone — raw headers are the post-commit
+      // write surface (values spelled out where a setter used to expand).
+      c.setHeader("Content-Type", "application/custom");
+      c.setHeader("Content-Length", "7");
+      c.setHeader("ETag", '"v1"');
+      c.setHeader("Last-Modified", new Date(Date.UTC(2026, 8, 4)).toUTCString());
+      c.setHeader("Content-Disposition", 'inline; filename="report.pdf"');
       c.append("X-Extra", "one");
       c.remove("X-Extra");
     });
@@ -169,19 +171,12 @@ describe("0.7: the context surface is the §8 quick reference", () => {
       "accepts",
       "acceptsEncodings",
       // response (staged pre-commit, decorating post-commit)
-      "res",
       "status",
-      "body",
-      "type",
-      "length",
-      "etag",
-      "lastModified",
       "setHeader",
       "append",
       "remove",
       "has",
       "resHeader",
-      "attachment",
       "redirect",
       "text",
       "json",

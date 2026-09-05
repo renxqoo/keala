@@ -12,9 +12,7 @@ import { Keala } from "../../src/core/app.ts";
 import { startNodeServer } from "../../src/adapters/node.ts";
 
 const app = new Keala({ env: "test" });
-app.get("/health", (c) => {
-  c.body = "up";
-});
+app.get("/health", (c) => c.text("up"));
 app.get("/stuck", async () => {
   await new Promise<never>(() => {}); // parks forever: app.inFlight stays 1
 });

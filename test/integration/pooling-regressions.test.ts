@@ -34,13 +34,12 @@ describe("HA-4: async-floated next() + pooling — cross-request corruption", ()
 
     app.get("/a", floatMid, async (c) => {
       await sleep(80); // late: after /a's context was retired and re-acquired
-      c.body = "A-SECRET-RESPONSE";
-      c.status = 200;
+      // U3c: the body setter is gone — the late write rides the surviving
+      // header surface (same hazard class: a foreign value on /victim's
+      // response).
+      c.setHeader("X-Secret", "A-SECRET-RESPONSE");
     });
-    app.get("/victim", holdMid, async (c) => {
-      c.body = "VICTIM-RESPONSE";
-      c.status = 200;
-    });
+    app.get("/victim", holdMid, (c) => c.text("VICTIM-RESPONSE"));
 
     const ra = app.handle(new Request("http://x/a")); // retires its ctx at ~5ms
     await sleep(15);
@@ -48,8 +47,9 @@ describe("HA-4: async-floated next() + pooling — cross-request corruption", ()
     const [a, v] = await Promise.all([ra, rv]);
     const victimBody = await v.text();
     expect(await a.text()).toBe("Not Found"); // /a's own answer (float = lost)
-    // FAILS today: the victim receives "A-SECRET-RESPONSE".
+    // FAILS on regression: the victim receives "A-SECRET-RESPONSE".
     expect(victimBody).toBe("VICTIM-RESPONSE");
+    expect(v.headers.get("x-secret")).toBeNull(); // the late write never landed
   });
 
   it("the same shape must not leak per-request state across users (c.state)", async () => {
@@ -68,12 +68,12 @@ describe("HA-4: async-floated next() + pooling — cross-request corruption", ()
     app.get("/login", floatMid, async (c) => {
       await sleep(60);
       c.state["user"] = "alice-secret";
-      c.body = "in";
+      return c.text("in");
     });
     let seen: unknown = "unset";
     app.get("/who", holdMid, async (c) => {
       seen = (c.state as Record<string, unknown>)["user"];
-      c.body = "who";
+      return c.text("who");
     });
 
     const r1 = app.handle(new Request("http://x/login"));

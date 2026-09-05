@@ -35,7 +35,7 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
     app.post("/json", async (c) => {
       const first = await bodyOf(c).json();
       const second = await bodyOf(c).json();
-      c.body = first === second ? "same" : "different";
+      return c.text(first === second ? "same" : "different");
     });
 
     const res = await app.handle(
@@ -64,7 +64,7 @@ describe("R7 middleware/helper functional regressions [RED]", () => {
       form.forEach(() => {
         entries += 1;
       });
-      c.body = String(entries);
+      return c.text(String(entries));
     });
 
     const res = await app.handle(

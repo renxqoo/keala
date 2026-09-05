@@ -177,18 +177,16 @@ describe("PERF-4: shared JSON init headers isolation", () => {
   it("consecutive JSON responses never share mutated header state", async () => {
     const app = new Keala({ env: "test" });
     app.get("/j", (c) => {
-      c.body = { a: 1 }; // bare fast path (status 200)
+      // bare fast path (status 200)
       c.setHeader("x-tag", "one");
+      return c.json({ a: 1 });
     });
-    app.get("/js", (c) => {
-      c.status = 201; // status-only fast path
-      c.body = { b: 2 };
-    });
+    app.get("/js", (c) => c.json({ b: 2 }, 201)); // status-only fast path
     const a = await hit(app, "/j");
     const b = await hit(app, "/js");
-    expect(a.headers.get("content-type")).toBe("application/json");
+    expect(a.headers.get("content-type")?.startsWith("application/json")).toBe(true);
     expect(a.headers.get("x-tag")).toBe("one");
-    expect(b.headers.get("content-type")).toBe("application/json");
+    expect(b.headers.get("content-type")?.startsWith("application/json")).toBe(true);
     expect(b.headers.get("x-tag")).toBeNull(); // no leakage from request A
     expect(await a.text()).toBe('{"a":1}');
     expect(await b.text()).toBe('{"b":2}');

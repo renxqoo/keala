@@ -251,7 +251,7 @@ describe("branch coverage: round 3", () => {
     const app = new Keala();
     app.use(async (c) => {
       c.setHeader("X-Multi", ["a", "b"]);
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("x-multi")).toBe("a, b");
@@ -269,7 +269,7 @@ describe("branch coverage: round 3", () => {
     let host = "";
     app.use(async (c) => {
       host = c.host;
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.handle(
       new Request("http://localhost:3000/", {

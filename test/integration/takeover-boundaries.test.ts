@@ -327,7 +327,9 @@ describe("R4.3 agent review: concurrency and pooling isolation", () => {
       app.onError((_error, c) => {
         setTimeout(() => {
           try {
-            c.body = "LATE-WRITE";
+            // U3c: the body setter is gone — the late write rides the header
+            // surface (setHeader throws on the retired prototype).
+            c.setHeader("X-Late", "LATE-WRITE");
           } catch (err) {
             lateError = err;
           } finally {

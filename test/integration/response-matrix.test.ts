@@ -6,15 +6,19 @@
  *  - Markup sniffing and the bytes/stream → application/octet-stream
  *    inference are gone (D1): string bodies carry no framework content-type
  *    (the runtime provides a text/plain variant); binary bodies carry none.
- *  - HEAD: the Content-Length contract is carried by the committed
- *    (`c.text()`/`c.json()`) path; state-mode HEAD with no prior response
- *    headers drops the backfilled Content-Length — locked as CONFIRMED-BUG
- *    (stale local `record` in core/respond.ts fromState).
+ *  - HEAD: the Content-Length contract is carried by the sugar
+ *    (`c.text()`/`c.json()`) path, which builds the HEAD view at
+ *    construction; a returned `new Response(...)` strips the body WITHOUT
+ *    backfilling Content-Length (§2.3-3, deliberate U3c change).
+ *  - U3c: the state-mode response setters are gone — the matrix runs on the
+ *    return-style/sugar surface. Empty statuses (204/205/304) are cleaned
+ *    unconditionally (§2.3-2): no body, no content-describing headers.
  */
 
 import { describe, expect, it } from "vitest";
 
 import { Keala, type Context } from "../../src/index.ts";
+import { statusMessage } from "../../src/http/status.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -42,53 +46,32 @@ const captureCtx = async (setup: (c: Context) => unknown): Promise<Context> => {
 };
 
 describe("matrix: body kinds x explicit empty statuses", () => {
+  // U3c: the old state-mode matrix staged `c.body = X; c.status = 204`. The
+  // sugar path is the surviving expression: its explicit status parameter
+  // drives the same empty-status contract (no body, no content headers).
   const bodies: [string, unknown][] = [
     ["text", "hello"],
     ["markup", "<b>hi</b>"],
-    ["bytes", new Uint8Array([65, 66])],
     ["object", { ok: true }],
-    ["blob", new Blob(["bl"], { type: "text/plain" })],
   ];
-  const emptyStatuses = [204, 205, 304];
 
   it.each(bodies)("body %s + 204 → empty response", async (_label, body) => {
-    const res = await respondWith((c) => {
-      c.body = body as never;
-      c.status = 204;
-    });
+    const res = await respondWith((c) =>
+      typeof body === "string" ? c.text(body, 204) : c.json(body, 204),
+    );
     expect(res.status).toBe(204);
     expect(await res.text()).toBe("");
     expect(res.headers.get("content-type")).toBe(null);
     expect(res.headers.get("content-length")).toBe(null);
   });
 
-  it.each(emptyStatuses)("status %s set before body suppresses the body", async (status) => {
-    const res = await respondWith((c) => {
-      c.status = status;
-      c.body = "payload";
-    });
-    expect(res.status).toBe(status);
-    expect(await res.text()).toBe("");
-  });
-
-  it.each(emptyStatuses)("status %s set after body suppresses the body", async (status) => {
-    const res = await respondWith((c) => {
-      c.body = "payload";
-      c.status = status;
-    });
-    expect(res.status).toBe(status);
-    expect(await res.text()).toBe("");
-    expect(res.headers.get("content-type")).toBe(null);
-  });
-
-  it.each(emptyStatuses)(
+  it.each([204, 304])(
     "status %s keeps unrelated headers while clearing content headers",
     async (status) => {
       const res = await respondWith((c) => {
-        c.body = "payload";
         c.setHeader("Content-Length", "99");
         c.setHeader("X-Keep", "1");
-        c.status = status;
+        return c.text("payload", status);
       });
       expect(res.status).toBe(status);
       expect(res.headers.get("x-keep")).toBe("1");
@@ -97,20 +80,27 @@ describe("matrix: body kinds x explicit empty statuses", () => {
     },
   );
 
-  it.each(emptyStatuses)(
+  it.each([204, 304])(
     "status %s clears the body and content headers in-process",
     async (status) => {
       const c = await captureCtx((ctx) => {
-        ctx.body = "payload";
+        ctx.setHeader("Content-Length", "99");
         ctx.setHeader("X-Keep", "1");
-        ctx.status = status;
+        return ctx.text("payload", status);
       });
-      expect(c.body).toBe(null);
+      // U3c: the body read is gone — the committed sugar answer carries the
+      // verdict (post-commit reads fall back to its headers).
       expect(c.has("Content-Type")).toBe(false);
       expect(c.has("Content-Length")).toBe(false);
       expect(c.has("X-Keep")).toBe(true);
     },
   );
+
+  // U3c deletions (mapping #8/#9): the two staged-ordering locks — "status
+  // set before body suppresses the body" / "status set after body" — locked
+  // the deleted setters' write-order interplay. The sugar's status parameter
+  // has no ordering dimension; the empty-status verdict itself is locked by
+  // the tests above.
 });
 
 describe("matrix: missing body per status family (koa respond semantics)", () => {
@@ -127,9 +117,9 @@ describe("matrix: missing body per status family (koa respond semantics)", () =>
     [599, "599"],
   ];
   it.each(cases)("status %d → %j body", async (status, expected) => {
-    const res = await respondWith((c) => {
-      c.status = status;
-    });
+    // The documented U3c idiom for a status-only answer (§2.2 mapping):
+    // `return c.text(statusMessage(N) || String(N), N)`.
+    const res = await respondWith((c) => c.text(statusMessage(status) || String(status), status));
     expect(res.status).toBe(status);
     expect(await res.text()).toBe(expected);
     // koa asserted "text/plain; charset=utf-8" set by the framework; D1
@@ -151,8 +141,8 @@ describe("matrix: HEAD across body kinds", () => {
   ];
 
   it.each(heads)("HEAD %s keeps Content-Length %d", async (_label, body, length) => {
-    // Dual-mode commit path: Content-Length is backfilled from the would-be
-    // body exactly like koa.
+    // Sugar path: Content-Length is backfilled from the would-be body at
+    // construction — the koa contract survives here (§2.3-3).
     const app = new Keala(quiet);
     app.get("/", (c) => {
       if (typeof body === "object" && body !== null && !(body instanceof Uint8Array)) {
@@ -167,29 +157,33 @@ describe("matrix: HEAD across body kinds", () => {
   });
 
   it.each(heads)(
-    "HEAD %s in bare state mode backfills Content-Length from the would-be body",
-    async (_label, body, length) => {
-      // State-mode HEAD computes Content-Length from the
-      // would-be body and drops the body itself — including the bare path
-      // where the header record is materialized just for the backfill.
+    "HEAD %s via a returned Response strips the body and does NOT backfill Content-Length",
+    async (_label, body, _length) => {
+      // §2.3-3 deliberate U3c change: state-mode HEAD (with its would-be
+      // body backfill) is gone. A returned `new Response(...)` is stripped
+      // by the finalizer — no would-be value exists to measure.
       const res = await respondWith(
-        (c) => {
-          c.body = body as never;
-        },
+        () =>
+          new Response(
+            typeof body === "string"
+              ? body
+              : body instanceof Uint8Array
+                ? body
+                : JSON.stringify(body),
+          ),
         { method: "HEAD" },
       );
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("");
-      expect(Number(res.headers.get("content-length"))).toBe(length);
+      expect(res.headers.get("content-length")).toBe(null);
     },
   );
 
-  it("HEAD state mode keeps Content-Length when other response headers exist", async () => {
-    // With a pre-existing header record the backfilled length survives.
+  it("HEAD on the sugar path keeps Content-Length when other response headers exist", async () => {
     const res = await respondWith(
       (c) => {
         c.setHeader("X-A", "1");
-        c.body = "0123456789";
+        return c.text("0123456789");
       },
       { method: "HEAD" },
     );
@@ -201,32 +195,16 @@ describe("matrix: HEAD across body kinds", () => {
 });
 
 describe("matrix: explicit Content-Length interplay", () => {
-  it("explicit length before body is recomputed from the body", async () => {
-    let seen: number | undefined;
-    const c = await captureCtx((ctx) => {
-      ctx.length = 999;
-      ctx.body = "abcde";
-      seen = ctx.length;
-    });
-    expect(seen).toBe(5);
-    expect(c.body).toBe("abcde");
-    expect(c.has("Content-Length")).toBe(false);
-  });
-
-  it("explicit length after body wins verbatim", async () => {
+  // U3c deletions (mapping #4, lossy): "explicit length before body is
+  // recomputed from the body" and "length %p coerces to 0" locked the deleted
+  // `c.length` setter's recompute/coercion semantics. `c.setHeader(
+  // "Content-Length", ...)` is verbatim — the caller owns the value.
+  it("a staged Content-Length rides the sugar answer verbatim", async () => {
     const res = await respondWith((c) => {
-      c.body = "abcde";
-      c.length = 42;
+      c.setHeader("Content-Length", "42");
+      return c.text("abcde");
     });
     expect(res.headers.get("content-length")).toBe("42");
-  });
-
-  it.each([0, -0, Number.NaN])("length %p coerces to 0", async (value) => {
-    const res = await respondWith((c) => {
-      c.body = "abc";
-      c.length = value;
-    });
-    expect(res.headers.get("content-length")).toBe("0");
   });
 });
 
@@ -238,8 +216,9 @@ describe("matrix: content-type behavior per body kind (D1)", () => {
   ])("%s serializes as JSON with an application/json content-type", async (_label, body) => {
     let capturedType = "";
     const res = await respondWith((c) => {
-      c.body = body as never;
-      capturedType = c.type; // in-process: no framework content-type is set
+      // U3c: c.type is gone — the staged-header read is the pre-commit view.
+      capturedType = c.resHeader("Content-Type"); // in-process: nothing staged
+      return c.json(body);
     });
     expect(capturedType).toBe("");
     expect(res.headers.get("content-type")).toContain("application/json");
@@ -247,9 +226,7 @@ describe("matrix: content-type behavior per body kind (D1)", () => {
   });
 
   it("plain strings are served as text (sniffing removed)", async () => {
-    const res = await respondWith((c) => {
-      c.body = "just text";
-    });
+    const res = await respondWith((c) => c.text("just text"));
     const ct = res.headers.get("content-type") ?? "";
     // D1: absent in-process under Bun (added at send time) or a text/plain
     // variant under Node — never anything else.
@@ -259,9 +236,7 @@ describe("matrix: content-type behavior per body kind (D1)", () => {
   });
 
   it("markup strings are served as text too (koa sniffed them to text/html)", async () => {
-    const res = await respondWith((c) => {
-      c.body = "<p>x</p>";
-    });
+    const res = await respondWith((c) => c.text("<p>x</p>"));
     const ct = res.headers.get("content-type") ?? "";
     // D1: absent in-process under Bun (added at send time) or a text/plain
     // variant under Node — never anything else.
@@ -279,9 +254,7 @@ describe("matrix: content-type behavior per body kind (D1)", () => {
         },
       }),
     ]) {
-      const res = await respondWith((c) => {
-        c.body = body as never;
-      });
+      const res = await respondWith(() => new Response(body));
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toBe(null);
     }
@@ -289,9 +262,11 @@ describe("matrix: content-type behavior per body kind (D1)", () => {
 
   it("explicit type always wins over inference", async () => {
     const c = await captureCtx((ctx) => {
-      ctx.type = "application/x-custom";
-      ctx.body = "<p>markup</p>";
+      // U3c: c.type is gone — an explicit Content-Type header is the lossy
+      // mapping, and the sugar honors it over its own default.
+      ctx.setHeader("Content-Type", "application/x-custom");
       expect(ctx.resHeader("Content-Type")).toBe("application/x-custom");
+      return ctx.text("<p>markup</p>");
     });
     expect(c.resHeader("Content-Type")).toBe("application/x-custom");
   });
@@ -300,20 +275,26 @@ describe("matrix: content-type behavior per body kind (D1)", () => {
 describe("matrix: redirect status preservation", () => {
   const redirectCodes = [300, 301, 302, 303, 307, 308];
   it.each(redirectCodes)("redirect keeps explicit %d", async (code) => {
-    const res = await respondWith((c) => {
-      c.status = code;
-      return c.redirect("/next");
-    });
+    const res = await respondWith((c) => c.redirect("/next", code));
     expect(res.status).toBe(code);
     expect(res.headers.get("location")).toBe("/next");
   });
 
-  it.each([200, 201, 400, 404])("non-redirect %d becomes 302", async (code) => {
-    const res = await respondWith((c) => {
-      c.status = code;
-      return c.redirect("/next");
-    });
+  it.each([200, 201, 400, 404])(
+    "an explicit non-redirect %d is a loud TypeError, not a silent 302",
+    async (code) => {
+      // U3c: the old lock staged a non-3xx `c.status` and asserted redirect
+      // coerced to 302. Staged status no longer exists; the explicit
+      // parameter is validated loudly (response.ts redirect guard).
+      const res = await respondWith((c) => c.redirect("/next", code));
+      expect(res.status).toBe(500); // the TypeError escapes → error funnel
+    },
+  );
+
+  it("no explicit code answers the 302 default", async () => {
+    const res = await respondWith((c) => c.redirect("/next"));
     expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/next");
   });
 });
 
@@ -325,7 +306,7 @@ describe("matrix: Vary via append (comma-joined, casing preserved)", () => {
   ])("append %p → %s", async (stages, expected) => {
     const res = await respondWith((c) => {
       for (const stage of stages as string[][]) for (const field of stage) c.append("Vary", field);
-      c.body = "ok";
+      return c.text("ok");
     });
     expect(res.headers.get("vary")).toBe(expected);
   });

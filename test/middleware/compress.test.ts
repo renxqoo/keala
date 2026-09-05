@@ -25,7 +25,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/b", (c) => {
-      c.body = body as string;
+      return c.text(body as string);
     });
     const res = await app.handle(req("/b", { headers: { "accept-encoding": "gzip" } }));
     expect(res.headers.get("content-encoding")).toBe("gzip");
@@ -42,7 +42,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
-      c.body = body;
+      return c.text(body);
     });
     const res = await app.handle(req("/big", { headers: { "accept-encoding": "gzip" } }));
     expect(res.headers.get("content-encoding")).toBe("gzip");
@@ -56,7 +56,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
     app.use(compress());
     const payload = { hello: "world", rows: Array.from({ length: 32 }, (_, i) => ({ id: i })) };
     app.get("/o", (c) => {
-      c.body = payload;
+      return c.json(payload);
     });
     const res = await app.handle(req("/o", { headers: { "accept-encoding": "gzip" } }));
     expect(res.headers.get("content-encoding")).toBe("gzip");
@@ -66,19 +66,25 @@ describe("compress (CompressionStream default): wire correctness", () => {
     expect(restored).toEqual(payload);
   });
 
-  it("pass-through rules unchanged: tiny bodies, streams, no accept-encoding", async () => {
+  it("pass-through rules: tiny bodies, streams, no accept-encoding", async () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/tiny", (c) => {
-      c.body = "x";
+      return c.text("x");
     });
-    app.get("/stream", (c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.close();
-        },
-      });
-    });
+    app.get(
+      "/stream",
+      () =>
+        // U3c gate (§2.3-5): streams are NEVER transformation-eligible —
+        // only snapshot-identity sugar products are.
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        ),
+    );
     const tiny = await app.handle(req("/tiny", { headers: { "accept-encoding": "gzip" } }));
     expect(tiny.headers.get("content-encoding")).toBeNull();
     expect(await tiny.text()).toBe("x");
@@ -90,17 +96,22 @@ describe("compress (CompressionStream default): wire correctness", () => {
   });
 
   it("incompressible bodies stay uncompressed (packed >= bytes skips)", async () => {
-    // Random bytes do not shrink; the component must not ship a body that
-    // grew — and must not claim gzip for it.
+    // U3c: bytes can only ride a hand-built Response, which passes the
+    // identity gate outright — so the packed>=bytes rule is exercised with
+    // an injected identity "gzip" over a compressible SUGAR body (packing
+    // never shrinks), and the byte route doubles as the hand-built lock.
     const app = new Keala(quiet);
     const random = new Uint8Array(2048);
     crypto.getRandomValues(random);
-    app.get("/rand", (c) => {
-      c.body = random;
-    });
+    app.get("/rand", () => new Response(random));
+    app.use(compress({ gzip: (input) => Promise.resolve(input) }));
+    app.get("/packed", (c) => c.text("0".repeat(400)));
     const res = await app.handle(req("/rand", { headers: { "accept-encoding": "gzip" } }));
     expect(res.headers.get("content-encoding")).toBeNull();
     expect(new Uint8Array(await res.arrayBuffer()).byteLength).toBe(2048);
+    const packed = await app.handle(req("/packed", { headers: { "accept-encoding": "gzip" } }));
+    expect(packed.headers.get("content-encoding")).toBeNull();
+    expect(await packed.text()).toBe("0".repeat(400));
   });
 
   it("heavy concurrent compression never surfaces unhandledRejection", async () => {
@@ -116,7 +127,7 @@ describe("compress (CompressionStream default): wire correctness", () => {
       const app = new Keala(quiet);
       app.use(compress());
       app.get("/c", (c) => {
-        c.body = "concurrent-compressible-body-".repeat(32);
+        return c.text("concurrent-compressible-body-".repeat(32));
       });
       const request = async (): Promise<ArrayBuffer> => {
         const res = await app.handle(req("/c", { headers: { "accept-encoding": "gzip" } }));

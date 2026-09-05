@@ -67,12 +67,9 @@ const getterOnChain = (proto: object, key: string): (() => unknown) | undefined 
 export const deadProtoFor = (liveProto: object): object => {
   const descriptors: PropertyDescriptorMap = {};
   for (const key of [
+    // U3c: body/type/length/etag/lastModified left the surface with the
+    // setters; status stays as the read-only observation slot.
     "status",
-    "body",
-    "type",
-    "length",
-    "etag",
-    "lastModified",
     "state",
     "cookies",
   ]) {
@@ -87,7 +84,7 @@ export const deadProtoFor = (liveProto: object): object => {
       configurable: true,
     };
   }
-  for (const key of ["setHeader", "append", "remove", "redirect", "attachment"]) {
+  for (const key of ["setHeader", "append", "remove", "redirect"]) {
     descriptors[key] = {
       value(): void {
         throw new Error(RETIRED);

@@ -106,7 +106,7 @@ describe("REVIEW-SEC-7: queue entries for requests whose signal already aborted"
     const gate = deferred();
     app.get("/hold", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const holder = app.handle(new Request("http://x/hold"));
     const dead1 = new AbortController();
@@ -160,7 +160,7 @@ describe("REVIEW-SEC-8: queueTimeoutMs boundary values", () => {
     const gate = deferred();
     app.get("/hold", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const holder = app.handle(new Request("http://x/hold"));
     const flood = [0, 1].map((i) => app.handle(new Request(`http://x/hold-x-${i}`)));
@@ -188,10 +188,10 @@ describe("REVIEW-SEC-9: deadline zombie — pooling state must not leak", () => 
     app.get("/zombie", async (c) => {
       c.state.secret = marker;
       await gate.promise;
-      c.body = "late"; // harmless write after the 504
+      return c.text("late"); // harmless late return after the 504
     });
     app.get("/probe", (c) => {
-      c.body = `keys=${Object.keys(c.state).toSorted().join(",")}`;
+      return c.text(`keys=${Object.keys(c.state).toSorted().join(",")}`);
     });
     const zombie = await app.handle(new Request("http://x/zombie"));
     expect(zombie.status).toBe(504);
@@ -219,7 +219,7 @@ describe("REVIEW-SEC-10: requestTimeout 1ms storm", () => {
       const gate = deferred();
       app.get("/hang", async (c) => {
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       const tracker = noiseTracker();
       try {
@@ -252,7 +252,7 @@ describe("REVIEW-SEC-11: deadline zombie must not write a second response on the
       const app = new Keala({ env: "test", requestTimeout: 120 });
       app.get("/zombie", async (c) => {
         await wait(450);
-        c.body = "ZOMBIE-LATE-BYTES";
+        return c.text("ZOMBIE-LATE-BYTES");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -288,10 +288,10 @@ describe("REVIEW-SEC-12: pipelined requests racing drain start", () => {
       const gate = deferred();
       app.get("/slow", async (c) => {
         await gate.promise;
-        c.body = "DRAIN-FIRST";
+        return c.text("DRAIN-FIRST");
       });
       app.get("/fast", (c) => {
-        c.body = "DRAIN-SECOND";
+        return c.text("DRAIN-SECOND");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);

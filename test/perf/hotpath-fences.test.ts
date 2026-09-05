@@ -46,7 +46,7 @@ const makeProbe = (options: AppOptions): Probe => {
     await next();
   });
   app.get("/x", (c) => {
-    c.body = { ok: true };
+    return c.json({ ok: true });
   });
   const request = new Request("http://localhost/x");
   const run = async (): Promise<void> => {
@@ -300,7 +300,7 @@ describe("agent R4.4 perf review: hot-path costs", () => {
         observed.push(
           `plain:${(c as unknown as { abortValue?: AbortController }).abortValue !== undefined}`,
         );
-        c.body = "ok";
+        return c.text("ok");
       });
       await plainApp.handle(new Request("http://localhost/x"));
       const timeoutApp = new Keala({ env: "test", requestTimeout: 30_000 });
@@ -308,7 +308,7 @@ describe("agent R4.4 perf review: hot-path costs", () => {
         observed.push(
           `timeout:${(c as unknown as { abortValue?: AbortController }).abortValue !== undefined}`,
         );
-        c.body = "ok";
+        return c.text("ok");
       });
       await timeoutApp.handle(new Request("http://localhost/x"));
       expect(observed).toEqual(["plain:false", "timeout:false"]);
@@ -340,7 +340,7 @@ describe("agent R4.4 perf review: hot-path costs", () => {
       pooled.get("/p", (c) => {
         if (seen.length === 0) void c.signal.aborted; // touch ONLY the first request
         seen.push((c as unknown as { abortValue?: AbortController }).abortValue !== undefined);
-        c.body = "ok";
+        return c.text("ok");
       });
       const pooledRequest = new Request("http://localhost/p");
       await (await pooled.handle(pooledRequest)).text(); // consume → retire → recycle

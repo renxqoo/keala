@@ -273,14 +273,15 @@ describe("C2: dev warning for route-scoped middleware that never calls next", ()
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("does not warn when the middleware writes a state-mode response without next", async () => {
+  it("does not warn when the middleware answers with a Response without next", async () => {
     const warn = warns();
     const app = new Keala({ env: "development" });
     app.get(
       "/x",
       (c) => {
-        c.status = 200;
-        c.body = "from middleware"; // legit koa idiom: state-style, no next
+        // U3c: the return form is the only answer shape — no next is legit
+        // whenever a Response is returned (the old state-mode twin).
+        return c.text("from middleware");
       },
       (c) => c.json({ never: true }),
     );

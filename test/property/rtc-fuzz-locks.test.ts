@@ -317,15 +317,20 @@ describe("R6-H pooling: retired contexts [locks]", () => {
   it("locks: a consumer cancelling mid-pull still recycles the context safely", async () => {
     const app = new Keala({ ...quiet, pooling: true });
     let pulls = 0;
-    app.get("/s", (c) => {
-      c.body = new ReadableStream({
-        async pull(ctrl) {
-          pulls += 1;
-          await new Promise((r) => setTimeout(r, 5));
-          ctrl.enqueue(encoder.encode(`c${pulls}`));
-        },
-      });
-    });
+    app.get(
+      "/s",
+      () =>
+        // U3c: streams ride a hand-built Response (outside the sugar gate).
+        new Response(
+          new ReadableStream({
+            async pull(ctrl) {
+              pulls += 1;
+              await new Promise((r) => setTimeout(r, 5));
+              ctrl.enqueue(encoder.encode(`c${pulls}`));
+            },
+          }),
+        ),
+    );
     const res = await drive(app, new Request("http://x/s"));
     const reader = res.body!.getReader();
     await reader.read();

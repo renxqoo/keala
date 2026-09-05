@@ -183,7 +183,7 @@ describe("REVIEW-SEC-2: custom rejection handler on the Node wire", () => {
       const gate = deferred();
       app.get("/hold", async (c) => {
         await gate.promise;
-        c.body = "HOLD";
+        return c.text("HOLD");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -325,11 +325,11 @@ describe("REVIEW-SEC-6: signal synthesis — deadline abort must stay request-sc
     app.get("/peer", async (c) => {
       await wait(30);
       observed.push({ who: "peer", aborted: c.signal.aborted });
-      c.body = "peer-ok";
+      return c.text("peer-ok");
     });
     app.get("/after", async (c) => {
       observed.push({ who: "after", aborted: c.signal.aborted });
-      c.body = "after-ok";
+      return c.text("after-ok");
     });
     const victim = app.handle(new Request("http://x/victim"));
     const peer = app.handle(new Request("http://x/peer"));

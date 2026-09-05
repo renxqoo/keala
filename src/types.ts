@@ -17,13 +17,6 @@ export type HeaderValue = string | string[];
 export type HeaderMap = Record<string, HeaderValue>;
 
 /**
- * Allowed response bodies (state mode): objects are serialized as JSON,
- * `Blob` / `ReadableStream` pass through directly. A web `Response` is NOT
- * assignable (0.7): return it instead — the commit slot owns it.
- */
-export type ResponseBody = string | Uint8Array | ReadableStream | Blob | object | null;
-
-/**
  * Declaration-merging point for context extensions (EXT-1).
  *
  * `app.decorate(key, value)` installs a member on every context at RUNTIME;

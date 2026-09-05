@@ -108,10 +108,7 @@ describe("responseCache", () => {
       c.cookies.set("sid", "1");
       return c.text("session");
     });
-    app.get("/nostream", cache(), (c) => {
-      c.status = 201;
-      return c.text("created");
-    });
+    app.get("/nostream", cache(), (c) => c.text("created", 201));
     const post = await app.handle(req("/post-only", { method: "POST", body: "x" }));
     expect(post.headers.get("x-cache")).toBeNull();
     for (const path of ["/private", "/cookied", "/nostream"]) {
@@ -146,9 +143,9 @@ describe("responseCache", () => {
 
   it("binary (non-textual) bodies are not captured", async () => {
     const app = new Keala(quiet);
-    app.get("/bin", cache(), (c) => {
-      c.body = new Uint8Array([1, 2, 3]);
-    });
+    // U3c: bytes ride a hand-built Response — outside the sugar identity
+    // gate, so the capture never even considers them.
+    app.get("/bin", cache(), () => new Response(new Uint8Array([1, 2, 3])));
     const first = await app.handle(req("/bin"));
     const second = await app.handle(req("/bin"));
     expect(second.headers.get("x-cache")).toBeNull();

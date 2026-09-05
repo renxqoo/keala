@@ -269,7 +269,10 @@ describe("INV-6 pooling isolation", () => {
         setTimeout(
           () => {
             try {
-              captured.status = 500; // direct accessor: must throw while retired
+              // U3c: status is a getter-only accessor now — the write must
+              // still throw on a retired context (typed as a bare record:
+              // the property is deleted from the public surface).
+              (captured as unknown as { status: number }).status = 500;
               guardFailures++;
             } catch {
               /* the documented guard */

@@ -199,10 +199,7 @@ describe("R4.5 Node response engine", () => {
         }),
       );
       app.get("/bare-status", (c) => c.text("status", 201));
-      app.get("/bare-bytes", (c) => {
-        c.status = 200;
-        c.body = new Uint8Array([4, 5, 6]);
-      });
+      app.get("/bare-bytes", () => new Response(new Uint8Array([4, 5, 6])));
       app.get("/json-with-headers", (c) => c.json({ planned: true }, 207, { "x-planned": "json" }));
       app.get("/html", (c) => c.html("<strong>head</strong>"));
     });

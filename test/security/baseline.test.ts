@@ -8,9 +8,9 @@
  *    percent-encoded (controls included), so the wire header stays a single
  *    line. The lock asserts the OUTCOME (no CRLF on the wire, no injected
  *    headers) instead of the throw.
- *  - Empty-body endings use a committed `new Response(null, { status: 204 })`
- *    or `c.body = "ok"` because the state-mode null-body path is currently
- *    broken (see the CONFIRMED-BUG block at the bottom).
+ *  - Empty-body endings use `new Response(null, { status: 204 })` or
+ *    `return c.text("ok")` (U3c: the response setters are gone; see the
+ *    CONFIRMED-BUG block at the bottom for the surviving contract).
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -29,7 +29,7 @@ describe("header injection (response splitting)", () => {
       expect(() => c.append("X-Safe", "v\nX-Evil: 1")).toThrow(TypeError);
       expect(() => c.setHeader("X-Safe", "v\rX-Evil: 1")).toThrow(TypeError);
       expect(() => c.setHeader("X-Safe", "v\u0000")).toThrow(TypeError);
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
     expect(res.headers.get("x-evil")).toBe(null);
@@ -56,22 +56,15 @@ describe("header injection (response splitting)", () => {
     app.use(async (c) => {
       expect(() => c.cookies.set("sid", "v\r\nSet-Cookie: evil=1")).toThrow(TypeError);
       expect(() => c.cookies.set("sid", "v\u0000")).toThrow(TypeError);
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
     expect(res.headers.get("set-cookie")).toBe(null);
   });
 
-  it("rejects CRLF in ETag values", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c) => {
-      expect(() => {
-        c.etag = 'x"\r\nX-Evil: 1';
-      }).toThrow(TypeError);
-      c.body = "ok";
-    });
-    await drive(app, new Request("http://localhost:3000/"));
-  });
+  // U3c deletion: the "rejects CRLF in ETag values" lock died with the
+  // c.etag setter — ETag is a bare header now, and the generic CRLF
+  // rejection of staged header values is locked by the tests above.
 
   it("drops invalid headers arriving via error.headers instead of crashing", async () => {
     const app = new Keala(quiet);
@@ -98,7 +91,7 @@ describe("prototype pollution", () => {
       // pollution structurally impossible. Unsafe-looking keys are just keys.
       sawOk = c.query("ok");
       sawProtoKey = c.query("__proto__[polluted]");
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(
       app,
@@ -117,7 +110,7 @@ describe("prototype pollution", () => {
       expect(() => c.setHeader("__proto__", "x")).toThrow(TypeError);
       expect(() => c.setHeader("constructor", "x")).toThrow(TypeError);
       expect(() => c.setHeader("prototype", "x")).toThrow(TypeError);
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(app, new Request("http://localhost:3000/"));
     expect(({} as Record<string, unknown>).x).toBeUndefined();
@@ -128,7 +121,7 @@ describe("prototype pollution", () => {
     app.use(async (c) => {
       expect(c.cookies.get("__proto__")).toBeUndefined();
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(
       app,
@@ -143,7 +136,7 @@ describe("prototype pollution", () => {
     app.get("/files/*", (c) => {
       c.state["__proto__"] = "x";
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(app, new Request("http://localhost:3000/files/a"));
   });
@@ -153,7 +146,7 @@ describe("malformed input must never crash the process", () => {
   it("survives broken percent-encoding in paths and queries", async () => {
     const app = new Keala();
     app.get("/files/:name", (c) => {
-      c.body = String(c.params("name"));
+      return c.text(String(c.params("name")));
     });
     const res = await drive(app, new Request("http://localhost:3000/files/%E0%A4%A?x=%ZZ"));
     expect(res.status).toBe(200);
@@ -178,7 +171,7 @@ describe("malformed input must never crash the process", () => {
     const app = new Keala();
     app.use(async (c) => {
       expect(c.cookies.get("session")).toBe("ok");
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(
       app,
@@ -192,7 +185,7 @@ describe("malformed input must never crash the process", () => {
     const app = new Keala();
     app.use(async (c) => {
       expect(c.accepts("html")).toBeDefined();
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(
       app,
@@ -278,7 +271,7 @@ describe("cookie integrity", () => {
   it("rejects forged signatures", async () => {
     const app = new Keala({ keys: ["production-key"] });
     app.use(async (c) => {
-      c.body = c.cookies.get("sid") ?? "anonymous";
+      return c.text(c.cookies.get("sid") ?? "anonymous");
     });
     const forged = await drive(
       app,
@@ -293,7 +286,7 @@ describe("cookie integrity", () => {
       if (c.path === "/set") {
         c.cookies.set("sid", "fresh", { signed: true });
       } else {
-        c.body = c.cookies.get("sid") ?? "anonymous";
+        return c.text(c.cookies.get("sid") ?? "anonymous");
       }
     });
     const set = await drive(app, new Request("http://localhost:3000/set"));
@@ -313,7 +306,7 @@ describe("routing abuse resistance", () => {
   it("does not match path traversal out of the wildcard scope via decode", async () => {
     const app = new Keala();
     app.get("/assets/*", (c) => {
-      c.body = `wildcard:${c.params("wildcard")}`;
+      return c.text(`wildcard:${c.params("wildcard")}`);
     });
     const res = await drive(app, new Request("http://localhost:3000/assets/a%2F..%2Fsecret"));
     expect(res.status).toBe(200);
@@ -342,25 +335,28 @@ describe("routing abuse resistance", () => {
 // ---------------------------------------------------------------------------
 
 describe("CONFIRMED-BUG: null-body finalization", () => {
-  it('CONFIRMED-BUG(now fixed): a 204 response must have an empty body, not the text "null" (TODO-BUG: respond.ts bodyInitOf)', async () => {
+  // U3c: the state-mode bodyInitOf bug is unreachable now (no body setter).
+  // The surviving contract is the return-form twin: empty statuses are
+  // cleansed UNCONDITIONALLY (§2.3-2) — no body, no content-describing
+  // headers, never the literal text "null".
+  it('CONFIRMED-BUG(now fixed): a 204 sugar answer serves "" not "null", with content headers cleansed', async () => {
     const app = new Keala(quiet);
     app.use((c) => {
-      c.status = 204;
+      c.setHeader("Content-Type", "text/plain");
+      return c.text("attempted", 204);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(204);
-    expect(await res.text()).toBe(""); // actual: "null" (Bun) / TypeError (Node)
+    expect(await res.text()).toBe("");
+    expect(res.headers.get("content-type")).toBeNull();
+    expect(res.headers.get("content-length")).toBeNull();
   });
 
-  it('CONFIRMED-BUG(now fixed): explicit null body then explicit status serves "" not "null" (TODO-BUG: respond.ts bodyInitOf)', async () => {
+  it('CONFIRMED-BUG(now fixed): a null-body Response with explicit 200 serves "" not "null"', async () => {
     const app = new Keala(quiet);
-    app.use((c) => {
-      c.body = null;
-      c.body = undefined as never; // koa allows an undefined body assignment
-      c.status = 200;
-    });
+    app.use(() => new Response(null));
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe(""); // actual: "null"
+    expect(await res.text()).toBe("");
   });
 });

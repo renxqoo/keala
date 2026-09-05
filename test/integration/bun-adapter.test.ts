@@ -39,9 +39,7 @@ const fakeServe = (): {
 describe("startBunServer", () => {
   it("wires app.handle into the serve fetch handler and passes the server handle through the runtime so c.ip resolves", async () => {
     const app = new Keala();
-    app.use(async (c) => {
-      c.body = { ip: c.ip, url: c.url };
-    });
+    app.use((c) => c.json({ ip: c.ip, url: c.url }));
     const { impl, options } = fakeServe();
     startBunServer(app, { port: 4123 }, undefined, impl);
 
@@ -84,9 +82,7 @@ describe("startBunServer", () => {
 
   it("handles null requestIP results", async () => {
     const app = new Keala();
-    app.use(async (c) => {
-      c.body = c.ip;
-    });
+    app.use((c) => c.text(c.ip));
     const { impl, options } = fakeServe();
     startBunServer(app, {}, undefined, impl);
     const fetch = options()["fetch"] as (

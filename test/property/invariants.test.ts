@@ -46,8 +46,7 @@ describe("agent-r6 RED: confirmed violations", () => {
     });
     app.get("/r", (c) => {
       c.setHeader("x-unicode", "café中"); // 0xE9 and 0x4E2D — not a ByteString
-      c.body = "ok";
-      return undefined;
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost/r"));
     expect(res.status).toBe(500);
@@ -64,8 +63,7 @@ describe("agent-r6 RED: confirmed violations", () => {
     const app = new Keala({ ...quiet });
     app.get("/r", (c) => {
       c.setHeader("x-unicode", "café中");
-      c.body = "ok";
-      return undefined;
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost/r", { method: "HEAD" }));
     expect(res.status).toBe(500);
@@ -74,8 +72,8 @@ describe("agent-r6 RED: confirmed violations", () => {
 
   it("R6-3 [INV-7+INV-8, seed head-dirty-committed#17/35/140/148] post-commit mutation with a non-latin-1 value", async () => {
     // The exact fuzz shape from the property: a committed json response whose
-    // outer middleware stages a unicode header (plus benign type/message/body
-    // writes) after next(). rebuildCommitted's headers.set() throws, the
+    // outer middleware stages a unicode header (plus benign late writes)
+    // after next(). rebuildCommitted's headers.set() throws, the
     // error path re-stages the poison header, and the recursion above runs —
     // onerror floods and the HEAD answer is bodied.
     const app = new Keala({ ...quiet });
@@ -85,9 +83,10 @@ describe("agent-r6 RED: confirmed violations", () => {
     });
     app.use(async (c, next) => {
       await next();
+      // U3c: the seed's type/body ops are gone with the setters — the
+      // post-commit header write alone carries the mutation class (it now
+      // lands directly on the committed Response's Headers, §0.7 contract).
       c.setHeader("x-unicode", "café中"); // the poison write (seed 17's `set` op)
-      c.type = "bogus"; // seed 17's `type` op (in-place post-commit in 0.7)
-      c.body = "late-body"; // seed 17's `body` op (0.7: throws post-commit)
     });
     app.get("/r", (c) => c.json({ a: 1 }, 200));
     const res = await app.handle(new Request("http://localhost/r", { method: "HEAD" }));

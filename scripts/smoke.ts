@@ -35,7 +35,7 @@ api.param("id", async (c, next) => {
 
 api.get("/users/:id", async (c) => {
   c.cookies.set("last", c.params("id") ?? "", { signed: true, httpOnly: true });
-  c.body = { id: Number(c.params("id")) };
+  return c.json({ id: Number(c.params("id")) });
 });
 
 api.get("/hello", (c) => c.text("hello world"));
@@ -43,9 +43,8 @@ api.get("/boom", () => {
   throw new Error("boom");
 });
 api.post("/users", (c) => {
-  c.status = 201;
   c.setHeader("Location", "/api/users/42");
-  c.body = { created: true };
+  return c.json({ created: true }, 201);
 });
 api.get("/query", (c) => c.json({ q: c.query("q") ?? null, n: c.queries("n").length }));
 api.get("/teapot", (c) => c.throw(418, "short and stout"));
@@ -56,10 +55,7 @@ app.use(async (c, next) => {
   c.setHeader("X-Response-Time", `${Date.now() - start}ms`);
 });
 app.mount("/", api);
-app.get("/redirect", (c) => {
-  c.status = 302;
-  return c.redirect("/api/hello");
-});
+app.get("/redirect", (c) => c.redirect("/api/hello"));
 app.notFound((c) => c.text("nothing here", 404));
 
 const server = app.listen({ port: 0, hostname: "127.0.0.1" });
@@ -170,10 +166,7 @@ if (typeof Bun !== "undefined") {
   const pooledApp = new Keala({ env: "production", pooling: true });
   pooledApp.get("/t", (c) => c.text("hello world"));
   pooledApp.get("/j", (c) => c.json({ hello: "world" }));
-  pooledApp.get("/s", (c) => {
-    c.type = "text/plain";
-    c.body = "state";
-  });
+  pooledApp.get("/s", (c) => c.text("state"));
   const pooledServer = pooledApp.listen({ port: 0, hostname: "127.0.0.1" });
   const pb = `http://127.0.0.1:${pooledServer.port}`;
   for (let pass = 0; pass < 2; pass++) {

@@ -107,8 +107,7 @@ describe("pooling soak", () => {
     app.get("/text/:n", (c) => c.text(`t:${c.params("n")}`));
     app.get("/hdr/:n", (c) => {
       c.setHeader("x-n", c.params("n") ?? "");
-      c.body = `h:${c.params("n")}`;
-      c.type = "text/plain";
+      return c.text(`h:${c.params("n")}`);
     });
     const results = await Promise.all(
       Array.from({ length: 60 }, (_, i) =>

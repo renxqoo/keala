@@ -424,8 +424,9 @@ describe("review fixes: 0.6.3 regression locks", () => {
     const seen: unknown[] = [];
     app.use(async (c, next) => {
       await next();
-      // 0.7: c.message is gone; the commit-aware reads are status/type.
-      seen.push(c.status, c.type);
+      // 0.7: c.message is gone; U3c: c.type is gone — the commit-aware reads
+      // are status + resHeader (which falls back to the committed Response).
+      seen.push(c.status, c.resHeader("Content-Type"));
     });
     app.get(
       "/x",

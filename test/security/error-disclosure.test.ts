@@ -86,7 +86,7 @@ describe("agent security review: error.headers content framing", () => {
       const app = new Keala({ env: "test" });
       app.get("/evil", (c) => c.throw(502, "upstream", { headers: { "content-length": "5" } }));
       app.get("/ok", (c) => {
-        c.body = "OK-BODY";
+        return c.text("OK-BODY");
       });
       app.onError(() => new Response("SMUGGLED-CONTENT-FOLLOWS-HERE-IN-BYTES"));
       const handle = startNodeServer(app, { port: 0 });

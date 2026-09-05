@@ -55,10 +55,7 @@ app.get(
     c.setHeader("X-Step-2", "2");
     await next();
   },
-  (c) => {
-    c.type = "text/plain";
-    c.body = "middleware";
-  },
+  (c) => c.text("middleware"),
 );
 
 app.get("/debug/memory", (c) =>

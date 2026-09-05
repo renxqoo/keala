@@ -175,7 +175,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
       // timer, or re-wrap the finalized Response. The settle release
       // (settleRequest → releaseInFlight) returns `value` UNCHANGED when not
       // draining — proven by identity for committed Responses and by an
-      // exactly-1 Response construction count for state-mode bodies (a
+      // exactly-1 Response construction count for sugar bodies (a
       // re-wrap would make it 2). Timers are fenced twice: by the counting
       // patch (create balance) and by getActiveResourcesInfo before/after.
       const acPatch = patchConstructor("AbortController");
@@ -188,7 +188,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
           await next();
         });
         app.get("/s", (c) => {
-          c.body = "state-mode-payload";
+          return c.text("sugar-mode-payload");
         });
         const prebuilt = new Response("committed-payload");
         app.get("/c", () => prebuilt);
@@ -233,7 +233,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         const rs0 = rsPatch.count();
         const resp0 = respPatch.count();
 
-        // State-mode (finalize constructs the Response): the object handed
+        // Sugar-mode (the helper constructs the Response): the object handed
         // out must be the one and only Response constructed for the request.
         for (let i = 0; i < N; i++) await app.handle(stateReq);
         // Committed-mode: pre-built Response returned verbatim.
@@ -258,7 +258,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         expect(constructedResponses).toBe(N); // exactly finalize's own N — no re-wrap
         // The only streams are finalize's own string bodies (undici routes
         // `new Response("...")` through the global ReadableStream): one per
-        // state-mode request, NONE for the verbatim committed share — a
+        // sugar request, NONE for the verbatim committed share — a
         // settle-side re-wrap would push this to 2N.
         expect(constructedStreams).toBe(N);
         // Committed identity: settle returns the SAME object when not draining.

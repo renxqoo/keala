@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/index.ts";
 
+/**
+ * U3c migration: the response setter family (c.body=/c.status=(write)/
+ * c.type/c.length/c.etag/c.lastModified/c.attachment and the staged reads
+ * c.body/c.type/c.etag/c.lastModified/c.res) is gone. Responses are committed
+ * by RETURN — c.text/c.json/c.html or a hand-built Response. Tests that
+ * locked the deleted setters' own semantics (type expansion, etag
+ * auto-quoting, attachment basename/RFC5987, length coercion, the staged
+ * null-body/redirect-status slots) were deleted — see the migration report.
+ */
+
 const makeApp = () => new Keala({ env: "test" });
 
 describe("response facade (flat context)", () => {
@@ -9,50 +19,43 @@ describe("response facade (flat context)", () => {
     const app = makeApp();
     app.use(async (c) => {
       expect(c.status).toBe(404);
-      expect(c.body).toBe(null);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
   });
 
-  it("validates status codes", async () => {
+  it("validates status codes (U3c: the sugar path delegates to the Response constructor)", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      expect(() => {
-        c.status = 700;
-      }).toThrow(TypeError);
-      expect(() => {
-        c.status = 404.5;
-      }).toThrow(TypeError);
-      c.status = 201;
+      expect(() => c.text("x", 700)).toThrow(RangeError);
+      return c.text("Created", 201);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(201);
   });
 
-  it("delivers string bodies verbatim with a runtime text content-type (markup sniffing removed)", async () => {
-    // D1 divergence: c.body = string no longer sniffs markup — no
-    // content-type is recorded in-process and the wire type comes from the
-    // fetch runtime (text/plain for strings).
+  it("delivers string bodies verbatim with a text content-type (markup sniffing removed)", async () => {
+    // D1 divergence: a markup string is NOT sniffed to text/html — c.text
+    // always answers text/plain.
     const app = makeApp();
     let sawType = "";
     app.use(async (c, next) => {
       await next();
-      sawType = c.type;
+      sawType = c.resHeader("Content-Type");
     });
     app.use(async (c) => {
-      c.body = "<h1>hello</h1>";
+      return c.text("<h1>hello</h1>");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(sawType).toBe("");
+    expect((sawType ?? "").startsWith("text/plain") || sawType === "").toBe(true);
     expect(await res.text()).toBe("<h1>hello</h1>");
     const htmlType = res.headers.get("content-type") ?? "";
     expect(htmlType === "" || htmlType.startsWith("text/plain")).toBe(true);
 
     const plain = makeApp();
     plain.use(async (c) => {
-      c.body = "plain words";
+      return c.text("plain words");
     });
     const plainRes = await plain.handle(new Request("http://localhost:3000/"));
     const plainType = plainRes.headers.get("content-type") ?? "";
@@ -62,7 +65,7 @@ describe("response facade (flat context)", () => {
   it("JSON-serializes object bodies via Response.json", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.body = { users: [1, 2, 3] };
+      return c.json({ users: [1, 2, 3] });
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect((res.headers.get("content-type") ?? "").split(";")[0]).toBe("application/json");
@@ -71,8 +74,8 @@ describe("response facade (flat context)", () => {
 
   it("supports binary bodies", async () => {
     const app = makeApp();
-    app.use(async (c) => {
-      c.body = new Uint8Array([1, 2, 3]);
+    app.use(async () => {
+      return new Response(new Uint8Array([1, 2, 3]));
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     // D1: no octet-stream sniffing — the body passes through untouched.
@@ -82,43 +85,30 @@ describe("response facade (flat context)", () => {
 
   it("supports stream bodies", async () => {
     const app = makeApp();
-    app.use(async (c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          const encoder = new TextEncoder();
-          controller.enqueue(encoder.encode("chunked"));
-          controller.close();
-        },
-      });
+    app.use(async () => {
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(encoder.encode("chunked"));
+            controller.close();
+          },
+        }),
+      );
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(await res.text()).toBe("chunked");
   });
 
-  it("null body maps to 204 (or keeps empty statuses)", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.body = "temp";
-      c.body = null;
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(204);
-    expect(res.headers.get("content-type")).toBe(null);
-
-    const keep304 = makeApp();
-    keep304.use(async (c) => {
-      c.status = 304;
-      c.body = null;
-    });
-    const notModified = await keep304.handle(new Request("http://localhost:3000/"));
-    expect(notModified.status).toBe(304);
-  });
+  // U3c deletion: "null body maps to 204 (or keeps empty statuses)" locked
+  // the staged `c.body = null` slot. The empty-status contract now lives in
+  // the sugar path — locked below ("strips content headers for 204/304") and
+  // in app-runtime-locks ("sugar: 304 keeps validators/cookies...").
 
   it("keeps an explicit status when body is set", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.status = 201;
-      c.body = { ok: true };
+      return c.json({ ok: true }, 201);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(201);
@@ -127,8 +117,7 @@ describe("response facade (flat context)", () => {
   it("strips content headers for 204/304", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.body = "will be dropped";
-      c.status = 204;
+      return c.text("will be dropped", 204);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(204);
@@ -137,20 +126,13 @@ describe("response facade (flat context)", () => {
     expect(await res.text()).toBe("");
   });
 
-  // CONFIRMED-BUG (core): the HEAD Content-Length backfill is lost whenever
-  // the request produced NO other response headers. fromState reads the header
-  // record into a local `const record` up front (src/core/respond.ts fromState,
-  // `const record = c.headersRecord`); the HEAD backfill then assigns a FRESH
-  // record via `(record ?? (c.headersRecord = {}))["content-length"] = ...`,
-  // but hasRecord/multiValue/the serialization all still consult the stale
-  // null local, so the bare fast path returns `new Response(null)` and the
-  // backfilled "12" never reaches the wire. With any prior header (e.g. a
-  // c.set call) the local is non-null and the backfill survives.
-  // Expected (koa): HEAD keeps status 200, Content-Length "12", empty body.
-  it("CONFIRMED-BUG: drops the body for HEAD requests", async () => {
+  // U3c: the state-mode HEAD backfill (and its bare-fast-path bug) is gone —
+  // the sugar path builds the HEAD view AT CONSTRUCTION, so Content-Length
+  // reaches the wire even with no other header staged.
+  it("drops the body for HEAD requests (sugar builds the HEAD view)", async () => {
     const app = makeApp();
     app.use(async (c) => {
-      c.body = "body-content";
+      return c.text("body-content");
     });
     const res = await app.handle(new Request("http://localhost:3000/", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -168,7 +150,7 @@ describe("response facade (flat context)", () => {
       c.append("Vary", "Origin");
       c.append("Vary", "Accept");
       c.remove("x-one");
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("x-one")).toBe(null);
@@ -181,51 +163,20 @@ describe("response facade (flat context)", () => {
     app.use(async (c) => {
       expect(() => c.setHeader("Bad Name", "v")).toThrow(TypeError);
       expect(() => c.setHeader("X-Ok", "v\r\nInjected: 1")).toThrow(TypeError);
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.handle(new Request("http://localhost:3000/"));
   });
 
-  it("type setter and getter", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.type = "application/xml; charset=utf-8";
-      expect(c.type).toBe("application/xml");
-      c.body = "<x/>";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-type")).toBe("application/xml; charset=utf-8");
-  });
-
-  it("etag quoting and lastModified validation", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.etag = "abc";
-      expect(c.etag).toBe('"abc"');
-      c.etag = '"quoted"';
-      expect(c.etag).toBe('"quoted"');
-      c.lastModified = new Date(Date.UTC(2024, 5, 1));
-      expect(c.lastModified?.toISOString()).toBe("2024-06-01T00:00:00.000Z");
-      expect(() => {
-        c.lastModified = "nope" as unknown as Date;
-      }).toThrow(TypeError);
-      c.body = "ok";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("etag")).toBe('"quoted"');
-    expect(res.headers.get("last-modified")).toBe("Sat, 01 Jun 2024 00:00:00 GMT");
-  });
-
-  it("etag removal on empty value", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.etag = "temp";
-      c.etag = "";
-      c.body = "ok";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("etag")).toBe(null);
-  });
+  // U3c deletions (deleted-API semantics — the setters' own behavior):
+  //  - "type setter and getter" — c.type write/read pair, param-stripping getter
+  //  - "etag quoting and lastModified validation" — auto-quoting + Date checks
+  //  - "etag removal on empty value" — the setter's empty-string removal slot
+  //  - "keeps an explicit redirect status" — the staged `c.status = 3xx` slot
+  //    feeding c.redirect's default code; the explicit-code form is locked by
+  //    the redirect tests below
+  //  - "attachment ..." ×3 — basename/MIME-inference/RFC5987 fallback
+  //  - "length setter coerces numbers" — the setter's numeric coercion
 
   it("redirect sets Location with an empty body (0.7 adjudication)", async () => {
     const app = makeApp();
@@ -257,19 +208,9 @@ describe("response facade (flat context)", () => {
       expect(() => c.redirect("/x", 200)).toThrow(/3xx/);
       expect(() => c.redirect("/x", 404)).toThrow(/3xx/);
       expect(() => c.redirect("/x", 302.5)).toThrow(/3xx/);
-      c.body = "ok";
+      return c.text("ok");
     });
     await invalid.handle(new Request("http://localhost:3000/"));
-  });
-
-  it("keeps an explicit redirect status", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.status = 301;
-      return c.redirect("/gone");
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(301);
   });
 
   it("redirect after a commit is a harmless pure build (U3a: no throw, no effect unless returned)", async () => {
@@ -285,47 +226,5 @@ describe("response facade (flat context)", () => {
     expect(built?.status).toBe(302);
     expect(res.headers.get("location")).toBe(null);
     expect(await res.text()).toBe("committed");
-  });
-
-  it("attachment sets content-disposition and infers type", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.attachment("report.pdf");
-      c.body = "binary-ish";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-disposition")).toBe('attachment; filename="report.pdf"');
-    expect(res.headers.get("content-type")).toBe("application/pdf");
-  });
-
-  it("attachment without filename", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.attachment();
-      c.body = "x";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-disposition")).toBe("attachment");
-  });
-
-  it("attachment rejects path separators in fallback", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      expect(() => c.attachment("报表.bin", { fallback: "a/b" })).toThrow(TypeError);
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/"));
-  });
-
-  it("length setter coerces numbers", async () => {
-    const app = makeApp();
-    app.use(async (c) => {
-      c.length = "42" as unknown as number;
-      expect(c.length).toBe(42);
-      c.length = Number.NaN;
-      expect(c.length).toBe(0);
-      c.body = "ok";
-    });
-    await app.handle(new Request("http://localhost:3000/"));
   });
 });

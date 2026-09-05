@@ -49,12 +49,11 @@ describe("app pipeline", () => {
     expect(res.headers.get("allow")).toContain("GET");
   });
 
-  it("state mode: c.body/c.status/c.set flow into the response", async () => {
+  it("staged headers and the sugar status flow into the response (U3c rewrite of the state-mode lock)", async () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
-      c.status = 201;
       c.setHeader("X-Made", "yes");
-      c.body = "made";
+      return c.text("made", 201);
     });
     const res = await app.handle(req("/s"));
     expect(res.status).toBe(201);
@@ -102,7 +101,7 @@ describe("app pipeline", () => {
     expect(await res.text()).toBe("plain");
   });
 
-  it("does not resurrect an explicitly removed text content-type; a replaced body throws (0.7)", async () => {
+  it("does not resurrect an explicitly removed text content-type (U3c: post-commit body writes are gone)", async () => {
     const removed = new Keala(quiet);
     removed.use(async (c, next) => {
       await next();
@@ -112,20 +111,10 @@ describe("app pipeline", () => {
     removed.get("/text", (c) => c.text("plain"));
     expect((await removed.handle(req("/text"))).headers.get("content-type")).toBeNull();
 
-    const replaced = new Keala(quiet);
-    const thrown: unknown[] = [];
-    replaced.use(async (c, next) => {
-      await next();
-      try {
-        c.body = new Uint8Array([1, 2, 3]);
-      } catch (error) {
-        thrown.push(error);
-      }
-    });
-    replaced.get("/text", (c) => c.text("plain"));
-    const replacedRes = await replaced.handle(req("/text"));
-    expect(thrown[0]).toBeInstanceOf(TypeError);
-    expect(await replacedRes.text()).toBe("plain");
+    // U3c deletion: the "replaced body throws" half locked the post-commit
+    // `c.body =` TypeError — the setter is gone; returning a new Response is
+    // the replacement (locked by "last committer wins" in
+    // response-regressions.test.ts).
   });
 
   it("c.json returns application/json through the native static", async () => {
@@ -137,15 +126,9 @@ describe("app pipeline", () => {
     expect(await res.text()).toBe('{"ok":true}');
   });
 
-  it("state-mode object bodies serialize via Response.json semantics", async () => {
-    const app = new Keala(quiet);
-    app.get("/o", (c) => {
-      c.body = { n: 1 };
-    });
-    const res = await app.handle(req("/o"));
-    expect((res.headers.get("content-type") ?? "").split(";")[0]).toBe("application/json");
-    expect(await res.text()).toBe('{"n":1}');
-  });
+  // U3c deletion: "state-mode object bodies serialize via Response.json
+  // semantics" locked the staged object-body path — c.json's serialization
+  // is locked directly above ("c.json returns application/json...").
 
   it("notFound customizes the untouched-404 response", async () => {
     const app = new Keala(quiet);

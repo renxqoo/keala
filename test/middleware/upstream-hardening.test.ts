@@ -32,7 +32,7 @@ describe("upstream hardening: compress gates", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
-      c.body = gzipBody;
+      return c.text(gzipBody);
     });
     const refused = await app.handle(req("/big", { headers: { "accept-encoding": "gzip;q=0" } }));
     expect(refused.headers.get("content-encoding")).toBeNull();
@@ -47,7 +47,7 @@ describe("upstream hardening: compress gates", () => {
     app.use(compress());
     app.get("/big", (c) => {
       c.setHeader("Cache-Control", "no-transform");
-      c.body = gzipBody;
+      return c.text(gzipBody);
     });
     const res = await app.handle(req("/big", gzipAccepted));
     expect(res.headers.get("content-encoding")).toBeNull();
@@ -58,8 +58,7 @@ describe("upstream hardening: compress gates", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
-      c.status = 206;
-      c.body = gzipBody;
+      return c.text(gzipBody, 206);
     });
     const res = await app.handle(req("/big", gzipAccepted));
     expect(res.status).toBe(206);
@@ -70,15 +69,16 @@ describe("upstream hardening: compress gates", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/png", (c) => {
-      c.type = "image/png";
-      c.body = "PNG".repeat(200); // large enough, wrong type
+      // U3c: bare-header contract — the caller passes the full value.
+      c.setHeader("Content-Type", "image/png");
+      return c.text("PNG".repeat(200)); // large enough, wrong type
     });
     const res = await app.handle(req("/png", gzipAccepted));
     expect(res.headers.get("content-encoding")).toBeNull();
     // textual types still compress
     app.get("/svg", (c) => {
-      c.type = "image/svg+xml";
-      c.body = gzipBody;
+      c.setHeader("Content-Type", "image/svg+xml");
+      return c.text(gzipBody);
     });
     const svg = await app.handle(req("/svg", gzipAccepted));
     expect(svg.headers.get("content-encoding")).toBe("gzip");
@@ -88,7 +88,7 @@ describe("upstream hardening: compress gates", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
-      c.body = gzipBody;
+      return c.text(gzipBody);
     });
     const res = await app.handle(req("/big", { headers: { "accept-encoding": "*" } }));
     expect(res.headers.get("content-encoding")).toBe("gzip");
@@ -104,10 +104,10 @@ describe("upstream hardening: etag method gate", () => {
     const app = new Keala(quiet);
     app.use(etag());
     app.post("/e", (c) => {
-      c.body = "payload";
+      return c.text("payload");
     });
     app.get("/e", (c) => {
-      c.body = "payload";
+      return c.text("payload");
     });
     const res = await app.handle(req("/e", { method: "POST", headers: { "if-none-match": "*" } }));
     expect(res.status).toBe(200);
@@ -162,7 +162,7 @@ describe("upstream hardening: pattern registration guards", () => {
     // capture across segments — documented deliberate divergence from hono.
     const app = new Keala(quiet);
     app.get("/files/:name(.*)", (c) => {
-      c.body = `got ${c.params("name")}`;
+      return c.text(`got ${c.params("name")}`);
     });
     expect((await app.handle(req("/files/a/b"))).status).toBe(404);
     expect(await (await app.handle(req("/files/a"))).text()).toBe("got a");
@@ -227,32 +227,27 @@ describe("upstream hardening: response invariants", () => {
     expect(resB.status).toBe(500);
   });
 
-  it("koa#1939: replacing a sized body with a stream drops the stale Content-Length", async () => {
+  it("koa#1939 (U3c residue): a returned stream Response carries no fabricated Content-Length", async () => {
+    // U3c: the stale-CL drop died with the double body assignment — the
+    // state machine that repaired it is gone. What remains true (and locked
+    // here): a stream has no knowable length, and the finalizer never
+    // invents one for a returned Response. Staging an explicit CL now WINS
+    // per §2.3-1 (staged overwrite) — the caller owns bare headers.
     const app = new Keala(quiet);
-    app.get("/s", (c) => {
-      c.body = "hello";
-      c.setHeader("Content-Length", "5");
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("a-much-longer-body"));
-          controller.close();
-        },
-      });
-    });
+    app.get(
+      "/s",
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("a-much-longer-body"));
+              controller.close();
+            },
+          }),
+        ),
+    );
     const res = await app.handle(req("/s"));
     expect(res.headers.get("content-length")).toBeNull();
-    // A stream has unknown length by construction — an explicit stale CL
-    // goes even WITHOUT a prior body.
-    app.get("/s2", (c) => {
-      c.setHeader("Content-Length", "10");
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.close();
-        },
-      });
-    });
-    const res2 = await app.handle(req("/s2"));
-    expect(res2.headers.get("content-length")).toBeNull();
   });
 
   // 0.7: koa#1939 (`c.body = new Response(...)` dropping the stale CL) is
@@ -269,7 +264,7 @@ describe("upstream hardening: forwarded headers", () => {
     let host = "";
     app.get("/h", (c) => {
       host = c.host;
-      c.body = host;
+      return c.text(host);
     });
     const res = await app.handle(
       req("/h", { headers: { "x-forwarded-host": "evil.com:fake@legitimate.com" } }),
@@ -283,7 +278,7 @@ describe("upstream hardening: forwarded headers", () => {
     // chain's leftmost entry.
     const app = new Keala({ ...quiet, proxy: true });
     app.get("/ip", (c) => {
-      c.body = c.ip;
+      return c.text(c.ip);
     });
     const res = await app.handle(
       req("/ip", { headers: { "x-forwarded-for": "23.243.1.1:38242, [::1]:8080, ::1, 5.6.7.8" } }),
@@ -317,7 +312,7 @@ describe("upstream hardening: cookies", () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
       c.cookies.set("sid", "1");
-      c.body = "ok";
+      return c.text("ok");
     });
     const https = await app.handle(new Request("https://localhost:3000/s"));
     expect(https.headers.getSetCookie()[0]).toContain("Secure");
@@ -326,7 +321,7 @@ describe("upstream hardening: cookies", () => {
     // Explicit opt-out wins even over TLS.
     app.get("/o", (c) => {
       c.cookies.set("sid", "1", { secure: false });
-      c.body = "ok";
+      return c.text("ok");
     });
     const optedOut = await app.handle(new Request("https://localhost:3000/o"));
     expect(optedOut.headers.getSetCookie()[0]).not.toContain("Secure");

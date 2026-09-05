@@ -34,7 +34,7 @@ describe("node adapter: request bridging", () => {
     const { base } = await serve((app) => {
       app.get("/x", (c) => {
         c.setHeader("x-custom", "yes");
-        c.body = "hello node";
+        return c.text("hello node");
       });
     });
     const res = await fetch(`${base}/x`);
@@ -76,7 +76,7 @@ describe("node adapter: request bridging", () => {
   it("exposes the remote address through the runtime channel", async () => {
     const { base } = await serve((app) => {
       app.get("/ip", (c) => {
-        c.body = c.ip;
+        return c.text(c.ip);
       });
     });
     const res = await fetch(`${base}/ip`);
@@ -87,7 +87,7 @@ describe("node adapter: request bridging", () => {
   it("Host header identity is preserved (c.host sees the request's own host)", async () => {
     const { base } = await serve((app) => {
       app.get("/host", (c) => {
-        c.body = c.host;
+        return c.text(c.host);
       });
     });
     const res = await fetch(`${base}/host`);
@@ -101,7 +101,7 @@ describe("node adapter: response bridging", () => {
       app.get("/cookies", (c) => {
         c.cookies.set("a", "1");
         c.cookies.set("b", "2");
-        c.body = "ok";
+        return c.text("ok");
       });
     });
     const res = await fetch(`${base}/cookies`);
@@ -126,7 +126,7 @@ describe("node adapter: response bridging", () => {
   it("HEAD answers with content-length and no body", async () => {
     const { base } = await serve((app) => {
       app.get("/big", (c) => {
-        c.body = "x".repeat(1234);
+        return c.text("x".repeat(1234));
       });
     });
     const res = await fetch(`${base}/big`, { method: "HEAD" });
@@ -149,7 +149,7 @@ describe("node adapter: response bridging", () => {
   it("404 and 405 flow through the finalizer", async () => {
     const { base } = await serve((app) => {
       app.get("/only", (c) => {
-        c.body = "ok";
+        return c.text("ok");
       });
     });
     expect((await fetch(`${base}/missing`)).status).toBe(404);
@@ -162,10 +162,10 @@ describe("node adapter: response bridging", () => {
     const app = new Keala({ ...quiet, keys: ["adapter-secret"] });
     app.get("/set", (c) => {
       c.cookies.set("sid", "session-1", { signed: true });
-      c.body = "set";
+      return c.text("set");
     });
     app.get("/read", (c) => {
-      c.body = c.cookies.get("sid", { signed: true }) ?? "none";
+      return c.text(c.cookies.get("sid", { signed: true }) ?? "none");
     });
     const signed = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     servers.push(signed);
@@ -184,7 +184,7 @@ describe("node adapter: server lifecycle", () => {
     async () => {
       const app = new Keala(quiet);
       app.get("/x", (c) => {
-        c.body = "ok";
+        return c.text("ok");
       });
       const server = await listen(app, 0, "127.0.0.1").ready();
       const base = `http://127.0.0.1:${server.port}`;
@@ -207,7 +207,7 @@ describe("node adapter: server lifecycle", () => {
   it("handle.fetch() mirrors the Bun server handle shape", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.body = "direct";
+      return c.text("direct");
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -229,7 +229,7 @@ describe("node adapter: raw socket behavior", () => {
   it("websocket upgrade requests are refused with 501 at the wire level", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -253,7 +253,7 @@ describe("node adapter: raw socket behavior", () => {
   it("an HTTP/1.0 request without Host still routes (fallback origin)", async () => {
     const app = new Keala(quiet);
     app.get("/legacy", (c) => {
-      c.body = "old http";
+      return c.text("old http");
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -287,7 +287,7 @@ describe("node adapter: failure surfaces", () => {
   it("repeated request headers arrive as an array value", async () => {
     const app = new Keala(quiet);
     app.get("/x-forwarded", (c) => {
-      c.body = c.header("x-forwarded-for");
+      return c.text(c.header("x-forwarded-for"));
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -319,7 +319,7 @@ describe("node adapter: failure surfaces", () => {
     const app = new Keala(quiet);
     app.get("/slow", (c) => {
       return gate.then(() => {
-        c.body = "late";
+        return c.text("late");
       });
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
@@ -335,15 +335,18 @@ describe("node adapter: failure surfaces", () => {
 
   it("a response stream failing after headers destroys the socket", async () => {
     const app = new Keala(quiet);
-    app.get("/broken-stream", (c) => {
-      c.status = 200;
-      c.body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("part1"));
-          setTimeout(() => controller.error(new Error("mid-stream failure")), 10);
-        },
-      });
-    });
+    app.get(
+      "/broken-stream",
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("part1"));
+              setTimeout(() => controller.error(new Error("mid-stream failure")), 10);
+            },
+          }),
+        ),
+    );
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
     const ended = new Promise<string>((resolve, reject) => {
@@ -381,7 +384,7 @@ describe("node adapter: failure surfaces", () => {
   it("malformed HTTP answers 400 and drops the connection", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -400,7 +403,7 @@ describe("node adapter: bridge failures", () => {
   it("an unparseable absolute-form target is refused (parser 400 or bridge 500)", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -428,7 +431,7 @@ describe("node adapter: review hardening", () => {
     servers.push(occupier);
     const app = new Keala(quiet);
     app.get("/x", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     await expect(listen(app, occupier.port, "127.0.0.1").ready()).rejects.toThrow();
   });
@@ -436,7 +439,7 @@ describe("node adapter: review hardening", () => {
   it("absolute-form request targets route like origin-form", async () => {
     const app = new Keala(quiet);
     app.get("/proxy-style", (c) => {
-      c.body = c.URL!.pathname;
+      return c.text(c.URL!.pathname);
     });
     const server = await listen(app, 0, "127.0.0.1").ready();
     servers.push(server);
@@ -461,7 +464,7 @@ describe("node adapter: review hardening", () => {
   it("an IPv6-bound server answers Host-less HTTP/1.0 requests", async () => {
     const app = new Keala(quiet);
     app.get("/legacy", (c) => {
-      c.body = "old http";
+      return c.text("old http");
     });
     const server = await listen(app, 0, "::1").ready();
     servers.push(server);

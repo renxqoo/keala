@@ -206,7 +206,7 @@ describe("R4.4 contract coherence (agent-r44)", () => {
       started++;
       if (started === 1)
         await gate.promise; // the zombie-to-be parks
-      else c.body = `done-${started}`;
+      else return c.text(`done-${started}`);
     });
     const first = app.handle(new Request("http://x/work")); // admitted, parks
     const second = app.handle(new Request("http://x/work")); // queued
@@ -239,7 +239,9 @@ describe("R4.4 contract coherence (agent-r44)", () => {
     await controlApp.handle(new Request("http://x/n"));
     let controlThrew = false;
     try {
-      controlCtx!.body = "late";
+      // U3c: the body setter is gone — probe retirement through a surviving
+      // mutating path (setHeader throws on the dead prototype).
+      controlCtx!.setHeader("x-late", "1");
     } catch {
       controlThrew = true;
     }
@@ -260,7 +262,8 @@ describe("R4.4 contract coherence (agent-r44)", () => {
     await wait(10);
     let recycleThrew: Error | undefined;
     try {
-      zombieCtx!.body = "late-write";
+      // U3c: probe through setHeader (the body setter is gone with the API).
+      zombieCtx!.setHeader("x-late", "1");
     } catch (error) {
       recycleThrew = error as Error;
     }
@@ -276,7 +279,7 @@ describe("R4.4 contract coherence (agent-r44)", () => {
     const gate = deferred();
     app.get("/park", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const inflight = app.handle(new Request("http://x/park"));
     expect(app.inFlight).toBe(1);
@@ -341,9 +344,7 @@ describe("R4.4 contract coherence (agent-r44)", () => {
     // before `timer = setTimeout(...)`, so an idle close() resolves at once
     // but leaves the drain timer armed for the full window.
     const app = new Keala({ env: "test" });
-    app.get("/x", (c) => {
-      c.body = "x";
-    });
+    app.get("/x", (c) => c.text("x"));
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);
     const tracker = armTracker();

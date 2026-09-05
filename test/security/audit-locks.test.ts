@@ -121,7 +121,7 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
     const errors: string[] = [];
     app.onError((e) => void errors.push(e.message));
     app.use((c) => {
-      c.body = `is:${String(c.is((c.query("f") as string) ?? "json"))}`;
+      return c.text(`is:${String(c.is((c.query("f") as string) ?? "json"))}`);
     });
     for (const token of PROTO_TOKENS) {
       const res = await drive(app, `http://localhost:3000/?f=${encodeURIComponent(token)}`, {
@@ -133,25 +133,10 @@ describe("audit: prototype tokens in negotiation dictionaries (fixed crash/leak)
     expect(errors).toEqual([]);
   });
 
-  it("end-to-end: attachment() never emits a non-string Content-Type", async () => {
-    const app = new Keala(quiet);
-    app.use((c) => {
-      c.attachment(c.query("name") as string);
-      c.body = "data";
-    });
-    for (const token of PROTO_TOKENS) {
-      const res = await drive(
-        app,
-        `http://localhost:3000/?name=report.${encodeURIComponent(token)}`,
-      );
-      const contentType = res.headers.get("content-type") ?? "";
-      expect(res.status).toBe(200);
-      // Before the fix this was literally "[object Object]" / native code.
-      expect(contentType).not.toContain("object");
-      expect(contentType).not.toContain("native code");
-      expect(contentType.startsWith("text/") || contentType === "").toBe(true);
-    }
-  });
+  // U3c deletion: the end-to-end attachment() Content-Type leak lock died
+  // with the setter (no MIME inference exists to poison). The dictionary
+  // fix itself stays locked by "mime helpers never return non-strings" and
+  // the c.is() end-to-end test above.
 });
 
 // ---------------------------------------------------------------------------
@@ -194,7 +179,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
     app.onError((e: Error) => void seen.push(`${e.constructor.name}:${e.message}`));
     app.use((c) => {
       c.cookies.set("sid", "v", { sameSite: "Strict; Path=/pwned" } as never);
-      c.body = "unreachable";
+      return c.text("unreachable");
     });
     const res = await drive(app, "http://localhost:3000/");
     expect(res.status).toBe(500);
@@ -210,7 +195,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
     const app = new Keala(quiet);
     app.use((c) => {
       c.cookies.set("ok", "1", { sameSite: "strict", httpOnly: true });
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await drive(app, "http://localhost:3000/");
     expect(res.headers.getSetCookie()).toEqual(["ok=1; Path=/; SameSite=Strict; HttpOnly"]);
@@ -308,7 +293,7 @@ describe("audit: x-forwarded-* trust chain", () => {
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(app, "http://localhost:3000/", {
       headers: { ...forwarded, Host: "real.example.com" },
@@ -324,7 +309,7 @@ describe("audit: x-forwarded-* trust chain", () => {
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(app, "http://localhost:3000/", {
       headers: {
@@ -344,7 +329,7 @@ describe("audit: x-forwarded-* trust chain", () => {
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.handle(new Request("http://localhost:3000/", { headers: forwarded }), {
       remote: "203.0.113.9",
@@ -361,7 +346,7 @@ describe("audit: x-forwarded-* trust chain", () => {
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     await drive(app, "http://localhost:3000/", { headers: forwarded });
     expect(captured?.ip).toBe("5.6.7.8");
@@ -416,7 +401,7 @@ describe("audit: error path contract", () => {
     });
     app.use((c) => {
       c.cookies.set("sid", "v\r\nSet-Cookie: evil=1");
-      c.body = "unreachable";
+      return c.text("unreachable");
     });
     // Must resolve (never reject) — before the option fixes, a crafted option
     // could push the throw past dispatch into the finalizer, escaping app.handle.
@@ -431,7 +416,7 @@ describe("audit: error path contract", () => {
     app.onError(() => {});
     app.use((c) => {
       expect(() => c.cookies.set("bad name", "v")).toThrow(TypeError);
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await drive(app, "http://localhost:3000/");
     expect(res.headers.getSetCookie()).toEqual([]);

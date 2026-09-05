@@ -117,7 +117,7 @@ import { listen } from ${JSON.stringify(nodeUrl)};
 const app = new Keala({ env: "test" });
 app.get("/park", async (c) => {
   await new Promise((resolve) => setTimeout(resolve, 5000)); // outlives the probe
-  c.body = "done";
+  return c.text("done");
 });
 const server = await listen(app, { port: 0, hostname: "127.0.0.1", signals: true }).ready();
 process.stdout.write("READY\\n");
@@ -173,7 +173,7 @@ it("REVIEW-CT-35: §4 U1 — strategy null (sync AND async) admits through the g
   const gateA = deferred();
   sync.get("/w", async (c) => {
     await gateA.promise;
-    c.body = "a";
+    return c.text("a");
   });
   const first = sync.handle(new Request("http://x/w"));
   const second = sync.handle(new Request("http://x/w"));
@@ -191,7 +191,7 @@ it("REVIEW-CT-35: §4 U1 — strategy null (sync AND async) admits through the g
   const gateB = deferred();
   asyncApp.get("/w", async (c) => {
     await gateB.promise;
-    c.body = "b";
+    return c.text("b");
   });
   const firstB = asyncApp.handle(new Request("http://x/w"));
   const secondB = asyncApp.handle(new Request("http://x/w"));
@@ -220,7 +220,7 @@ it("REVIEW-CT-36: §4 U1 — admit() takes exactly one slot at the moment of cap
   const gate = deferred();
   app.get("/w", async (c) => {
     await gate.promise;
-    c.body = "ok";
+    return c.text("ok");
   });
   const first = app.handle(new Request("http://x/w"));
   const second = app.handle(new Request("http://x/w"));
@@ -240,7 +240,7 @@ it("REVIEW-CT-37: §4 U1/P3 — a null resolving DURING drain: untaken is refuse
   const gate = deferred();
   refuser.get("/w", async (c) => {
     await gate.promise;
-    c.body = "a";
+    return c.text("a");
   });
   const first = refuser.handle(new Request("http://x/w"));
   await wait(10);
@@ -268,7 +268,7 @@ it("REVIEW-CT-37: §4 U1/P3 — a null resolving DURING drain: untaken is refuse
   served.get("/w", async (c) => {
     started++;
     if (started === 1) await gate2.promise; // only the FIRST parks
-    c.body = "b";
+    return c.text("b");
   });
   const firstB = served.handle(new Request("http://x/w"));
   await wait(10);
@@ -325,7 +325,7 @@ it.skipIf(typeof Bun !== "undefined")(
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "served";
+      return c.text("served");
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);
@@ -363,7 +363,7 @@ it("REVIEW-CT-39b: §4 U1/P3 — a native-source strategy call sees a materializ
   const gate = deferred();
   app.get("/work", async (c) => {
     await gate.promise;
-    c.body = "served";
+    return c.text("served");
   });
   const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
   liveServers.push(server);
@@ -403,7 +403,7 @@ it("REVIEW-CT-40: §2.1/r9 — first signal drains (default window), second forc
     const app = new Keala({ env: "test" });
     app.get("/stuck", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const inflight = app.handle(new Request("http://x/stuck"));
     await wait(10);
@@ -433,7 +433,7 @@ it("REVIEW-CT-41: §2.2 r9 — escalation flows through the adapter contract (st
   const gate = deferred();
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const inflight = app.handle(new Request("http://x/park"));
   await wait(10);

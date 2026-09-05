@@ -40,7 +40,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
     // arrayBuffer() owns the formLimit budget (R4.10).
     app.use(createBodyParser({ formLimit: 1000 }));
     app.post("/x", async (c) => {
-      c.body = `len:${(await bodyOf(c).arrayBuffer()).byteLength}`;
+      return c.text(`len:${(await bodyOf(c).arrayBuffer()).byteLength}`);
     });
     const chunks = new ReadableStream({
       start(controller) {
@@ -63,7 +63,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 0 }));
     app.post("/x", async (c) => {
-      c.body = JSON.stringify(await bodyOf(c).json());
+      return c.text(JSON.stringify(await bodyOf(c).json()));
     });
     const empty = await app.handle(req("/x", { method: "POST" }));
     expect(empty.status).toBe(200);
@@ -80,7 +80,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c) => {
-      c.body = JSON.stringify(await bodyOf(c).json());
+      return c.text(JSON.stringify(await bodyOf(c).json()));
     });
     const num = await app.handle(
       req("/x", { method: "POST", body: "123", headers: { "content-type": "application/json" } }),
@@ -108,7 +108,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
       } catch (err) {
         second = String((err as { status?: number }).status);
       }
-      c.body = `${first}/${second}`;
+      return c.text(`${first}/${second}`);
     });
     const res = await app.handle(
       req("/x", {
@@ -125,7 +125,7 @@ describe("redteam P2: bodyParser boundaries (green)", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 100 }));
     app.post("/t", async (c) => {
-      c.body = `t:${(await bodyOf(c).text()).length}`;
+      return c.text(`t:${(await bodyOf(c).text()).length}`);
     });
     const over = await app.handle(
       req("/t", {
@@ -381,19 +381,22 @@ describe("redteam P2: component protocol (green)", () => {
     app.decorate("feature", { enable: () => undefined });
     expect(() => app.decorate("feature", 2)).toThrow(/already defined/);
     // Core context members are guarded too — shadowing them silently changes
-    // framework behavior under the caller's feet.
-    expect(() => app.decorate("body", "x")).toThrow(/already defined/);
+    // framework behavior under the caller's feet. (U3c: `body` left the
+    // surface with the setter; `text` is a live sugar member.)
+    expect(() => app.decorate("text", "x")).toThrow(/already defined/);
     expect(() => app.decorate("status", 200)).toThrow(/already defined/);
     // Accessor decorations fall under the same rule.
     expect(() => app.decorateLazy("status", () => 200)).toThrow(/already defined/);
   });
 
-  it("decorate refuses per-request instance slots (params/bodyValue/…)", () => {
+  it("decorate refuses per-request instance slots (params/directBodyResponseValue/…)", () => {
     const app = new Keala(quiet);
     // These live as own slots on every context, not on the prototype — a
     // getter decoration would make every request throw in initContext.
+    // (U3c: bodyValue is gone; directBodyResponseValue — the sugar identity
+    // brand — is the live twin.)
     expect(() => app.decorateLazy("params", () => ({}))).toThrow(/already defined/);
-    expect(() => app.decorate("bodyValue", 1)).toThrow(/already defined/);
+    expect(() => app.decorate("directBodyResponseValue", 1)).toThrow(/already defined/);
     expect(() => app.decorate("_res", null)).toThrow(/already defined/);
     expect(() => app.decorate("rawRequest", {})).toThrow(/already defined/);
     // Unrelated keys still decorate fine.

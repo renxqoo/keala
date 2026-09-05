@@ -278,26 +278,10 @@ describe("BUG-2: error-mapper takeover drops staged Set-Cookie when it sets its 
   });
 });
 
-describe("BUG-3: c.body = <Response> type-checks but silently serializes {}", () => {
-  it("assigning a web Response throws TypeError with the return-it guidance", async () => {
-    const app = new Keala({ env: "test" });
-    let caught: unknown = null;
-    app.get("/", (c) => {
-      try {
-        c.body = new Response("real-body", { status: 201, headers: { "x-r": "1" } });
-      } catch (err) {
-        caught = err;
-        throw err; // rethrow so the funnel path is exercised too
-      }
-    });
-    const res = await hit(app, "/");
-    // Expected under the documented removal (docs/KEALA-NATIVE-API.md §6.2):
-    // a loud TypeError at the assignment site, and the funnel answers 500 —
-    // never a silent 200 "{}" that drops the assigned Response's
-    // status/headers.
-    expect(caught).toBeInstanceOf(TypeError);
-    expect((caught as TypeError).message).toContain("return the Response instead");
-    expect(res.status).toBe(500);
-    expect(await res.text()).toBe("Internal Server Error");
-  });
-});
+/**
+ * U3c deletion (mapping #6): "BUG-3: c.body = <Response> type-checks but
+ * silently serializes {}" locked the deleted `c.body =` setter's TypeError
+ * guard ("return the Response instead"). With the setter gone the hazard it
+ * guarded against (assigning a Response into the body slot) cannot be
+ * expressed — returning the Response IS the API now.
+ */

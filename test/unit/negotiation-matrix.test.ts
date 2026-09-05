@@ -17,7 +17,7 @@ const probe = async (headers: Record<string, string>): Promise<Context> => {
   let ctx: Context | undefined;
   app.use(async (c) => {
     ctx = c;
-    c.body = "probed";
+    return c.text("probed");
   });
   await app.handle(new Request("http://localhost:3000/", { headers }));
   if (ctx === undefined) throw new Error("probe failed");
@@ -210,7 +210,7 @@ describe("cookies matrix: facade behaviors", () => {
         c.cookies.set("sid", "user-9", { signed: true, httpOnly: true, path: "/" });
         return;
       }
-      c.body = c.cookies.get("sid") ?? "none";
+      return c.text(c.cookies.get("sid") ?? "none");
     });
     await app.handle(new Request("http://localhost:3000/set"));
     const setter = new Keala({ ...quiet, keys: ["k1"] });
@@ -278,7 +278,7 @@ describe("url/query matrix: dense getters", () => {
         querystring: c.querystring,
         search: c.search,
       };
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.handle(new Request(url, { headers: { Host: url.split("/")[2] ?? "h" } }));
     for (const [key, value] of Object.entries(expected)) {

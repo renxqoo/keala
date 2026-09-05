@@ -13,7 +13,7 @@ const probe = async (
   const probing = new Keala({ keys: ["k"], proxy, proxyIpHeader: "x-forwarded-for" });
   probing.use(async (c) => {
     captured = c;
-    c.body = "probed";
+    return c.text("probed");
   });
   await probing.handle(new Request(init.url, init));
   if (captured === undefined) throw new Error("probe middleware did not run");
@@ -82,7 +82,7 @@ describe("request facade (flat context)", () => {
     let captured: Context | undefined;
     app.use(async (c) => {
       captured = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.handle(new Request("http://localhost:3000/x"));
     expect(captured?.host).toBe("localhost:3000");
@@ -129,7 +129,7 @@ describe("request facade (flat context)", () => {
     let captured: Context | undefined;
     limited.use(async (c) => {
       captured = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     await limited.handle(
       new Request("http://localhost:3000/", {
@@ -158,7 +158,7 @@ describe("request facade (flat context)", () => {
     let captured: Context | undefined;
     remoteApp.use(async (c) => {
       captured = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     // the remote address rides the runtime object instead of a bare string.
     await remoteApp.handle(new Request("http://localhost:3000/"), { remote: "192.168.1.10" });
@@ -209,7 +209,7 @@ describe("request facade (flat context)", () => {
     cookieApp.use(async (c) => {
       cookieCtx = c;
       c.cookies.set("sid", "session-1", { signed: true });
-      c.body = "ok";
+      return c.text("ok");
     });
     const baked = await cookieApp.handle(new Request("http://localhost:3000/", { method: "GET" }));
     // A freshly-set cookie is not visible to reads (the jar holds request cookies).
@@ -219,7 +219,7 @@ describe("request facade (flat context)", () => {
     let readCtx: Context | undefined;
     roundTrip.use(async (c) => {
       readCtx = c;
-      c.body = "ok";
+      return c.text("ok");
     });
     await roundTrip.handle(
       new Request("http://localhost:3000/", { headers: { Cookie: setCookie.split(";")[0] ?? "" } }),

@@ -43,7 +43,7 @@ describe("R4.6 drain: handle mode (no server)", () => {
     const gate = deferred();
     app.get("/slow", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
 
     const inflight = app.handle(new Request("http://x/slow"));
@@ -216,7 +216,7 @@ describe("R4.6 drain: Node adapter (wire truth)", () => {
       const gate = deferred();
       app.get("/slow", async (c) => {
         await gate.promise;
-        c.body = "wire-done";
+        return c.text("wire-done");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
@@ -276,7 +276,7 @@ describe("R4.6 drain: Node adapter (wire truth)", () => {
       const gate = deferred();
       app.get("/hold", async (c) => {
         await gate.promise;
-        c.body = "held-ok";
+        return c.text("held-ok");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
@@ -301,7 +301,7 @@ describe("R4.6 drain: Node adapter (wire truth)", () => {
     const gate = deferred();
     app.get("/slow", async (c) => {
       await gate.promise;
-      c.body = "pooled-done";
+      return c.text("pooled-done");
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);
@@ -322,7 +322,7 @@ describe("R4.6 drain: handlers observe draining (query-only readiness)", () => {
     app.get("/probe", async (c: Context) => {
       await gate.promise;
       seen.push(app.isDraining());
-      c.body = "probed";
+      return c.text("probed");
     });
     const inflight = app.handle(new Request("http://x/probe"));
     const closed = app.close({ drain: 1000 });
@@ -346,7 +346,7 @@ describe("R4.6 seam red tests: S2 drain × node transport, S3 hold × committed 
       // wedge the drain or leak the connection.
       const raw = await readBodyLimited(c, 1024 * 1024);
       await gate.promise;
-      c.body = new TextDecoder().decode(raw);
+      return c.text(new TextDecoder().decode(raw));
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);
@@ -369,7 +369,7 @@ describe("R4.6 seam red tests: S2 drain × node transport, S3 hold × committed 
     const gate = deferred();
     app.post("/ignore", async (c) => {
       await gate.promise;
-      c.body = "ignored-body";
+      return c.text("ignored-body");
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);

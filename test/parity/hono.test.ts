@@ -202,15 +202,10 @@ describe("documents intentional divergence: sugar helpers answer 204/304 with a 
   });
 });
 
-describe("documents intentional divergence: c.body = null answers 204 (koa); hono's c.body(null) answers 200", () => {
-  it("null body collapses to an empty 204", async () => {
-    const app = new Keala(quiet);
-    app.get("/r", (c) => void (c.body = null));
-    const res = await drive(app, new Request("http://x/r"));
-    expect(res.status).toBe(204);
-    expect(await res.text()).toBe("");
-  });
-});
+// U3c deletion: the "c.body = null collapses to an empty 204" divergence
+// lock died with the body setter — there is no null-body collapse any more;
+// an empty 204 is `new Response(null, { status: 204 })` by construction
+// (locked in test/security/baseline.test.ts, §2.3-2).
 
 describe("0.7 alignment: c.redirect() ships a bare 302 exactly like hono (the koa body is gone)", () => {
   it("location, status and an empty body", async () => {

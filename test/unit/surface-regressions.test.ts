@@ -42,7 +42,7 @@ const probe = async (
   const app = new Keala(quiet);
   app.use(async (c) => {
     captured = c;
-    c.body = "done";
+    return c.text("done");
   });
   setup?.(app);
   await app.handle(new Request(init.url, init));
@@ -72,10 +72,9 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
     }
   });
 
-  it("redirect() replaces a previously-set 304 instead of keeping it", async () => {
+  it("redirect() answers 302 by default (U3c: no staged status can feed it)", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
-      c.status = 304;
       return c.redirect("/next");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
@@ -112,7 +111,7 @@ describe("agent audit: router mount and trie encoding", () => {
       seen.push(`mounted-after:${c.url}`);
     });
     router.get("/users", (c) => {
-      c.body = { page: c.query("page") };
+      return c.json({ page: c.query("page") });
     });
     app.mount("/api", router);
     const res = await app.handle(new Request("http://localhost:3000/api/users?page=2&size=10"));
@@ -127,7 +126,7 @@ describe("agent audit: router mount and trie encoding", () => {
   it("percent-encoded static segments inside dynamic routes match", async () => {
     const app = new Keala(quiet);
     app.get("/caf%C3%A9/:id", (c) => {
-      c.body = { id: c.params("id") };
+      return c.json({ id: c.params("id") });
     });
     const res = await app.handle(new Request("http://localhost:3000/caf%C3%A9/42"));
     expect(res.status).toBe(200);
@@ -137,7 +136,7 @@ describe("agent audit: router mount and trie encoding", () => {
   it("unicode route patterns match percent-encoded requests", async () => {
     const app = new Keala(quiet);
     app.get("/café/:id", (c) => {
-      c.body = `ok:${c.params("id")}`;
+      return c.text(`ok:${c.params("id")}`);
     });
     const res = await app.handle(new Request("http://localhost:3000/caf%C3%A9/7"));
     expect(res.status).toBe(200);
@@ -147,7 +146,7 @@ describe("agent audit: router mount and trie encoding", () => {
   it("keeps %2F inside a single param segment (no path splitting)", async () => {
     const app = new Keala(quiet);
     app.get("/files/:name", (c) => {
-      c.body = `file:${c.params("name")}`;
+      return c.text(`file:${c.params("name")}`);
     });
     // %2F stays a single segment for matching purposes (no path splitting).
     const res = await app.handle(new Request("http://localhost:3000/files/a%2Fb"));
@@ -156,17 +155,10 @@ describe("agent audit: router mount and trie encoding", () => {
   });
 });
 
-describe("agent audit: response details", () => {
-  it("length setter is a no-op while Transfer-Encoding is set", async () => {
-    const c = await probe({ url: "http://localhost:3000/" });
-    c.setHeader("Transfer-Encoding", "chunked");
-    c.length = 99;
-    expect(c.resHeader("Content-Length")).toBe("");
-    c.remove("Transfer-Encoding");
-    c.length = 99;
-    expect(c.resHeader("Content-Length")).toBe("99");
-  });
-});
+// U3c deletion (agent audit: response details): "length setter is a no-op
+// while Transfer-Encoding is set" locked the deleted c.length setter's own
+// TE-guard. Content-Length now rides setHeader verbatim (the caller owns
+// the TE interaction).
 
 describe("agent audit: is() array form (type-is compatibility)", () => {
   it("c.is() accepts a single array of candidate types", async () => {
@@ -211,7 +203,7 @@ describe("agent audit: compose next() guard under nesting", () => {
     app.use(async (_c, next) => next());
     app.get("/seq", async (c, next) => {
       await next();
-      c.body = "done";
+      return c.text("done");
     });
     for (let i = 0; i < 5; i++) {
       const res = await app.handle(new Request("http://localhost:3000/seq"));
@@ -243,7 +235,7 @@ describe("R7-SURFACE-1 [HIGH] decorate preserves ordinary service objects", () =
     let observed: unknown;
     app.get("/", (c) => {
       observed = (c as unknown as { repository: unknown }).repository;
-      c.body = "ok";
+      return c.text("ok");
     });
     const response = await app.handle(request());
 

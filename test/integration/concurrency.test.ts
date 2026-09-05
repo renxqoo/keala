@@ -42,12 +42,9 @@ describe("concurrent isolation", () => {
     router.get("/user/:id", async (c) => {
       await delay(Number(c.params("id")) % 3);
       c.setHeader("X-Path", "param");
-      c.body = `user:${c.params("id")}:${c.query("tag") ?? "none"}`;
+      return c.text(`user:${c.params("id")}:${c.query("tag") ?? "none"}`);
     });
-    router.get("/static", (c) => {
-      c.type = "json";
-      c.body = { stable: true };
-    });
+    router.get("/static", (c) => c.json({ stable: true }));
     router.get("/error", () => {
       throw createError(418, "teapot");
     });
@@ -56,7 +53,7 @@ describe("concurrent isolation", () => {
     });
     router.get("/cookie", (c) => {
       c.cookies.set("sid", `s-${c.query("n") ?? "0"}`, { signed: true });
-      c.body = `cookie:${c.cookies.get("sid")}`;
+      return c.text(`cookie:${c.cookies.get("sid")}`);
     });
     app.mount("/", router);
     return app;
@@ -118,7 +115,7 @@ describe("concurrent isolation", () => {
       if (c.state["token"] !== mine) violations.push(`token:${mine}->${String(c.state["token"])}`);
       const extra = Object.keys(c.state).filter((k) => k !== "token");
       if (extra.length > 0) violations.push(`extra:${mine}:${extra.join(",")}`);
-      c.body = String(c.state["token"]);
+      return c.text(String(c.state["token"]));
     });
     const results = await Promise.all(
       Array.from({ length: 30 }, (_, i) =>
@@ -136,12 +133,8 @@ describe("concurrent isolation", () => {
     app.use(async (_c, next) => {
       await next();
     });
-    app.get("/only-get", (c) => {
-      c.body = "g";
-    });
-    app.put("/only-put", (c) => {
-      c.body = "p";
-    });
+    app.get("/only-get", (c) => c.text("g"));
+    app.put("/only-put", (c) => c.text("p"));
     const responses = await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         app.handle(
@@ -167,9 +160,7 @@ describe("concurrent isolation", () => {
     app.use(async (_c, next) => {
       await next();
     });
-    app.get("/only-get", (c) => {
-      c.body = "g";
-    });
+    app.get("/only-get", (c) => c.text("g"));
     app.post("/only-post", async (_c, next) => {
       // Defers downstream (fall-through style): the route's handler wrote
       // nothing, so status stays 404 with no Allow header.
@@ -198,13 +189,15 @@ describe("error path lifecycle", () => {
     const errors: unknown[] = [];
     const app = new Keala(quiet);
     app.onError((e) => void errors.push(e));
-    app.use(async (c) => {
+    app.use(async (c, next) => {
+      // Staged before the failure: middleware security headers must reach
+      // error pages even when the chain's own commit is later discarded.
       c.setHeader("X-Custom", "leak");
       c.append("Set-Cookie", "sid=dead; Path=/");
-      c.status = 200;
-      c.body = "partial";
+      await next();
       throw createError(500, "boom");
     });
+    app.use((c) => c.text("partial"));
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(500);
     expect(res.headers.get("x-custom")).toBe("leak");
@@ -221,8 +214,7 @@ describe("error path lifecycle", () => {
       try {
         await next();
       } catch {
-        c.status = 200;
-        c.body = "recovered";
+        return c.text("recovered", 200);
       }
     });
     app.use(async () => {
@@ -318,7 +310,7 @@ describe("lazy singletons", () => {
       c.cookies.set("a", "1");
       await next();
       observed.push(c.cookies === first);
-      c.body = "ok";
+      return c.text("ok");
     });
     app.use(async (c) => {
       c.cookies.set("b", "2");
@@ -335,7 +327,7 @@ describe("lazy singletons", () => {
       states.push(c.state);
       c.state["n"] = states.length;
       await delay(1);
-      c.body = JSON.stringify({ keys: Object.keys(c.state) });
+      return c.json({ keys: Object.keys(c.state) });
     });
     const first = await app.handle(new Request("http://localhost:3000/"));
     const second = await app.handle(new Request("http://localhost:3000/"));
@@ -353,7 +345,7 @@ describe("lazy singletons", () => {
     const app = new Keala(quiet);
     app.use((c) => {
       const readings = [c.ip, c.ip, c.ip];
-      c.body = readings.join("|");
+      return c.text(readings.join("|"));
     });
     await app.handle(new Request("http://localhost:3000/"), {
       remote: () => {
@@ -370,9 +362,7 @@ describe("lazy singletons", () => {
   it("语义锁定: a requestIP host returning null is consulted exactly once", async () => {
     let calls = 0;
     const app = new Keala(quiet);
-    app.use((c) => {
-      c.body = `${c.ip},${c.ip}`;
-    });
+    app.use((c) => c.text(`${c.ip},${c.ip}`));
     await app.handle(new Request("http://localhost:3000/"), {
       server: {
         requestIP: () => {
@@ -387,9 +377,7 @@ describe("lazy singletons", () => {
   it("语义锁定: a thunk with a concrete result is called exactly once", async () => {
     let calls = 0;
     const app = new Keala(quiet);
-    app.use((c) => {
-      c.body = [c.ip, c.ip, c.ip].join(",");
-    });
+    app.use((c) => c.text([c.ip, c.ip, c.ip].join(",")));
     const res = await app.handle(new Request("http://localhost:3000/"), {
       remote: () => {
         calls++;
@@ -407,15 +395,18 @@ describe("lazy singletons", () => {
 describe("stream bodies", () => {
   it("语义锁定: HEAD with a stream body drops the body but keeps status and type", async () => {
     const app = new Keala(quiet);
-    app.use((c) => {
-      c.type = "text/plain";
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(enc("abc"));
-          controller.close();
-        },
-      });
-    });
+    app.use(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(enc("abc"));
+              controller.close();
+            },
+          }),
+          { headers: { "content-type": "text/plain" } },
+        ),
+    );
     const res = await app.handle(new Request("http://localhost:3000/", { method: "HEAD" }));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/plain");
@@ -425,40 +416,39 @@ describe("stream bodies", () => {
 
   it("语义锁定: consuming a healthy streamed body yields its chunks", async () => {
     const app = new Keala(quiet);
-    app.use((c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(enc("hello "));
-          controller.enqueue(enc("stream"));
-          controller.close();
-        },
-      });
-    });
+    app.use(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(enc("hello "));
+              controller.enqueue(enc("stream"));
+              controller.close();
+            },
+          }),
+        ),
+    );
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(await res.text()).toBe("hello stream");
   });
 
-  // Documented divergence (was an inherited koa CONFIRMED-BUG): Koa pipes the body
-  // through `Stream.pipeline(stream, res, err => ctx.onerror(err))` so a
-  // mid-flight body failure reaches the app's error channel. keala hands the raw
-  // stream to the fetch `Response` and — by design (docs/DESIGN.md §4) —
-  // made stream error observation an OPT-IN feature (`observeStream`, off by
-  // default to save 567ns/response and restore backpressure). The opt-in
-  // switch has not shipped yet (P2); until it does, this lock is explicitly
-  // parked rather than silently dropped.
+  // Restored (U3c): the onStreamError wiring moved to finishCommitted — every
+  // wire-bound streaming Response passes through it, whatever built it.
   it("[P2 delivered] a failing body stream reaches the onStreamError hook (opt-in)", async () => {
     const seen: string[] = [];
     const app = new Keala({
       env: "test",
       onStreamError: (e) => seen.push(e.message),
     });
-    app.use((c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(enc("first"));
-          queueMicrotask(() => controller.error(new Error("stream exploded")));
-        },
-      });
+    app.use(() => {
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("first"));
+            queueMicrotask(() => controller.error(new Error("stream exploded")));
+          },
+        }),
+      );
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     await expect(res.text()).rejects.toThrow();

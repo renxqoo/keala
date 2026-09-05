@@ -149,7 +149,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
         if (active > peak) peak = active;
         await wait(1);
         active--;
-        c.body = `f:${c.params("id")}`;
+        return c.text(`f:${c.params("id")}`);
       });
       const results = await Promise.all(
         Array.from({ length: 500 }, (_, i) =>
@@ -200,10 +200,10 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
       const gate = deferred();
       app.get("/z", async (c) => {
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       app.get("/f/:id", (c) => {
-        c.body = `f:${c.params("id")}`;
+        return c.text(`f:${c.params("id")}`);
       });
       const unhandled = trackUnhandled();
       try {
@@ -262,7 +262,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
       app.get("/s/:id", async (c) => {
         entered++;
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       const unhandled = trackUnhandled();
       try {
@@ -325,17 +325,17 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
       let entered = 0;
       const streamGate = deferred();
       app.get("/fast", (c) => {
-        c.body = "fast";
+        return c.text("fast");
       });
       app.get("/park/:id", async (c) => {
         entered++;
         await wait(600); // settles DURING the drain window
-        c.body = `parked:${c.params("id")}`;
+        return c.text(`parked:${c.params("id")}`);
       });
       app.get("/short/:id", async (c) => {
         entered++;
         await wait(50); // queued victims: short handlers
-        c.body = `short:${c.params("id")}`;
+        return c.text(`short:${c.params("id")}`);
       });
       app.get("/stream/:id", async () => {
         await streamGate.promise; // held until the drain is running

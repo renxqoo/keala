@@ -127,7 +127,7 @@ describe("R3-2 bodyParser: multipart part budget disarmed by `;` in a quoted bou
     // error path; a surviving budget materializes every part instead.
     app.use(async (c0) => {
       const fd = await bodyOf(c0).formData();
-      c0.body = `parsed ${[...fd.keys()].length} parts`;
+      return c0.text(`parsed ${[...fd.keys()].length} parts`);
     });
     return app;
   };

@@ -47,7 +47,7 @@ describe("security: response-splitting variant matrix", () => {
   it.each(payloads)("set() blocks %p", async (payload) => {
     const res = await attack((c) => {
       expect(() => c.setHeader("X-Target", payload)).toThrow(TypeError);
-      c.body = "ok";
+      return c.text("ok");
     });
     expect(wireHeaders(res)).not.toContain("evil=1");
     expect(wireHeaders(res)).not.toContain("X-Inject");
@@ -68,7 +68,7 @@ describe("security: response-splitting variant matrix", () => {
     async (payload) => {
       const res = await attack((c) => {
         expect(() => c.cookies.set("sid", payload)).toThrow(TypeError);
-        c.body = "ok";
+        return c.text("ok");
       });
       expect(res.headers.get("set-cookie")).toBe(null);
     },
@@ -81,7 +81,7 @@ describe("security: response-splitting variant matrix", () => {
     // Unicode values were impossible to set.
     const res = await attack((c) => {
       c.cookies.set("sid", "v\u240d\u240a-not-crlf");
-      c.body = "ok";
+      return c.text("ok");
     });
     expect(res.headers.get("set-cookie")).toBe("sid=v%E2%90%8D%E2%90%8A-not-crlf; Path=/");
   });
@@ -98,7 +98,7 @@ describe("security: response-splitting variant matrix", () => {
   it("append() applies identical validation to every element", async () => {
     const res = await attack((c) => {
       expect(() => c.append("X-Multi", ["ok", "evil\r\nX-Bad: 1"])).toThrow(TypeError);
-      c.body = "ok";
+      return c.text("ok");
     });
     expect(res.headers.get("x-bad")).toBe(null);
   });
@@ -108,7 +108,7 @@ describe("security: response-splitting variant matrix", () => {
       expect(() => c.setHeader({ "X-A": "fine", "X-B": "bad\r\nX-C: 1" } as never)).toThrow(
         TypeError,
       );
-      c.body = "ok";
+      return c.text("ok");
     });
     expect(res.headers.get("x-c")).toBe(null);
   });
@@ -129,7 +129,7 @@ describe("security: prototype pollution vector matrix", () => {
       // A targeted read of the hostile key is just a string lookup — no
       // object, no property assignment, pollution structurally impossible.
       readBack = c.query(key) ?? "absent";
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(
       new Request(`http://localhost:3000/?${encodeURIComponent(key)}=${value}&ok=1`),
@@ -153,7 +153,7 @@ describe("security: prototype pollution vector matrix", () => {
     app.use((c) => {
       c.state["__proto__"] = { polluted: true } as never;
       c.cookies.set("ok", "1");
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(
       new Request("http://localhost:3000/p", {
@@ -204,7 +204,7 @@ describe("security: cookie forgery matrix", () => {
   it("end-to-end: forged cookies read as absent", async () => {
     const app = new Keala({ ...quiet, keys: ["prod-key"] });
     app.use((c) => {
-      c.body = c.cookies.get("sid") ?? "anonymous";
+      return c.text(c.cookies.get("sid") ?? "anonymous");
     });
     for (const forged of ["sid=root.aaaa", "sid=root", "sid=.", `sid=${sign("root", "off-key")}`]) {
       const res = await app.handle(
@@ -236,8 +236,10 @@ describe("security: redirect and XSS matrix", () => {
     "attachment filename %p stays inside Content-Disposition",
     async (filename) => {
       const res = await attack((c) => {
-        c.attachment(filename);
-        c.body = "f";
+        // U3c: attachment() is gone — the caller builds the bare header
+        // value, and staged-value validation is the injection barrier.
+        c.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return c.text("f");
       });
       // The header value must be a single line: any raw CR/LF would split it.
       const disposition = res.headers.get("content-disposition") ?? "";
@@ -256,8 +258,9 @@ describe("security: redirect and XSS matrix", () => {
   });
 
   it("redirect status is never downgraded to 2xx by attacker input", async () => {
+    // U3c: the c.status write vector is gone — a redirect answer is 3xx by
+    // construction. Lock the construction.
     const res = await attack((c) => {
-      c.status = 200;
       return c.redirect("/moved");
     });
     expect(res.status).toBeGreaterThanOrEqual(300);
@@ -286,7 +289,7 @@ describe("security: path traversal and routing abuse", () => {
   ])("wildcard capture of %p stays inside the route", async (raw) => {
     const app = new Keala(quiet);
     app.get("/static/*", (c) => {
-      c.body = `cap:${c.params("wildcard")}`;
+      return c.text(`cap:${c.params("wildcard")}`);
     });
     const path = raw.startsWith("/") ? raw : `/static/${raw}`;
     const res = await app.handle(new Request(`http://localhost:3000${path}`));
@@ -298,7 +301,7 @@ describe("security: path traversal and routing abuse", () => {
   it("decoded params never escape their segment for :name captures", async () => {
     const app = new Keala(quiet);
     app.get("/users/:name/files/:rest", (c) => {
-      c.body = `${c.params("name")}/${c.params("rest")}`;
+      return c.text(`${c.params("name")}/${c.params("rest")}`);
     });
     const res = await app.handle(new Request("http://localhost:3000/users/a%2Fb/files/c%2Fd"));
     // Decoding is intentional; the capture stays a value and never
@@ -310,7 +313,7 @@ describe("security: path traversal and routing abuse", () => {
     const app = new Keala(quiet);
     for (let i = 0; i < 200; i++) {
       app.get(`/r${i}/:id(\\d+)`, (c) => {
-        c.body = `r${i}`;
+        return c.text(`r${i}`);
       });
     }
     const res = await app.handle(new Request("http://localhost:3000/r199/7"));
@@ -342,7 +345,7 @@ describe("security: resource-abuse bounds", () => {
   it("a pathological Accept header with 2k entries parses bounded", async () => {
     const app = new Keala(quiet);
     app.use((c) => {
-      c.body = String(c.accepts("html"));
+      return c.text(String(c.accepts("html")));
     });
     const header = Array.from({ length: 2000 }, (_, i) => `t${i}/x;q=0.${i % 10}`).join(",");
     const res2 = await app.handle(

@@ -19,7 +19,6 @@
 
 import type { RouteHandler } from "../router/router.ts";
 import type { Context } from "../core/context/context.ts";
-import { finalize } from "../core/respond.ts";
 
 export interface ResponseCacheOptions {
   /** Time to live in milliseconds. Default 60_000. */
@@ -95,16 +94,6 @@ const captureBody = (res: Response): Promise<string | Uint8Array | null> => {
  * need not be valid UTF-8 — the `.text()` capture round-trip would corrupt
  * them on replay.
  */
-const isTextualStateBody = (body: Context["bodyValue"]): boolean => {
-  if (typeof body === "string") return true;
-  return (
-    body !== null &&
-    typeof body === "object" &&
-    !(body instanceof Uint8Array) &&
-    !(body instanceof ReadableStream) &&
-    !(body instanceof Blob)
-  );
-};
 
 export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
   const ttl = options.ttl ?? 60_000;
@@ -211,14 +200,10 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     // locks the developer's stream with a getReader() the REAL finalizer then
     // trips over (a hard 500). Non-textual state bodies were never capturable
     // anyway; decline before touching anything.
-    const stateMode = c._res === undefined;
-    if (stateMode && !isTextualStateBody(c.bodyValue)) return;
-    // Materialize the equivalent Response (without committing it) so
-    // eligibility and capture see the same object the finalizer will build.
-    // The discard is safe: nothing consumed the body (captureBody reads a
-    // clone), and the finalizer re-derives an identical Response from the
-    // untouched state.
-    const res = c._res ?? (await finalize(c.app, c));
+    // U3c: state-mode bodies no longer exist (the setters are gone) — only
+    // committed Responses can be captured.
+    const res = c._res;
+    if (res === undefined) return;
     if (!eligible(c, res)) return;
     // Only FRAMEWORK-BUILT snapshot bodies are capturable: the identity mark
     // (set by the sugar helpers and the state finalizer) proves the body is

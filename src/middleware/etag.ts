@@ -19,62 +19,9 @@ const wyhash = (
   }
 ).Bun?.hash?.wyhash;
 
-/** wyhash over bytes (string inputs hash identically to their UTF-8 form). */
-const wyhashOf = (bytes: Uint8Array): string | null =>
-  typeof wyhash === "function" ? wyhash(bytes).toString(16) : null;
-
 /** wyhash over the STRING itself — no TextEncoder pass, no byte copy. */
 const wyhashTextOf = (text: string): string | null =>
   typeof wyhash === "function" ? wyhash(text).toString(16) : null;
-
-/**
- * Node fallback: `zlib.crc32` over the UTF-8 bytes through the lazy bridge —
- * ~0.12ms per 3MB (the pure-JS per-byte FNV cost ~1ms/MB, and the string-
- * lane variant was no better under V8). Load-bearing laziness: importing
- * the framework pulls no native bridge until an etag actually hashes.
- */
-const crc32Of = (bytes: Uint8Array): string | null => {
-  const crc32 =
-    (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node ===
-    undefined
-      ? undefined
-      : nodeZlib().crc32;
-  return typeof crc32 === "function" ? (crc32(bytes) >>> 0).toString(16) : null;
-};
-
-const encoder = new TextEncoder();
-
-const tagOf = (c: Context, body: unknown): string | null => {
-  // String-shaped bodies (and object bodies through the memoized JSON text)
-  // hash natively without a byte copy where the runtime allows it (Bun's
-  // wyhash takes strings; Node's crc32 takes the UTF-8 bytes). The
-  // finalizer and sugar read the same serialization memo (R4.10: hashing a
-  // 3MB JSON body used to double its stringify+encode cost).
-  if (typeof body === "string") return textTagOf(body);
-  if (body instanceof Uint8Array) return bytesTagOf(body);
-  if (body !== null && typeof body === "object" && !(body instanceof ReadableStream)) {
-    return textTagOf(
-      c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(body) ?? "null"),
-    );
-  }
-  return null;
-};
-
-const textTagOf = (text: string): string => {
-  const native = wyhashTextOf(text);
-  if (native !== null) return `W/"${native}"`;
-  const crc = crc32Of(encoder.encode(text));
-  if (crc !== null) return `W/"${crc}"`;
-  return `W/"${text.length.toString(16)}${fnv1aText(text)}"`;
-};
-
-const bytesTagOf = (bytes: Uint8Array): string => {
-  const native = wyhashOf(bytes);
-  if (native !== null) return `W/"${native}"`;
-  const crc = crc32Of(bytes);
-  if (crc !== null) return `W/"${crc}"`;
-  return `W/"${bytes.byteLength.toString(16)}${fnv1aBytes(bytes)}"`;
-};
 
 /** FNV-1a over char codes, two per round — the no-native-module lane. */
 const fnv1aText = (text: string): string => {
@@ -95,51 +42,66 @@ const fnv1aText = (text: string): string => {
   return h.toString(16);
 };
 
-/** FNV-1a over bytes for the Uint8Array body lane, four lanes per round. */
-const fnv1aBytes = (bytes: Uint8Array): string => {
-  const n = bytes.byteLength;
-  let a = 0x811c9dc5;
-  let b = 0x01000193;
-  let c = 0x811c9dc5;
-  let d = 0x01000193;
-  let i = 0;
-  const limit = n - (n % 4);
-  for (; i < limit; i += 4) {
-    a = Math.imul(a ^ (bytes[i] as number), 0x01000193) >>> 0;
-    b = Math.imul(b ^ (bytes[i + 1] as number), 0x01000193) >>> 0;
-    c = Math.imul(c ^ (bytes[i + 2] as number), 0x01000193) >>> 0;
-    d = Math.imul(d ^ (bytes[i + 3] as number), 0x01000193) >>> 0;
-  }
-  let h = (a ^ b ^ c ^ d) >>> 0;
-  for (; i < n; i++) {
-    h ^= bytes[i] as number;
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16);
+const crc32Of = (bytes: Uint8Array): string | null => {
+  const crc32 =
+    (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node ===
+    undefined
+      ? undefined
+      : nodeZlib().crc32;
+  return typeof crc32 === "function" ? (crc32(bytes) >>> 0).toString(16) : null;
+};
+
+const encoder = new TextEncoder();
+
+const textTagOf = (text: string): string => {
+  const native = wyhashTextOf(text);
+  if (native !== null) return `W/"${native}"`;
+  const crc = crc32Of(encoder.encode(text));
+  if (crc !== null) return `W/"${crc}"`;
+  return `W/"${text.length.toString(16)}${fnv1aText(text)}"`;
 };
 
 export const etag = (): RouteHandler => {
   return async (c, next) => {
     await next();
-    if (c._res !== undefined) return; // committed responses pass through
+    const committed = c._res;
+    // Transformation gate (§2.3-5): only snapshot-identity bodies — sugar
+    // products the framework built are branded directBodyResponseValue at
+    // construction. Hand-built Responses, streams, SSE and native planned
+    // responses pass through: their bodies may be live, locked or consumed.
+    if (committed === undefined || c.directBodyResponseValue !== committed) return;
     // Validators only negotiate safe methods — a 304 for POST would tell
     // the client a state change "already happened" (hono corpus lock).
     if (c.method !== "GET" && c.method !== "HEAD") return;
-    const status = c.statusValue;
+    const status = committed.status;
     if (status !== 200 && status !== 201) return;
-    if (c.has("etag")) return;
-    const tag = tagOf(c, c.bodyValue);
+    if (committed.headers.has("etag")) return;
+    const tag = await tagOfResponse(c, committed);
     if (tag === null) return;
     const noneMatch = c.header("if-none-match");
     if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {
-      // 304 must not carry body or content headers (koan contract).
-      c.status = 304;
-      c.body = null;
-      c.setHeader("ETag", tag);
-      return;
+      // 304 short-circuit: rebuilt CLEAN — no body, no content-describing
+      // headers (§2.3-2) — with the validator; staged headers (Vary,
+      // security) merge onto it at finalize. Returning it replaces the
+      // committed answer (last-committer-wins).
+      return new Response(null, { status: 304, headers: { etag: tag } });
     }
-    c.setHeader("ETag", tag);
+    // Post-commit header writes land directly on the committed Response.
+    committed.headers.set("etag", tag);
   };
+};
+
+/**
+ * Hash the snapshot body of a sugar-built Response. The JSON lane reuses the
+ * request's serialization memo (R4.10: one stringify per request); the text
+ * lane reads a CLONE — the committed body itself must stay unconsumed for
+ * the wire. Byte bodies never reach here (the sugar surface is text/json).
+ */
+const tagOfResponse = async (c: Context, res: Response): Promise<string | null> => {
+  const memo = c.bodySerializedValue;
+  if (memo !== undefined) return textTagOf(memo);
+  const text = await res.clone().text();
+  return textTagOf(text);
 };
 
 export interface CompressOptions {
@@ -234,31 +196,47 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
     }
     await next();
     varyAcceptEncoding(c);
-    if (c._res !== undefined) return;
-    if (c.has("content-encoding")) return;
+    const committed = c._res;
+    // Same transformation gate as etag (§2.3-5): snapshot-identity sugar
+    // products only — streams and hand-built Responses pass through.
+    if (committed === undefined || c.directBodyResponseValue !== committed) return;
+    if (committed.headers.has("content-encoding")) return;
     // no-transform is the origin's explicit instruction to intermediaries.
-    const cacheControl = c.resHeader("Cache-Control") ?? "";
+    const cacheControl = committed.headers.get("cache-control") ?? "";
     if (/(?:^|,)\s*no-transform\s*(?:,|$)/i.test(cacheControl)) return;
     // Partial content has range semantics — re-encoding breaks them.
-    if (c.statusValue === 206) return;
-    const body = c.bodyValue;
-    let bytes: Uint8Array | null = null;
-    if (typeof body === "string") bytes = encoder.encode(body);
-    else if (body !== null && typeof body === "object" && !(body instanceof Uint8Array)) {
-      if (body instanceof ReadableStream || body instanceof Blob || body instanceof Response) {
-        return;
-      }
-      bytes = encoder.encode(JSON.stringify(body) ?? "null");
-    } else if (body instanceof Uint8Array) {
-      bytes = body;
-    }
-    if (bytes === null || bytes.byteLength < 200) return; // tiny bodies grow
-    const contentType = c.resHeader("Content-Type") ?? "";
+    if (committed.status === 206) return;
+    // Empty-status answers carry no body to encode.
+    if (committed.body === null) return;
+    const contentType = committed.headers.get("content-type") ?? "";
     if (COMPRESSED_TYPE.test(contentType.toLowerCase())) return;
+    // Snapshot bytes: the JSON lane reuses the request's serialization memo
+    // (R4.10); the text lane reads a CLONE so the wire body stays unconsumed
+    // — and memoizes the ORIGINAL text it read: an outer etag() then hashes
+    // the pre-compression representation (what clients compare If-None-Match
+    // against), never the packed bytes (adversarial review).
+    const memo = c.bodySerializedValue;
+    const text = memo !== undefined ? memo : await committed.clone().text();
+    if (memo === undefined) c.bodySerializedValue = text;
+    const bytes = encoder.encode(text);
+    if (bytes.byteLength < 200) return; // tiny bodies grow
     const packed = await gzip(bytes);
     if (packed.byteLength >= bytes.byteLength) return;
-    c.bodyValue = packed;
-    c.setHeader("Content-Encoding", "gzip");
-    c.remove("Content-Length");
+    // Replace with a NEW Response (last-committer-wins): the original
+    // headers ride along, content-length describes the now-stale body and
+    // is dropped, content-encoding lands. Vary was staged above and merges
+    // at finalize.
+    const headers = new Headers(committed.headers);
+    headers.set("content-encoding", "gzip");
+    headers.delete("content-length");
+    const replacement = new Response(packed, { status: committed.status, headers });
+    // Re-brand the replacement (adversarial review): packed bytes are as
+    // context-independent a snapshot as the original, and an OUTER etag()
+    // (app.use(etag()); app.use(compress())) must still see a branded body to
+    // negotiate — bodySerializedValue still carries the ORIGINAL text, so the
+    // validator hashes the pre-compression representation, which is what
+    // clients compare If-None-Match against.
+    c.directBodyResponseValue = replacement;
+    return replacement;
   };
 };

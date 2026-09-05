@@ -72,9 +72,7 @@ const app =
 app.use(async (_c, next) => {
   await next();
 });
-app.get("/x", (c) => {
-  c.body = { ok: true };
-});
+app.get("/x", (c) => c.json({ ok: true }));
 
 const request = new Request("http://localhost/x");
 const run = async (): Promise<void> => {

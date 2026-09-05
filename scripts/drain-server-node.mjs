@@ -15,14 +15,12 @@ const port = Number(process.argv[2] ?? 0) || 0;
 
 const app = new Keala({ env: "production" });
 
-app.get("/fast", (c) => {
-  c.body = "fast";
-});
+app.get("/fast", (c) => c.text("fast"));
 
 app.get("/slow/:ms", async (c) => {
   const ms = Number(c.params("ms") ?? 50);
   await new Promise((resolve) => setTimeout(resolve, ms));
-  c.body = `slow-${ms}`;
+  return c.text(`slow-${ms}`);
 });
 
 app.get("/stream/:chunks", (c) => {

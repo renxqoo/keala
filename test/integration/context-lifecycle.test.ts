@@ -72,6 +72,9 @@ describe("guarded pooling: release vs streaming body consumption", () => {
     expect(await firstBody).toBe("begin|secret=alpha");
   });
 
+  // Restored (U3c): the onStreamError wiring moved to finishCommitted, so a
+  // RETURNED stream Response is observed too — and the hook still receives
+  // the stream's own (possibly recycled) context.
   it("a late stream error (onStreamError) is attributed to the request that owns the stream", async () => {
     const seen: string[] = [];
     const app = new Keala({
@@ -85,14 +88,16 @@ describe("guarded pooling: release vs streaming body consumption", () => {
     const boom = new Promise<void>((resolve) => {
       detonate = resolve;
     });
-    app.get("/first", (c) => {
-      c.body = new ReadableStream<Uint8Array>({
-        async start(controller) {
-          controller.enqueue(new TextEncoder().encode("part"));
-          await boom;
-          controller.error(new Error("late-failure"));
-        },
-      });
+    app.get("/first", () => {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async start(controller) {
+            controller.enqueue(new TextEncoder().encode("part"));
+            await boom;
+            controller.error(new Error("late-failure"));
+          },
+        }),
+      );
     });
     app.get("/second", (c) => c.text("ok"));
 
@@ -112,14 +117,18 @@ describe("guarded pooling: release vs streaming body consumption", () => {
 describe("guarded pooling: retireWithBody edge paths", () => {
   it("a cancelled body retires the context (client disconnect)", async () => {
     const app = new Keala({ ...quiet, pooling: true });
-    app.get("/s", (c) => {
-      c.body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("chunk"));
-          // never closed — only cancellation can end this body
-        },
-      });
-    });
+    app.get(
+      "/s",
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("chunk"));
+              // never closed — only cancellation can end this body
+            },
+          }),
+        ),
+    );
     const first = await app.handle(req("/s"));
     const reader = first.body!.getReader();
     await reader.read();
@@ -144,15 +153,19 @@ describe("guarded pooling: retireWithBody edge paths", () => {
     const boom = new Promise<void>((resolve) => {
       detonate = () => resolve();
     });
-    app.get("/boom", (c) => {
-      c.body = new ReadableStream<Uint8Array>({
-        async start(controller) {
-          controller.enqueue(new TextEncoder().encode("x"));
-          await boom;
-          controller.error(new Error("source died"));
-        },
-      });
-    });
+    app.get(
+      "/boom",
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(new TextEncoder().encode("x"));
+              await boom;
+              controller.error(new Error("source died"));
+            },
+          }),
+        ),
+    );
     const res = await app.handle(req("/boom"));
     const reader = res.body!.getReader();
     await reader.read();

@@ -96,34 +96,14 @@ const streamOf = (chunks: string[], errorAt?: number): ReadableStream<Uint8Array
 };
 
 describe("agent r5 — confirmed bugs", () => {
-  it("R5-1a: stale pre-commit status must not leak into a post-commit remove() rebuild", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      c.status = 404; // staged BEFORE the commit (koa 404-interceptor pattern)
-      await next();
-      c.remove("X-None"); // post-commit header removal triggers the rule-4 rebuild
-    });
-    app.get("/", () => new Response("hello"));
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(200); // actual: 404
-    expect(await res.text()).toBe("hello");
-  });
+  // U3c deletions: R5-1a and R5-1c locked the stale pre-commit staged slots
+  // (c.status = 404 / c.body = null) leaking into the rule-4 rebuild. The
+  // staged status/body slots AND the rebuild are gone with the setters —
+  // nothing can stage a status any more; the committed Response is final
+  // unless a middleware returns a new one (R5-3 below locks that path).
 
   // 0.7: R5-1b (post-commit message-only override) is gone with c.message
   // and the rule-4 rebuild — statusText customization no longer exists.
-
-  it("R5-1c: pre-commit c.body=null must not turn a committed 200 into a bodyless 204", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      c.body = null; // reset idiom: flag 1 + implicit statusValue 204 (pre-commit)
-      await next();
-      c.remove("X-None"); // post-commit flag-16 writer
-    });
-    app.get("/", () => new Response("hello"));
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(200); // actual: 204
-    expect(await res.text()).toBe("hello"); // actual: "" (body dropped)
-  });
 
   it("R5-2a: pooling + handler-locked body must not throw out of handle() (sync chain)", async () => {
     const app = new Keala({ ...quiet, pooling: true });
@@ -230,10 +210,7 @@ describe("agent r5 — confirmed bugs", () => {
       pooling: true,
       onStreamError: (err) => errors.push(String(err)),
     });
-    app.get("/", (c) => {
-      c.status = 200;
-      c.body = streamOf(["a", "b", "c", "d", "e", "f"]);
-    });
+    app.get("/", () => new Response(streamOf(["a", "b", "c", "d", "e", "f"])));
     const res = await drive(app, new Request("http://localhost:3000/"));
     const reader = res.body!.getReader();
     await reader.read(); // a pull is now in flight when the client aborts

@@ -6,7 +6,7 @@
  * `ipValue` distinguishes unresolved (`null`) from resolved-empty (`""`).
  */
 
-import type { HeaderMap, ResponseBody, Runtime } from "../../types.ts";
+import type { HeaderMap, Runtime } from "../../types.ts";
 import type { RequestSettings } from "./settings.ts";
 import type { Application } from "../app.ts";
 import type { RequestSource } from "../request-source.ts";
@@ -50,10 +50,10 @@ export interface ContextState {
   urlObjectValue: URL | null;
   statusValue: number;
   headersRecord: HeaderMap | null;
-  bodyValue: ResponseBody;
   /**
    * Bit-packed response flags — one field write instead of four.
-   * 1 = explicit status, 2 = explicit null body, 4 = multi-value header,
+   * (U3c: bits 1 = explicit status and 2 = explicit null body died with the
+   * response setters.) 4 = multi-value header,
    * 256 = dev tracing: a matched route's own layers were reached
    * (DOGFOOD-R1 C4 — set by the chain marker, never on the prod hot path),
    * 512 = dev tracing enabled for this context (set at creation only when

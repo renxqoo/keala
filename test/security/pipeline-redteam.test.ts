@@ -49,29 +49,12 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
     expect(resolved.host).toBe("good.com:3000"); // actual: "evil.com" — cross-origin
   });
 
-  it("PIPE-2 (0.7): a post-commit c.status downgrade throws instead of rebuilding", async () => {
-    const app = new Keala(quiet);
-    let caught: unknown;
-    app.use(async (c, next) => {
-      await next();
-      try {
-        c.status = 204; // the old empty-status downgrade — rule-4 rebuild is gone
-      } catch (err) {
-        caught = err;
-      }
-    });
-    app.use((c) => {
-      c.status = 200;
-      c.setHeader("Content-Length", "5");
-      return c.text("hello");
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(caught).toBeInstanceOf(TypeError);
-    expect((caught as Error).message).toContain("response already committed");
-    // The committed Response survives the rejected write untouched.
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("hello");
-  });
+  // U3c deletion: PIPE-2 (post-commit c.status downgrade throws instead of
+  // rebuilding) died with the status write path — there is no write to
+  // reject any more. The replacement semantics (a post-next middleware
+  // swapping the committed answer by RETURNING a new Response,
+  // last-committer-wins) are locked by PIPE-2b below and the etag/compress
+  // suites.
 
   it("PIPE-2b (0.7): a fresh-check middleware swaps in a 304 Response keeping validators", async () => {
     const app = new Keala(quiet);
@@ -116,7 +99,7 @@ describe("redteam r3 — pipeline/finalizer confirmed bugs", () => {
       expect(c.has("constructor")).toBe(false); // control: null-proto record
       void c.cookies; // materializes the header record via the cookies getter
       observed = c.has("constructor");
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await drive(app, new Request("http://localhost:3000/"));
     expect(res.status).toBe(200);

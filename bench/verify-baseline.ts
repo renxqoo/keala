@@ -11,12 +11,8 @@ const BATCHES = 40;
 const rawHandler = (_req: Request): Response => new Response("hello world");
 
 const app = new Keala();
-app.get("/text", (c) => {
-  c.body = "hello world";
-});
-app.get("/users/:id", (c) => {
-  c.body = `user ${c.params("id")}`;
-});
+app.get("/text", (c) => c.text("hello world"));
+app.get("/users/:id", (c) => c.text(`user ${c.params("id")}`));
 
 const hono = new Hono();
 hono.get("/text", (c) => c.text("hello world"));

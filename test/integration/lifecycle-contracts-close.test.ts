@@ -115,7 +115,7 @@ import { listen } from ${JSON.stringify(nodeUrl)};
 const app = new Keala({ env: "test" });
 app.get("/park", async (c) => {
   await new Promise((resolve) => setTimeout(resolve, 5000)); // outlives the probe
-  c.body = "done";
+  return c.text("done");
 });
 const server = await listen(app, { port: 0, hostname: "127.0.0.1", signals: true }).ready();
 process.stdout.write("READY\\n");
@@ -166,7 +166,7 @@ const poll = setInterval(() => {
 it("REVIEW-CT-1: §2.1 CloseStatus shape; isDraining one-way (true forever after close)", async () => {
   const app = new Keala({ env: "test" });
   app.get("/x", (c) => {
-    c.body = "x";
+    return c.text("x");
   });
   expect(app.isDraining()).toBe(false);
   const status = await app.close({ drain: 100 });
@@ -192,7 +192,7 @@ it("REVIEW-CT-3: §2.1 drain validation — negative / NaN / -Infinity throw Typ
   }
   const app = new Keala({ env: "test" });
   app.get("/x", (c) => {
-    c.body = "x";
+    return c.text("x");
   });
   expect(() => app.close({ drain: -5 })).toThrow(TypeError);
   expect(app.isDraining()).toBe(false);
@@ -205,7 +205,7 @@ it("REVIEW-CT-4: §2.2 escalation — a repeat close({drain:0}) force-resolves a
   const gate = deferred();
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const inflight = app.handle(new Request("http://x/park"));
   await wait(10);
@@ -226,7 +226,7 @@ it("REVIEW-CT-5: §2.2 escalation is drain:0-only — a repeat close({drain:80})
   const gate = deferred();
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const inflight = app.handle(new Request("http://x/park"));
   await wait(10);
@@ -245,7 +245,7 @@ it("REVIEW-CT-6: §2.2 default drain window is not immediate; close completes vi
   const gate = deferred();
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const inflight = app.handle(new Request("http://x/park"));
   await wait(10);
@@ -261,7 +261,7 @@ it("REVIEW-CT-7: §2.2 r2 — drain:Infinity never arms a timer; the counter com
   const gate = deferred();
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const inflight = app.handle(new Request("http://x/park"));
   await wait(10);
@@ -277,7 +277,7 @@ it("REVIEW-CT-8: §2.2 r3 — drain:0 is immediate force and the listener ALWAYS
   const gate = deferred();
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
   liveServers.push(server);
@@ -301,7 +301,7 @@ it("REVIEW-CT-9: §2.2 r3 — drain window expiry reports {timedOut:true, inFlig
   const gate = deferred();
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const inflight = app.handle(new Request("http://x/park"));
   await wait(10);
@@ -318,8 +318,8 @@ it("REVIEW-CT-10: §2.3 — CloseStatus resolves LAST (after in-flight work comp
   const order: string[] = [];
   app.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
     order.push("request-done");
+    return c.text("done");
   });
   const inflight = app.handle(new Request("http://x/park"));
   await wait(10);

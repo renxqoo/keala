@@ -153,7 +153,7 @@ describe("SEC-2: admission as a bypass — refusals are pre-context and context-
     app.get("/work", async (c) => {
       counts.route += 1;
       await wait(5);
-      c.body = "ok";
+      return c.text("ok");
     });
     app.notFound(() => {
       counts.notFound += 1;
@@ -193,7 +193,7 @@ describe("SEC-2: admission as a bypass — refusals are pre-context and context-
       void c.setHeader("x-victim-token", secret);
       void c.setHeader("content-type", "text/plain; charset=utf-8");
       await gate.promise;
-      c.body = "victim-done";
+      return c.text("victim-done");
     });
     const victim = app.handle(new Request("http://x/victim"));
     const closed = app.close({ drain: 2000 });
@@ -263,7 +263,7 @@ describe("SEC-4: queue resource exhaustion — waiter hygiene under flood", () =
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const tracker = unhandledTracker();
     try {

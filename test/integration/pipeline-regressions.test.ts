@@ -52,43 +52,20 @@ describe("agent3 — finalize: synthesized responses drop staged headers", () =>
 });
 
 describe("agent3 — post-commit response rewrites", () => {
-  // 0.7: the old silently-dropped `c.status` writes are now loud TypeErrors
-  // (the rule-4 rebuild machinery is gone). Replace a committed response by
-  // RETURNING a new one from middleware.
-  it("post-commit c.status write throws instead of being silently dropped", async () => {
+  // U3c deletions (mapping #6): "post-commit c.status write throws instead of
+  // being silently dropped" and the status-write half of "post-commit header
+  // writes still land while status writes throw" locked the deleted
+  // `c.status =` setter's TypeError guard — the write path no longer exists.
+  // The surviving post-commit surface (header writers landing on the
+  // committed Response) is kept below.
+  it("post-commit header writes still land on the committed Response", async () => {
     const app = new Keala(quiet);
-    let caught: unknown;
     app.use(async (c, next) => {
       await next();
-      try {
-        c.status = 201;
-      } catch (err) {
-        caught = err;
-      }
-    });
-    app.get("/x", (c) => c.text("made"));
-    const res = await app.handle(req("/x"));
-    expect(caught).toBeInstanceOf(TypeError);
-    expect((caught as Error).message).toContain("response already committed");
-    expect(res.status).toBe(200); // the committed Response survives
-    expect(await res.text()).toBe("made");
-  });
-
-  it("post-commit header writes still land while status writes throw", async () => {
-    const app = new Keala(quiet);
-    let caught: unknown;
-    app.use(async (c, next) => {
-      await next();
-      try {
-        c.status = 203;
-      } catch (err) {
-        caught = err;
-      }
       c.setHeader("X-Late", "1"); // header writes stay legal post-commit
     });
     app.get("/x", () => new Response("ok"));
     const res = await app.handle(req("/x"));
-    expect(caught).toBeInstanceOf(TypeError);
     expect(res.status).toBe(200);
     expect(res.headers.get("x-late")).toBe("1");
   });
@@ -151,16 +128,11 @@ describe("agent3 — sugar helpers vs staged state", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("CONFIRMED-BUG: staged 204 status + c.text answers an opaque 500", async () => {
-    const app = new Keala(quiet);
-    app.get("/b", (c) => {
-      c.status = 204;
-      return c.text("done");
-    });
-    const res = await app.handle(req("/b"));
-    expect(res.status).toBe(204);
-    expect(await res.text()).toBe("");
-  });
+  // U3c deletion (mapping #6/deleted staged-status API): the "staged 204
+  // status + c.text answers an opaque 500" variant locked the interaction
+  // between a STAGED status write and the sugar helper — the staged status
+  // write path no longer exists (the sugar's second parameter is the only
+  // status source, locked by the explicit-204 test above).
 
   // 0.7: the "sugar helpers drop a staged c.message" lock is gone with the
   // API — statusText customization no longer exists.
@@ -177,14 +149,17 @@ describe("agent3 — investigated and cleared", () => {
     expect(res.headers.get("retry-after")).toBe("1, 2");
   });
 
-  it("clear: HEAD on an expose 4xx error backfills content-length", async () => {
+  it("clear: HEAD on an expose 4xx error strips the body (no CL backfill — §2.3-3)", async () => {
+    // U3c behavior change: error answers are built Responses, and returned/
+    // built Responses do NOT backfill Content-Length on HEAD (only the sugar
+    // path keeps the koa HEAD-CL contract, locked in response-matrix).
     const app = new Keala(quiet);
     app.get("/e", (c) => {
       c.throw(418, "teapot");
     });
     const res = await app.handle(req("/e", { method: "HEAD" }));
     expect(res.status).toBe(418);
-    expect(res.headers.get("content-length")).toBe("6");
+    expect(res.headers.get("content-length")).toBeNull();
     expect(await res.text()).toBe("");
   });
 
@@ -193,7 +168,7 @@ describe("agent3 — investigated and cleared", () => {
     app.get("/c", (c) => {
       const o: Record<string, unknown> = {};
       o["self"] = o;
-      c.body = o;
+      return c.json(o);
     });
     const res = await app.handle(req("/c"));
     expect(res.status).toBe(500);

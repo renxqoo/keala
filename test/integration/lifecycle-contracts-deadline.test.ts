@@ -116,7 +116,7 @@ import { listen } from ${JSON.stringify(nodeUrl)};
 const app = new Keala({ env: "test" });
 app.get("/park", async (c) => {
   await new Promise((resolve) => setTimeout(resolve, 5000)); // outlives the probe
-  c.body = "done";
+  return c.text("done");
 });
 const server = await listen(app, { port: 0, hostname: "127.0.0.1", signals: true }).ready();
 process.stdout.write("READY\\n");
@@ -251,7 +251,7 @@ it("REVIEW-CT-31: §2.2 r1 — the 504 frees the slot at once; the zombie's late
   app.get("/work", async (c) => {
     started++;
     if (started === 1) await gate.promise; // the zombie-to-be parks
-    c.body = started === 1 ? "zombie" : `done-${started}`;
+    return c.text(started === 1 ? "zombie" : `done-${started}`);
   });
   const first = app.handle(new Request("http://x/work")); // admitted, parks
   const second = app.handle(new Request("http://x/work")); // queued
@@ -267,7 +267,9 @@ it("REVIEW-CT-32: §2.2 invariant — a deadline-504 Context is never recycled i
   let controlCtx: Context | undefined;
   controlApp.get("/n", (c) => ((controlCtx = c), new Response(null)));
   await controlApp.handle(new Request("http://x/n"));
-  expect(() => ((controlCtx as Context).body = "late")).toThrow(/retired/); // guard active
+  // U3c: probe retirement through a surviving mutating path (the body setter
+  // left the surface with the API).
+  expect(() => (controlCtx as Context).setHeader("x-late", "1")).toThrow(/retired/); // guard active
 
   const app = new Keala({ env: "test", pooling: true, requestTimeout: 40 });
   const gate = deferred();
@@ -280,7 +282,7 @@ it("REVIEW-CT-32: §2.2 invariant — a deadline-504 Context is never recycled i
   expect((await app.handle(new Request("http://x/z"))).status).toBe(504);
   gate.resolve(); // the zombie settles — its context must go to GC, not the pool
   await wait(20);
-  expect(() => ((zombieCtx as Context).body = "late-write")).not.toThrow();
+  expect(() => (zombieCtx as Context).setHeader("x-late", "1")).not.toThrow();
 });
 
 it("REVIEW-CT-33: §2.2 invariant — a REJECTING strategy is contained to the built-in 503", async () => {
@@ -297,7 +299,7 @@ it("REVIEW-CT-33: §2.2 invariant — a REJECTING strategy is contained to the b
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "ok";
+      return c.text("ok");
     });
     const first = app.handle(new Request("http://x/work"));
     const r = await app.handle(new Request("http://x/work"));
@@ -329,7 +331,7 @@ it("REVIEW-CT-34: §2.2 invariant — a SYNC-THROWING strategy must not take the
   const gate = deferred();
   app.get("/work", async (c) => {
     await gate.promise;
-    c.body = "ok";
+    return c.text("ok");
   });
   const first = app.handle(new Request("http://x/work"));
   await wait(10);

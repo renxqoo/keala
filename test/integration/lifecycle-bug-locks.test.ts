@@ -141,7 +141,7 @@ describe("agent-r44 bug hunt: signal bridge force semantics", () => {
         const gate = deferred();
         app.get("/stuck", async (c) => {
           await gate.promise;
-          c.body = "late";
+          return c.text("late");
         });
         void app.handle(new Request("http://x/stuck")); // in-flight for the drain
         installSignalBridge(app);
@@ -184,7 +184,7 @@ describe("agent-r44 bug hunt: drain: Infinity handling in adapters", () => {
       const gate = deferred();
       app.get("/stuck", async (c) => {
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
@@ -279,9 +279,7 @@ describe("agent-r44 bug hunt: stopGraceful timer lifecycle", () => {
       // OBSERVABLE: one pending fake timer after stopGraceful resolved.
       // STATUS: CONFIRMED-RED — vi.getTimerCount() === 1 after resolution.
       const app = new Keala({ env: "test" });
-      app.get("/x", (c) => {
-        c.body = "x";
-      });
+      app.get("/x", (c) => c.text("x"));
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
       vi.useFakeTimers();
@@ -320,12 +318,13 @@ describe("agent-r44 bug hunt: pooling x deadline interaction", () => {
       app.get("/z", async (c) => {
         zombie = c;
         await gate.promise;
-        c.status = 204; // settles late with a NULL body -> immediate retire
+        // settles late with a NULL body -> immediate retire
+        return new Response(null, { status: 204 });
       });
       const seen: Context[] = [];
       app.get("/who", (c) => {
         seen.push(c);
-        c.body = "ok";
+        return c.text("ok");
       });
 
       const answered = await app.handle(new Request("http://x/z"));
@@ -361,7 +360,7 @@ describe("agent-r44 bug hunt: queue waiter edge cases (VERIFIED-OK locks)", () =
       const gate = deferred();
       app.get("/w", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const first = app.handle(new Request("http://x/w"));
       const queued = app.handle(new Request("http://x/w"));
@@ -393,7 +392,7 @@ describe("agent-r44 bug hunt: queue waiter edge cases (VERIFIED-OK locks)", () =
       const gate = deferred();
       app.get("/w", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const first = app.handle(new Request("http://x/w"));
       const abort = new AbortController();
@@ -425,7 +424,7 @@ describe("agent-r44 bug hunt: deadline x drain interaction (VERIFIED-OK lock)", 
       const gate = deferred();
       app.get("/stuck", async (c) => {
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       const inflight = app.handle(new Request("http://x/stuck"));
       const closed = app.close({ drain: 4000 });
@@ -458,7 +457,7 @@ describe("agent-r44 bug hunt: pooling recycle x abort state (VERIFIED-OK lock)",
       let sigA: AbortSignal | undefined;
       app.get("/a", (c) => {
         sigA = c.signal;
-        c.body = "a";
+        return c.text("a");
       });
       const ra = await app.handle(new Request("http://x/a", { signal: abort.signal }));
       await ra.text(); // context recycled into the pool
@@ -466,7 +465,7 @@ describe("agent-r44 bug hunt: pooling recycle x abort state (VERIFIED-OK lock)",
       let sigB: AbortSignal | undefined;
       app.get("/b", (c) => {
         sigB = c.signal;
-        c.body = "b";
+        return c.text("b");
       });
       const rb = await app.handle(new Request("http://x/b"));
       await rb.text();

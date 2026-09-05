@@ -23,14 +23,13 @@ import type { RouteHandler } from "../../src/router/router.ts";
 export const validWrites = (rng: Rng): ((c: Context) => void) => {
   const name = `x-r6-${randString(rng, 6, "abcdefghijklmnopqrstuvwxyz")}`;
   const value = randString(rng, 16, TOKEN);
-  const status = rng.pick([200, 201, 204, 301, 302, 304, 418] as const);
   const useCookie = rng.bool(0.3);
   return (c: Context): void => {
-    // Header/cookie writes stay legal on both sides of the commit (0.7);
-    // a status write is only valid pre-commit.
+    // Header/cookie writes stay legal on both sides of the commit (0.7).
+    // U3c: the status write op is gone — the sugar status parameter is the
+    // only status source.
     c.setHeader(name, value);
     if (useCookie) c.cookies.set("r6", "1");
-    if (rng.bool(0.3) && c.res === undefined) c.status = status;
   };
 };
 
@@ -70,19 +69,27 @@ export const dangerousWrites = (rng: Rng): ((c: Context) => void) => {
         break;
       case 4:
         ops.push((c) => {
-          // 0.7: the c.message op became a body write — legal pre-commit,
-          // a loud TypeError post-commit (both belong in the zoo).
-          c.body = randString(rng, 12, PRINTABLE + CTL);
+          // U3c: the body/type/attachment setters are gone. Their zoo role
+          // — a write that survives validation but detonates at the wire —
+          // is carried by a non-ByteString staged value (the R6-1 class).
+          c.setHeader("x-r6-poison", `café${randString(rng, 4, UNICODE)}中`);
         });
         break;
       case 5:
         ops.push((c) => {
-          c.type = randHeaderValue(rng);
+          // Bare-header contract: hostile Content-Type values (validation
+          // rejects CR/LF/NUL at set time → a loud 500).
+          c.setHeader("Content-Type", randHeaderValue(rng));
         });
         break;
       case 6:
         ops.push((c) => {
-          c.attachment(randString(rng, 12, PRINTABLE + CTL + UNICODE));
+          // Bare-header twin of the old attachment() op (RFC 5987 encoding
+          // is the caller's job now; CTL values throw at validation).
+          c.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${randString(rng, 12, PRINTABLE + CTL + UNICODE)}"`,
+          );
         });
         break;
       default:
@@ -238,7 +245,9 @@ export const randHandler = (rng: Rng, opts: HandlerOpts): RouteHandler => {
       return async (c, next) => {
         writes(c);
         await next();
-        c.body = randString(rng, 16, PRINTABLE);
+        // U3c: last-committer-wins — a post-next sugar return replaces the
+        // downstream answer (the old post-next body write's twin).
+        return c.text(randString(rng, 16, PRINTABLE));
       };
     }
     case 10:

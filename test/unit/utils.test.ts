@@ -17,6 +17,7 @@ import {
 } from "../../src/utils/mime.ts";
 import { Keala, isHttpError } from "../../src/index.ts";
 import { normalizeError } from "../../src/http/errors.ts";
+import { statusMessage } from "../../src/http/status.ts";
 
 describe("getPath", () => {
   it("extracts the path from absolute URLs", () => {
@@ -180,43 +181,22 @@ describe("coverage gaps", () => {
     app.use(async (c) => {
       first = c.cookies;
       second = c.cookies;
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.handle(new Request("http://localhost:3000/"));
     expect(first).toBe(second);
   });
 
-  it("delegates response setters through the flat context", async () => {
-    // 0.7: the c.message statusText setter is gone with the API.
-    const app = new Keala();
-    app.use(async (c) => {
-      c.type = "text/csv";
-      c.length = 5;
-      c.lastModified = new Date(Date.UTC(2025, 0, 2));
-      c.etag = "v9";
-      expect(c.resHeader("Content-Type")).toBe("text/csv");
-      expect(c.has("Content-Type")).toBe(true);
-      c.body = "a,b,c";
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.headers.get("content-type")).toBe("text/csv");
-    const probe = new Keala();
-    let seenLength: number | undefined = 0;
-    probe.use(async (c) => {
-      c.body = "a,b,c";
-      seenLength = c.length;
-    });
-    await probe.handle(new Request("http://localhost:3000/"));
-    expect(seenLength).toBe(5);
-    expect(res.headers.get("etag")).toBe('"v9"');
-    expect(res.headers.get("last-modified")).toBe("Thu, 02 Jan 2025 00:00:00 GMT");
-  });
-
+  // U3c deletion: "delegates response setters through the flat context"
+  // locked the deleted c.type/c.length/c.lastModified/c.etag setter family
+  // (auto-quoting, Date conversion, the computed c.length read). The staged
+  // header channel it also probed (setHeader/resHeader/has) is locked by
+  // response.test.ts "set/append/remove header operations".
   it("skips empty strings inside multi-value header flattening", async () => {
     const app = new Keala();
     app.use(async (c) => {
       c.append("Set-Cookie", ["a=1; Path=/", ""]);
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect([...res.headers.getSetCookie()]).toEqual(["a=1; Path=/"]);
@@ -227,17 +207,17 @@ describe("coverage gaps", () => {
     app.use(async (c) => {
       c.append("X-List", ["only"]);
       c.append("X-List", "second");
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("x-list")).toBe("only, second");
   });
 
   it("falls back to the numeric status for unknown codes without a body", async () => {
+    // U3c: `c.status = 599` with no body used to fall back to the status
+    // text — the sugar's second parameter is the equivalent status channel.
     const app = new Keala();
-    app.use(async (c) => {
-      c.status = 599;
-    });
+    app.use((c) => c.text(statusMessage(599) || String(599), 599));
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(599);
     expect(await res.text()).toBe("599");
@@ -255,7 +235,7 @@ describe("coverage gaps", () => {
       } catch (err) {
         captured = err;
       }
-      c.body = "done";
+      return c.text("done");
     });
     await app.handle(new Request("http://localhost:3000/"));
     expect(isHttpError(captured)).toBe(true);
@@ -286,11 +266,11 @@ describe("coverage gaps", () => {
     expect(escapeHtml("plain text 123")).toBe("plain text 123");
   });
 
-  it("keeps etag quoting for weak validators", async () => {
+  it("ships a weak validator ETag verbatim (U3c: quoting is the caller's)", async () => {
     const app = new Keala();
     app.use(async (c) => {
-      c.etag = 'W/"weak"';
-      c.body = "ok";
+      c.setHeader("ETag", 'W/"weak"');
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("etag")).toBe('W/"weak"');

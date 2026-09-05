@@ -17,7 +17,6 @@
  *
  * app.use(cors())                                   // global onion middleware
  * app.get("/users/:id", (c) => c.json({ id: c.params("id") })) // return style
- * app.get("/page", (c) => { c.body = "hi"; c.type = "text/html" }) // state style
  *
  * app.listen(3000)
  * ```
@@ -69,14 +68,7 @@ export { startBunServer, type ServerHandle, type ServeImplementation } from "./a
 export { failFastAdmission, queueAdmission } from "./core/lifecycle-admission.ts";
 export type { AdmissionStrategy } from "./types.ts";
 export { compilePattern, type CompiledSegment, type PatternIR } from "./router/pattern.ts";
-export type {
-  AppOptions,
-  HeaderValue,
-  ListenOptions,
-  ResponseBody,
-  Runtime,
-  Next,
-} from "./types.ts";
+export type { AppOptions, HeaderValue, ListenOptions, Runtime, Next } from "./types.ts";
 export type { RouteHandler } from "./router/router.ts";
 export type { Plugin } from "./types.ts";
 // The typed context-extension channel (EXT-1): merge into ContextExtensions

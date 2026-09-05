@@ -27,7 +27,7 @@ app.get("/boom", () => {
 });
 app.get("/cookies", (c) => {
   c.cookies.set("sid", "x".repeat(24), { signed: true });
-  c.body = "ok";
+  return c.text("ok");
 });
 app.get("/committed", () => new Response("foreign body", { headers: { "x-kind": "foreign" } }));
 

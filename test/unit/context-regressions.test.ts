@@ -26,7 +26,7 @@ const probe = async (
   const probing = new Keala({ env: "test", ...settings });
   probing.use(async (c) => {
     captured = c;
-    c.body = "probed";
+    return c.text("probed");
   });
   await probing.handle(new Request(init.url, init));
   if (captured === undefined) throw new Error("probe middleware did not run");
@@ -69,7 +69,7 @@ describe("agent3: signed cookie set() without keys (fail-open)", () => {
     const app = new Keala({ env: "test" });
     app.use(async (c) => {
       c.cookies.set("sid", "secret", { signed: true });
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     // Today this emits `sid=secret` (unsigned) with a 200 — a signed cookie
@@ -141,7 +141,7 @@ describe("agent3: append() singleton header corruption", () => {
       } catch {
         secondAppendThrew = true;
       }
-      c.body = "x";
+      return c.text("x");
     });
     await app.handle(new Request("http://localhost:3000/"));
     expect(secondAppendThrew).toBe(true);
@@ -158,7 +158,7 @@ describe("agent3: append() singleton header corruption", () => {
       } catch {
         // expected — see the sibling test above
       }
-      c.body = "x";
+      return c.text("x");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     // Today: "text/html; charset=utf-8, application/json" — an invalid

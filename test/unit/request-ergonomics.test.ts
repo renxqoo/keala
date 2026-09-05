@@ -209,7 +209,7 @@ describe("c.URL (ported from the retired koa parity suite, U1)", () => {
   it("c.URL exposes the live WHATWG URL view", async () => {
     const app = new Keala(quiet);
     app.get("/u", (c) => {
-      c.body = c.URL instanceof URL ? c.URL.pathname : "not a URL";
+      return c.text(c.URL instanceof URL ? c.URL.pathname : "not a URL");
     });
     const res = await app.handle(req("/u"));
     expect(await res.text()).toBe("/u");

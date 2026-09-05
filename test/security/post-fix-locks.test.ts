@@ -77,7 +77,7 @@ describe("RT-F1: pooling never leaks parsed bodies or validated values", () => {
     );
     app.post("/plain", async (c) => {
       void (await readJson((c as unknown as { req: unknown }).req).json());
-      c.body = { leaked: (c as unknown as { valid?: unknown }).valid ?? null };
+      return c.json({ leaked: (c as unknown as { valid?: unknown }).valid ?? null });
     });
     await app.handle(
       req("/v", {
@@ -259,11 +259,11 @@ describe("RT-F7: c.append validates header names; the record is prototype-less",
   it("append rejects forbidden/inherited names", () => {
     const app = new Keala(quiet);
     app.get("/a", (c) => {
-      c.body = "ok";
       expect(() => c.append("constructor", "x")).toThrow(/Invalid header field name/);
       expect(() => c.append("__proto__", "pwn")).toThrow(/Invalid header field name/);
       expect(() => c.append("prototype", "x")).toThrow(/Invalid header field name/);
       expect(() => c.append("bad name", "x")).toThrow(/Invalid header field name/);
+      return c.text("ok");
     });
     return app.handle(req("/a"));
   });
@@ -276,7 +276,7 @@ describe("RT-F7: c.append validates header names; the record is prototype-less",
       expect(record).not.toBeNull();
       expect((record as object)["constructor"]).toBeUndefined();
       expect(Object.getPrototypeOf(record)).toBeNull();
-      c.body = "ok";
+      return c.text("ok");
     });
     return app.handle(req("/b"));
   });
@@ -299,8 +299,9 @@ describe("RT-F9: etag honors If-None-Match: *", () => {
   it("* matches any representation with 304", async () => {
     const app = new Keala(quiet);
     app.get("/e", etag(), (c) => {
-      // state mode — return-style commits a Response and bypasses etag
-      c.body = "payload";
+      // U3c: the gate flipped — sugar products are the transformable shape;
+      // only a hand-built Response would bypass etag.
+      return c.text("payload");
     });
     const res = await app.handle(req("/e", { headers: { "if-none-match": "*" } }));
     expect(res.status).toBe(304);

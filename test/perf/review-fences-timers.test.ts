@@ -171,7 +171,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         // Variant 1 — plain unconfigured app.
         const plain = new Keala({ env: "test" });
         plain.get("/p", (c) => {
-          c.body = "p";
+          return c.text("p");
         });
         const plainReq = new Request("http://x/p");
         for (let i = 0; i < 300; i++) await plain.handle(plainReq);
@@ -184,7 +184,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         const sat = new Keala({ env: "test", overload: { maxConcurrency: 4, maxQueue: 64 } });
         sat.get("/s", async (c) => {
           await satGate.promise;
-          c.body = "s";
+          return c.text("s");
         });
         const satReq = new Request("http://x/s");
         const flood: Promise<Response>[] = [];
@@ -201,7 +201,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         // Variant 3 — deadline-configured: settles-before-deadline requests.
         const dl = new Keala({ env: "test", requestTimeout: 60_000 });
         dl.get("/d", (c) => {
-          c.body = "d";
+          return c.text("d");
         });
         const dlReq = new Request("http://x/d");
         for (let i = 0; i < 300; i++) await dl.handle(dlReq);
@@ -226,7 +226,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
           const gate = deferred();
           app.get("/hold", async (c) => {
             await gate.promise;
-            c.body = "h";
+            return c.text("h");
           });
           const held = app.handle(new Request("http://x/hold"));
           const closing = app.close({ drain: 300 });
@@ -240,7 +240,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
           const gate = deferred();
           app.get("/hold", async (c) => {
             await gate.promise;
-            c.body = "h";
+            return c.text("h");
           });
           const held = app.handle(new Request("http://x/hold"));
           const t0 = timers.snapshot();
@@ -292,11 +292,11 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         const contexts: unknown[] = [];
         app.get("/seed", (c) => {
           contexts.push(c);
-          c.body = "seed"; // bodied: its context retires only on consumption
+          return c.text("seed"); // bodied: its context retires only on consumption
         });
         app.get("/w", async (c) => {
           contexts.push(c);
-          c.body = "w"; // bodied: stays out of the pool until consumed
+          return c.text("w"); // bodied: stays out of the pool until consumed
         });
         const parkGate = deferred();
         app.get("/park", () => parkGate.promise.then(() => undefined));

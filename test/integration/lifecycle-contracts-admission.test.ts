@@ -120,7 +120,7 @@ import { listen } from ${JSON.stringify(nodeUrl)};
 const app = new Keala({ env: "test" });
 app.get("/park", async (c) => {
   await new Promise((resolve) => setTimeout(resolve, 5000)); // outlives the probe
-  c.body = "done";
+  return c.text("done");
 });
 const server = await listen(app, { port: 0, hostname: "127.0.0.1", signals: true }).ready();
 process.stdout.write("READY\\n");
@@ -173,7 +173,7 @@ it("REVIEW-CT-15: §2.1/§6 C1 — inFlight counts admitted-not-settled; queued 
   const gate = deferred();
   plain.get("/park", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const inflight = plain.handle(new Request("http://x/park"));
   await wait(10);
@@ -186,7 +186,7 @@ it("REVIEW-CT-15: §2.1/§6 C1 — inFlight counts admitted-not-settled; queued 
   const gate2 = deferred();
   queued.get("/park", async (c) => {
     await gate2.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const first = queued.handle(new Request("http://x/park"));
   void queued.handle(new Request("http://x/park"));
@@ -255,7 +255,7 @@ it("REVIEW-CT-18: §2.1 — requestTimeout 0/undefined = off; invalid values thr
     const app = new Keala({ env: "test", requestTimeout: off });
     app.get("/slow", async (c) => {
       await wait(70);
-      c.body = "fine";
+      return c.text("fine");
     });
     expect((await app.handle(new Request("http://x/slow"))).status).toBe(200);
   }
@@ -266,7 +266,7 @@ it("REVIEW-CT-19: §2.2 — built-in rejection shape is exact (503, text/plain, 
   const gate = deferred();
   app.get("/work", async (c) => {
     await gate.promise;
-    c.body = "ok";
+    return c.text("ok");
   });
   const first = app.handle(new Request("http://x/work"));
   const r = await app.handle(new Request("http://x/work"));
@@ -284,7 +284,7 @@ it("REVIEW-CT-20: §2.2 — Retry-After ONLY when not draining AND retryAfterSec
   const gate = deferred();
   live.get("/w", async (c) => {
     await gate.promise;
-    c.body = "ok";
+    return c.text("ok");
   });
   const first = live.handle(new Request("http://x/w"));
   expect((await live.handle(new Request("http://x/w"))).headers.get("retry-after")).toBe("7");
@@ -295,7 +295,7 @@ it("REVIEW-CT-20: §2.2 — Retry-After ONLY when not draining AND retryAfterSec
   const gate2 = deferred();
   zero.get("/w", async (c) => {
     await gate2.promise;
-    c.body = "ok";
+    return c.text("ok");
   });
   const first2 = zero.handle(new Request("http://x/w"));
   expect((await zero.handle(new Request("http://x/w"))).headers.get("retry-after")).toBeNull();
@@ -311,7 +311,7 @@ it("REVIEW-CT-20: §2.2 — Retry-After ONLY when not draining AND retryAfterSec
       },
     });
     app.get("/w", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.close({ drain: 100 });
     const r = await app.handle(new Request("http://x/w"));
@@ -338,7 +338,7 @@ it("REVIEW-CT-21: §2.1/§2.2 — handler override is returned verbatim; reasons
   const gate = deferred();
   app.get("/work", async (c) => {
     await gate.promise;
-    c.body = "ok";
+    return c.text("ok");
   });
   const first = app.handle(new Request("http://x/work"));
   const second = app.handle(new Request("http://x/work")); // queued
@@ -371,7 +371,7 @@ it("REVIEW-CT-22: §2.2 — a THROWING handler falls back to the built-in shape 
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "ok";
+      return c.text("ok");
     });
     const first = app.handle(new Request("http://x/work"));
     const r = await app.handle(new Request("http://x/work"));
@@ -398,7 +398,7 @@ it("REVIEW-CT-23: §2.3 — a queued request leaves exactly once: drain-drop win
     const gate = deferred();
     app.get("/work", async (c) => {
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const first = app.handle(new Request("http://x/work"));
     const queued = app.handle(new Request("http://x/work"));
@@ -427,7 +427,7 @@ it("REVIEW-CT-24: §2.3 — a queued request whose client disconnects leaves onc
   const gate = deferred();
   app.get("/work", async (c) => {
     await gate.promise;
-    c.body = "done";
+    return c.text("done");
   });
   const first = app.handle(new Request("http://x/work"));
   const abort = new AbortController();
@@ -452,7 +452,7 @@ it("REVIEW-CT-25: §2.2 invariant — the rejection path has NO Context, no mapp
   const gate = deferred();
   app.get("/work", async (c) => {
     await gate.promise;
-    c.body = "ok";
+    return c.text("ok");
   });
   const first = app.handle(new Request("http://x/work"));
   await wait(10); // the ADMITTED request legitimately runs the middleware
@@ -472,7 +472,7 @@ it("REVIEW-CT-26: §2.2 r1 — draining refusals also precede Context (unconfigu
   app.use(middleware as never);
   app.onError(mapper);
   app.get("/x", (c) => {
-    c.body = "x";
+    return c.text("x");
   });
   await app.close({ drain: 100 });
   const r = await app.handle(new Request("http://x/x"));

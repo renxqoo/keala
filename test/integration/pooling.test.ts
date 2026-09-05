@@ -33,8 +33,11 @@ const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
   c.state["step"] = 1;
   c.setHeader("X-Used", "yes");
   c.append("Set-Cookie", "old=1; Path=/");
-  c.status = 201;
-  c.body = "payload";
+  // U3c: the status/body setters are gone — dirty the same response slots
+  // directly (statusValue + the sugar-snapshot slot) so the recycle contract
+  // keeps full coverage.
+  c.statusValue = 201;
+  c.directBodyResponseValue = new Response("payload", { status: 201 });
   c.cookies.set("sid", "one", { signed: true });
   // Materialize every lazy cache (the recycle must drop them).
   void c.ip;
@@ -70,7 +73,9 @@ describe("resetContext recycling semantics", () => {
     expect(recycled.path).toBe("/b");
     expect(recycled.query("y")).toBe("2");
     expect(recycled.status).toBe(404);
-    expect(recycled.body).toBe(null);
+    // U3c: the body slot is gone; its closest survivor (the sugar-snapshot
+    // identity slot) must be reset just the same.
+    expect(recycled.directBodyResponseValue).toBeUndefined();
     expect(recycled.has("X-Used")).toBe(false);
     expect(recycled.resHeader("set-cookie")).toBe("");
     expect(Object.keys(recycled.state)).toEqual([]);
@@ -123,15 +128,14 @@ describe("request isolation (fresh context per request)", () => {
     app.get("/a/:id", (c) => {
       c.state["id"] = c.params("id");
       c.setHeader("X-Run", String(c.state["id"]));
-      c.body = JSON.stringify({ id: c.state["id"], q: c.query("v") ?? null });
+      return c.json({ id: c.state["id"], q: c.query("v") ?? null });
     });
     app.get("/b", (c) => {
       // No writes: every field must reflect THIS request, not the previous one.
-      c.body = JSON.stringify({
+      return c.json({
         state: Object.keys(c.state).length,
         url: c.url,
         path: c.path,
-        type: c.type,
       });
     });
 
@@ -141,7 +145,6 @@ describe("request isolation (fresh context per request)", () => {
       state: number;
       url: string;
       path: string;
-      type: string;
     };
     expect(body.state).toBe(0); // state was reset
     expect(body.url).toBe("/b");
@@ -158,7 +161,7 @@ describe("request isolation (fresh context per request)", () => {
     app.get("/slow/:tag", async (c) => {
       const mine = c.params("tag") as string;
       await new Promise((resolve) => setTimeout(resolve, mine === "a" ? 15 : 2));
-      c.body = `${mine}:${c.params("tag")}`;
+      return c.text(`${mine}:${c.params("tag")}`);
     });
     const results = await Promise.all([
       app.handle(new Request("http://localhost:3000/slow/a")),
@@ -173,7 +176,7 @@ describe("request isolation (fresh context per request)", () => {
     const app = new Keala({ ...quiet });
     app.onError(() => {});
     app.get("/ok", (c) => {
-      c.body = `fresh:${c.state["step"] ?? "0"}`;
+      return c.text(`fresh:${c.state["step"] ?? "0"}`);
     });
     app.get("/boom", async () => {
       throw new Error("planned");
@@ -191,11 +194,13 @@ describe("request isolation (fresh context per request)", () => {
         c.setHeader("X-Custom", "first");
         return;
       }
-      c.body = [
-        c.cookies.get("sid") ?? "none",
-        c.resHeader("X-Custom") || "none",
-        c.headers.get("x-incoming") ?? "none",
-      ].join("|");
+      return c.text(
+        [
+          c.cookies.get("sid") ?? "none",
+          c.resHeader("X-Custom") || "none",
+          c.headers.get("x-incoming") ?? "none",
+        ].join("|"),
+      );
     });
     await app.handle(new Request("http://localhost:3000/set"));
     const res = await app.handle(
@@ -206,14 +211,17 @@ describe("request isolation (fresh context per request)", () => {
 
   it("stream bodies still deliver across requests", async () => {
     const app = new Keala(quiet);
-    app.use(async (c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("streamed"));
-          controller.close();
-        },
-      });
-    });
+    app.use(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("streamed"));
+              controller.close();
+            },
+          }),
+        ),
+    );
     const first = await app.handle(new Request("http://localhost:3000/"));
     expect(await first.text()).toBe("streamed");
     const second = await app.handle(new Request("http://localhost:3000/"));
@@ -268,12 +276,10 @@ describe("guarded pooling", () => {
     expect(() => {
       (retired as unknown as { status: number }).status = 500;
     }).toThrow(/retired/);
-    expect(() => {
-      (retired as unknown as { set: (k: string, v: string) => void }).set("x", "1");
-    }).toThrow(/retired/);
-    expect(() => {
-      (retired as unknown as { body: unknown }).body = "late";
-    }).toThrow(/retired/);
+    // U3c: body/set left the surface with the setters — the retired guard's
+    // surviving write surfaces are the header writers, redirect and state.
+    expect(() => retired.setHeader("x", "1")).toThrow(/retired/);
+    expect(() => retired.redirect("http://x/leak")).toThrow(/retired/);
   });
 
   it("a retired context is live again after reset (pool reuse)", async () => {

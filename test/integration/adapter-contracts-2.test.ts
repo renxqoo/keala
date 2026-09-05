@@ -230,7 +230,7 @@ describe("R4.4 contract coherence (agent-r44)", () => {
     const qGate = deferred();
     queued.get("/w", async (c) => {
       await qGate.promise;
-      c.body = "ok";
+      return c.text("ok");
     });
     const q1 = queued.handle(new Request("http://x/w")); // admitted, parks
     const abort = new AbortController();
@@ -274,7 +274,7 @@ describe("R4.4 contract coherence (agent-r44)", () => {
     const gate = deferred();
     app.get("/w", async (c) => {
       await gate.promise;
-      c.body = "ok";
+      return c.text("ok");
     });
     const handles = Array.from({ length: 256 + 64 + 1 }, () =>
       app.handle(new Request("http://x/w")),

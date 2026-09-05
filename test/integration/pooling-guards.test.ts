@@ -36,7 +36,9 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
     app.get("/first", (c) => {
       setTimeout(() => {
         try {
-          c.body = "stale-timer-from-request-a";
+          // U3c: the body setter is gone — probe the retired window through a
+          // surviving mutating path (setHeader throws on the dead prototype).
+          c.setHeader("X-Stale", "stale-timer-from-request-a");
         } catch (err) {
           observed.push((err as Error).message);
         }
@@ -64,9 +66,9 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
   it("does not recycle a context while an unawaited next() branch can still mutate it", async () => {
     /**
      * Repro: middleware starts `next()` without awaiting it, commits an early
-     * response, and its delayed route writes `c.body` after that response is
-     * consumed.  A second in-flight request deliberately acquires the pool
-     * slot before the old branch resumes.
+     * response, and its delayed route writes to the context after that
+     * response is consumed.  A second in-flight request deliberately acquires
+     * the pool slot before the old branch resumes.
      *
      * Expected: request B remains its untouched 404; request A's late branch
      * must either finish before recycle or stay bound to request A's context.
@@ -92,10 +94,11 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
     });
     app.get("/early", async (c) => {
       await releaseOldBranch.promise;
-      // 0.7: the early Response is already committed, so a late body write
-      // is a loud TypeError instead of a silent stale mutation.
+      // U3c: the body setter left with the API — the late write rides the
+      // header surface. It may land on request A's own committed Response or
+      // throw (retired); either way it must never reach request B.
       try {
-        c.body = "stale-from-request-a";
+        c.setHeader("X-Stale", "stale-from-request-a");
       } catch (error) {
         lateWriteThrew = error;
       }
@@ -120,7 +123,10 @@ describe("R7 core: guarded pooling owns every still-running onion branch", () =>
       status: 404,
       body: "Not Found",
     });
-    expect(lateWriteThrew).toBeInstanceOf(TypeError);
+    // U3c: whether A's late write threw or landed on A's own retired
+    // Response, the survivor invariant is that request B never sees it.
+    expect(victim.headers.get("x-stale")).toBeNull();
+    expect(lateWriteThrew === null || lateWriteThrew instanceof Error).toBe(true);
   });
 });
 

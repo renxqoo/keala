@@ -50,11 +50,11 @@ describe("node adapter locks correct behavior", () => {
         // exist for the mapped "/" target to match.
         app.options("/", (c) => {
           c.setHeader("Allow", "GET");
-          c.body = "opts";
+          return c.text("opts");
         });
         app.options("/*", (c) => {
           c.setHeader("Allow", "GET");
-          c.body = "opts-star";
+          return c.text("opts-star");
         });
       });
       const out = await raw(port, "OPTIONS * HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n");
@@ -68,7 +68,7 @@ describe("node adapter locks correct behavior", () => {
   it("uses an absolute-form (proxy-style) target verbatim", async () => {
     const { port } = await serve((app) => {
       app.get("/abs", (c) => {
-        c.body = "abs-ok";
+        return c.text("abs-ok");
       });
     });
     const out = await raw(
@@ -82,7 +82,7 @@ describe("node adapter locks correct behavior", () => {
   it("joins repeated request headers with ', '", async () => {
     const { port } = await serve((app) => {
       app.get("/", (c) => {
-        c.body = c.header("x-dup");
+        return c.text(c.header("x-dup"));
       });
     });
     const out = await raw(
@@ -95,7 +95,7 @@ describe("node adapter locks correct behavior", () => {
   it("bridges chunked bodies and content-length: 0", async () => {
     const { port } = await serve((app) => {
       app.post("/", async (c) => {
-        c.body = JSON.stringify(await c.raw.text());
+        return c.text(JSON.stringify(await c.raw.text()));
       });
     });
     const chunked = await raw(
@@ -113,7 +113,7 @@ describe("node adapter locks correct behavior", () => {
   it("drops GET bodies (the fetch Request constructor forbids them)", async () => {
     const { port } = await serve((app) => {
       app.get("/", async (c) => {
-        c.body = JSON.stringify(await c.raw.text());
+        return c.text(JSON.stringify(await c.raw.text()));
       });
     });
     const out = await raw(
@@ -126,7 +126,7 @@ describe("node adapter locks correct behavior", () => {
   it("answers malformed HTTP with a 400 and upgrades with a 501", async () => {
     const { port } = await serve((app) => {
       app.get("/", (c) => {
-        c.body = "x";
+        return c.text("x");
       });
     });
     expect((await raw(port, "NOT HTTP AT ALL\r\n\r\n")).split("\r\n")[0]).toBe(
@@ -145,7 +145,7 @@ describe("node adapter locks correct behavior", () => {
   it("exposes socket.remoteAddress through c.ip verbatim", async () => {
     const { port } = await serve((app) => {
       app.get("/", (c) => {
-        c.body = c.ip;
+        return c.text(c.ip);
       });
     });
     const out = await raw(port, "GET / HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n");
@@ -155,10 +155,9 @@ describe("node adapter locks correct behavior", () => {
   it("fans set-cookie out and suppresses HEAD bodies", async () => {
     const { port } = await serve((app) => {
       app.get("/", (c) => {
-        c.status = 201;
         c.append("set-cookie", "a=1");
         c.append("set-cookie", "b=2");
-        c.body = "ck";
+        return c.text("ck", 201);
       });
     });
     const out = await raw(port, "GET / HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n");

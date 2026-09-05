@@ -91,7 +91,7 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
         const id = Number(c.params("id"));
         startOrder.push(id);
         await wait(1);
-        c.body = String(id);
+        return c.text(String(id));
       });
       const handles = Array.from({ length: 300 }, (_, i) =>
         app
@@ -156,7 +156,7 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
       let signalSeen: AbortSignal | undefined;
       app.get("/done", async (c) => {
         signalSeen = c.signal;
-        c.body = "done";
+        return c.text("done");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
@@ -227,7 +227,7 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
       try {
         const app = new Keala({ env: "test" });
         app.get("/x", (c) => {
-          c.body = "x";
+          return c.text("x");
         });
         installSignalBridge(app);
         const fire = registered.find(([event]) => event === "SIGTERM")?.[1];
@@ -257,7 +257,7 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
       try {
         const app = new Keala({ env: "test" });
         app.get("/x", (c) => {
-          c.body = "x";
+          return c.text("x");
         });
         installSignalBridge(app);
         expect(registered.map(([event]) => event).toSorted()).toEqual(["SIGINT", "SIGTERM"]);

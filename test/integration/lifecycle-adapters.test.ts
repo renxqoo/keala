@@ -194,9 +194,7 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
     let closedViaSlot = false;
     try {
       const app = new Keala({ env: "test" });
-      app.get("/x", (c) => {
-        c.body = "x";
-      });
+      app.get("/x", (c) => c.text("x"));
       const server = await listenNode(app, {
         port: 0,
         hostname: "127.0.0.1",
@@ -219,9 +217,7 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
     const onProbe = vi.spyOn(process, "on").mockImplementation(() => process);
     try {
       const app = new Keala({ env: "test" });
-      app.get("/x", (c) => {
-        c.body = "x";
-      });
+      app.get("/x", (c) => c.text("x"));
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       expect(once).not.toHaveBeenCalled();
       // process.on fires for unrelated listeners; the bridge specifically

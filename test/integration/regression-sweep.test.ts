@@ -175,9 +175,7 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
   it("stream body + onStreamError + cache() must stream, not 500 (R6-1)", async () => {
     const seen: string[] = [];
     const app = new Keala({ ...quiet, onStreamError: (e) => seen.push(e.message) });
-    app.get("/s", cache(), (c) => {
-      c.body = streamOf(["hello"]);
-    });
+    app.get("/s", cache(), () => new Response(streamOf(["hello"])));
     const res = await drive(app, new Request("http://good.com/s"));
     // Correct: the cache must simply decline to store a stream body while the
     // response streams untouched. Actual: the throwaway finalize() locked the
@@ -193,20 +191,18 @@ describe("R6-A cache(): r5 state-mode materialization vs the stream observer [RE
 
   it("locks: the same route streams fine without the onStreamError hook", async () => {
     const app = new Keala(quiet);
-    app.get("/s", cache(), (c) => {
-      c.body = streamOf(["hello"]);
-    });
+    app.get("/s", cache(), () => new Response(streamOf(["hello"])));
     const res = await drive(app, new Request("http://good.com/s"));
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("hello");
   });
 
-  it("locks: state-mode TEXTUAL bodies are stored and replayed (the r5 goal)", async () => {
+  it("locks: sugar TEXTUAL bodies are stored and replayed (the r5 goal)", async () => {
     let n = 0;
     const app = new Keala(quiet);
     app.get("/t", cache({ ttl: 60_000 }), (c) => {
       n += 1;
-      c.body = `v${n}`;
+      return c.text(`v${n}`);
     });
     const first = await drive(app, new Request("http://good.com/t"));
     expect(await first.text()).toBe("v1");
@@ -222,7 +218,7 @@ describe("R6-B cache(): ttl window [RED]", () => {
     app.get("/slow", cache({ ttl: 120 }), async (c) => {
       n += 1;
       await new Promise((r) => setTimeout(r, 260));
-      c.body = `n${n}`;
+      return c.text(`n${n}`);
     });
     const first = await drive(app, new Request("http://good.com/slow"));
     expect(await first.text()).toBe("n1");
@@ -232,53 +228,17 @@ describe("R6-B cache(): ttl window [RED]", () => {
     expect(await second.text()).toBe("n1");
   });
 });
-describe("R6-C post-commit contract (0.7): writes throw, new Responses win", () => {
+describe("R6-C post-commit contract (0.7): new Responses win", () => {
   // 0.7 rewrote the flags 32/64/128 rebuild machinery into the commit
-  // contract: c.body/c.status/c.redirect throw once a Response is committed;
-  // middleware replaces a committed response by RETURNING a new one.
-
-  it("post-commit c.body writes throw TypeError (was R6-2 / flag 128)", async () => {
-    const app = new Keala(quiet);
-    let caught: unknown;
-    app.get(
-      "/x",
-      async (c, next) => {
-        await next();
-        try {
-          c.body = null;
-        } catch (err) {
-          caught = err;
-        }
-      },
-      () => new Response("hello"),
-    );
-    const res = await drive(app, new Request("http://good.com/x"));
-    expect(caught).toBeInstanceOf(TypeError);
-    expect((caught as Error).message).toContain("response already committed");
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("hello"); // the committed body survives
-  });
-
-  it("post-commit c.status overrides throw TypeError (was flag 32)", async () => {
-    const app = new Keala(quiet);
-    let caught: unknown;
-    app.get(
-      "/x",
-      async (c, next) => {
-        await next();
-        try {
-          c.status = 404;
-        } catch (err) {
-          caught = err;
-        }
-      },
-      () => new Response("committed"),
-    );
-    const res = await drive(app, new Request("http://good.com/x"));
-    expect(caught).toBeInstanceOf(TypeError);
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("committed");
-  });
+  // contract; U3c removed the write paths entirely (c.body/c.status are
+  // gone, c.redirect is a pure builder): middleware replaces a committed
+  // response by RETURNING a new one.
+  //
+  // U3c deletions (mapping #6): "post-commit c.body writes throw TypeError"
+  // (was R6-2 / flag 128) and "post-commit c.status overrides throw
+  // TypeError" (was flag 32) locked the deleted setters' post-commit guard —
+  // the write surface no longer exists; the committed-answer-survives
+  // invariant is locked by the pure-builder test below.
 
   it("post-commit c.redirect is a pure builder (U3a): returned only when returned", async () => {
     // Was R6-3 (the staged form threw on commit). The U3a return-form never
@@ -425,7 +385,7 @@ describe("R6-E negotiation: explicit refusals vs wildcards [RED + locks]", () =>
     let answered: unknown = "unset";
     app.get("/e", (c) => {
       answered = c.acceptsEncodings(["gzip", "identity", "deflate"]);
-      c.body = "x";
+      return c.text("x");
     });
     await drive(app, new Request("http://good.com/e"));
     expect(answered).toBe("identity");

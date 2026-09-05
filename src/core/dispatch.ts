@@ -144,12 +144,7 @@ const warnIfSwallowed = (app: Application, c: Context, trace: RouteTrace): boole
  * responses without next() set the response, throws take the error path.
  */
 const warnIfStalled = (app: Application, c: Context, trace: RouteTrace): void => {
-  if (
-    (c.flags & FLAG_CHAIN_STALLED) === 0 ||
-    c._res !== undefined ||
-    (c.flags & 1) !== 0 ||
-    c.bodyValue !== null
-  ) {
+  if ((c.flags & FLAG_CHAIN_STALLED) === 0 || c._res !== undefined) {
     return;
   }
   warnOnce(
@@ -229,6 +224,7 @@ const dispatchDirect = (
       if (
         c.headersRecord === null &&
         method !== "HEAD" &&
+        app.onStreamError === undefined &&
         !(isEmptyStatus(result.status) && result.body !== null)
       ) {
         return result;
@@ -270,6 +266,7 @@ const dispatchDirect = (
       if (
         c.headersRecord === null &&
         method !== "HEAD" &&
+        app.onStreamError === undefined &&
         !(isEmptyStatus(result.status) && result.body !== null)
       ) {
         return result;

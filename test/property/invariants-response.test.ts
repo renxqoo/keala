@@ -21,9 +21,9 @@ describe("INV-7 response consistency", () => {
   it("HEAD => null body + GET-equal status; 204/205/304 => no body, no content-* headers", async () => {
     await runProp("head-empty-status", 200, async (rng) => {
       const cfg: RespCfg = {
-        style: rng.pick(["state", "sugar", "committed"] as const),
+        style: rng.pick(["sugar", "response"] as const),
         status: rng.pick([200, 201, 204, 205, 301, 302, 304, 418] as const),
-        body: rng.pick(["text", "json", "bytes", "redirect"] as const),
+        body: rng.pick(["text", "json", "bytes", "stream", "redirect"] as const),
       };
       const app = new Keala({ ...quiet });
       app.get("/r", makeCfgHandler(cfg));
@@ -40,6 +40,22 @@ describe("INV-7 response consistency", () => {
       const gcl = getRes.headers.get("content-length");
       if (hcl !== null && gcl !== null && hcl !== gcl) {
         throw new Error(`HEAD content-length ${hcl} != GET ${gcl}`);
+      }
+      // §2.3-3 (U3c, explicit lock): a returned Response's HEAD view is
+      // stripped WITHOUT backfilling Content-Length — only the sugar path
+      // computes one from the would-be payload.
+      if (cfg.style === "response" && cfg.body !== "redirect" && hcl !== null) {
+        throw new Error(`response-style HEAD backfilled content-length ${hcl}`);
+      }
+      if (
+        cfg.style === "sugar" &&
+        (cfg.body === "text" || cfg.body === "json") &&
+        !EMPTY_CFG.has(cfg.status)
+      ) {
+        const expected = cfg.body === "text" ? "8" : "11"; // "cfg-body" / {"ok":true}
+        if (hcl !== expected) {
+          throw new Error(`sugar HEAD content-length ${hcl} != exact ${expected}`);
+        }
       }
       // Redirect bodies legitimately override an empty cfg status to 302 —
       // emptiness is judged on the ACTUAL shipped status.

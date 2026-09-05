@@ -152,7 +152,6 @@ const CONTEXT_DEFAULTS = {
   hostValue: null,
   statusValue: 404,
   headersRecord: null,
-  bodyValue: null,
   flags: 0,
   _res: undefined,
   directBodyResponseValue: undefined,

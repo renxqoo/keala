@@ -196,7 +196,7 @@ describe("router: registration behaviors", () => {
         },
         (c) => {
           order.push("leaf");
-          c.body = "done";
+          return c.text("done");
         },
       );
     });

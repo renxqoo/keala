@@ -38,7 +38,7 @@ describe("bodyParser: readers", () => {
     app.post("/x", async (c0) => {
       await readBodyLimited(c0, 16);
       await bodyOf(c0).arrayBuffer();
-      c0.body = "unreachable";
+      return c0.text("unreachable");
     });
     const request = post(
       new ReadableStream<Uint8Array>({
@@ -58,7 +58,7 @@ describe("bodyParser: readers", () => {
     let cancelObserved = false;
     app.post("/x", async (c0) => {
       await bodyOf(c0).arrayBuffer();
-      c0.body = "unreachable";
+      return c0.text("unreachable");
     });
     const request = post(
       new ReadableStream<Uint8Array>({
@@ -90,7 +90,7 @@ describe("bodyParser: readers", () => {
       order.push("bytes");
       const blob = await bodyOf(c).blob();
       order.push("blob");
-      c.body = `${json.a}|${text}|${bytes.byteLength}|${blob.size}`;
+      return c.text(`${json.a}|${text}|${bytes.byteLength}|${blob.size}`);
     });
     const res = await app.handle(jsonBody({ a: 1 }));
     expect(await res.text()).toBe('1|{"a":1}|7|7');
@@ -105,7 +105,7 @@ describe("bodyParser: readers", () => {
       await next();
     });
     app.post("/x", async (c) => {
-      c.body = `${c.state.first as string}/${await bodyOf(c).text()}`;
+      return c.text(`${c.state.first as string}/${await bodyOf(c).text()}`);
     });
     const res = await app.handle(post("payload"));
     expect(await res.text()).toBe("payload/payload");
@@ -115,7 +115,7 @@ describe("bodyParser: readers", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c) => {
-      c.body = JSON.stringify([await bodyOf(c).json(), await bodyOf(c).text()]);
+      return c.text(JSON.stringify([await bodyOf(c).json(), await bodyOf(c).text()]));
     });
     const res = await app.handle(post(""));
     expect(await res.text()).toBe('[null,""]');
@@ -126,7 +126,7 @@ describe("bodyParser: readers", () => {
     app.use(createBodyParser());
     app.post("/x", async (c) => {
       const form = await bodyOf(c).formData();
-      c.body = JSON.stringify([form.get("a"), form.get("b")]);
+      return c.text(JSON.stringify([form.get("a"), form.get("b")]));
     });
     const urlenc = await app.handle(
       post("a=1&b=2", { "content-type": "application/x-www-form-urlencoded" }),
@@ -145,7 +145,7 @@ describe("bodyParser: limits and malformed input", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 8 }));
     app.post("/x", async (c) => {
-      c.body = JSON.stringify(await bodyOf(c).json());
+      return c.text(JSON.stringify(await bodyOf(c).json()));
     });
     const res = await app.handle(jsonBody({ padding: "0123456789" }));
     expect(res.status).toBe(413);
@@ -156,7 +156,7 @@ describe("bodyParser: limits and malformed input", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser({ jsonLimit: 16 }));
     app.post("/x", async (c) => {
-      c.body = JSON.stringify(await bodyOf(c).json());
+      return c.text(JSON.stringify(await bodyOf(c).json()));
     });
     const chunks = new ReadableStream({
       start(controller) {
@@ -180,7 +180,7 @@ describe("bodyParser: limits and malformed input", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
     app.post("/x", async (c) => {
-      c.body = JSON.stringify(await bodyOf(c).json());
+      return c.text(JSON.stringify(await bodyOf(c).json()));
     });
     const res = await app.handle(post("{not json", { "content-type": "application/json" }));
     expect(res.status).toBe(400);
@@ -212,7 +212,7 @@ describe("validator", () => {
     };
     app.post("/x", mw, validator(schemaOk(true)), (c0) => {
       const c = c0 as ContextWithValid;
-      c.body = JSON.stringify(c.valid);
+      return c.text(JSON.stringify(c.valid));
     });
     const res = await app.handle(jsonBody({ n: 21 }));
     expect(await res.text()).toBe('{"doubled":42}');
@@ -242,7 +242,7 @@ describe("validator", () => {
     };
     app.post("/x", validator(echoNull), (c0) => {
       const c = c0 as ContextWithValid;
-      c.body = JSON.stringify(c.valid);
+      return c.text(JSON.stringify(c.valid));
     });
     const empty = await app.handle(post(""));
     expect(await empty.text()).toBe("null");

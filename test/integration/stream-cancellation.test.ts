@@ -31,7 +31,8 @@ describe("R7-CROSS-1 responseCache preserves representation bytes", () => {
       encodedCalls++;
       c.setHeader("Content-Type", "text/plain; charset=utf-8");
       c.setHeader("Content-Encoding", "gzip");
-      c.body = packed;
+      // U3c: a byte body is a returned Response now (staged headers ride it).
+      return new Response(packed);
     });
     app.get("/plain", cache(), (c) => {
       plainCalls++;

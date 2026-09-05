@@ -267,9 +267,7 @@ process.on("SIGTERM", () => {
           handler: (_r, reason) => new Response(`gate:${reason}`, { status: 503 }),
         },
       });
-      closedApp.get("/x", (c) => {
-        c.body = "x";
-      });
+      closedApp.get("/x", (c) => c.text("x"));
       const first = await closedApp.close({ drain: 10 });
       expect(first).toEqual({ timedOut: false, inFlight: 0 });
       for (let i = 0; i < 3; i++) {

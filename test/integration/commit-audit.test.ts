@@ -113,11 +113,11 @@ describe("audit C2: the error funnel carries a sugar commit's consumed headers",
 });
 
 describe("audit C3: content-describing names never replay onto a newer commit", () => {
-  it("a post-commit c.type does not override the newer commit's explicit content-type", async () => {
+  it("a post-commit Content-Type SET does not override the newer commit's explicit content-type", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.type = "text/csv";
+      c.setHeader("Content-Type", "text/csv");
       return new Response("a,b", { headers: { "content-type": "application/json" } });
     });
     app.get("/", () => new Response("x"));
@@ -125,11 +125,11 @@ describe("audit C3: content-describing names never replay onto a newer commit", 
     expect(res.headers.get("content-type")).toBe("application/json");
   });
 
-  it("a post-commit c.length does not ship a stale content-length for a new body", async () => {
+  it("a post-commit Content-Length SET does not ship a stale content-length for a new body", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.length = 99;
+      c.setHeader("Content-Length", "99");
       return new Response("hi");
     });
     app.get("/", () => new Response("x"));
@@ -142,7 +142,7 @@ describe("audit C3: content-describing names never replay onto a newer commit", 
     const app = new Keala(quiet);
     app.use(async (c, next) => {
       await next();
-      c.type = "text/csv";
+      c.setHeader("Content-Type", "text/csv");
     });
     app.get("/", (c) => c.text("a,b"));
     const res = await app.handle(request("/"));

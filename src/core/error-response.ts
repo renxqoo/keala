@@ -8,7 +8,7 @@
 
 import type { Application } from "./app.ts";
 import type { Context } from "./context/context.ts";
-import { finalize, flattenHeaders, sanitizeEmptyStatus, stripBody } from "./respond.ts";
+import { finishCommitted, flattenHeaders, sanitizeEmptyStatus, stripBody } from "./respond.ts";
 import { normalizeError, toHttpError, type HttpError } from "../http/errors.ts";
 import { isEmptyStatus, statusMessage } from "../http/status.ts";
 import type { HeaderMap, HeaderValue } from "../types.ts";
@@ -70,7 +70,7 @@ const buildErrorResponse = (
   const mapper = app.errorMapper;
   if (mapper === undefined) {
     consoleFallback(app, c.url, error);
-    return builtinErrorResponse(app, c, error);
+    return builtinErrorResponse(c, error);
   }
   // TAKEOVER FAST PATH: a mapper returning a Response bypasses the context
   // reset entirely — the Response is already built, nothing reads the stale
@@ -84,13 +84,13 @@ const buildErrorResponse = (
     // a Response. Brand-check it first: probing `.then` and then brand-checking
     // again added two redundant operations to every mapped error.
     if (out instanceof Response) return finalizeTakeoverResponse(c, out, error);
-    if (out === undefined) return builtinErrorResponse(app, c, error);
+    if (out === undefined) return builtinErrorResponse(c, error);
     if (isThenable(out)) {
       // ADOPT through Promise.resolve: a hand-rolled thenable's .then may
       // return anything — verbatim .then() chaining once leaked undefined
       // through the never-reject boundary (review round finding).
       return Promise.resolve(out).then(
-        (res) => finalizeMapperResult(app, c, res, error),
+        (res) => finalizeMapperResult(c, res, error),
         (mapperErr: unknown) => mapperFailed(c, mapperErr),
       );
     }
@@ -104,16 +104,11 @@ const invalidMapperResult = (c: Context): Response =>
   mapperFailed(c, new TypeError("error mapper must return a Response, a thenable, or undefined"));
 
 /** Validate the asynchronously adopted value, then apply rules 3-4. */
-const finalizeMapperResult = (
-  app: Application,
-  c: Context,
-  res: unknown,
-  error: HttpError,
-): Response => {
+const finalizeMapperResult = (c: Context, res: unknown, error: HttpError): Response => {
   // Only the contract's explicit `void` declines. Treat every other value as
   // a mapper bug: silently accepting a wrong return type can leak the
   // original error body/status and hides a broken enterprise envelope.
-  if (res === undefined) return builtinErrorResponse(app, c, error) as Response;
+  if (res === undefined) return builtinErrorResponse(c, error) as Response;
   if (!(res instanceof Response)) return invalidMapperResult(c);
   return finalizeTakeoverResponse(c, res, error);
 };
@@ -321,11 +316,7 @@ const mergeAbsentHeaders = (
 };
 
 /** The built-in text/plain error response — the decline default. */
-const builtinErrorResponse = (
-  app: Application,
-  c: Context,
-  error: HttpError,
-): Response | Promise<Response> => {
+const builtinErrorResponse = (c: Context, error: HttpError): Response | Promise<Response> => {
   // A stale committed response must not shadow the error; the built-in
   // constructs FROM this state, so reset it here. Headers the chain staged
   // ride along (koa parity — security headers must still cover error
@@ -356,7 +347,6 @@ const builtinErrorResponse = (
       break;
     }
   }
-  c.bodyValue = null;
   c.flags = 0;
   // FAST PATH: nothing staged, nothing to replay, not HEAD, bodied status —
   // construct the exact same bytes directly and skip the staged-state
@@ -386,20 +376,26 @@ const builtinErrorResponse = (
       // Invalid header from an error object — drop it silently.
     }
   }
-  c.status = error.status;
+  // U3c: build the error page directly (the response setters are gone) and
+  // close it through the shared committed path — staged error headers merge
+  // onto it, empty statuses sanitize, HEAD strips the body.
+  c.statusValue = error.status; // observation slot for post-error readers
   const message =
     error.expose === true ? error.message : statusMessage(error.status) || "Internal Server Error";
   c.setHeader("Content-Type", "text/plain; charset=utf-8");
-  c.body = message;
   // TERMINAL conversion — the error path must never re-enter the full error
-  // pipeline: a finalize failure here (say, a staged header no Response can
-  // carry) answers the static 500 directly. This built-in path never calls
-  // the mapper, so a mapper failure can never recurse (the historical
+  // pipeline: a failure here (say, a staged header no Response can carry)
+  // answers the static 500 directly. This built-in path never calls the
+  // mapper, so a mapper failure can never recurse (the historical
   // mutual-recursion bug fired app.onerror ~1.3k times for ONE request).
-  // finalize is synchronous here by construction: _res is cleared and the
-  // body is the plain message string, so no stream/HEAD async branch exists.
   try {
-    return finalize(app, c) as Response;
+    return finishCommitted(
+      c,
+      new Response(message, {
+        status: error.status,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      }),
+    ) as Response;
   } catch {
     return staticServerError(c.method);
   }

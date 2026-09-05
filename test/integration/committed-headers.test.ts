@@ -1,10 +1,9 @@
 /**
  * The 0.7 committed-header contract: after a Response commits, header
- * writes (setHeader/append/remove/type/length/etag/…) land DIRECTLY on the
- * committed Response's headers — one path, no rebuild machinery. Body and
- * status writes throw. A newer commit (an outer middleware returning
- * another Response) wins outright: inter-commit writes belonged to the
- * response they were applied to.
+ * writes (setHeader/append/remove) land DIRECTLY on the committed
+ * Response's headers — one path, no rebuild machinery. A newer commit (an
+ * outer middleware returning another Response) wins outright: inter-commit
+ * writes belonged to the response they were applied to.
  */
 import { describe, expect, it } from "vitest";
 import { Keala } from "../../src/core/app.ts";
@@ -117,12 +116,12 @@ describe("0.7 committed header contract", () => {
     expect(response.headers.get("x-keep")).toBe("yes");
   });
 
-  it("removing c.type after commit removes the committed Content-Type", async () => {
+  it("removing Content-Type after commit removes the committed header", async () => {
     const app = new Keala({ env: "production" });
 
     app.use(async (c, next) => {
       await next();
-      c.type = null;
+      c.remove("Content-Type");
     });
     app.get("/", () => new Response("hello", { headers: { "content-type": "text/custom" } }));
 
@@ -181,47 +180,14 @@ describe("0.7 committed header contract", () => {
     expect(response.headers.get("x-many")).toBe("one, two, three");
   });
 
-  it("a post-commit body write throws instead of rebuilding", async () => {
-    const app = new Keala({ env: "production" });
-    const thrown: unknown[] = [];
-
-    app.use(async (c, next) => {
-      await next();
-      c.setHeader("X-Fast", "yes");
-      try {
-        c.body = "replacement";
-      } catch (error) {
-        thrown.push(error);
-      }
-    });
-    app.get("/", () => new Response("original", { headers: { "x-original": "yes" } }));
-
-    const response = await app.handle(request());
-    expect(thrown[0]).toBeInstanceOf(TypeError);
-    expect((thrown[0] as Error).message).toMatch(/already committed/);
-    expect(response.headers.get("x-fast")).toBe("yes");
-    expect(await response.text()).toBe("original");
-  });
-
-  it("a post-commit status write throws instead of rebuilding", async () => {
-    const app = new Keala({ env: "production" });
-    const thrown: unknown[] = [];
-
-    app.use(async (c, next) => {
-      await next();
-      try {
-        c.status = 204;
-      } catch (error) {
-        thrown.push(error);
-      }
-    });
-    app.get("/", (c) => c.text("hello"));
-
-    const response = await app.handle(request());
-    expect(thrown[0]).toBeInstanceOf(TypeError);
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("hello");
-  });
+  /**
+   * U3c deletions (mapping #6): "a post-commit body write throws instead of
+   * rebuilding" and "a post-commit status write throws instead of rebuilding"
+   * locked the deleted `c.body =` / `c.status =` setters' TypeError guard —
+   * the write path no longer exists, and the surviving post-commit surface
+   * (setHeader/append/remove on the committed Response, identity preserved)
+   * is locked by the tests above.
+   */
 
   it("does not skip a cookie written through a facade created before commit", async () => {
     const app = new Keala({ env: "production" });

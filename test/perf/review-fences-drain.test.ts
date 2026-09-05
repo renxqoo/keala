@@ -168,7 +168,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
         {
           const app = new Keala({ env: "test", requestTimeout: 30_000 });
           app.get("/s", (c) => {
-            c.body = "sync";
+            return c.text("sync");
           });
           const req = new Request("http://x/s");
           for (let i = 0; i < 100; i++) await app.handle(req); // warm-up
@@ -194,7 +194,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
           const app = new Keala({ env: "test", requestTimeout: 30_000 });
           app.get("/a", async (c) => {
             await Promise.resolve(); // settle in a microtask, well before the deadline
-            c.body = "async";
+            return c.text("async");
           });
           const req = new Request("http://x/a");
           for (let i = 0; i < 50; i++) await app.handle(req);
@@ -273,7 +273,7 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
           if (mode === "state") {
             app.get("/d", async (c) => {
               await gate.promise;
-              c.body = PAYLOAD;
+              return c.text(PAYLOAD);
             });
           } else {
             const prebuilt = Array.from({ length: K }, () =>

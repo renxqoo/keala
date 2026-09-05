@@ -11,54 +11,31 @@ import {
   randHeaderValue,
   randString,
 } from "./agent-r6-prop-rig.mts";
-import { REDIRECT_TARGETS, TOKEN } from "./agent-r6-prop-rig.mts";
+import { CTL, REDIRECT_TARGETS, UNICODE } from "./agent-r6-prop-rig.mts";
 // ---------------------------------------------------------------------------
 // INV-1: never-reject — app.handle never throws / rejects, always a Response
 // ---------------------------------------------------------------------------
 
 /**
- * Random post-commit mutations (the 0.7 commit surface): header/cookie-ish
- * writes land in place; body/status/redirect writes throw TypeError and are
- * caught by the caller's log — both halves belong in the zoo.
+ * Random post-commit mutations (the U3c commit surface): header/cookie-ish
+ * writes land directly on the committed Response's Headers; values that
+ * fail validation (CTL) or the wire's ByteString rule throw TypeError and
+ * are caught by the caller's log — both halves belong in the zoo. The
+ * status/body/type/length/etag/lastModified/attachment ops died with the
+ * setter family; the live surface below carries the mutation classes.
  */
 export const lateMutations = (rng: Rng): ((c: Context, log?: string[]) => void) => {
   const ops: ((c: Context, log?: string[]) => void)[] = [];
   const n = rng.range(1, 4);
   for (let i = 0; i < n; i++) {
-    switch (rng.int(13)) {
+    switch (rng.int(8)) {
       case 0:
-        ops.push((c, log) => {
-          log?.push("status");
-          c.status = rng.pick([200, 201, 204, 205, 301, 302, 304, 418, 500] as const);
-        });
-        break;
-      case 1:
-        ops.push((c, log) => {
-          // 0.7: the c.message op became a lastModified write (occasionally
-          // invalid, which throws exactly like the old message setter did).
-          log?.push("last-modified");
-          c.lastModified = rng.bool(0.2) ? new Date(Number.NaN) : new Date(rng.int(4102444800000));
-        });
-        break;
-      case 2:
-        ops.push((c, log) => {
-          log?.push("body");
-          c.body = rng.pick([
-            "late-body",
-            { late: true },
-            new TextEncoder().encode("late-bytes") as Uint8Array,
-            null,
-            undefined,
-          ]) as Context["body"];
-        });
-        break;
-      case 3:
         ops.push((c, log) => {
           log?.push("set");
           c.setHeader(randHeaderName(rng), randHeaderValue(rng));
         });
         break;
-      case 4:
+      case 1:
         ops.push((c, log) => {
           log?.push("append");
           c.append(
@@ -67,53 +44,45 @@ export const lateMutations = (rng: Rng): ((c: Context, log?: string[]) => void) 
           );
         });
         break;
-      case 5:
+      case 2:
         ops.push((c, log) => {
           log?.push("remove");
           c.remove(rng.pick(["content-type", "x-custom", "set-cookie", "etag", "vary"] as const));
         });
         break;
-      case 6:
+      case 3:
         ops.push((c, log) => {
           log?.push("cookies");
           c.cookies.set("late", "1");
         });
         break;
-      case 7:
+      case 4:
         ops.push((c, log) => {
+          // Post-commit redirect(): builds a Response whose return value the
+          // void caller drops — legal, inert, still worth exercising.
           log?.push("redirect");
-          return c.redirect(rng.pick(REDIRECT_TARGETS));
+          c.redirect(rng.pick(REDIRECT_TARGETS));
         });
         break;
-      case 8:
+      case 5:
         ops.push((c, log) => {
-          // 0.7: c.vary is gone; append("Vary", …) is the replacement.
           log?.push("vary");
           c.append("Vary", "x-late");
         });
         break;
-      case 9:
+      case 6:
         ops.push((c, log) => {
-          log?.push("type");
-          c.type = rng.bool(0.5) ? randString(rng, 10, TOKEN) : randHeaderValue(rng);
-        });
-        break;
-      case 10:
-        ops.push((c, log) => {
-          log?.push("length");
-          c.length = rng.range(0, 100);
-        });
-        break;
-      case 11:
-        ops.push((c, log) => {
-          log?.push("etag");
-          c.etag = randString(rng, 8, TOKEN);
+          // CTL value: validation rejects it AT THE CALL — the loud half.
+          log?.push("ctl-set");
+          c.setHeader("x-r6-late", randString(rng, 12, PRINTABLE + CTL));
         });
         break;
       default:
         ops.push((c, log) => {
-          log?.push("attachment");
-          c.attachment(randString(rng, 8, PRINTABLE));
+          // Non-ByteString value: passes validation, detonates at the
+          // committed Headers' wire rule — the R6-1 mutation class.
+          log?.push("poison-set");
+          c.setHeader("x-r6-late", `café${randString(rng, 4, UNICODE)}中`);
         });
     }
   }
@@ -172,10 +141,19 @@ export const committer = (rng: Rng, style: (typeof commitStyles)[number]): Route
 export const EMPTY_CFG = new Set([204, 205, 304]);
 
 export interface RespCfg {
-  style: "state" | "sugar" | "committed";
+  /** U3c: the two answer shapes are sugar helpers and hand-built Responses. */
+  style: "sugar" | "response";
   status: number;
-  body: "text" | "json" | "bytes" | "redirect";
+  body: "text" | "json" | "bytes" | "stream" | "redirect";
 }
+
+const oneShotStream = (): ReadableStream<Uint8Array> =>
+  new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("cfg-stream"));
+      controller.close();
+    },
+  });
 
 export const makeCfgHandler =
   (cfg: RespCfg): RouteHandler =>
@@ -185,20 +163,27 @@ export const makeCfgHandler =
       // split collapsed into one path (both produced the same wire answer).
       return c.redirect("/target");
     }
-    const body =
-      cfg.body === "text"
-        ? "cfg-body"
-        : cfg.body === "json"
-          ? { ok: true }
-          : new TextEncoder().encode("cfg-bytes");
-    if (cfg.style === "state") {
-      c.status = cfg.status;
-      c.body = body;
-      return;
+    // §2.3-2: empty statuses never carry a body on any form — the sugar
+    // helpers cleanse at construction; a bodied hand-built 204/304 cannot
+    // even be constructed (undici refuses it outright).
+    if (EMPTY_CFG.has(cfg.status)) {
+      if (cfg.style === "sugar") {
+        return cfg.body === "json"
+          ? c.json({ ok: true }, cfg.status)
+          : c.text("cfg-body", cfg.status);
+      }
+      return new Response(null, { status: cfg.status });
     }
     if (cfg.style === "sugar") {
-      if (typeof body === "string") return c.text(body, cfg.status);
-      return c.json(body, cfg.status);
+      // The sugar surface is text/json only — bytes and streams ride
+      // hand-built Responses by API construction.
+      if (cfg.body === "json") return c.json({ ok: true }, cfg.status);
+      return c.text("cfg-body", cfg.status);
     }
-    return new Response(body as unknown as string, { status: cfg.status });
+    if (cfg.body === "json") return Response.json({ ok: true }, { status: cfg.status });
+    if (cfg.body === "bytes") {
+      return new Response(new TextEncoder().encode("cfg-bytes"), { status: cfg.status });
+    }
+    if (cfg.body === "stream") return new Response(oneShotStream(), { status: cfg.status });
+    return new Response("cfg-body", { status: cfg.status });
   };

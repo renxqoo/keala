@@ -88,7 +88,8 @@ const headersInitOf = (merged: Record<string, HeaderValue>): Headers => {
   for (const key of Object.keys(merged)) {
     const value = merged[key] as HeaderValue;
     if (Array.isArray(value)) {
-      for (const item of value) headers.append(key, item);
+      // Empty strings never become wire headers (flattenHeaders parity).
+      for (const item of value) if (item.length > 0) headers.append(key, item);
     } else {
       headers.set(key, value);
     }
@@ -147,23 +148,35 @@ const emptyStatusResponse = (
  * HEAD view built AT CONSTRUCTION: no body, exact Content-Length from the
  * would-be payload. The finalizer never reads committed bodies (an open
  * producer must not block it), so the koa HEAD-CL contract is honored where
- * the payload is still a known value — right here.
+ * the payload is still a known value — right here. The view is BRANDED as a
+ * snapshot and the would-be payload memoized, so post-next transforms
+ * (etag()'s conditional 304 on `HEAD + If-None-Match`) work on HEAD too
+ * (adversarial review: hashing must read the memo — the view itself has no
+ * body to clone).
  */
 const sugarHead = (
+  c: ContextState,
   merged: Record<string, HeaderValue> | undefined,
   contentType: string | undefined,
   bodyLength: number,
   status: number | undefined,
+  snapshot: string | undefined,
 ): Response => {
   const record: Record<string, HeaderValue> = merged === undefined ? {} : { ...merged };
   if (contentType !== undefined && record["content-type"] === undefined) {
     record["content-type"] = contentType;
   }
   record["content-length"] = String(bodyLength);
-  return new Response(null, {
-    status: status ?? 200,
-    headers: headersInitOf(record),
-  });
+  if (snapshot !== undefined && c.bodySerializedValue === undefined) {
+    c.bodySerializedValue = snapshot;
+  }
+  return directResponse(
+    c,
+    new Response(null, {
+      status: status ?? 200,
+      headers: headersInitOf(record),
+    }),
+  );
 };
 
 /** UTF-8 byte length of a sugar payload (string or raw bytes). */
@@ -178,14 +191,21 @@ export const sugarText = (
 ): Response => {
   const live = headers === undefined;
   const merged = live ? liveStaged(c) : consumeStaged(c, headers);
-  // An explicitly staged c.status wins over the default (hono parity).
-  const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
-  const st = status ?? staged;
+  // U3c: the status write path is gone — the explicit parameter is the
+  // only status source.
+  const st = status;
   let response: Response;
   if (st !== undefined && isEmptyStatus(st)) {
     response = emptyStatusResponse(st, dropContentHeaders(merged));
   } else if (sourceMethod(c.rawRequest) === "HEAD") {
-    response = sugarHead(merged, TEXT_PLAIN, payloadLength(body as string | Uint8Array), st);
+    response = sugarHead(
+      c,
+      merged,
+      TEXT_PLAIN,
+      payloadLength(body as string | Uint8Array),
+      st,
+      typeof body === "string" ? body : undefined,
+    );
   } else if (merged === undefined) {
     response = st === undefined ? textResponse(c, body) : textResponse(c, body, { status: st });
   } else {
@@ -216,19 +236,18 @@ export const sugarJson = (
   const merged = live ? liveStaged(c) : consumeStaged(c, headers);
   // Response.json sets `application/json` and serializes natively — 74ns
   // cheaper than stringify + record init (see docs/AUDIT.md).
-  const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
-  const st = status ?? staged;
+  // U3c: the status write path is gone — the parameter is the only source.
+  const st = status;
   let response: Response;
   if (st !== undefined && isEmptyStatus(st)) {
     response = emptyStatusResponse(st, dropContentHeaders(merged));
   } else if (sourceMethod(c.rawRequest) === "HEAD") {
     // The HEAD view serializes once, here — Response.json would attach a body.
-    response = sugarHead(
-      merged,
-      "application/json",
-      byteLengthOf(JSON.stringify(payload) ?? "null"),
-      st,
-    );
+    const jsonText =
+      typeof payload === "object" && payload !== null
+        ? (c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(payload) ?? "null"))
+        : (JSON.stringify(payload) ?? "null");
+    response = sugarHead(c, merged, "application/json", byteLengthOf(jsonText), st, jsonText);
   } else if (isNativeRequestSource(c.rawRequest)) {
     const bodyText =
       typeof payload === "object" && payload !== null
@@ -251,7 +270,7 @@ export const sugarJson = (
         }),
       );
     }
-  } else if (merged === undefined && status === undefined && staged === undefined) {
+  } else if (merged === undefined && status === undefined) {
     response = directResponse(c, Response.json(payload));
   } else {
     response = directResponse(
@@ -287,8 +306,8 @@ export const sugarHtml = (
     merged === undefined
       ? { "content-type": TEXT_HTML }
       : ((merged["content-type"] ??= TEXT_HTML), merged);
-  const staged = (c.flags & 1) !== 0 ? c.statusValue : undefined;
-  const st = status ?? staged;
+  // U3c: the status write path is gone — the parameter is the only source.
+  const st = status;
   let response: Response;
   // Null-body statuses never carry the html content-type (see sugarText).
   if (st !== undefined && isEmptyStatus(st)) {
@@ -297,7 +316,14 @@ export const sugarHtml = (
       headers: headersInitOf(dropContentHeaders(withType) ?? {}),
     });
   } else if (sourceMethod(c.rawRequest) === "HEAD") {
-    response = sugarHead(withType, undefined, payloadLength(body as string | Uint8Array), st);
+    response = sugarHead(
+      c,
+      withType,
+      undefined,
+      payloadLength(body as string | Uint8Array),
+      st,
+      typeof body === "string" ? body : undefined,
+    );
   } else {
     const init =
       st === undefined

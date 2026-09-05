@@ -21,22 +21,21 @@ const serve = async (
   return { server, base: `http://127.0.0.1:${server.port}` };
 };
 
-// The state-mode shapes exercised by the middleware-3 hot path: staged
-// headers + a terminal state-style body, finalized through fromState with a
-// non-empty header record.
+// The shapes exercised by the middleware-3 hot path (U3c: staged headers +
+// a returned sugar/plain Response — the state-mode body is gone; the staged
+// record is consumed by the sugar into a non-empty Headers build).
 const registerStateShapes = (app: InstanceType<typeof Keala>): void => {
   app.get("/text", (c) => {
     c.setHeader("x-step", "1");
-    c.type = "text/plain";
-    c.body = "middleware";
+    return c.text("middleware");
   });
   app.get("/json", (c) => {
     c.setHeader("x-step", "1");
-    c.body = { hello: "world" };
+    return c.json({ hello: "world" });
   });
   app.get("/bytes", (c) => {
     c.setHeader("x-step", "1");
-    c.body = new TextEncoder().encode("raw");
+    return new Response(new TextEncoder().encode("raw"));
   });
 };
 
@@ -97,7 +96,7 @@ describe("R4.7 staged-header wire behavior under repeated names", () => {
     const { base } = await serve((app) => {
       app.get("/repeat", (c) => {
         c.setHeader("x-repeat", `v${c.url.length}`);
-        c.body = "ok";
+        return c.text("ok");
       });
     });
     const first = await fetch(`${base}/repeat`);

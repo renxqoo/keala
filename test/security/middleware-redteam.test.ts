@@ -201,7 +201,7 @@ describe("R3-6: compress() must not gzip when gzip is explicitly refused (q=0)",
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
-      c.body = "x".repeat(2000);
+      return c.text("x".repeat(2000));
     });
     const res = await app.handle(
       new Request("http://localhost:3000/big", {

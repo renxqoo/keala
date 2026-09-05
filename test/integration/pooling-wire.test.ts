@@ -33,8 +33,8 @@ const registerRoutes = (app: InstanceType<typeof Keala>): void => {
       c.setHeader("X-Step-3", "3");
     },
     (c: Context) => {
-      c.type = "text/plain";
-      c.body = "middleware";
+      c.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return c.text("middleware");
     },
   );
 };

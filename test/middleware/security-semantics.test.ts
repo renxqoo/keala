@@ -154,18 +154,19 @@ describe("R5-2 security: cache() key must not be forgeable via X-Forwarded-Host"
 });
 
 // ---------------------------------------------------------------------------
-// [R5-3] responseCache never caches state-mode responses (c._res is only set
-//        for return-style handlers; the finalizer runs after the onion)
+// [R5-3] responseCache eligibility (U3c: the sugar identity gate —
+//        c.directBodyResponseValue === committed; hand-built Responses
+//        are captured-never, streams are captured-never)
 // ---------------------------------------------------------------------------
-describe("R5-3 semantic: cache() silently no-ops for state-mode handlers", () => {
-  it("a 200 textual state-mode (c.body) response must be cacheable", async () => {
+describe("R5-3 semantic: cache() captures sugar products", () => {
+  it("a 200 textual sugar (c.text) response must be cacheable", async () => {
     let computed = 0;
     const app = new Keala(quiet);
     app.get("/s", cache({ ttl: 60_000 }), (c) => {
       computed += 1;
-      // The framework's canonical koa-style state API — eligible per the
-      // module's own gate (GET, 200, textual, no cookies/vary/set-cookie).
-      c.body = `state-${computed}`;
+      // The canonical sugar form — eligible per the module's own gate
+      // (GET, 200, textual, no cookies/vary/set-cookie, sugar identity).
+      return c.text(`state-${computed}`);
     });
     await drive(app, req("/s"));
     const second = await drive(app, req("/s"));

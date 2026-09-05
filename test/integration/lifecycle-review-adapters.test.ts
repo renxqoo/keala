@@ -73,7 +73,7 @@ describe("R4.6 review hunt: Node adapter wire truth", () => {
       const gate = deferred();
       app.get("/stuck", async (c) => {
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
@@ -139,7 +139,7 @@ describe("R4.6 review hunt: Node adapter wire truth", () => {
       });
       app.get("/stuck", async (c) => {
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       app.get("/stream", (c) => {
         // ~80ms stream; its headers flush BEFORE close, so the response goes
@@ -209,7 +209,7 @@ describe("R4.6 review hunt: Node adapter wire truth", () => {
       // decrement), stopGraceful would wait out its drain window.
       const app = new Keala({ env: "test" });
       app.get("/ok", (c) => {
-        c.body = "ok";
+        return c.text("ok");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
@@ -313,7 +313,7 @@ describe("R4.6 review hunt: closeApp against hostile adapters", () => {
       const gate = deferred();
       app.get("/work", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const first = app.handle(new Request("http://x/work"));
       const queued = [
@@ -375,7 +375,7 @@ describe("R4.6 review hunt: WS upgrade settlement (§2.2 r5)", () => {
       const gate = deferred();
       app.get("/park", async (c) => {
         await gate.promise;
-        c.body = "parked";
+        return c.text("parked");
       });
       const parked = app.handle(new Request("http://x/park"));
       await wait(5);

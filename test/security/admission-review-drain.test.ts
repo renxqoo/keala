@@ -109,10 +109,10 @@ describe("REVIEW-SEC-17: vanished pipelined peer wedges the drain window open", 
       const gate = deferred();
       app.get("/slow", async (c) => {
         await gate.promise;
-        c.body = "DRAIN-FIRST";
+        return c.text("DRAIN-FIRST");
       });
       app.get("/fast", (c) => {
-        c.body = "never";
+        return c.text("never");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -171,7 +171,7 @@ describe("REVIEW-SEC-13: a strategy promise that never resolves", () => {
       const gate = deferred();
       app.get("/hold", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -227,7 +227,7 @@ describe("REVIEW-SEC-14: cached custom rejection Response reused across refusals
       const gate = deferred();
       app.get("/hold", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -284,7 +284,7 @@ describe("REVIEW-SEC-15: hostile clients flooding the wire queue, then abandonin
       const gate = deferred();
       app.get("/work", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -352,7 +352,7 @@ describe("REVIEW-SEC-15: hostile clients flooding the wire queue, then abandonin
       const gate = deferred();
       app.get("/work", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -422,7 +422,7 @@ describe("REVIEW-SEC-16: oversized/slow bodies during drain must not wedge stopG
       const tracker = noiseTracker();
       app.post("/upload", async (c) => {
         const bytes = await c.raw.arrayBuffer(); // parks — body never completes
-        c.body = `got-${bytes.byteLength}`;
+        return c.text(`got-${bytes.byteLength}`);
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);

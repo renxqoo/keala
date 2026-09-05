@@ -28,7 +28,7 @@ app.get("/boom", () => {
 });
 app.get("/cookies", (c) => {
   c.cookies.set("sid", "x".repeat(24), { signed: true });
-  c.body = "ok";
+  return c.text("ok");
 });
 
 const paths = ["/text", "/json", "/users/7", "/boom", "/cookies"] as const;
@@ -83,7 +83,7 @@ const freshApp = (): InstanceType<typeof Keala> => {
   });
   clone.get("/cookies", (c) => {
     c.cookies.set("soak", "1", { signed: true });
-    c.body = "ok";
+    return c.text("ok");
   });
   return clone;
 };

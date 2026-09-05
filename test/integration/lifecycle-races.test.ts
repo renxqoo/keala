@@ -34,7 +34,7 @@ describe("R4.6 coverage: race + escalation edges", () => {
     let answers = 0;
     app.get("/race", async (c) => {
       await wait(5); // settles BEFORE the timer
-      c.body = "won";
+      return c.text("won");
     });
     const settled = app.handle(new Request("http://x/race"));
     const response = await settled;
@@ -157,7 +157,7 @@ describe("R4.6 coverage: native transport teardown", () => {
     app.post("/shape", async (c) => {
       const raw = await readBodyLimited(c, 1024);
       rawAfterBytes = c.raw;
-      c.body = new TextDecoder().decode(raw);
+      return c.text(new TextDecoder().decode(raw));
     });
     const response = await app.handle(
       new Request("http://x/shape", { method: "POST", body: "payload" }),
@@ -205,7 +205,7 @@ describe("R4.6 coverage: native transport teardown", () => {
   it("a sync-settling request under a configured deadline races clean (no 504)", async () => {
     const app = new Keala({ env: "test", requestTimeout: 1000 });
     app.get("/sync", (c) => {
-      c.body = "sync-ok";
+      return c.text("sync-ok");
     });
     for (let i = 0; i < 3; i++) {
       const response = await app.handle(new Request("http://x/sync"));
@@ -244,7 +244,7 @@ describe("R4.6 coverage: native transport teardown", () => {
     const app = new Keala({ env: "test" });
     app.post("/multi", async (c) => {
       const raw = await readBodyLimited(c, 8192);
-      c.body = `len:${raw.byteLength}`;
+      return c.text(`len:${raw.byteLength}`);
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);

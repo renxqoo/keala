@@ -40,7 +40,7 @@ describe("requestId", () => {
     app.use(requestId());
     app.get("/x", (c) => {
       c.setHeader("X-State-Id", String(c.state.requestId ?? ""));
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(req("/x"));
     const id = res.headers.get("x-request-id");
@@ -69,7 +69,7 @@ describe("timing + logger", () => {
     app.use(timing());
     app.get("/x", async (c) => {
       (c.state as { timingMark?: (n: string) => void }).timingMark?.("db");
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(req("/x"));
     const value = res.headers.get("server-timing") ?? "";

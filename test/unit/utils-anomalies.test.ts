@@ -20,7 +20,9 @@ import { validateHeaderName } from "../../src/utils/text.ts";
 const quiet = { env: "test" } as const;
 
 const captureCtx = async (
-  setup: (c: Context) => void,
+  // U3a/U3c: propagate a setup return — `return c.text(...)` inside setup
+  // must become the handler's answer, not a swallowed 404.
+  setup: (c: Context) => unknown,
   url = "http://localhost:3000/",
   init?: RequestInit,
 ): Promise<Context> => {
@@ -28,7 +30,7 @@ const captureCtx = async (
   let captured: Context | undefined;
   app.use(async (c) => {
     captured = c;
-    setup(c);
+    return setup(c) as Response | undefined;
   });
   await app.handle(new Request(url, init));
   if (captured === undefined) throw new Error("probe failed");
@@ -88,39 +90,11 @@ describe("anomalies: c.throw argument matrix", () => {
   });
 });
 
-describe("anomalies: status setter rejects the invalid matrix", () => {
-  const invalid: unknown[] = [
-    NaN,
-    Infinity,
-    -1,
-    0,
-    99,
-    199,
-    600,
-    1000,
-    404.5,
-    "200",
-    null,
-    undefined,
-    {},
-    [],
-  ];
-  it.each(invalid)("c.status = %p throws", async (value) => {
-    await captureCtx((c) => {
-      expect(() => {
-        c.status = value as number;
-      }).toThrow(TypeError);
-    });
-  });
-
-  const valid: number[] = [200, 201, 204, 301, 304, 400, 404, 418, 500, 599];
-  it.each(valid)("c.status = %p is accepted", async (value) => {
-    await captureCtx((c) => {
-      c.status = value;
-      expect(c.status).toBe(value);
-    });
-  });
-});
+// U3c deletion: "anomalies: status setter rejects the invalid matrix" (23
+// it.each cases) locked the deleted `c.status =` write path's own validation
+// matrix. Status now rides the sugar's second parameter; out-of-range codes
+// are rejected loudly by the Response constructor (locked in
+// response.test.ts "validates status codes").
 
 describe("anomalies: body setter exotic values", () => {
   // core bug: `bodyInitOf(null→object)` calls JSON.stringify inside the
@@ -133,7 +107,7 @@ describe("anomalies: body setter exotic values", () => {
     app.get("/", (c) => {
       const cyclic: Record<string, unknown> = {};
       cyclic.self = cyclic;
-      c.body = cyclic;
+      return c.json(cyclic);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(500);
@@ -144,7 +118,7 @@ describe("anomalies: body setter exotic values", () => {
     const app = new Keala(quiet);
     app.onError(() => {});
     app.get("/", (c) => {
-      c.body = 10n as never;
+      return c.json(10n);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(500);
@@ -160,7 +134,7 @@ describe("anomalies: body setter exotic values", () => {
   ])("string body %s round-trips", async (_label, value) => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
-      c.body = value;
+      return c.text(value);
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(200);
@@ -169,8 +143,8 @@ describe("anomalies: body setter exotic values", () => {
 
   it("empty Uint8Array responds 200 with empty body", async () => {
     const app = new Keala(quiet);
-    app.get("/", (c) => {
-      c.body = new Uint8Array(0);
+    app.get("/", () => {
+      return new Response(new Uint8Array(0));
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(200);
@@ -180,31 +154,28 @@ describe("anomalies: body setter exotic values", () => {
   it("JSON body with nested unicode survives", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
-      c.body = { deep: { emoji: "🎉", cjk: "中文", quote: '""' } };
+      return c.json({ deep: { emoji: "🎉", cjk: "中文", quote: '""' } });
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.headers.get("content-type")).toContain("application/json");
     expect(await res.json()).toEqual({ deep: { emoji: "🎉", cjk: "中文", quote: '""' } });
   });
 
-  it("body null after object keeps the JSON type and yields literal null", async () => {
-    await captureCtx((c) => {
-      c.type = "application/json";
-      c.body = { a: 1 };
-      c.body = null;
-      expect(c.body).toBe("null");
-    });
-  });
+  // U3c deletion: "body null after object keeps the JSON type and yields
+  // literal null" locked the staged `c.body = null` slot (deleted with the
+  // setter); a null JSON payload is locked via c.json(null) semantics.
 
   it("failing stream surfaces as 500", async () => {
     const app = new Keala(quiet);
     app.onError(() => {});
-    app.get("/", (c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.error(new Error("stream broke"));
-        },
-      });
+    app.get("/", () => {
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error("stream broke"));
+          },
+        }),
+      );
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect([200, 500]).toContain(res.status);
@@ -230,7 +201,7 @@ describe("anomalies: header operations", () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {
       c.setHeader("X-Long", value);
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(200);
@@ -262,12 +233,14 @@ describe("anomalies: header operations", () => {
 describe("anomalies: etag inputs", () => {
   // 0.7: the c.message input matrix is gone with the API (statusText
   // customization no longer exists, so there is nothing to poison).
+  // U3c: the c.etag setter is gone too — ETag rides setHeader verbatim
+  // (quoting is the caller's), so the matrix now probes the header write.
 
   it.each(["", "abc", '"quoted"', 'W/"weak"', '\\"escaped'])(
     "etag %p accepted safely",
     async (etag) => {
       await captureCtx((c) => {
-        c.etag = etag;
+        c.setHeader("ETag", etag);
         expect(c.resHeader("ETag")).not.toContain("\n");
       });
     },
@@ -347,7 +320,7 @@ describe("audit: unicode confusion (no normalization bypass)", () => {
       // (findable by its own name), never folding onto __proto__.
       folded = c.query("__proto__");
       literal = c.query(FULLWIDTH_PROTO);
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await drive(
       app,
@@ -364,7 +337,7 @@ describe("audit: unicode confusion (no normalization bypass)", () => {
     let path = "";
     app.use((c) => {
       path = c.path;
-      c.body = "ok";
+      return c.text("ok");
     });
     // %EF%BC%8E is U+FF0E FULLWIDTH FULL STOP.
     await drive(app, "http://localhost:3000/a%EF%BC%8E%EF%BC%8E/b");

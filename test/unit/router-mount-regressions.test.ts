@@ -353,7 +353,7 @@ describe("staged-header merge onto committed Response", () => {
     app.get("/", (c) => {
       c.append("x-m", "1");
       c.append("x-m", "2");
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await hit(app, "/");
     expect(res.headers.get("x-m")).toBe("1, 2");
@@ -364,7 +364,7 @@ describe("staged-header merge onto committed Response", () => {
     app.get("/", (c) => {
       c.append("content-type", "a");
       c.append("content-type", "b");
-      c.body = "ok";
+      return c.text("ok");
     });
     const res = await hit(app, "/");
     expect(res.status).toBe(500);

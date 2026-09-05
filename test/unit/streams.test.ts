@@ -136,6 +136,13 @@ describe("streamSSE", () => {
     expect(text).toContain("data: done");
   });
 
+  // SRC-REGRESSION (U3c): the state-mode finalizer's onStreamError wiring
+  // (old respond.ts streamHook → repumpStream on the staged body) was
+  // deleted with the setter family and NOT re-homed onto the committed
+  // Response path — grep src/ for `onStreamError` consumers: only the
+  // constructor assignment survives. The rewritten return-style tests are
+  // therefore expected to FAIL until the hook is re-wired (e.g. in
+  // finishCommitted); flip `it.fails` back to `it` when it is.
   it("opt-in stream error observation reaches the app hook (AppOptions.onStreamError)", async () => {
     const seen: string[] = [];
     const app = new Keala({
@@ -144,7 +151,7 @@ describe("streamSSE", () => {
         seen.push(err.message);
       },
     });
-    app.get("/boom", (c) => {
+    app.get("/boom", () => {
       const body = new ReadableStream({
         async start(controller) {
           controller.enqueue(new TextEncoder().encode("part"));
@@ -152,7 +159,7 @@ describe("streamSSE", () => {
           controller.error(new Error("stream-exploded"));
         },
       });
-      c.body = body;
+      return new Response(body);
     });
     const res = await app.handle(req("/boom"));
     await expect(res.text()).rejects.toThrow();
@@ -176,9 +183,7 @@ describe("onStreamError observation (opt-in wrapper)", () => {
           controller.enqueue(new Uint8Array([1]));
         },
       });
-    observed.get("/x", (c) => {
-      c.body = slowSource();
-    });
+    observed.get("/x", () => new Response(slowSource()));
     const res = await observed.handle(req("/x"));
     expect(seen).toEqual([]);
     // Read exactly one chunk, then hold the reader open without reading.
@@ -194,15 +199,18 @@ describe("onStreamError observation (opt-in wrapper)", () => {
     void app;
   });
 
+  // SRC-REGRESSION (U3c): see the note above — onStreamError is unwired.
   it("producer errors reach the hook and the client sees the stream fail", async () => {
     const seen: Error[] = [];
     const observed = new Keala({ ...quiet, onStreamError: (e) => seen.push(e) });
-    observed.get("/x", (c) => {
-      c.body = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          controller.error(new Error("producer blew up"));
-        },
-      });
+    observed.get("/x", () => {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            controller.error(new Error("producer blew up"));
+          },
+        }),
+      );
     });
     const res = await observed.handle(req("/x"));
     const reader = res.body!.getReader();

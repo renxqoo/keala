@@ -44,7 +44,7 @@ const makeProbe = (options: AppOptions): Probe => {
     await next();
   });
   app.get("/x", (c) => {
-    c.body = { ok: true };
+    return c.json({ ok: true });
   });
   const request = new Request("http://localhost/x");
   const run = async (): Promise<void> => {
@@ -163,12 +163,12 @@ const queueStorm = async (depth: number): Promise<number> => {
   const gate = new Promise<void>((resolve) => {
     open = resolve;
   });
-  app.get("/park", (c) => {
-    c.body = "park";
-    return gate.then(() => undefined);
+  app.get("/park", async (_c) => {
+    await gate;
+    return _c.text("park");
   });
   app.get("/fast", (c) => {
-    c.body = "ok";
+    return c.text("ok");
   });
   const parked = app.handle(new Request("http://localhost/park"));
   const waiting: Promise<Response>[] = [];
@@ -209,8 +209,9 @@ describe("agent R4.4 perf review: hot-path costs", () => {
       // until consumed via ONE pull-based ReadableStream wrap (holdBody);
       // not draining → direct release, no wrap. Counted via patched global
       // ReadableStream (undici routes `new Response("str")` through it):
-      //   state-mode (c.body = string): control N (finalize's own Response
-      //     stream), drain 2N → exactly one EXTRA wrap;
+      //   sugar-mode (c.text string; U3c: the state mode is gone): control
+      //     N (the sugar Response's own undici stream), drain 2N → exactly
+      //     one EXTRA wrap;
       //   committed-mode (pre-built Responses returned verbatim): control 0,
       //     drain N → the extra wrap is the ONLY wrap.
       // FENCE: drain consumption within 50µs/res of control (one stream hop,
@@ -218,16 +219,16 @@ describe("agent R4.4 perf review: hot-path costs", () => {
       const N = 64;
       const PAYLOAD = `drain-payload-${"x".repeat(48)}`;
       const rsPatch = patchConstructor("ReadableStream");
-      const buildScenario = (mode: "state" | "committed"): { app: Keala; open: () => void } => {
+      const buildScenario = (mode: "sugar" | "committed"): { app: Keala; open: () => void } => {
         const app = new Keala({ env: "test" });
         let open!: () => void;
         const gate = new Promise<void>((resolve) => {
           open = resolve;
         });
-        if (mode === "state") {
-          app.get("/slow", (c) => {
-            c.body = PAYLOAD;
-            return gate.then(() => undefined);
+        if (mode === "sugar") {
+          app.get("/slow", async (c) => {
+            await gate;
+            return c.text(PAYLOAD);
           });
         } else {
           const prebuilt = Array.from({ length: N }, () => new Response(PAYLOAD));
@@ -237,7 +238,7 @@ describe("agent R4.4 perf review: hot-path costs", () => {
         return { app, open };
       };
       const round = async (
-        mode: "state" | "committed",
+        mode: "sugar" | "committed",
         drain: boolean,
       ): Promise<{ ms: number; wraps: number; ok: boolean; closeStatus: unknown }> => {
         const { app, open } = buildScenario(mode);
@@ -262,7 +263,7 @@ describe("agent R4.4 perf review: hot-path costs", () => {
         const timings: Record<string, number[]> = {};
         const wrapsSeen: Record<string, number[]> = {};
         for (let i = 0; i < 3; i++) {
-          for (const mode of ["state", "committed"] as const) {
+          for (const mode of ["sugar", "committed"] as const) {
             for (const drain of [false, true]) {
               const result = await round(mode, drain);
               const key = `${mode}:${drain ? "drain" : "control"}`;
@@ -278,7 +279,7 @@ describe("agent R4.4 perf review: hot-path costs", () => {
         }
         const perRes = (key: string): number =>
           (Math.min(...(timings[key] ?? [Infinity])) * 1e6) / N;
-        for (const mode of ["state", "committed"] as const) {
+        for (const mode of ["sugar", "committed"] as const) {
           const controlWraps = wrapsSeen[`${mode}:control`]!;
           const drainWraps = wrapsSeen[`${mode}:drain`]!;
           console.log(
@@ -287,8 +288,8 @@ describe("agent R4.4 perf review: hot-path costs", () => {
           );
           const deltas = drainWraps.map((w, i) => w - (controlWraps[i] ?? 0));
           expect(deltas.every((d) => d === N)).toBe(true); // exactly one extra wrap, every round
-          if (mode === "state") {
-            expect(controlWraps.every((w) => w === N)).toBe(true); // only finalize's native stream
+          if (mode === "sugar") {
+            expect(controlWraps.every((w) => w === N)).toBe(true); // only the sugar Response's native stream
           } else {
             expect(controlWraps.every((w) => w === 0)).toBe(true); // committed passthrough: zero
           }
@@ -317,12 +318,12 @@ describe("agent R4.4 perf review: hot-path costs", () => {
         const gate = new Promise<void>((resolve) => {
           open = resolve;
         });
-        app.get("/park", (c) => {
-          c.body = "park";
-          return gate.then(() => undefined);
+        app.get("/park", async (c) => {
+          await gate;
+          return c.text("park");
         });
         app.get("/fast", (c) => {
-          c.body = "ok";
+          return c.text("ok");
         });
         const t0 = timers.snapshot();
         const l0 = listeners.snapshot();

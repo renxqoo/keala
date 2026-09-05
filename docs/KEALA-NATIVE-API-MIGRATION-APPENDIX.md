@@ -124,7 +124,8 @@ test/unit/utils-anomalies.test.ts
 test/unit/utils.test.ts
 ```
 
-共 105 文件 / 640 处（U1 删除 parity/koa\* 后 2026-09-06 重生成；U3c 核销矩阵）
+共 105 文件 / 640 处 → **U3c 已完成（2026-09-06）**：四批并行改写全部清零
+（机械 return 化 + 语义映射 §2.2 + 删除矩阵 21+13+~29 条；parity-locks 整删）
 
 ## M3 test/ 中读侧 getter/属性使用（c.body/.status/.type/.etag/.lastModified/.res 任意用法，含写路径行）
 

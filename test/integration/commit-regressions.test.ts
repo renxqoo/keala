@@ -200,29 +200,14 @@ describe("immutable committed Responses", () => {
   });
 });
 
-describe("0.7 commit contract guards", () => {
-  it("c.body after commit throws (500)", async () => {
-    const app = new Keala({ env: "test" });
-    app.use(async (c, next) => {
-      await next();
-      c.body = "late";
-    });
-    app.get("/", (c) => c.text("hi"));
-    const res = await hit(app, "/");
-    expect(res.status).toBe(500);
-  });
-
-  it("c.status after commit throws (500)", async () => {
-    const app = new Keala({ env: "test" });
-    app.use(async (c, next) => {
-      await next();
-      c.status = 201;
-    });
-    app.get("/", (c) => c.text("hi"));
-    const res = await hit(app, "/");
-    expect(res.status).toBe(500);
-  });
-});
+/**
+ * U3c deletions (mapping #6): the two "0.7 commit contract guards" locks —
+ * "c.body after commit throws (500)" and "c.status after commit throws
+ * (500)" — tested the deleted setter family's post-commit TypeError guard.
+ * The write path no longer exists, so there is nothing to lock; the
+ * surviving post-commit surface (header writers) is locked in
+ * commit-audit.test.ts.
+ */
 
 describe("error mapper + cookies", () => {
   it("mapper takeover keeps staged set-cookie and its own", async () => {
@@ -357,29 +342,21 @@ describe("pooling + stream bodies", () => {
 describe("respond/serialize edges", () => {
   it("Uint8Array body: no runtime JSON; verbatim bytes", async () => {
     const app = new Keala({ env: "test" });
-    app.get("/", (c) => {
-      c.body = new Uint8Array([1, 2, 3]);
-    });
+    app.get("/", () => new Response(new Uint8Array([1, 2, 3])));
     const res = await hit(app, "/");
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
 
-  it("c.body = null on a JSON-typed 200 yields the literal null", async () => {
+  it("c.json(null) on a 200 yields the literal null", async () => {
     const app = new Keala({ env: "test" });
-    app.get("/", (c) => {
-      c.type = "application/json";
-      c.body = { a: 1 };
-      c.body = null;
-    });
+    app.get("/", (c) => c.json(null));
     const res = await hit(app, "/");
     expect(await res.text()).toBe("null");
   });
 
-  it("204 via c.status only: no content headers, empty body", async () => {
+  it("204 via a bare empty-status Response: no content headers, empty body", async () => {
     const app = new Keala({ env: "test" });
-    app.get("/", (c) => {
-      c.status = 204;
-    });
+    app.get("/", () => new Response(null, { status: 204 }));
     const res = await hit(app, "/");
     expect(res.status).toBe(204);
     expect(res.headers.get("content-type")).toBeNull();
@@ -395,52 +372,14 @@ describe("respond/serialize edges", () => {
 
 const quiet = { env: "test" } as const;
 
-describe("r8 (0.7): a post-commit body rewrite throws — the committed body ships verbatim", () => {
-  it("a string body write after a commit is a TypeError, wire stays in sync", async () => {
-    const app = new Keala(quiet);
-    const thrown: unknown[] = [];
-    app.use(async (c, next) => {
-      await next();
-      try {
-        c.body = "a much longer body";
-      } catch (error) {
-        thrown.push(error);
-      }
-    });
-    // A committed Response carrying its own Content-Length (e.g. an upstream
-    // fetch() response).
-    app.get("/a", () => new Response("hi", { headers: { "content-length": "2" } }));
-    const res = await app.handle(new Request("http://localhost:3000/a"));
-    expect(thrown[0]).toBeInstanceOf(TypeError);
-    // The invariant from the r8 review (never a stale length) now holds by
-    // construction: the body is never replaced, so length and payload cannot
-    // desync.
-    expect(await res.text()).toBe("hi");
-    expect(res.headers.get("content-length")).toBe("2");
-  });
-
-  it("a stream body write after a commit is a TypeError too", async () => {
-    const app = new Keala(quiet);
-    const thrown: unknown[] = [];
-    app.use(async (c, next) => {
-      await next();
-      try {
-        c.body = new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("a much longer streamed body"));
-            controller.close();
-          },
-        });
-      } catch (error) {
-        thrown.push(error);
-      }
-    });
-    app.get("/a", () => new Response("hi", { headers: { "content-length": "2" } }));
-    const res = await app.handle(new Request("http://localhost:3000/a"));
-    expect(thrown[0]).toBeInstanceOf(TypeError);
-    expect(await res.text()).toBe("hi");
-  });
-});
+/**
+ * U3c deletions (mapping #6): the two r8 locks — "a string body write after
+ * a commit is a TypeError" and "a stream body write after a commit is a
+ * TypeError" — locked the deleted `c.body =` setter's post-commit TypeError
+ * guard. The write path no longer exists; the never-a-stale-length invariant
+ * now holds by construction (a committed body is immutable). No replacement
+ * surface exists to rewrite against.
+ */
 
 describe("r8: failed ws registration leaves no stranded wsRoutes key", () => {
   it("a throwing app.ws() (sunk overlap) does not occupy the key", () => {
@@ -464,9 +403,7 @@ describe("r8: Router identity prefix", () => {
   it('prefix: "/" is the identity mount, not a broken "//path" factory', async () => {
     const app = new Keala(quiet);
     const r = new Router({ prefix: "/" });
-    r.get("/x", (c) => {
-      c.body = "ok";
-    });
+    r.get("/x", (c) => c.text("ok"));
     app.mount("/", r);
     const res = await app.handle(new Request("http://localhost:3000/x"));
     expect([res.status, await res.text()]).toEqual([200, "ok"]);

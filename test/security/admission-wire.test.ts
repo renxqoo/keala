@@ -133,7 +133,7 @@ describe("SEC-6: Node wire — drain Connection: close injection vs handler-set 
       const gate = deferred();
       app.get("/slow", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -170,7 +170,7 @@ describe("SEC-6: Node wire — drain Connection: close injection vs handler-set 
     async () => {
       const app = new Keala({ env: "test" });
       app.get("/x", (c) => {
-        c.body = "ok";
+        return c.text("ok");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -202,10 +202,10 @@ describe("SEC-7: pipelining and gate refusals on the Node wire", () => {
       const gate = deferred();
       app.get("/slow", async (c) => {
         await gate.promise;
-        c.body = "FIRST-SLOW";
+        return c.text("FIRST-SLOW");
       });
       app.get("/fast", (c) => {
-        c.body = "SECOND-FAST";
+        return c.text("SECOND-FAST");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -250,7 +250,7 @@ describe("SEC-7: pipelining and gate refusals on the Node wire", () => {
       const gate = deferred();
       app.get("/slow", async (c) => {
         await gate.promise;
-        c.body = "done";
+        return c.text("done");
       });
       const handle = startNodeServer(app, { port: 0 });
       liveServers.push(handle);
@@ -288,7 +288,7 @@ describe("SEC-8: signal bridge — request input cannot synthesize process signa
     }
     const app = new Keala({ env: "test" });
     app.get("/x", (c) => {
-      c.body = "ok";
+      return c.text("ok");
     });
     const handle = startNodeServer(app, { port: 0, signals: true });
     liveServers.push(handle);
@@ -414,10 +414,10 @@ describe("SEC-9: requestTimeout 504 — no request-derived data, fixed abort rea
     const gate = deferred();
     app.get("/zombie", async (c) => {
       await gate.promise;
-      c.body = "zombie-writes-late"; // harmless write after the 504
+      return c.text("zombie-writes-late"); // harmless late return after the 504
     });
     app.get("/next", (c) => {
-      c.body = "healthy";
+      return c.text("healthy");
     });
     const tracker = unhandledTracker();
     try {

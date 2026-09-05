@@ -165,11 +165,10 @@ describe("error funnel interactions", () => {
 });
 
 describe("HEAD handling", () => {
-  it("HEAD on state-mode string body: CL backfilled, no body", async () => {
+  it("HEAD on a sugar text body: CL backfilled, no body", async () => {
     const app = new Keala({ env: "test" });
     app.get("/", (c) => {
-      c.body = "héllo";
-      c.type = "text/plain";
+      return c.text("héllo");
     });
     const res = await hit(app, "/", { method: "HEAD" });
     expect(res.headers.get("content-length")).toBe("6"); // héllo = 6 UTF-8 bytes
@@ -342,7 +341,7 @@ describe("cookie facade", () => {
   });
 });
 
-describe("state-mode responses", () => {
+describe("response defaults (U3c: state mode retired)", () => {
   it("default 404 body is the status text", async () => {
     const app = new Keala({ env: "test" });
     const res = await hit(app, "/nope");
@@ -350,12 +349,10 @@ describe("state-mode responses", () => {
     expect(await res.text()).toBe("Not Found");
   });
 
-  it("c.status=204 clears content headers", async () => {
+  it("sugar 204 clears content headers", async () => {
     const app = new Keala({ env: "test" });
     app.get("/", (c) => {
-      c.type = "text/html";
-      c.body = "x";
-      c.status = 204;
+      return c.text("x", 204);
     });
     const res = await hit(app, "/");
     expect(res.status).toBe(204);
@@ -366,7 +363,7 @@ describe("state-mode responses", () => {
   it("JSON object body gets application/json", async () => {
     const app = new Keala({ env: "test" });
     app.get("/", (c) => {
-      c.body = { a: 1 };
+      return c.json({ a: 1 });
     });
     const res = await hit(app, "/");
     expect(res.headers.get("content-type")).toContain("application/json");
@@ -376,8 +373,7 @@ describe("state-mode responses", () => {
   it("redirect() then finalize carries Location with empty body", async () => {
     const app = new Keala({ env: "test" });
     app.get("/r", (c) => {
-      c.status = 301;
-      return c.redirect("/x");
+      return c.redirect("/x", 301);
     });
     const res = await hit(app, "/r");
     expect(res.status).toBe(301);

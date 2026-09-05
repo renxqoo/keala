@@ -96,7 +96,7 @@ describe("agent-r44 bug hunt: stopGraceful timer lifecycle (locus contrast)", ()
       // adapters leak. VERIFIED-OK lock isolating the defect's location.
       const app = new Keala({ env: "test" });
       app.get("/x", (c) => {
-        c.body = "x";
+        return c.text("x");
       });
       await app.handle(new Request("http://x/x"));
       vi.useFakeTimers();
@@ -125,7 +125,7 @@ describe("agent-r44 bug hunt: Node wire accounting (VERIFIED-OK lock)", () => {
       // balance exactly). STATUS: VERIFIED-OK (green).
       const app = new Keala({ env: "test" });
       app.get("/n", (c) => {
-        c.body = "ok";
+        return c.text("ok");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);

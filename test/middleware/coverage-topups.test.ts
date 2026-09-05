@@ -25,27 +25,29 @@ const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
 describe("coverage: etag body kinds and negotiation", () => {
-  it("tags Uint8Array and object bodies; streams and null pass through", async () => {
+  it("tags sugar text/JSON bodies; bytes, streams and null pass through", async () => {
     const app = new Keala(quiet);
     app.use(etag());
-    app.get("/u8", (c) => {
-      c.body = new Uint8Array([1, 2, 3]);
-    });
+    // U3c (§2.3-5): the transform gate is snapshot-identity — the sugar
+    // surface is text/json only, so byte bodies ride hand-built Responses
+    // and are NEVER tagged (bytes were taggable in the state mode).
+    app.get("/u8", () => new Response(new Uint8Array([1, 2, 3])));
     app.get("/obj", (c) => {
-      c.body = { a: 1 };
+      return c.json({ a: 1 });
     });
-    app.get("/stream", (c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.close();
-        },
-      });
-    });
-    app.get("/none", (c) => {
-      c.body = null;
-      c.status = 204;
-    });
-    expect((await app.handle(req("/u8"))).headers.get("etag")).toMatch(/^W\//);
+    app.get(
+      "/stream",
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        ),
+    );
+    app.get("/none", () => new Response(null, { status: 204 }));
+    expect((await app.handle(req("/u8"))).headers.get("etag")).toBeNull();
     expect((await app.handle(req("/obj"))).headers.get("etag")).toMatch(/^W\//);
     expect((await app.handle(req("/stream"))).headers.get("etag")).toBeNull();
     expect((await app.handle(req("/none"))).status).toBe(204);
@@ -55,12 +57,12 @@ describe("coverage: etag body kinds and negotiation", () => {
     const app = new Keala(quiet);
     app.use(etag());
     app.get("/pre", (c) => {
-      c.etag = '"custom"';
-      c.body = "x";
+      // U3c: bare-header contract — the caller quotes the value themselves.
+      c.setHeader("ETag", '"custom"');
+      return c.text("x");
     });
     app.get("/201", (c) => {
-      c.status = 201;
-      c.body = "created";
+      return c.text("created", 201);
     });
     const pre = await app.handle(req("/pre"));
     expect(pre.headers.get("etag")).toBe('"custom"');
@@ -77,7 +79,7 @@ describe("coverage: etag body kinds and negotiation", () => {
     const app = new Keala(quiet);
     app.use(etag());
     app.get("/x", (c) => {
-      c.body = "stable";
+      return c.text("stable");
     });
     const tag = (await app.handle(req("/x"))).headers.get("etag") ?? "";
     const list = await app.handle(
@@ -92,15 +94,19 @@ describe("coverage: compress decision tree", () => {
     const app = new Keala(quiet);
     app.use(compress());
     app.get("/big", (c) => {
-      c.body = "compressible-content-".repeat(40);
+      return c.text("compressible-content-".repeat(40));
     });
-    app.get("/stream", (c) => {
-      c.body = new ReadableStream({
-        start(controller) {
-          controller.close();
-        },
-      });
-    });
+    app.get(
+      "/stream",
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        ),
+    );
     const accepted = { headers: { "accept-encoding": "gzip" } } as RequestInit;
     const big = await app.handle(new Request("http://localhost:3000/big", accepted));
     // node:zlib gzip runs on Bun and Node alike.
@@ -224,7 +230,7 @@ describe("coverage: body-parser reader errors", () => {
     const app = new Keala(quiet);
     app.use(createBodyParser());
     app.get("/x", async (c) => {
-      c.body = JSON.stringify(await bodyOf(c).json());
+      return c.text(JSON.stringify(await bodyOf(c).json()));
     });
     const res = await app.handle(req("/x")); // GET: empty body
     expect(await res.text()).toBe("null");
@@ -273,7 +279,7 @@ describe("coverage: compress with injected gzip", () => {
     const app = new Keala(quiet);
     app.use(compress({ gzip }));
     app.get("/x", (c) => {
-      c.body = "0".repeat(400);
+      return c.text("0".repeat(400));
     });
     const res = await app.handle(gzRequest("/x"));
     expect(res.headers.get("content-encoding")).toBe("gzip");
@@ -282,17 +288,19 @@ describe("coverage: compress with injected gzip", () => {
     expect(bytes[1]).toBe(0x8b);
   });
 
-  it("object bodies compress; pre-encoded and committed responses skip", async () => {
+  it("JSON sugar bodies compress; pre-encoded and hand-built responses skip", async () => {
     const app = new Keala(quiet);
     app.use(compress({ gzip }));
     app.get("/obj", (c) => {
-      c.body = { pad: "1".repeat(500) };
+      return c.json({ pad: "1".repeat(500) });
     });
     app.get("/pre", (c) => {
-      c.body = "0".repeat(400);
       c.setHeader("Content-Encoding", "br");
+      return c.text("0".repeat(400));
     });
-    app.get("/committed", (c) => c.text("0".repeat(400)));
+    // U3c gate flip: c.text IS the transformable shape now — only a
+    // hand-built Response passes through untouched.
+    app.get("/committed", () => new Response("0".repeat(400)));
     expect((await app.handle(gzRequest("/obj"))).headers.get("content-encoding")).toBe("gzip");
     expect((await app.handle(gzRequest("/pre"))).headers.get("content-encoding")).toBe("br");
     expect((await app.handle(gzRequest("/committed"))).headers.get("content-encoding")).toBeNull();
@@ -303,23 +311,26 @@ describe("coverage: compress with injected gzip", () => {
     const app = new Keala(quiet);
     app.use(compress({ gzip: growing }));
     app.get("/x", (c) => {
-      c.body = "0".repeat(400);
+      return c.text("0".repeat(400));
     });
     const res = await app.handle(gzRequest("/x"));
     expect(res.headers.get("content-encoding")).toBeNull();
   });
 
-  it("Uint8Array bodies are eligible; accept-encoding lists parse", async () => {
+  it("hand-built byte bodies pass the gate; accept-encoding lists parse", async () => {
     const app = new Keala(quiet);
     app.use(compress({ gzip }));
-    app.get("/x", (c) => {
-      c.body = new Uint8Array(400).fill(7);
-    });
+    // U3c: bytes are not on the sugar surface — a hand-built Response is
+    // outside the identity gate and never encodes.
+    app.get("/x", () => new Response(new Uint8Array(400).fill(7)));
+    app.get("/list", (c) => c.text("0".repeat(400)));
     const res = await app.handle(gzRequest("/x"));
-    expect(res.headers.get("content-encoding")).toBe("gzip");
+    expect(res.headers.get("content-encoding")).toBeNull();
+    expect(new Uint8Array(await res.arrayBuffer()).byteLength).toBe(400);
+    expect((await app.handle(gzRequest("/list"))).headers.get("content-encoding")).toBe("gzip");
     // wildcard-less encodings do not trigger
     const brotliOnly = await app.handle(
-      new Request("http://localhost:3000/x", { headers: { "accept-encoding": "br" } }),
+      new Request("http://localhost:3000/list", { headers: { "accept-encoding": "br" } }),
     );
     expect(brotliOnly.headers.get("content-encoding")).toBeNull();
   });

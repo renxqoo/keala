@@ -82,12 +82,6 @@ const handle = async (
   return app.handle(new Request(`http://localhost:3000${url}`, init));
 };
 
-const runPlain = async (mw: (c: Context) => void, init?: RequestInit): Promise<Response> => {
-  const app = new Keala({ env: "test" });
-  app.use(mw);
-  return app.handle(new Request("http://localhost:3000/", init));
-};
-
 /** Shared per-request scratch array so handlers can record execution order. */
 const ORDER_KEY = "redteam:order";
 const ctxState = (c: Context): string[] => {
@@ -167,7 +161,7 @@ describe("red team: router", () => {
     const res = await handle((app) => {
       const router = new Router();
       router.get("/users/:id", (c) => {
-        c.body = "route";
+        return c.text("route");
       });
       router.param("id", (c, next) => {
         c.setHeader("X-Param", "ran");
@@ -186,7 +180,7 @@ describe("red team: router", () => {
         await next();
       });
       app.get("/x", (c) => {
-        c.body = `${ctxState(c).join(",")},second`;
+        return c.text(`${ctxState(c).join(",")},second`);
       });
     }, "/x");
     expect(await res.text()).toBe("first,second");
@@ -204,7 +198,7 @@ describe("red team: router", () => {
         await next();
       });
       router.get("/admin/panel", (c) => {
-        c.body = "panel";
+        return c.text("panel");
       });
       app.mount("/v2", router);
     }, "/v2/api/admin/panel");
@@ -218,7 +212,7 @@ describe("red team: router", () => {
       (app) => {
         const child = new Router();
         child.get("/items/:sku", (c) => {
-          c.body = { sku: c.params("sku") };
+          return c.json({ sku: c.params("sku") });
         });
         app.mount("/shop", child);
       },
@@ -232,7 +226,7 @@ describe("red team: router", () => {
       (app) => {
         const child = new Router();
         child.get("/items/:sku", (c) => {
-          c.body = { sku: c.params("sku") };
+          return c.json({ sku: c.params("sku") });
         });
         app.mount("/shop", child);
       },
@@ -247,82 +241,23 @@ describe("red team: router", () => {
 // 0.7: the "red team: request lazy cache" suite is gone — request
 // url/querystring setters were deleted (requests are read-only).
 
-describe("red team: respond state machine", () => {
-  // The old bug (status lost → 200 "hello") IS fixed, but the test
-  // cannot run: the null-body finalization CONFIRMED-BUG (see
-  // test/security.test.ts) makes app.handle REJECT for any 204 under
-  // Node/undici and serve the text "null" under Bun. Un-skip once
-  // src/core/respond.ts bodyInitOf() maps null -> null.
-  it("[P1] keeps 204 after body=null then a real body (blocked by the null-body CONFIRMED-BUG)", async () => {
-    const res = await runPlain((c) => {
-      c.body = null;
-      c.body = "hello";
-    });
-    expect(res.status).toBe(204);
-    expect(await res.text()).toBe("");
-  });
-
-  // 0.7: [P2] (`c.body = new Response(...)` status/body adoption) is gone
-  // with the Response-as-body quirk — return the Response instead.
-
-  it("[P3] stays empty for null body then undefined body then explicit status", async () => {
-    const res = await runPlain((c) => {
-      c.body = null;
-      c.body = undefined as never; // koa allows an undefined body assignment
-      c.status = 200;
-    });
-    expect(res.status).toBe(200);
-    // Empty-body assertion deferred — see the CONFIRMED-BUG block in
-    // test/security.test.ts (current core serves the text "null").
-  });
-
-  it("[P4] repairs a manually set Content-Length for string bodies", async () => {
-    // Facade-level: the stale 99 must not survive the body assignment. The
-    // wire header itself is runtime-supplied (node's Response object hides
-    // auto content-length; Bun exposes it).
-    let observed: number | undefined = -1;
-    const res = await runPlain((c) => {
-      c.setHeader("Content-Length", "99");
-      c.body = "hi";
-      observed = c.length;
-    });
-    expect(observed).toBe(2);
-    const wire = res.headers.get("content-length");
-    expect(wire === null || wire === "2").toBe(true);
-  });
-
-  it("[P5] preserves an explicit Content-Length on HEAD responses", async () => {
-    const res = await runPlain(
-      (c) => {
-        c.body = "hi";
-        c.setHeader("Content-Length", "99");
-      },
-      { method: "HEAD" },
-    );
-    expect(res.headers.get("content-length")).toBe("99");
-  });
-
-  it("[P6] never emits an unexpandable ctx.type as the Content-Type", async () => {
-    // D1: an unexpandable type drops the header entirely (the runtime
-    // supplies the default); koa's old sniffing fallback is gone. The
-    // security contract — the attacker-chosen token must not reach the wire
-    // as Content-Type — is what gets locked.
-    const res = await runPlain((c) => {
-      c.type = "unknown-thing";
-      c.body = "x";
-    });
-    const contentType = res.headers.get("content-type");
-    expect(contentType === null || contentType.startsWith("text/plain")).toBe(true);
-    expect(contentType).not.toBe("unknown-thing");
-  });
-});
+// ---------------------------------------------------------------------------
+// U3c deletion: the "red team: respond state machine" suite ([P1]/[P3]/
+// [P4]/[P5]/[P6]) went with the response setters it exercised — double body
+// assignment, null/undefined body adoption, the c.length read, staged-CL
+// repair and c.type MIME inference no longer exist ([P2] was already gone
+// with the 0.7 Response-as-body quirk). Surviving analogues: empty-status
+// cleansing (test/security/baseline.test.ts CONFIRMED-BUG block, §2.3-2),
+// staged-header overwrite (§2.3-1), sugar HEAD Content-Length
+// (test/middleware/cache.test.ts), stream CL (upstream-hardening koa#1939).
+// ---------------------------------------------------------------------------
 
 describe("CONFIRMED-BUG: router core (found during this migration)", () => {
   it("CONFIRMED-BUG(now fixed): app.mount('/', router) must mount at root, not throw (TODO-BUG: core/app.ts mount base keeps '/' and produces '//path')", async () => {
     const app = new Keala({ env: "test" });
     const router = new Router();
     router.get("/users/:id", (c) => {
-      c.body = "u";
+      return c.text("u");
     });
     expect(() => app.mount("/", router)).not.toThrow(); // actual: TypeError "Route path has an empty segment: //users/:id"
     const res = await app.handle(new Request("http://localhost:3000/users/7"));
@@ -335,7 +270,7 @@ describe("CONFIRMED-BUG: router core (found during this migration)", () => {
     const app = new Keala({ env: "test" });
     const router = new Router();
     router.get("/admin/panel", (c) => {
-      c.body = "panel";
+      return c.text("panel");
     });
     router.use(async (_c, next) => {
       guardRan = true;

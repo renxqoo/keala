@@ -54,12 +54,11 @@ describe("coverage: response sugar combinations", () => {
     expect(h.headers.get("content-type")).toBe("text/plain");
   });
 
-  it("state-mode object bodies carry status through Response.json", async () => {
+  it("json sugar carries staged headers and status through Response.json", async () => {
     const app = new Keala(quiet);
     app.get("/s", (c) => {
-      c.status = 201;
       c.setHeader("x-s", "1");
-      c.body = { made: true };
+      return c.json({ made: true }, 201);
     });
     const res = await app.handle(req("/s"));
     expect(res.status).toBe(201);

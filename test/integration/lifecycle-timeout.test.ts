@@ -72,7 +72,7 @@ describe("R4.6 deadline: 504 through the funnel", () => {
   it("fast requests win the race (no 504, no leaked timer)", async () => {
     const app = new Keala({ env: "test", requestTimeout: 2000 });
     app.get("/fast", (c) => {
-      c.body = "fast-ok";
+      return c.text("fast-ok");
     });
     const response = await app.handle(new Request("http://x/fast"));
     expect(await response.text()).toBe("fast-ok");
@@ -99,7 +99,7 @@ describe("R4.6 deadline: 504 through the funnel", () => {
     const gate = deferred();
     app.get("/stuck", () => gate.promise.then(() => undefined));
     app.get("/ok", (c) => {
-      c.body = "still-ok";
+      return c.text("still-ok");
     });
     const dead = await app.handle(new Request("http://x/stuck"));
     expect(dead.status).toBe(504);
@@ -182,7 +182,7 @@ describe("R4.6 c.signal: cooperative cancellation", () => {
     app.get("/watch", async (c) => {
       observed = c.signal;
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const inflight = app.handle(new Request("http://x/watch", { signal: abort.signal }));
     await wait(5);
@@ -214,7 +214,7 @@ describe("R4.6 c.signal: cooperative cancellation", () => {
     let read = false;
     app.get("/lazy", (c) => {
       read = (c as unknown as { abortValue?: AbortController }).abortValue !== undefined;
-      c.body = "ok";
+      return c.text("ok");
     });
     await app.handle(new Request("http://x/lazy"));
     expect(read).toBe(false);
@@ -227,7 +227,7 @@ describe("R4.6 c.signal: cooperative cancellation", () => {
     app.get("/watch", async (c) => {
       signalSeen = c.signal;
       await gate.promise;
-      c.body = "done";
+      return c.text("done");
     });
     const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
     liveServers.push(server);

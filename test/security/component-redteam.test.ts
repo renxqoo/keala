@@ -400,7 +400,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
     const app = new Keala(quiet);
     app.use((c, next) => {
       void next(); // deliberately not awaited; late rejection must be contained
-      c.body = "early";
+      return c.text("early");
     });
     app.get("/x", () => Promise.reject(new Error("late")));
     const res = await app.handle(req("/x"));

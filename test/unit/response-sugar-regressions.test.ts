@@ -279,7 +279,7 @@ describe("etag middleware", () => {
     const app = new Keala({ env: "test" });
     app.use(etag());
     app.get("/", (c) => {
-      c.body = { hello: "world" };
+      return c.json({ hello: "world" });
     });
     const first = await hit(app, "/");
     const tag = first.headers.get("etag");

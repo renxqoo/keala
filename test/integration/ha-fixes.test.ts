@@ -42,16 +42,19 @@ describe("HA-1: floating-branch registration under pooling", () => {
       },
       async (c) => {
         await wait(60); // late: /a already answered, its context retired-pending
-        c.body = "A-SECRET";
+        // U3c: the body setter is gone — probe the late write through a
+        // surviving mutation path. On the retired context this throws (the
+        // floated branch keeps the context out of the pool, so it can never
+        // land on /victim's response either way).
+        c.setHeader("X-Branch", "A-SECRET");
       },
     );
-    app.get("/victim", async (c) => {
-      c.body = "VICTIM";
-    });
+    app.get("/victim", (c) => c.text("VICTIM"));
     const first = app.handle(new Request("http://x/a"));
     await wait(15); // /a settles, its branch is still running
     const victim = await app.handle(new Request("http://x/victim"));
     expect(await victim.text()).toBe("VICTIM");
+    expect(victim.headers.get("x-branch")).toBeNull(); // never leaked
     expect((await first).status).toBe(404); // the floated route never committed
   });
 
@@ -64,7 +67,7 @@ describe("HA-1: floating-branch registration under pooling", () => {
     });
     app.get("/a", async (c) => {
       await wait(5);
-      c.body = "a";
+      return c.text("a");
     });
     const response = await app.handle(new Request("http://x/a"));
     await response.text();

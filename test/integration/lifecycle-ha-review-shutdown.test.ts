@@ -162,7 +162,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
         const app = new Keala({ env: "test" });
         app.get("/stuck", async (c) => {
           await gate.promise;
-          c.body = "late";
+          return c.text("late");
         });
         const zombieHandles = Array.from({ length: 100 }, () =>
           app.handle(new Request("http://x/stuck")),
@@ -263,11 +263,11 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
       });
       const slowGate = deferred();
       app.get("/fast/:id", (c) => {
-        c.body = `fast:${c.params("id")}`;
+        return c.text(`fast:${c.params("id")}`);
       });
       app.get("/slow/:id", async (c) => {
         await slowGate.promise;
-        c.body = `slow:${c.params("id")}`;
+        return c.text(`slow:${c.params("id")}`);
       });
       app.get("/stream/:id", (c) =>
         Promise.resolve(
@@ -334,7 +334,7 @@ describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
       const gate = deferred();
       app.get("/stuck", async (c) => {
         await gate.promise;
-        c.body = "late";
+        return c.text("late");
       });
       const server = await startNodeServer(app, { port: 0, hostname: "127.0.0.1" }).ready();
       liveServers.push(server);
