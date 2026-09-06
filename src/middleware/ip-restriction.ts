@@ -132,7 +132,11 @@ const compileRules = (rules: readonly string[] | undefined, name: string): Compi
 const parseAddress = (ip: string): { v4: boolean; bits: bigint } | null => {
   if (typeof ip !== "string" || ip.length === 0) return null;
   if (ip.includes(":")) {
-    const bits = ipv6ToBits(ip);
+    // XFF/proxy forms carry bracketed IPv6 (`[2001:db8::1]`, sometimes with
+    // a port) — strip the brackets before parsing or the address is rejected
+    // and a deny-only config would 403 every proxied IPv6 client.
+    const unbracketed = ip.startsWith("[") && ip.endsWith("]") ? ip.slice(1, -1) : ip;
+    const bits = ipv6ToBits(unbracketed);
     return bits === null ? null : { v4: false, bits };
   }
   const bits = ipToInt(ip);

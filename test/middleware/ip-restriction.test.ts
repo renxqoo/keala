@@ -133,3 +133,20 @@ describe("ipRestriction: setup validation", () => {
     expect(() => ipRestriction(options as IpRestrictionOptions)).toThrow(TypeError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Review fix: bracketed IPv6 from XFF must parse (not fail-closed)
+// ---------------------------------------------------------------------------
+describe("bracketed IPv6 from XFF/proxy forms", () => {
+  it("deny-only config passes a bracketed IPv6+port address", async () => {
+    const app = new Keala({ env: "test", proxy: true });
+    app.use(ipRestriction({ deny: ["203.0.113.0/24"] }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", {
+        headers: { "x-forwarded-for": "[::1]:52344", host: "localhost:3000" },
+      }),
+    );
+    expect(res.status).toBe(200); // not denied → pass
+  });
+});

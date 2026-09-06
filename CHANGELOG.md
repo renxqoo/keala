@@ -68,6 +68,27 @@ values, offset)` 是"要整个 map"的官方适配器(sink 镜像边界同款)�
   **rateLimit hit() 原子接口**；**serve-static precompressed + 钩子**
 - **metrics 首套单元测试**（19 条——此前零覆盖）
 
+### 新中间件 N1-N7（企业刚需 + 生产运维）
+
+- **combine**：`some(mwA, mwB)` 多认证取其一（拒绝继续尝试，放行短路）、
+  `all(...)` 全过——解锁 `some(bearerAuth, apiKeyAuth)` 组合模式
+- **apiKeyAuth**：X-API-Key 认证——静态 keys 列表 timing-safe 或 verify
+  回调；RFC 6750 三路（缺头 401/畸形 400/验拒 401）；header 名可配
+- **webhook 验签**：Stripe/GitHub/Slack/raw 四模式 HMAC-SHA256——
+  timing-safe MAC 比对、时间戳容差窗口（默认 300s）、body clone 保护
+  （验签后 handler 仍可读）、Stripe 多密钥轮换
+- **ipRestriction**：IPv4/IPv6 CIDR 白名单/黑名单——deny 优先、
+  `0.0.0.0/0` 全放、IPv6 压缩地址、纯位运算零依赖、畸形规则 setup 期
+  TypeError、客户端地址不可解析 fail-closed
+- **jwks**：JWKS 远程密钥——kid 索引、TTL 缓存（默认 5min）、
+  stale-serving（网络失败用旧缓存）、kid 风暴退避（恶意 kid 不放大
+  IdP fetch）、RSA+EC 密钥导入、单飞 refresh
+- **healthCheck**：自动注册 /healthz（liveness 永远 200，不查依赖
+  防级联重启）+ /readyz（异步谓词决定 200/503，抛错 503 只带 err.name）
+- **logger JSON 格式**：`logger({ format: "json", fields: {...} })`——
+  输出 {ts, method, path, status, duration_ms, request_id, ...fields}，
+  接 ELK/Datadog；text 格式逐字节不变
+
 ### 性能
 
 - **整表单 regex 快速层**(router):R413 的 per-bucket regex 升级为

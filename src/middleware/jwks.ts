@@ -228,6 +228,7 @@ export const jwks = (options: JwksOptions): JwksKeys => {
   };
 
   const verify = async (token: string): Promise<boolean> => {
+    if (typeof token !== "string") return false;
     try {
       await ensureFresh();
     } catch {
