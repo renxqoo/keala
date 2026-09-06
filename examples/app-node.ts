@@ -18,11 +18,13 @@ import {
   html,
   streamSSE,
   verifyPassword,
+  createCookies,
 } from "../src/index.ts";
 import { basicAuth, secureHeaders, serveStatic, validator } from "../src/middleware/index.ts";
 import { listen } from "../src/adapters/node.ts";
 
-const app = new Keala({ keys: ["change-me"], env: "production" });
+const app = new Keala({ env: "production" });
+app.use(createCookies({ keys: ["change-me"] }));
 app.use(createBodyParser({ jsonLimit: 256 * 1024 }));
 
 // Sunk routes degrade to their JS mirrors under Node — same paths, same

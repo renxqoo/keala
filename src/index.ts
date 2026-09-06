@@ -2,8 +2,8 @@
  * keala — hono-fast, onion-ergonomic, Bun-native.
  *
  * The ROOT entry is the app surface: core (the Keala class, router,
- * context, errors, cookie signing) plus the plugin and the in-handler
- * helpers. Middleware lives at `keala/middleware` (aggregate) or
+ * context, errors) plus the plugins (bodyParser, cookies) and the
+ * in-handler helpers. Middleware lives at `keala/middleware` (aggregate) or
  * `keala/middleware/<name>` (per file); the Node adapter at
  * `keala/node` — those two are the only split-out tiers (the
  * middleware tier is the heavy one; adapters are a mutually exclusive
@@ -13,8 +13,9 @@
  * import { Keala } from "keala";
  * import { cors } from "keala/middleware";
  *
- * const app = new Keala({ keys: ["secret"] })
+ * const app = new Keala()
  *
+ * app.use(createCookies({ keys: ["secret"] }))      // plugin: lazy c.cookies
  * app.use(cors())                                   // global onion middleware
  * app.get("/users/:id", (c) => c.json({ id: c.params("id") })) // return style
  *
@@ -34,6 +35,7 @@ export {
   type HandlerResult,
   type MiddlewareContext,
 } from "./core/compose.ts";
+export { createCookies, type CookiesPluginOptions } from "./plugins/cookies.ts";
 export type { Context } from "./core/context/context.ts";
 export { createContext, resetContext, baseContextProto } from "./core/context/context.ts";
 export {

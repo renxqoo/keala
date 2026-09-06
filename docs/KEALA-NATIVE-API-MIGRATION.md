@@ -209,7 +209,7 @@ bun scripts/smoke.ts / bun scripts/example-check.ts（受影响时）。
 
 ---
 
-## 第三部分：MIGRATION（按单元；状态：**U1-U4 已实施（2026-09-06）**——迁移全部单元完成）
+## 第三部分：MIGRATION（按单元；状态：**U1-U4 已实施（2026-09-06）**——迁移全部单元完成；后续独立单元见实施记录）
 
 ### U1 — koa 对齐测试退役（流程试运行单元）
 
@@ -512,6 +512,22 @@ CHANGELOG/index.ts/PARITY.md 齐。P3 服务器复测两轮中位 0.97x——低
 字面线 1pp，判噪声带内持平并如实记录（不粉饰）；隔离测量证明框架机器
 无回退。迁移六单元全部核销：2658→2570（−33 koa 差分、+15 新锁/回迁、
 −86 删除矩阵、−84 净变 → 2570），coverage 95.55/90.74/96.16/97.37。
+
+### 后续单元 — cookie 插件化（2026-09-06）
+
+U4 收口后的独立裁决（用户：token 时代签名 cookie 会话小众，勿使未用者
+白背）。`c.cookies` 拆为 keala 插件协议（`app.use(createCookies({ keys }))`，
+注册期 decorateLazy、首触惰性、位置无关——与 bodyParser 同款，**不是**
+hono/express 式每请求中间件层）；`keys` 构造选项删除；类型由插件模块的
+declaration merging 随 import 到达（零 declare 样板、未装则类型诚实缺席）。
+测试面 30 文件（26 keys 构造点 + 运行时缺装 29 处点亮）；pooling 的
+base-proto 直造 context 改槽位断言。实测：core 闭包 94.6→90.4KB（−4.3），
+SameSite/Partitioned 0 残留，打包可摇；逐文件 idle 收益 ≈0（如实记录——
+拆分价值是结构性的）。行为面变化（审查确认）：未装插件的 app 上用户 `decorate("cookies", …)`
+现在放行（HEAD 上被 core getter 守卫拒绝），随后再装插件会响亮报错——
+先后语义由 decorate 守卫统一。教训入档：批量清理 `,,` 会误伤解构空洞
+（`[status, , , allow]` 被改三位——smoke 抓获）；examples 不在 tsconfig，
+import 拼接错误只有运行时能抓。2570 双运行时绿。
 
 ### 第 1 波 — U1（2026-09-06）
 

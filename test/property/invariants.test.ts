@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import {
   PRINTABLE,
   delay,
@@ -201,7 +201,9 @@ describe("INV-1 never-reject", () => {
 
   it("committed responses + random post-commit mutations still never reject and stay wire-safe", async () => {
     await runProp("post-commit-mutations", 300, async (rng, _seed, ctx) => {
-      const app = new Keala({ ...quiet, pooling: rng.bool(0.4), keys: ["r6-secret"] });
+      const app = new Keala({ ...quiet, pooling: rng.bool(0.4) }).use(
+        createCookies({ keys: ["r6-secret"] }),
+      );
       const mutate = lateMutations(rng);
       const style = rng.pick(commitStyles);
       const wait = rng.bool(0.4);
@@ -363,7 +365,7 @@ describe("INV-2 exactly-once", () => {
 describe("INV-3 wire-safety", () => {
   it("random header/cookie/redirect/statusText injection never reaches the wire", async () => {
     await runProp("wire-safety", 250, async (rng, _seed, ctx) => {
-      const app = new Keala({ ...quiet, keys: ["r6-secret"] });
+      const app = new Keala({ ...quiet }).use(createCookies({ keys: ["r6-secret"] }));
       app.use(randHandler(rng, { mode: "any" }));
       app.on("ALL", "/*", randHandler(rng, { mode: "any" }));
       const headers: Record<string, string> = {

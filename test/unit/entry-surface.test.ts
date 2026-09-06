@@ -16,6 +16,7 @@ const ROOT_EXPORTS = new Set([
   "Keala",
   "Router",
   "compose",
+  "createCookies",
   "direct",
   "NOOP_TAIL",
   "createMiddleware",

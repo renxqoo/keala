@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import { sign } from "../../src/context/cookies.ts";
 import { compilePattern } from "../../src/router/pattern.ts";
 import {
@@ -220,7 +220,7 @@ describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, fu
 
 describe("redteam round2 — GA-2 concurrency isolation", () => {
   it("500 mixed concurrent requests answer without crosstalk", { timeout: 60_000 }, async () => {
-    const app = new Keala({ ...quiet, keys: ["k"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["k"] }));
     app.use(async (c, next) => {
       c.state.step = "1";
       await next();
@@ -307,7 +307,7 @@ describe("redteam round2 — GA-3 leak fence", () => {
     "100k mixed requests retain under 32B/request",
     { timeout: 120_000 },
     async () => {
-      const app = new Keala({ ...quiet, keys: ["k"] });
+      const app = new Keala({ ...quiet }).use(createCookies({ keys: ["k"] }));
       app.get("/text", (c) => c.text("hello"));
       app.get("/users/:id", (c) => c.json({ id: c.params("id") }));
       app.get("/err", () => {
@@ -349,7 +349,7 @@ describe("redteam round2 — GA-4 security quick-scan", () => {
   });
 
   it("cookie signatures: valid accepted, forged value and forged digest rejected", async () => {
-    const app = new Keala({ ...quiet, keys: ["k1"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["k1"] }));
     app.get("/read", (c) => c.text(`v=${c.cookies.get("sess", { signed: true }) ?? "REJECT"}`));
     const good = sign("v1", "k1");
     const read = async (cookie: string): Promise<string> =>

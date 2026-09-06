@@ -16,6 +16,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import { createError } from "../../src/http/errors.ts";
 
 const quiet = { env: "test" } as const;
@@ -117,7 +118,8 @@ describe("prototype pollution", () => {
   });
 
   it("ignores __proto__ cookie names instead of mutating the session map", async () => {
-    const app = new Keala({ keys: ["k"] });
+    const app = new Keala();
+    app.use(createCookies({ keys: ["k"] }));
     app.use(async (c) => {
       expect(c.cookies.get("__proto__")).toBeUndefined();
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
@@ -269,7 +271,8 @@ describe("information disclosure", () => {
 
 describe("cookie integrity", () => {
   it("rejects forged signatures", async () => {
-    const app = new Keala({ keys: ["production-key"] });
+    const app = new Keala();
+    app.use(createCookies({ keys: ["production-key"] }));
     app.use(async (c) => {
       return c.text(c.cookies.get("sid") ?? "anonymous");
     });
@@ -281,7 +284,8 @@ describe("cookie integrity", () => {
   });
 
   it("does not accept cookies signed with a retired key as new signatures", async () => {
-    const app = new Keala({ keys: ["new-key", "old-key"] });
+    const app = new Keala();
+    app.use(createCookies({ keys: ["new-key", "old-key"] }));
     app.use(async (c) => {
       if (c.path === "/set") {
         c.cookies.set("sid", "fresh", { signed: true });

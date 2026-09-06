@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import type { HttpError } from "../../src/http/errors.ts";
 import { Router } from "../../src/router/group.ts";
 /**
@@ -210,6 +211,7 @@ const hit = async (
 describe("BUG-1: redirect() registration range vs effective redirect statuses", () => {
   it("app.redirect 306 is silently coerced to 302 on the wire", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.redirect("/a", "/b", 306);
     const res = await hit(app, "/a");
     expect([res.status, res.headers.get("location")]).toEqual([306, "/b"]);
@@ -217,6 +219,7 @@ describe("BUG-1: redirect() registration range vs effective redirect statuses", 
 
   it("app.redirect 304 is silently coerced to 302 on the wire", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.redirect("/a", "/b", 304);
     const res = await hit(app, "/a");
     expect(res.status).toBe(304);
@@ -224,6 +227,7 @@ describe("BUG-1: redirect() registration range vs effective redirect statuses", 
 
   it("Router.redirect 306 is silently coerced to 302 on the wire", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     const r = new Router();
     r.redirect("/a", "/b", 306);
     app.mount("/", r);
@@ -233,6 +237,7 @@ describe("BUG-1: redirect() registration range vs effective redirect statuses", 
 
   it("contrast: c.redirect(target, 306) keeps 306 (explicit-code path)", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("/a", (c) => {
       return c.redirect("/b", 306);
     });
@@ -244,6 +249,7 @@ describe("BUG-1: redirect() registration range vs effective redirect statuses", 
 describe("BUG-2: error-mapper takeover drops staged Set-Cookie when it sets its own", () => {
   it("staged cookie + takeover cookie both ship (join, not replace)", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.use((c, next) => {
       c.cookies.set("pre", "1");
       return next();
@@ -266,6 +272,7 @@ describe("BUG-2: error-mapper takeover drops staged Set-Cookie when it sets its 
 
   it("contrast: builtin path keeps the staged cookie", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.use((c, next) => {
       c.cookies.set("pre", "1");
       return next();

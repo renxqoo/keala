@@ -3,7 +3,7 @@
  * mount offsets, fastDynamic equivalence, sinks, notFound, signal.
  */
 import { describe, expect, it } from "vitest";
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import { Router } from "../../src/router/group.ts";
 
 const hit = async (
@@ -294,23 +294,27 @@ describe("sink guards", () => {
   it("global middleware blocks sink; noOpFor excuses", async () => {
     const { noOpFor } = await import("../../src/core/middleware-stack.ts");
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.use(async (_c, next) => {
       await next();
     });
     expect(() => app.sink("/s", new Response("x"))).toThrow(/no-op/);
     const app2 = new Keala({ env: "test" });
+    app2.use(createCookies());
     app2.use(noOpFor(async (_c, next) => next(), { methods: ["GET"] }));
     expect(() => app2.sink("/s", new Response("x"))).not.toThrow();
   });
 
   it("later JS route under a sunk subtree throws", () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.sink("/assets/*", { dir: "./public" });
     expect(() => app.get("/assets/x", (c) => c.text("x"))).toThrow(/overlaps/);
   });
 
   it("static sink mirror serves fresh responses per hit", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.sink("/ping", new Response("pong", { headers: { "x-s": "1" } }));
     const a = await hit(app, "/ping");
     const b = await hit(app, "/ping");
@@ -323,6 +327,7 @@ describe("sink guards", () => {
 describe("url building", () => {
   it("url() encodes params; missing required param throws", () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("user", "/users/:id", (c) => c.text("ok"));
     expect(app.url("user", { id: "a b" })).toBe("/users/a%20b");
     expect(() => app.url("user", {})).toThrow(/Missing required/);
@@ -330,6 +335,7 @@ describe("url building", () => {
 
   it("wildcard values span segments", () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("files", "/f/*", (c) => c.text("ok"));
     expect(app.url("files", { wildcard: "a/b c" })).toBe("/f/a/b%20c");
   });
@@ -338,6 +344,7 @@ describe("url building", () => {
 describe("staged-header merge onto committed Response", () => {
   it("pre-commit staging merges onto a returned Response", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("/", (c) => {
       c.setHeader("x-a", "staged");
       c.cookies.set("k", "v");

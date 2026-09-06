@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala, type Application } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, req: Request) => app.handle(req);
@@ -269,6 +270,7 @@ describe("agent r5 — locks correct behavior", () => {
 
   it("finalizer (0.7): a DISTURBED committed body never crashes the finalizer — the failure belongs to the consumer", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c, next) => {
       await next();
       c.setHeader("X-Late", "1");
@@ -287,6 +289,7 @@ describe("agent r5 — locks correct behavior", () => {
 
   it("sugar: plain c.setHeader after a sugar return still merges (control for R5-4)", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c, next) => {
       await next();
       c.setHeader("X-Late", "1");
@@ -299,6 +302,7 @@ describe("agent r5 — locks correct behavior", () => {
 
   it("sugar: HEAD on a sugar response backfills Content-Length and drops the body", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/h", (c) => c.text("hello"));
     const res = await drive(app, new Request("http://localhost:3000/h", { method: "HEAD" }));
     expect(res.status).toBe(200);
@@ -308,6 +312,7 @@ describe("agent r5 — locks correct behavior", () => {
 
   it("sugar: 304 keeps validators/cookies and drops content headers", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/e", (c) => {
       c.cookies.set("sess", "1");
       return c.text("nvm", 304);

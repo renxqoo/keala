@@ -3,7 +3,7 @@
  * Each probe asserts the CORRECT expected behavior; failures are candidate bugs.
  */
 import { describe, expect, it } from "vitest";
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 
 const hit = async (
   app: InstanceType<typeof Keala>,
@@ -311,7 +311,8 @@ describe("query parsing", () => {
 
 describe("cookie facade", () => {
   it("set/get round trip, overwrite, multi cookies", async () => {
-    const app = new Keala({ env: "test", keys: ["k"] });
+    const app = new Keala({ env: "test" });
+    app.use(createCookies({ keys: ["k"] }));
     app.get("/set", (c) => {
       c.cookies.set("a", "1");
       c.cookies.set("b", "2", { signed: true });
@@ -328,7 +329,8 @@ describe("cookie facade", () => {
   });
 
   it("signed get verifies and strips", async () => {
-    const app = new Keala({ env: "test", keys: ["k"] });
+    const app = new Keala({ env: "test" });
+    app.use(createCookies({ keys: ["k"] }));
     let got: unknown;
     app.get("/read", (c) => {
       got = c.cookies.get("s", { signed: true });

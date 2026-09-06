@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
 import { getPath, getSearch, parseHostHeader, toURL } from "../../src/utils/url.ts";
 import { parseQuery } from "../../src/utils/query.ts";
@@ -10,7 +10,8 @@ const probe = async (
   proxy = false,
 ): Promise<Context> => {
   let captured: Context | undefined;
-  const probing = new Keala({ keys: ["k"], proxy, proxyIpHeader: "x-forwarded-for" });
+  const probing = new Keala({ proxy, proxyIpHeader: "x-forwarded-for" });
+  probing.use(createCookies({ keys: ["k"] }));
   probing.use(async (c) => {
     captured = c;
     return c.text("probed");
@@ -204,7 +205,8 @@ describe("request facade (flat context)", () => {
   });
 
   it("exposes cookies bound to the app keys", async () => {
-    const cookieApp = new Keala({ keys: ["secret-1"] });
+    const cookieApp = new Keala();
+    cookieApp.use(createCookies({ keys: ["secret-1"] }));
     let cookieCtx: Context | undefined;
     cookieApp.use(async (c) => {
       cookieCtx = c;
@@ -215,7 +217,8 @@ describe("request facade (flat context)", () => {
     // A freshly-set cookie is not visible to reads (the jar holds request cookies).
     expect(cookieCtx?.cookies.get("sid")).toBeUndefined();
     const setCookie = baked.headers.getSetCookie()[0] ?? "";
-    const roundTrip = new Keala({ keys: ["secret-1"] });
+    const roundTrip = new Keala();
+    roundTrip.use(createCookies({ keys: ["secret-1"] }));
     let readCtx: Context | undefined;
     roundTrip.use(async (c) => {
       readCtx = c;
@@ -241,7 +244,8 @@ describe("request facade (flat context)", () => {
   });
 
   it("exposes app settings", () => {
-    const app = new Keala({ keys: ["test-key"], proxyIpHeader: "x-forwarded-for" });
+    const app = new Keala({ proxyIpHeader: "x-forwarded-for" });
+    app.use(createCookies({ keys: ["test-key"] }));
     expect(app.env).toBe(process.env["NODE_ENV"] ?? "development");
     expect(app.settings.proxyIpHeader).toBe("x-forwarded-for");
     expect(app.toJSON()).toEqual({ env: app.env, proxy: false });

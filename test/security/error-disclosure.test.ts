@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { connect } from "node:net";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import { startNodeServer } from "../../src/adapters/node.ts";
 
 const requestFor = (path: string, init?: RequestInit): Request =>
@@ -17,6 +18,7 @@ const requestFor = (path: string, init?: RequestInit): Request =>
 
 const boot = (setup?: (app: Keala) => void): Keala => {
   const app = new Keala({ env: "test" });
+  app.use(createCookies()); // several locks below stage cookies
   if (setup !== undefined) setup(app);
   return app;
 };

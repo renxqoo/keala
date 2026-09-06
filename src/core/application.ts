@@ -15,7 +15,6 @@ import type {
   Plugin as AppOptionsPlugin,
   Runtime,
 } from "../types.ts";
-import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import type { Context } from "./context/context.ts";
 import type { RouteDef, RouteHandler, RouterState } from "../router/router.ts";
@@ -169,7 +168,6 @@ export interface Application {
   readonly settings: RequestSettings;
   readonly env: string;
   readonly proxy: boolean;
-  readonly keys: SigningKeys | undefined;
   readonly onStreamError: AppOptions["onStreamError"];
 }
 

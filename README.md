@@ -269,13 +269,13 @@ Every request allocates exactly one context. Request and response live on the
 same object; everything lazy (`query`, `cookies`, `ip`, `state`) materializes
 on first touch.
 
-| Request side (read-only)                               | Response side                             | Response sugar (return style)    |
-| ------------------------------------------------------ | ----------------------------------------- | -------------------------------- |
-| `c.raw/method/path/url/querystring/search`             | `c.status` (read-only)                    | `c.text(str, status?, headers?)` |
-| `c.header(name)` `c.headers`                           | `c.setHeader/append/remove/has/resHeader` | `c.json(obj, status?, headers?)` |
-| `c.params("id")` `c.routePath/routeName`               | `return c.redirect(url, code?)`           | `c.html(str, status?, headers?)` |
-| `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.cookies` (signed, key rotation)        | `new Response(...)`              |
-| `c.accepts/is` `c.signal` `c.runtime`                  | `c.throw/assert`                          |                                  |
+| Request side (read-only)                               | Response side                                        | Response sugar (return style)    |
+| ------------------------------------------------------ | ---------------------------------------------------- | -------------------------------- |
+| `c.raw/method/path/url/querystring/search`             | `c.status` (read-only)                               | `c.text(str, status?, headers?)` |
+| `c.header(name)` `c.headers`                           | `c.setHeader/append/remove/has/resHeader`            | `c.json(obj, status?, headers?)` |
+| `c.params("id")` `c.routePath/routeName`               | `return c.redirect(url, code?)`                      | `c.html(str, status?, headers?)` |
+| `c.query(name)` `c.queries(name)` `c.ip/host/protocol` | `c.cookies` (plugin-installed, signed, key rotation) | `new Response(...)`              |
+| `c.accepts/is` `c.signal` `c.runtime`                  | `c.throw/assert`                                     |                                  |
 
 Response rules in one line each: **returning a `Response` commits it —
 `c.text/json/html(...)` or `new Response(...)`; the last returned Response
@@ -358,7 +358,7 @@ production (rules: `DESIGN.md` §2 in the [repo](https://github.com/renxqoo/keal
 | `app.use(router.routes()).use(router.allowedMethods())` | `app.get(...)` directly, or `app.mount(prefix, router)`                         |
 | `new Koa({ proxy: true })`                              | `new Keala({ proxy: true })`                                                    |
 | `ctx.state.user`                                        | `c.state.user` (same)                                                           |
-| `ctx.cookies.get/set`                                   | `c.cookies.get/set` (same, signed + keys)                                       |
+| `ctx.cookies.get/set`                                   | plugin `createCookies({keys})` → same facade                                    |
 
 The response-side mappings are manual on purpose: the old setters did quiet
 work (MIME shorthand expansion, ETag quoting, attachment filename encoding)
@@ -514,24 +514,24 @@ const status = await app.close({ drain: 10_000, shutdownTimeout: 10_000 });
 
 ### Application
 
-| Member                                                                                            | Description                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Keala(options?)`                                                                             | The app class (instantiated with `new`). Options (11): `keys`, `proxy`, `proxyIpHeader`, `maxIpsCount`, `env`, `requestTimeout`, `overload`, `trustedHosts`, `unknownMethodAs404`, `pooling`, `onStreamError` (see [Lifecycle & overload](#lifecycle--overload)) |
-| `app.use(...mw)`                                                                                  | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                                                                                                                       |
-| `app.use(path, ...mw)`                                                                            | Exact static or trailing-`/*` scoped middleware; applies to in-scope 404/405 too                                                                                                                                                                                 |
-| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`                               | Route registration; named form `app.get(name, path, ...handlers)`                                                                                                                                                                                                |
-| `app.on(method, path, ...handlers)`                                                               | Any method, any case                                                                                                                                                                                                                                             |
-| `app.mount(prefix, routerOrApp)`                                                                  | Table-merge mount (404s fall through); applicable sub-app global/scoped middleware is prepended                                                                                                                                                                  |
-| `app.param(name, mw)`                                                                             | Middleware for every route capturing that param                                                                                                                                                                                                                  |
-| `app.handle(request, runtime?)`                                                                   | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote? }` feeds `c.ip` and websocket upgrades                                                                                                                                   |
-| `app.listen(port?, host?, cb?)`                                                                   | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node`                                                                                                  |
-| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`                     | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                                                                                                                     |
-| `app.onError(mapper)` / `app.notFound(fn)`                                                        | Single-slot error mapper (`Response \| void`) and custom 404; `env: "test"` suppresses the default console fallback                                                                                                                                              |
-| `app.decorate(key, value)`                                                                        | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                                                                                                               |
-| `app.ws(path, handlers)`                                                                          | WebSocket route (Bun only; a duplicate path throws at setup). `origin: string[] \| (c) => boolean` checks the upgrade Origin — mismatch 403                                                                                                                      |
-| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)`                    | Redirect routes and named-URL building                                                                                                                                                                                                                           |
-| `app.close({ drain, shutdownTimeout })`, `app.isDraining()`, `app.inFlight`, `app.onShutdown(fn)` | Graceful shutdown surface — see [Lifecycle & overload](#lifecycle--overload)                                                                                                                                                                                     |
-| `app.callback()`, `app.toJSON()`                                                                  | Adapters and introspection                                                                                                                                                                                                                                       |
+| Member                                                                                            | Description                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new Keala(options?)`                                                                             | The app class (instantiated with `new`). Options (10): `proxy`, `proxyIpHeader`, `maxIpsCount`, `env`, `requestTimeout`, `overload`, `trustedHosts`, `unknownMethodAs404`, `pooling`, `onStreamError` (see [Lifecycle & overload](#lifecycle--overload)) |
+| `app.use(...mw)`                                                                                  | Global middleware, compiled into every route chain (late `use` recomposes)                                                                                                                                                                               |
+| `app.use(path, ...mw)`                                                                            | Exact static or trailing-`/*` scoped middleware; applies to in-scope 404/405 too                                                                                                                                                                         |
+| `app.get/post/put/patch/delete/head/options/all(path, ...handlers)`                               | Route registration; named form `app.get(name, path, ...handlers)`                                                                                                                                                                                        |
+| `app.on(method, path, ...handlers)`                                                               | Any method, any case                                                                                                                                                                                                                                     |
+| `app.mount(prefix, routerOrApp)`                                                                  | Table-merge mount (404s fall through); applicable sub-app global/scoped middleware is prepended                                                                                                                                                          |
+| `app.param(name, mw)`                                                                             | Middleware for every route capturing that param                                                                                                                                                                                                          |
+| `app.handle(request, runtime?)`                                                                   | Fetch-style handler → `Promise<Response>`, never rejects; `runtime = { server?, remote? }` feeds `c.ip` and websocket upgrades                                                                                                                           |
+| `app.listen(port?, host?, cb?)`                                                                   | Boots `Bun.serve`; returns the Bun `Server` (with `reload()`); `onServeError` optional override of the 500 handler. Under Node use `listen()` from `keala/node`                                                                                          |
+| `app.sink(path, Response \| { dir } \| handler)` / `app.reloadNativeRoutes()`                     | Sink static routes into Bun's native routing table; hot-reload the table on a running server                                                                                                                                                             |
+| `app.onError(mapper)` / `app.notFound(fn)`                                                        | Single-slot error mapper (`Response \| void`) and custom 404; `env: "test"` suppresses the default console fallback                                                                                                                                      |
+| `app.decorate(key, value)`                                                                        | Extend every context (setup time; duplicate/core keys throw — no silent shadowing)                                                                                                                                                                       |
+| `app.ws(path, handlers)`                                                                          | WebSocket route (Bun only; a duplicate path throws at setup). `origin: string[] \| (c) => boolean` checks the upgrade Origin — mismatch 403                                                                                                              |
+| `app.redirect(src, dest, code?)` / `app.url(name, params)` / `app.route(name)`                    | Redirect routes and named-URL building                                                                                                                                                                                                                   |
+| `app.close({ drain, shutdownTimeout })`, `app.isDraining()`, `app.inFlight`, `app.onShutdown(fn)` | Graceful shutdown surface — see [Lifecycle & overload](#lifecycle--overload)                                                                                                                                                                             |
+| `app.callback()`, `app.toJSON()`                                                                  | Adapters and introspection                                                                                                                                                                                                                               |
 
 Units are not uniform across the surface — check twice: `requestTimeout`,
 `overload.queueTimeoutMs`, `rateLimit({ windowMs })`, `cache({ ttl })` and
@@ -559,7 +559,12 @@ append remove has resHeader cookies`
 
 ### Cookies
 
-`c.cookies.get(name, { signed })` / `c.cookies.set(name, value, options)` with
+`app.use(createCookies({ keys }))` installs `c.cookies` (the plugin
+protocol — registration-time install, lazy first touch; apps that never
+touch cookies pay nothing). The TYPE merges program-wide the moment the
+plugin module is in your program; the RUNTIME member only exists on apps
+that installed it — `c.cookies` on an app without the plugin is
+`undefined`. `c.cookies.get(name, { signed })` / `c.cookies.set(name, value, options)` with
 `maxAge expires path domain secure httpOnly sameSite partitioned priority
 overwrite signed`. Signing is HMAC-SHA256 with key rotation (Keygrip format:
 `value.signature`); signed reads fail closed without configured keys.

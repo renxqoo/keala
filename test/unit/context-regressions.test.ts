@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
-import { createCookies, type CookiesHost } from "../../src/context/cookies.ts";
+import {
+  createCookiesFacade as createCookies,
+  type CookiesHost,
+} from "../../src/context/cookies.ts";
 import { acceptsType } from "../../src/negotiation/accepts.ts";
 import { typeIs } from "../../src/negotiation/typeis.ts";
 import { charsetFromContentType } from "../../src/utils/mime.ts";

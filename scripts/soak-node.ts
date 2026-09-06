@@ -8,13 +8,15 @@
  */
 
 import { Keala } from "../src/core/app.ts";
+import { createCookies } from "../src/index.ts";
 import { startNodeServer } from "../src/adapters/node.ts";
 
 const ROUNDS = 12;
 const PER_ROUND = 10_000;
 const DRIFT_BUDGET_BYTES = 1_500; // allowed retained growth per request
 
-const app = new Keala({ keys: ["soak"], env: "test" });
+const app = new Keala({ env: "test" });
+app.use(createCookies({ keys: ["soak"] }));
 app.use(async (c, next) => {
   c.setHeader("X-Soak", "1");
   await next();

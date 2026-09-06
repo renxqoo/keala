@@ -8,6 +8,7 @@ import { connect } from "node:net";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import { listen, startNodeServer, type NodeServerHandle } from "../../src/adapters/node.ts";
 import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
 import { streamText } from "../../src/helpers/streams.ts";
@@ -98,6 +99,7 @@ describe("node adapter: request bridging", () => {
 describe("node adapter: response bridging", () => {
   it("fans out multiple set-cookie headers", async () => {
     const { base } = await serve((app) => {
+      app.use(createCookies());
       app.get("/cookies", (c) => {
         c.cookies.set("a", "1");
         c.cookies.set("b", "2");
@@ -159,7 +161,7 @@ describe("node adapter: response bridging", () => {
   });
 
   it("signed cookies work end-to-end through the adapter", async () => {
-    const app = new Keala({ ...quiet, keys: ["adapter-secret"] });
+    const app = new Keala(quiet).use(createCookies({ keys: ["adapter-secret"] }));
     app.get("/set", (c) => {
       c.cookies.set("sid", "session-1", { signed: true });
       return c.text("set");

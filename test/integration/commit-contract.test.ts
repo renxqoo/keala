@@ -185,7 +185,6 @@ describe("0.7: the context surface is the §8 quick reference", () => {
       "app",
       "routerAllowed",
       "state",
-      "cookies",
       "params",
       "throw",
       "assert",

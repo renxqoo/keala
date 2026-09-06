@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
 
 const request = (path = "/"): Request => new Request(`http://localhost${path}`);
@@ -156,6 +157,7 @@ describe("0.7 committed header contract", () => {
 
   it("post-commit Set-Cookie: setHeader replaces, append and the facade join", async () => {
     const app = new Keala({ env: "production" });
+    app.use(createCookies());
     let committed: Response | undefined;
 
     app.use(async (c, next) => {
@@ -191,6 +193,7 @@ describe("0.7 committed header contract", () => {
 
   it("does not skip a cookie written through a facade created before commit", async () => {
     const app = new Keala({ env: "production" });
+    app.use(createCookies());
 
     app.use(async (c, next) => {
       const cookies = c.cookies;
@@ -207,6 +210,7 @@ describe("0.7 committed header contract", () => {
 
   it("headers staged BEFORE the commit ride onto the committed Response", async () => {
     const app = new Keala({ env: "production" });
+    app.use(createCookies());
 
     app.get("/", (c) => {
       c.setHeader("X-Staged", "yes");
@@ -249,6 +253,7 @@ describe("0.7 committed header contract", () => {
     "applies post-commit %s in place on the committed Response",
     async (_name, operations) => {
       const app = new Keala({ env: "production" });
+      app.use(createCookies()); // one operation row stages through c.cookies
       let committed: Response | undefined;
 
       app.use(async (c, next) => {

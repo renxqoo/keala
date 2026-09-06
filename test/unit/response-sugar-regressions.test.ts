@@ -3,7 +3,7 @@
  * disposition, sugar arrays, mount-scope depth, misc edges.
  */
 import { describe, expect, it } from "vitest";
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import { contentDisposition } from "../../src/utils/text.ts";
 
 const hit = async (
@@ -142,6 +142,7 @@ describe("contentDisposition", () => {
 describe("sugar with per-call headers", () => {
   it("array header values preserve multi-value on the wire", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("/", (c) =>
       c.json({ ok: true }, 200, { "set-cookie": ["a=1; Path=/", "b=2; Path=/"] }),
     );
@@ -152,6 +153,7 @@ describe("sugar with per-call headers", () => {
 
   it("per-call headers merge with staged (per-call wins per name)", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("/", (c) => {
       c.setHeader("x-a", "staged");
       c.setHeader("x-keep", "staged");
@@ -164,6 +166,7 @@ describe("sugar with per-call headers", () => {
 
   it("staged set-cookie survives sugar consumption", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("/", (c) => {
       c.cookies.set("k", "v");
       return c.text("ok");
@@ -174,6 +177,7 @@ describe("sugar with per-call headers", () => {
 
   it("cookie set AFTER sugar lands on the committed response", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("/", (c) => {
       const r = c.text("ok");
       c.cookies.set("late", "1");

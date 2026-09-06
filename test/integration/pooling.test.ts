@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import {
   baseContextProto,
   createContext,
@@ -23,7 +23,7 @@ import { deadProtoFor } from "../../src/core/context/pool.ts";
 const quiet = { env: "test" } as const;
 
 /** A context that lived through a full, messy request lifecycle. */
-const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
+const usedContext = (app = new Keala({}).use(createCookies({ keys: ["k"] }))): Context => {
   const c = createContext(app, baseContextProto, new Request("http://localhost:3000/a?x=1"), {
     remote: "1.1.1.1",
   });
@@ -38,7 +38,12 @@ const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
   // keeps full coverage.
   c.statusValue = 201;
   c.directBodyResponseValue = new Response("payload", { status: 201 });
-  c.cookies.set("sid", "one", { signed: true });
+  // U-cookie: the facade decorates the APP proto; usedContext builds on
+  // the shared baseContextProto (no plugin decoration there), so dirty the
+  // plugin's memo slot + record directly (the recycle contract covers the
+  // same slots).
+  c.cookiesValue = { stale: "facade" };
+  c.setHeader("Set-Cookie", "sid=one; Path=/");
   // Materialize every lazy cache (the recycle must drop them).
   void c.ip;
   void c.query("v");
@@ -47,7 +52,7 @@ const usedContext = (app = new Keala({ keys: ["k"] })): Context => {
 
 describe("resetContext recycling semantics", () => {
   it("field conservation: recycled and fresh contexts expose identical state values", () => {
-    const app = new Keala({ keys: ["k"] });
+    const app = new Keala({}).use(createCookies({ keys: ["k"] }));
     const raw = new Request("http://localhost:3000/b?y=2");
     const runtime = { remote: "2.2.2.2" };
     const fresh = createContext(app, baseContextProto, raw, runtime);
@@ -82,10 +87,11 @@ describe("resetContext recycling semantics", () => {
     expect(recycled.paramNames).toBe(NO_PARAM_NAMES);
     expect(recycled.paramValues).toBe(NO_PARAM_VALUES);
     expect(recycled.ip).toBe("2.2.2.2");
-    // Unsigned read: the app carries signing keys, and a signed read of an
-    // unsigned value fails closed (by design) — the point here is that the
-    // fresh facade parses the NEW request's Cookie header.
-    expect(recycled.cookies.get("other", { signed: false })).toBe("2");
+    // U-cookie: the facade is plugin-decorated (not on this base-proto
+    // context) — its memo slot must be reset, and the NEW request's Cookie
+    // header is what a fresh facade would parse.
+    expect(recycled.cookiesValue).toBe(null);
+    expect(recycled.header("cookie")).toBe("other=2");
   });
 
   it("clears the 405 allowed-methods bookkeeping (contract #6: no foreign-405 leaks)", () => {
@@ -158,6 +164,7 @@ describe("request isolation (fresh context per request)", () => {
 
   it("concurrent interleaved requests keep isolated contexts", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/slow/:tag", async (c) => {
       const mine = c.params("tag") as string;
       await new Promise((resolve) => setTimeout(resolve, mine === "a" ? 15 : 2));
@@ -174,6 +181,7 @@ describe("request isolation (fresh context per request)", () => {
 
   it("error responses recycle cleanly", async () => {
     const app = new Keala({ ...quiet });
+    app.use(createCookies());
     app.onError(() => {});
     app.get("/ok", (c) => {
       return c.text(`fresh:${c.state["step"] ?? "0"}`);
@@ -187,10 +195,14 @@ describe("request isolation (fresh context per request)", () => {
   });
 
   it("cookies and headers do not leak between requests", async () => {
-    const app = new Keala({ ...quiet, keys: ["k"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["k"] }));
     app.use(async (c) => {
       if (c.path === "/set") {
-        c.cookies.set("sid", "one", { signed: true });
+        // U-cookie: the facade decorates the APP proto; this context is built on
+        // the shared baseContextProto, so dirty the plugin's memo slot + record
+        // directly (the recycle contract covers the same slots).
+        c.cookiesValue = { stale: "facade" };
+        c.setHeader("Set-Cookie", "sid=one; Path=/");
         c.setHeader("X-Custom", "first");
         return;
       }

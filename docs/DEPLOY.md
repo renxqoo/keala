@@ -159,8 +159,10 @@ const app = new Keala({
   proxy: true, // 信任 X-Forwarded-For / X-Forwarded-Proto
   proxyIpHeader: "x-real-ip", // 可选:换用别的头
   maxIpsCount: 1, // 从头里取第几跳
-  keys: [process.env.COOKIE_KEY!],
 });
+
+// 签名 cookie 用插件安装（0.7.4+:keys 不再是构造选项）
+app.use(createCookies({ keys: [process.env.COOKIE_KEY!] }));
 ```
 
 注意:信任是全有或全无——代理层必须保证头不可被客户端注入。

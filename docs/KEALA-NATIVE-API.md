@@ -16,14 +16,15 @@ npm add keala        # Node 也可跑
 
 ```ts
 import { Keala } from "keala";
+import { createCookies } from "keala";
 import { cors, logger, secureHeaders } from "keala/middleware";
 
 const app = new Keala({
-  keys: ["cookie-signing-secret"], // 设置后签名 cookie 可用
   proxy: true, // 信任 x-forwarded-*（反代后）
 });
 
 app
+  .use(createCookies({ keys: ["cookie-signing-secret"] })) // 插件：装出 c.cookies
   .use(secureHeaders())
   .use(cors({ origin: ["https://app.site"] }))
   .use(logger());
@@ -322,6 +323,9 @@ app.notFound((c) => c.text("自定义404", 404)); // 必须 return Response
 
 ## 7. Cookie 与会话
 
+`c.cookies` 由插件安装（`app.use(createCookies({ keys }))`——与 bodyParser 同款协议，
+注册期装、首触惰性，不用 cookie 的应用零成本）：
+
 ```ts
 c.cookies.get("sid"); // 读（不解码签名）
 c.cookies.get("sid", { signed: true }); // 验签读取——无 keys 时 fail-closed
@@ -331,7 +335,7 @@ c.cookies.delete("sid");
 
 内建能力（不需要额外包）：
 
-- **签名 + 密钥轮换**：`keys: ["new", "old"]`——新 key 签、旧 key 验，无缝换钥。
+- **签名 + 密钥轮换**：插件参数 `keys: ["new", "old"]`——新 key 签、旧 key 验，无缝换钥。
 - **secure 派生**：不显式设 `secure` 时跟随请求的 TLS 状态（含可信代理头）。
 - **防线**：`maxAge`/`expires` 超 400 天、`Partitioned` 无 `Secure` → 序列化期抛错
   （浏览器会静默丢的配置，直接让你在启动期看见）；值里的 CR/LF/NUL 拒绝。
@@ -483,7 +487,7 @@ const app = new Keala({
 流式 body 桥/背压/管线化/失败信封全处理，与 Bun 行为对齐（ws 除外，仍 Bun-only）。
 
 环境差异速查：`c.url` 是 origin-form（`/a?b=1`）——要绝对 URL 用 `c.href`/`c.origin`。
-运维清单：`trustedHosts`（公网）、`proxy: true`（仅反代后）、`keys`（要签名 cookie 时）、
+运维清单：`trustedHosts`（公网）、`proxy: true`（仅反代后）、cookie 插件（要 `c.cookies` 时）、
 `unknownMethodAs404`（按需）、overload 三件套（高流量）。
 
 ---
@@ -492,17 +496,17 @@ const app = new Keala({
 
 从 hono 来的核心替换（完整表在 README「从 hono 迁移」）：
 
-| hono                            | keala                                                  |
-| ------------------------------- | ------------------------------------------------------ |
-| `c.req.param("id")`             | `c.params("id")`                                       |
-| `c.req.query("q")`              | `c.query("q")`                                         |
-| `c.header("x", "v")`（写）      | `c.setHeader("x", "v")`                                |
-| `c.body(text, status)`          | `return c.text(text, status)`                          |
-| `throw new HTTPException(404)`  | `c.throw(404)`                                         |
-| `c.set("k", v)` / `c.get("k")`  | `c.state.k = v` / `c.state.k`                          |
-| `new Hono().route("/api", sub)` | `app.mount("/api", router)`                            |
-| `app.fetch(req)`                | `await app.handle(req)`（恒 Promise、永不 reject）     |
-| hono/cookie 的 signed           | 内建 `c.cookies.set(..., { signed: true })` + 密钥轮换 |
+| hono                            | keala                                                         |
+| ------------------------------- | ------------------------------------------------------------- |
+| `c.req.param("id")`             | `c.params("id")`                                              |
+| `c.req.query("q")`              | `c.query("q")`                                                |
+| `c.header("x", "v")`（写）      | `c.setHeader("x", "v")`                                       |
+| `c.body(text, status)`          | `return c.text(text, status)`                                 |
+| `throw new HTTPException(404)`  | `c.throw(404)`                                                |
+| `c.set("k", v)` / `c.get("k")`  | `c.state.k = v` / `c.state.k`                                 |
+| `new Hono().route("/api", sub)` | `app.mount("/api", router)`                                   |
+| `app.fetch(req)`                | `await app.handle(req)`（恒 Promise、永不 reject）            |
+| hono/cookie 的 signed           | cookie 插件 `c.cookies.set(..., { signed: true })` + 密钥轮换 |
 
 从 koa 来的直觉替换：`c.body = x` → `return c.text/json(x)`；
 `c.status = n` → sugar 第二参；`c.set(h, v)` → `c.setHeader`；
@@ -531,7 +535,7 @@ c.setHeader(f, v)  c.append(f, v)  c.remove(f)  c.has(f)  c.resHeader(f)
 c.text(body, status?, headers?)  c.json(...)  c.html(...)  c.redirect(url, code?)
 
 // 核心
-c.app  c.routerAllowed  c.state  c.cookies  c.params(name)
+c.app  c.routerAllowed  c.state  c.params(name)  c.cookies（插件装出）
 c.routePath  c.routeName          // 直读槽位（不在方法面里）
 c.throw(status, message?, props?)  c.assert(test, status, message?, props?)
 ```

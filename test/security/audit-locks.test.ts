@@ -29,9 +29,10 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
 import {
-  createCookies,
+  createCookiesFacade,
   parseCookies,
   serializeCookie,
   sign,
@@ -175,6 +176,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
 
   it("end-to-end: an injected option becomes a clean 500 with no Set-Cookie on the wire", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     const seen: string[] = [];
     app.onError((e: Error) => void seen.push(`${e.constructor.name}:${e.message}`));
     app.use((c) => {
@@ -193,6 +195,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
 
   it("end-to-end: legitimate cookies carry exactly the requested attributes", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use((c) => {
       c.cookies.set("ok", "1", { sameSite: "strict", httpOnly: true });
       return c.text("ok");
@@ -208,7 +211,7 @@ describe("audit: cookie option injection (fixed attribute smuggling)", () => {
 
 describe("audit: signed cookie integrity and Keygrip compatibility", () => {
   it("get(name, { signed: true }) fails CLOSED without keys (was: raw trust)", () => {
-    const cookies = createCookies({
+    const cookies = createCookiesFacade({
       cookieHeader: "sid=admin",
       requestSecure: false,
       keys: undefined,
@@ -218,7 +221,7 @@ describe("audit: signed cookie integrity and Keygrip compatibility", () => {
   });
 
   it("default unsigned read without keys keeps returning raw", () => {
-    const cookies = createCookies({
+    const cookies = createCookiesFacade({
       cookieHeader: "sid=admin",
       requestSecure: false,
       keys: undefined,
@@ -343,6 +346,7 @@ describe("audit: x-forwarded-* trust chain", () => {
 
   it("maxIpsCount truncates the forwarded chain from the right before c.ip resolves", async () => {
     const app = new Keala({ ...quiet, proxy: true, maxIpsCount: 1 });
+    app.use(createCookies());
     let captured: Context | undefined;
     app.use((c) => {
       captured = c;
@@ -395,6 +399,7 @@ describe("audit: parser linearity locks (negotiation, cookies)", () => {
 describe("audit: error path contract", () => {
   it("a throwing cookies.set() surfaces as a resolved 500 response", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     let emitted = 0;
     app.onError(() => {
       emitted++;
@@ -413,6 +418,7 @@ describe("audit: error path contract", () => {
 
   it("an invalid cookie name is rejected before any header is stored", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.onError(() => {});
     app.use((c) => {
       expect(() => c.cookies.set("bad name", "v")).toThrow(TypeError);

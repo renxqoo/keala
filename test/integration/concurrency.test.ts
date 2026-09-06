@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Keala, Router, createError } from "../../src/index.ts";
+import { Keala, Router, createError, createCookies } from "../../src/index.ts";
 /**
  * Concurrency / interleaving / lifecycle red-team suite.
  *
@@ -37,7 +37,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 // ---------------------------------------------------------------------------
 describe("concurrent isolation", () => {
   const buildApp = () => {
-    const app = new Keala({ ...quiet, keys: ["k"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["k"] }));
     const router = new Router();
     router.get("/user/:id", async (c) => {
       await delay(Number(c.params("id")) % 3);
@@ -303,7 +303,7 @@ const enc = (value: string): Uint8Array => new TextEncoder().encode(value);
 // ---------------------------------------------------------------------------
 describe("lazy singletons", () => {
   it("语义锁定: the cookies facade is created once and shared across await points", async () => {
-    const app = new Keala({ ...quiet, keys: ["k"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["k"] }));
     const observed: boolean[] = [];
     app.use(async (c, next) => {
       const first = c.cookies;

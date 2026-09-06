@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createCookies,
+  createCookiesFacade as createCookies,
   parseCookies,
   serializeCookie,
   sign,

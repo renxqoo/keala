@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import { Router } from "../../src/index.ts";
 /**
  * zz-red-bugs-3 — corrected probes + pooling/deadline/signal/queue/mount round.
@@ -168,6 +168,7 @@ describe("scoped middleware semantics (documented)", () => {
 describe("immutable committed Responses", () => {
   it("staged headers merge onto Response.redirect via rebuild", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.get("/", (c) => {
       c.setHeader("x-a", "staged");
       return Response.redirect("https://example.com/x", 307);
@@ -180,6 +181,7 @@ describe("immutable committed Responses", () => {
 
   it("post-commit setHeader on an immutable response answers 500 loudly (undici)", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.use(async (c, next) => {
       await next();
       c.setHeader("x-late", "1");
@@ -212,6 +214,7 @@ describe("immutable committed Responses", () => {
 describe("error mapper + cookies", () => {
   it("mapper takeover keeps staged set-cookie and its own", async () => {
     const app = new Keala({ env: "test" });
+    app.use(createCookies());
     app.use((c, next) => {
       c.cookies.set("pre", "1");
       return next();

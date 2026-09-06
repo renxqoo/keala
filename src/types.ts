@@ -102,8 +102,6 @@ export interface Runtime {
 }
 
 export interface AppOptions {
-  /** Cookie signing keys (rotation supported: first key signs, any key verifies). */
-  keys?: (string | Uint8Array)[];
   /** Trust proxy headers (`X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`). */
   proxy?: boolean;
   /** Header holding client IPs when `proxy` is enabled. Default `X-Forwarded-For`. */

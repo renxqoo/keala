@@ -17,6 +17,7 @@ import {
   html,
   streamSSE,
   verifyPassword,
+  createCookies,
 } from "../src/index.ts";
 import {
   basicAuth,
@@ -27,7 +28,8 @@ import {
   validator,
 } from "../src/middleware/index.ts";
 
-const app = new Keala({ keys: ["change-me"], env: "production" });
+const app = new Keala({ env: "production" });
+app.use(createCookies({ keys: ["change-me"] }));
 
 // --- plugins (context facades — safe alongside native sinks) ----------
 app.use(createBodyParser({ jsonLimit: 256 * 1024 }));

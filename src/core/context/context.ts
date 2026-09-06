@@ -9,17 +9,15 @@
 
 import type { Application } from "../app.ts";
 import { createError, type HttpErrorProps } from "../../http/errors.ts";
-import { createCookies, type CookiesFacade } from "../../context/cookies.ts";
 import { clearBranches } from "../branches.ts";
 import { FLAG_DEV_CHAIN } from "./state.ts";
-import type { ContextExtensions, HeaderMap } from "../../types.ts";
+import type { ContextExtensions } from "../../types.ts";
 import type { RequestApi } from "./request.ts";
 import { requestApi } from "./request.ts";
 import type { ResponseApi } from "./response.ts";
 import { responseApi } from "./response.ts";
 import type { ContextState } from "./state.ts";
 import type { RequestSource } from "../request-source.ts";
-import { sourceHeader } from "../request-source.ts";
 import { NO_PARAM_NAMES, NO_PARAM_VALUES } from "../../router/router.ts";
 
 export interface ContextCore extends RequestApi, ResponseApi {
@@ -27,7 +25,6 @@ export interface ContextCore extends RequestApi, ResponseApi {
   /** Methods registered for the matched path (405/Allow support). */
   readonly routerAllowed: Set<string>;
   readonly state: Record<string, unknown>;
-  readonly cookies: CookiesFacade;
   /**
    * Path parameter by name (U2 functional form). `undefined` when the
    * matched route has no such param (optionals may be absent) or no route
@@ -58,7 +55,6 @@ const mergeProtos = (...sources: object[]): object => {
 const contextApi: ThisType<Context> & {
   readonly app: Application;
   readonly state: Record<string, unknown>;
-  readonly cookies: CookiesFacade;
   readonly routerAllowed: Set<string>;
   params(name: string): string | undefined;
   throw(status: number, message?: string | HttpErrorProps, props?: HttpErrorProps): never;
@@ -71,33 +67,6 @@ const contextApi: ThisType<Context> & {
     // Created on first touch — handlers that never use c.state (the common
     // hot path) skip this allocation entirely.
     return (this.stateValue ??= Object.create(null) as Record<string, unknown>);
-  },
-  get cookies(): CookiesFacade {
-    if (this.cookiesValue !== null) return this.cookiesValue as CookiesFacade;
-    const c = this as Context;
-    // The facade writes `Set-Cookie` straight into the response header record
-    // (same semantics as koa); arrays are detected by the finalizer without
-    // needing the multi-value flag. Null-proto like recordOf() — inherited
-    // keys must never surface on the header record. Post-commit cookie writes
-    // ride the same record: the finalizer merges it onto the committed
-    // Response (set-cookie joins, it never replaces).
-    const headers = (c.headersRecord ??= Object.create(null) as HeaderMap);
-    const cookies = createCookies({
-      get cookieHeader(): string | null {
-        return sourceHeader(c.rawRequest, "cookie");
-      },
-      // Koa's "get secure from request": cookies set over a secure request
-      // (incl. proxy-trusted x-forwarded-proto) carry Secure unless the
-      // caller explicitly opts out — session-downgrade protection behind an
-      // https-terminating proxy.
-      get requestSecure(): boolean {
-        return c.secure;
-      },
-      keys: this.appValue.keys,
-      responseHeaders: headers,
-    });
-    this.cookiesValue = cookies;
-    return cookies;
   },
   get routerAllowed(): Set<string> {
     return (this.allowedValue ??= new Set());

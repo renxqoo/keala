@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import { startBunServer } from "../../src/adapters/bun.ts";
 import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
 import { validator, type StandardSchema } from "../../src/middleware/validator.ts";
@@ -408,7 +409,7 @@ describe("redteam P2: core regression quick-scan (green)", () => {
   });
 
   it("signed cookies round-trip; tampering is rejected", async () => {
-    const app = new Keala({ ...quiet, keys: ["secret"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["secret"] }));
     app.get("/read", (c) => c.text(`v=${c.cookies.get("v", { signed: true }) ?? "BAD"}`));
     app.get("/set", (c) => {
       c.cookies.set("v", "data", { signed: true });

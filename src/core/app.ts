@@ -4,7 +4,6 @@
  */
 
 import type { AppOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.ts";
-import type { SigningKeys } from "../context/cookies.ts";
 import type { RequestSettings } from "./context/settings.ts";
 import {
   baseContextProto,
@@ -94,7 +93,6 @@ export { isRouter };
 export class Keala implements NativeApplication {
   readonly env: string;
   readonly proxy: boolean;
-  readonly keys: SigningKeys | undefined;
   readonly onStreamError: AppOptions["onStreamError"];
   readonly settings: RequestSettings;
   readonly router: RouterState;
@@ -131,7 +129,6 @@ export class Keala implements NativeApplication {
   constructor(options: AppOptions = {}) {
     this.env = options.env ?? process.env["NODE_ENV"] ?? "development";
     this.proxy = options.proxy ?? false;
-    this.keys = options.keys;
     this.onStreamError = options.onStreamError;
     this.settings = Object.freeze({
       proxy: options.proxy ?? false,

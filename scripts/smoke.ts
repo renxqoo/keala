@@ -8,6 +8,7 @@
 import { dirname } from "node:path";
 
 import { Keala } from "../src/core/app.ts";
+import { createCookies } from "../src/index.ts";
 import { Router } from "../src/router/group.ts";
 import { createError } from "../src/http/errors.ts";
 
@@ -23,7 +24,8 @@ const check = (name: string, condition: boolean, detail = ""): void => {
   console.error(`  ✗ ${name} ${detail}`);
 };
 
-const app = new Keala({ keys: ["smoke-secret"], env: "production" });
+const app = new Keala({ env: "production" });
+app.use(createCookies({ keys: ["smoke-secret"] }));
 const api = new Router({ prefix: "/api" });
 
 api.param("id", async (c, next) => {

@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import { toHttpError } from "../../src/http/errors.ts";
 import { compress } from "../../src/middleware/etag.ts";
 import { etag } from "../../src/middleware/etag.ts";
@@ -261,6 +262,7 @@ describe("upstream hardening: response invariants", () => {
 describe("upstream hardening: forwarded headers", () => {
   it("koa host.test: userinfo in X-Forwarded-Host is stripped", async () => {
     const app = new Keala({ ...quiet, proxy: true });
+    app.use(createCookies());
     let host = "";
     app.get("/h", (c) => {
       host = c.host;
@@ -277,6 +279,7 @@ describe("upstream hardening: forwarded headers", () => {
     // 0.7: c.ips is gone; c.ip keeps the same stripPort treatment of the
     // chain's leftmost entry.
     const app = new Keala({ ...quiet, proxy: true });
+    app.use(createCookies());
     app.get("/ip", (c) => {
       return c.text(c.ip);
     });
@@ -310,6 +313,7 @@ describe("upstream hardening: cookies", () => {
 
   it("koa corpus: Secure is derived from the request when unset", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/s", (c) => {
       c.cookies.set("sid", "1");
       return c.text("ok");

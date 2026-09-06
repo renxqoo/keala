@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
 import { serializeCookie } from "../../src/context/cookies.ts";
 import { acceptsCharset, acceptsType, acceptsLanguage } from "../../src/negotiation/accepts.ts";
@@ -194,6 +194,7 @@ describe("cookies matrix: serialization option table", () => {
 describe("cookies matrix: facade behaviors", () => {
   it("multiple distinct cookies accumulate in order", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c) => {
       c.cookies.set("a", "1");
       c.cookies.set("b", "2");
@@ -204,7 +205,7 @@ describe("cookies matrix: facade behaviors", () => {
   });
 
   it("signed cookies round-trip through the facade with options intact", async () => {
-    const app = new Keala({ ...quiet, keys: ["k1"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["k1"] }));
     app.use(async (c) => {
       if (c.path === "/set") {
         c.cookies.set("sid", "user-9", { signed: true, httpOnly: true, path: "/" });
@@ -213,7 +214,7 @@ describe("cookies matrix: facade behaviors", () => {
       return c.text(c.cookies.get("sid") ?? "none");
     });
     await app.handle(new Request("http://localhost:3000/set"));
-    const setter = new Keala({ ...quiet, keys: ["k1"] });
+    const setter = new Keala({ ...quiet }).use(createCookies({ keys: ["k1"] }));
     setter.use(async (c) => {
       c.cookies.set("sid", "user-9", { signed: true });
     });

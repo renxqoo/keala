@@ -14,6 +14,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
 import { sign, unsign } from "../../src/context/cookies.ts";
 
@@ -21,6 +22,7 @@ const quiet = { env: "test" } as const;
 
 const attack = async (setup: (c: Context) => unknown, init?: RequestInit): Promise<Response> => {
   const app = new Keala(quiet);
+  app.use(createCookies());
   app.onError(() => {});
   // Propagate setup's return (U3a: `return c.redirect(...)` must become the
   // middleware's answer, not vanish).
@@ -125,6 +127,7 @@ describe("security: prototype pollution vector matrix", () => {
   ])("query key %p never pollutes Object.prototype", async (key, value) => {
     let readBack = "unset";
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use((c) => {
       // A targeted read of the hostile key is just a string lookup — no
       // object, no property assignment, pollution structurally impossible.
@@ -149,6 +152,7 @@ describe("security: prototype pollution vector matrix", () => {
 
   it("pollution through cookie names, state and params is inert", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/:__proto__", () => {});
     app.use((c) => {
       c.state["__proto__"] = { polluted: true } as never;
@@ -202,7 +206,7 @@ describe("security: cookie forgery matrix", () => {
   });
 
   it("end-to-end: forged cookies read as absent", async () => {
-    const app = new Keala({ ...quiet, keys: ["prod-key"] });
+    const app = new Keala({ ...quiet }).use(createCookies({ keys: ["prod-key"] }));
     app.use((c) => {
       return c.text(c.cookies.get("sid") ?? "anonymous");
     });

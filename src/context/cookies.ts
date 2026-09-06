@@ -223,8 +223,13 @@ export interface CookiesHost {
   readonly responseHeaders: HeaderMap;
 }
 
-/** Create the per-request cookie facade. The parse result is computed lazily once. */
-export const createCookies = (host: CookiesHost): CookiesFacade => {
+/**
+ * Create the per-request cookie facade. The parse result is computed lazily once.
+ * (U-cookie: the PLUGIN — `app.use(createCookies({ keys }))` — owns the
+ * user-facing `createCookies` name, mirroring `createBodyParser`; this factory
+ * is the internal builder the plugin and the primitive tests drive.)
+ */
+export const createCookiesFacade = (host: CookiesHost): CookiesFacade => {
   let jar: Record<string, string> | null = null;
   const jarOf = (): Record<string, string> => (jar ??= parseCookies(host.cookieHeader));
 

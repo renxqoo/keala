@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 
 const quiet = { env: "test" } as const;
 const request = (path: string): Request => new Request(`http://localhost${path}`);
@@ -85,7 +85,7 @@ describe("audit C2: the error funnel carries a sugar commit's consumed headers",
   });
 
   it("a pre-commit facade cookie survives the rebuilt error page", async () => {
-    const app = new Keala({ env: "production", keys: ["k"] });
+    const app = new Keala({ env: "production" }).use(createCookies({ keys: ["k"] }));
     app.use(async (c, next) => {
       c.cookies.set("session", "abc", { signed: false });
       await next();

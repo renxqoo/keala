@@ -36,6 +36,15 @@ values, offset)` 是"要整个 map"的官方适配器(sink 镜像边界同款)�
   onStreamError 重挂 committed 路径(dispatchDirect 快路径加门)。
 - koa 对齐测试退役(parity/koa\* 差分 33 用例删除;9 项唯一行为锁回迁 keala
   原生断言);koa 仅保留 bench 性能对照选手地位。
+- **cookie 插件化**:`c.cookies` 从 core 拆为插件协议——
+  `app.use(createCookies({ keys }))` 注册期安装(与 bodyParser 同款:无
+  位置依赖、首触惰性),`new Keala()` 的 `keys` 构造选项删除(移入插件
+  参数)。类型随 import 到达(插件模块 declaration-merge 进
+  ContextExtensions,零 declare 样板)。core 闭包 −4.3KB(94.6→90.4KB
+  minified),打包形态 tree-shake 生效(此前原型 getter 砍不动);逐文件
+  idle 收益 ≈0(cookies 模块边际成本本来就小——如实记录,本拆分的价值
+  是结构性的:core 纯度/可摇/类型诚实)。签名+轮换/fail-closed/secure
+  派生/400 天上限等语义逐字不变(83 项 cookie 测试零改写断言)。
 
 ### 性能
 

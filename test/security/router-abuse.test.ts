@@ -30,7 +30,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Keala, Router } from "../../src/index.ts";
+import { Keala, Router, createCookies } from "../../src/index.ts";
 import { compilePattern } from "../../src/router/pattern.ts";
 import { createRouterState, matchRoute, registerDef } from "../../src/router/router.ts";
 import { createNode, createTarget, insertPattern, matchPattern } from "../../src/router/trie.ts";
@@ -96,6 +96,7 @@ describe("redteam — RT-1 fast matcher ignores static tail after params", () =>
 
   it("CONFIRMED-BUG(now fixed) (RT-1e): mounted routers inherit the bug (mount /user/:id + /profile)", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     const sub = new Router();
     sub.get("/profile", (c) => c.text(`uid=${c.params("id")}`));
     app.mount("/user/:id", sub);
@@ -123,6 +124,7 @@ describe("redteam — RT-1 fast matcher ignores static tail after params", () =>
 describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
   it("CONFIRMED-BUG(now fixed) (RT-2a): HEAD must drop the body and backfill CL after a late c.set", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c, next) => {
       await next();
       c.setHeader("x-late", "1");
@@ -135,6 +137,7 @@ describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
 
   it("CONFIRMED-BUG(now fixed) (RT-2b): same via cookies.set after a committed set-cookie", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c, next) => {
       await next();
       c.cookies.set("late", "1", { path: "/" });
@@ -209,6 +212,7 @@ describe("redteam — RT-3 notFound throw escapes app.handle", () => {
 
   it("CONFIRMED-BUG(now fixed) (RT-3c): invalid c.set inside notFound must answer 500, not reject", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/a", (c) => c.text("a"));
     app.notFound((c) => {
       c.setHeader("x-bad-name\r\ninject: 1", "v");
@@ -220,6 +224,7 @@ describe("redteam — RT-3 notFound throw escapes app.handle", () => {
 
   it("green: with global middleware the same throw becomes a clean 500", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (_c, next) => {
       await next();
     });
@@ -249,6 +254,7 @@ describe("redteam — RT-3 notFound throw escapes app.handle", () => {
 describe("redteam — RT-4 set-cookie preservation (0.7: return-style is the only Response path)", () => {
   it("green control: return-style commit keeps both set-cookie headers", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get(
       "/x",
       () =>
@@ -284,6 +290,7 @@ describe("redteam — RT-4 set-cookie preservation (0.7: return-style is the onl
 describe("redteam — RT-5 sugar helpers corrupt multi-value headers", () => {
   it("CONFIRMED-BUG(now fixed) (RT-5a): cookies.set + return c.text() must yield exactly 2 set-cookie", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/x", (c) => {
       c.cookies.set("sess", "1", { path: "/" });
       c.cookies.set("cart", "2", { path: "/" });
@@ -295,6 +302,7 @@ describe("redteam — RT-5 sugar helpers corrupt multi-value headers", () => {
 
   it("CONFIRMED-BUG(now fixed) (RT-5b): c.text(body, status, {set-cookie: [...]}) must not join values", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/x", (c) => c.text("hi", 200, { "set-cookie": ["a=1", "b=2"] }));
     const res = await app.handle(req("http://localhost/x"));
     expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]);
@@ -302,6 +310,7 @@ describe("redteam — RT-5 sugar helpers corrupt multi-value headers", () => {
 
   it("green control: state-mode cookies.set without sugar keeps both headers", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/x", (c) => {
       c.cookies.set("sess", "1", { path: "/" });
       c.cookies.set("cart", "2", { path: "/" });
@@ -313,6 +322,7 @@ describe("redteam — RT-5 sugar helpers corrupt multi-value headers", () => {
 
   it("green: rule-4 merge of committed set-cookie + late cookies.set (GET)", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c, next) => {
       await next();
       c.cookies.set("late", "1", { path: "/" });

@@ -16,7 +16,7 @@ import {
 } from "./agent-r6-prop-rig.mts";
 import { CONTEXT_SLOT_KEYS } from "../../src/core/context/context.ts";
 import { runProp } from "./agent-r6-prop-ops.mts";
-import { Keala } from "../../src/index.ts";
+import { Keala, createCookies } from "../../src/index.ts";
 
 describe("INV-4 routing determinism", () => {
   it("dynamic patterns (optional / custom regex / wildcard / trailing slash) match deterministically", async () => {
@@ -126,7 +126,7 @@ describe("INV-5 no-prototype-pollution", () => {
 
   it("random query/cookie/JSON inputs leave Object.prototype and globals untouched", async () => {
     await runProp("no-proto-pollution", 250, async (rng, _seed, ctx) => {
-      const app = new Keala({ ...quiet, keys: ["r6-secret"] });
+      const app = new Keala({ ...quiet }).use(createCookies({ keys: ["r6-secret"] }));
       let queryHasProto = true;
       app.on("ALL", "/*", async (c) => {
         // The map is gone: targeted reads are plain string returns — a

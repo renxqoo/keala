@@ -73,6 +73,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala, type Application } from "../../src/core/app.ts";
+import { createCookies } from "../../src/index.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, req: Request) => app.handle(req);
@@ -107,6 +108,7 @@ describe("agent r5 — confirmed bugs", () => {
 
   it("R5-2a: pooling + handler-locked body must not throw out of handle() (sync chain)", async () => {
     const app = new Keala({ ...quiet, pooling: true });
+    app.use(createCookies());
     app.get("/", () => {
       const res = new Response(streamOf(["hi"]));
       res.body?.getReader(); // user error: lock the body, never release
@@ -126,6 +128,7 @@ describe("agent r5 — confirmed bugs", () => {
 
   it("R5-2b: pooling + handler-locked body must not reject handle() (async chain)", async () => {
     const app = new Keala({ ...quiet, pooling: true });
+    app.use(createCookies());
     app.get("/", async () => {
       const res = new Response(streamOf(["hi"]));
       res.body?.getReader();
@@ -145,6 +148,7 @@ describe("agent r5 — confirmed bugs", () => {
 
   it("R5-3 (U3a): an auth middleware redirects by returning c.redirect over the committed response", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c, next) => {
       await next();
       // The supported pattern IS c.redirect now — a pure builder whose
@@ -160,6 +164,7 @@ describe("agent r5 — confirmed bugs", () => {
 
   it("R5-4a: late c.cookies.set() after a sugar return must not vanish (post-commit form)", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.use(async (c, next) => {
       void c.cookies.get("incoming"); // materialize the memoized facade early
       await next();
@@ -175,6 +180,7 @@ describe("agent r5 — confirmed bugs", () => {
 
   it("R5-4b: late c.cookies.set() after a sugar return must not vanish (same-request form)", async () => {
     const app = new Keala(quiet);
+    app.use(createCookies());
     app.get("/c", (c) => {
       c.cookies.set("a", "1");
       const built = c.text("ok"); // consumes the staging record
