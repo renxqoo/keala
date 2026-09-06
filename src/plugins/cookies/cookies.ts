@@ -91,6 +91,10 @@ export const parseCookies = (header: string | null): Record<string, string> => {
     const eq = part.indexOf("=");
     const name = eq === -1 ? trimHeaderWs(part) : trimHeaderWs(part.slice(0, eq));
     if (name.length === 0 || !isValidCookieName(name)) continue;
+    // FIRST wins (M3): browsers send the most-specific-path cookie first —
+    // the host's own value. Taking the last would let a subdomain shadow
+    // the host's session cookie by planting a same-name late arrival.
+    if (name in out) continue;
     const raw = eq === -1 ? "" : trimHeaderWs(part.slice(eq + 1));
     if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
       out[name] = tryDecode(raw.slice(1, -1));
