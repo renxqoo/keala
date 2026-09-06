@@ -61,3 +61,4 @@ export {
 export { metrics, type Metrics, type MetricsRegistry, type MetricsSnapshot } from "./metrics.ts";
 export { webhook, type WebhookFormat, type WebhookOptions } from "./webhook.ts";
 export { ipRestriction, type IpRestrictionOptions } from "./ip-restriction.ts";
+export { healthCheck, type HealthCheckOptions } from "./health-check.ts";
