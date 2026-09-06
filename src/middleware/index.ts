@@ -58,3 +58,4 @@ export {
 } from "./rate-limit.ts";
 export { metrics, type Metrics, type MetricsRegistry, type MetricsSnapshot } from "./metrics.ts";
 export { webhook, type WebhookFormat, type WebhookOptions } from "./webhook.ts";
+export { ipRestriction, type IpRestrictionOptions } from "./ip-restriction.ts";
