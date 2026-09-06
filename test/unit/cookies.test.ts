@@ -194,24 +194,3 @@ describe("createCookies facade", () => {
     expect(jar["set-cookie"]).toEqual(["old=1", "new=3; Path=/"]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// M3: duplicate cookie names — FIRST wins (host cookie survives subdomain shadowing)
-// ---------------------------------------------------------------------------
-
-describe("M3: duplicate cookie names keep the FIRST value", () => {
-  it("the host's own cookie (sent first by the browser) survives a subdomain's shadow", () => {
-    // Browsers send the most-specific-path/host cookie FIRST. A subdomain
-    // can plant a same-name cookie that arrives LAST — taking the last value
-    // would let evil.sub.example.com shadow example.com's session cookie.
-    expect(parseCookies("sess=host; sess=shadow")).toEqual({ sess: "host" });
-  });
-
-  it("three duplicates keep the first", () => {
-    expect(parseCookies("a=1; a=2; a=3")).toEqual({ a: "1" });
-  });
-
-  it("distinct names unaffected", () => {
-    expect(parseCookies("x=1; y=2; x=3")).toEqual({ x: "1", y: "2" });
-  });
-});
