@@ -84,8 +84,11 @@ export const etag = (): RouteHandler => {
     if (c.method !== "GET" && c.method !== "HEAD") return;
     const status = committed.status;
     if (status !== 200 && status !== 201) return;
-    if (committed.headers.has("etag")) return;
-    const tag = await tagOfResponse(c, committed);
+    // A handler-preset validator participates in negotiation too (the
+    // middleware's primary value): if the response already carries an etag,
+    // use IT for the If-None-Match check instead of computing our own.
+    const presetTag = committed.headers.get("etag");
+    const tag = presetTag !== null ? presetTag : await tagOfResponse(c, committed);
     if (tag === null) return;
     const noneMatch = c.header("if-none-match");
     if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {

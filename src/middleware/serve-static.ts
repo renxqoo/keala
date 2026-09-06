@@ -274,6 +274,13 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
           leanHeaders["vary"] = "Accept-Encoding";
         }
         onFound?.(c.path, servingInfo.size);
+        // HEAD on the lean path: Bun.file's Response carries no in-process
+        // Content-Length (the runtime fills it for GET at send time, but HEAD
+        // on the wire gets 0). Set it explicitly from the stat we already have.
+        if (c.method === "HEAD") {
+          leanHeaders["content-length"] = String(servingInfo.size);
+          return new Response(null, { headers: leanHeaders });
+        }
         return new Response(bunFile(servingPath), { headers: leanHeaders });
       }
     }

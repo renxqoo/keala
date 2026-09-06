@@ -101,8 +101,10 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
     const origin = c.header("origin");
     const allowed =
       originFn !== null
-        ? Boolean(await originFn(origin.length > 0 ? origin : undefined)) && origin.length > 0
-        : origin.length > 0 && isAllowed(origin, originList);
+        ? Boolean(await originFn(origin.length > 0 ? origin : undefined)) &&
+          origin.length > 0 &&
+          origin !== "null"
+        : origin.length > 0 && origin !== "null" && isAllowed(origin, originList);
 
     const preflight =
       c.method === "OPTIONS" && c.header("access-control-request-method").length > 0;
@@ -210,6 +212,17 @@ export const csrf = (options: CsrfOptions = {}): RouteHandler => {
       });
     }
     const host = c.host;
+    // SECURITY NOTE: the expected origin is derived from the Host header (via
+    // c.host). An attacker who can set both Host AND Origin to the same
+    // attacker-controlled value (DNS-rebinding / direct HTTP) satisfies this
+    // check. Production deployments should pair csrf() with
+    // `new Keala({ trustedHosts: [...] })` — the Host header is validated
+    // against that list BEFORE routing, closing the vector at the boundary.
+    if (c.app.env === "development") {
+      console.warn(
+        "keala(dev): csrf() derives its expected origin from the Host header — pair with trustedHosts in production (see docs)",
+      );
+    }
     // The FULL origin decides — scheme included. Browsers treat
     // http://host and https://host as different origins; comparing hosts
     // alone would let a same-host-other-scheme page forge state changes.

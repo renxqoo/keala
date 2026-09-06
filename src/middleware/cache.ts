@@ -190,7 +190,16 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     const mayStore = !requestDirectives.has("no-store");
     const key = keyOf(c);
     const now = Date.now();
-    const cached = store.get(key);
+    // RFC 9111 §3.2: a request carrying Authorization must not reuse a
+    // stored response without explicit revalidation. We have no validators,
+    // so authenticated requests always bypass the cache (the eligible()
+    // function already blocks STORING auth'd responses — this closes the
+    // serving side: anonymous traffic can't seed entries that auth'd users
+    // would later hit).
+
+    // RFC 9111 §3.2: authenticated requests must not replay stored responses.
+    const authedRequest = c.header("authorization").length > 0;
+    const cached = authedRequest ? undefined : store.get(key);
     if (cached !== undefined) {
       if (cached.expires > now && !bypassStored) return storeHit(key, cached, c);
       store.delete(key); // expired (or a revalidation demand evicted it)

@@ -134,12 +134,14 @@ describe("responseCache", () => {
       new Request("http://localhost:3000/auth", { headers: { authorization: "Bearer x" } }),
     );
     expect(computed).toBe(2);
-    // An anonymous request warms the cache; authorized ones still bypass.
+    // An anonymous request warms the cache; authorized ones both bypass
+    // storage AND bypass serving (RFC 9111 §3.2 — the auth'd request must
+    // not replay the anonymous entry, so it reaches the handler too).
     await app.handle(req("/auth"));
     await app.handle(
       new Request("http://localhost:3000/auth", { headers: { authorization: "Bearer x" } }),
     );
-    expect(computed).toBe(3);
+    expect(computed).toBe(4);
   });
 
   it("binary (non-textual) bodies are not captured", async () => {
