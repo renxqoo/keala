@@ -81,6 +81,42 @@ describe("logger({ format: 'json' })", () => {
     expect((JSON.parse(lines[1] as string) as Record<string, unknown>).path).toBe("/b");
   });
 
+  it("core fields win over same-named caller fields — the line stays truthful", async () => {
+    const lines: string[] = [];
+    const app = new Keala(quiet);
+    app.use(requestId());
+    app.use(
+      logger({
+        format: "json",
+        // Hostile/spoofed field names: none of these may overwrite what the
+        // request actually was.
+        fields: {
+          ts: "1970-01-01T00:00:00.000Z",
+          method: "POST",
+          path: "/spoofed",
+          status: 500,
+          duration_ms: -1,
+          request_id: "spoofed-id",
+          service: "real-extra",
+        },
+        write: (line) => lines.push(line),
+      }),
+    );
+    app.get("/real", (c) => c.text("ok"));
+    await app.handle(req("/real"));
+    const entry = JSON.parse(lines[0] as string) as Record<string, unknown>;
+    expect(entry.method).toBe("GET");
+    expect(entry.path).toBe("/real");
+    expect(entry.status).toBe(200);
+    expect(entry.duration_ms as number).toBeGreaterThanOrEqual(0);
+    expect(entry.ts).not.toBe("1970-01-01T00:00:00.000Z");
+    expect(String(entry.ts)).toMatch(/^2\d{3}-/);
+    expect(entry.request_id).not.toBe("spoofed-id");
+    expect(typeof entry.request_id).toBe("string");
+    // Uncontested caller fields still flatten through.
+    expect(entry.service).toBe("real-extra");
+  });
+
   it("logs the thrown status on the error path, still as JSON", async () => {
     const lines: string[] = [];
     const app = new Keala(quiet);

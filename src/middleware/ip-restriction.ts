@@ -10,8 +10,20 @@
  * always wins — `allow: ["0.0.0.0/0"], deny: [...]` is the "everything but"
  * shape. A deny-only configuration passes everything not denied.
  *
- * The address comes from `c.ip` (the trusted-proxy chain when the app runs
- * `proxy: true`). IPv4 and IPv6 compare strictly within their own family —
+ * The address comes from `c.ip`. SECURITY: with `proxy: true` this reads the
+ * attacker-controllable X-Forwarded-For, so proxy deployments should put the
+ * gate behind a trusted proxy (or terminate at one that overwrites XFF) —
+ * the same caveat rateLimit's default key carries.
+ *
+ * IPv4 octets parse as strict dotted-decimal: `010.1.2.3` is a leading-zero
+ * decimal 10 (octet regex `^\d{1,3}$` + `Number`), NOT the legacy-octal 8
+ * some C parsers accept — and unlike hono, which rejects a leading-zero
+ * octet outright, we still match it as decimal 10. The divergence is
+ * deliberate and low-stakes: mixed legacy semantics inside one CIDR engine
+ * is worse than one strict grammar, and the octets that matter (0, and the
+ * 10/172/192 ranges) spell the same either way.
+ *
+ * IPv4 and IPv6 compare strictly within their own family —
  * no ::ffff:0:0/96 interconversion, so an IPv4 rule never admits an
  * IPv6-mapped peer. Unparseable rules are loud setup TypeErrors; an
  * unresolvable client address fails CLOSED (403) — a gate that opens when it
@@ -43,7 +55,7 @@ const IPV6_GROUP_RE = /^[0-9a-fA-F]{1,4}$/;
 const PREFIX_RE = /^\d{1,3}$/;
 
 /** `10.0.0.1` → 0x0A000001n (BigInt, so both families share one compare). */
-export const ipToInt = (ip: string): bigint | null => {
+const ipToInt = (ip: string): bigint | null => {
   const parts = ip.split(".");
   if (parts.length !== 4) return null;
   let value = 0n;
@@ -182,7 +194,7 @@ export const ipRestriction = (options: IpRestrictionOptions): RouteHandler => {
   if (allow.length === 0 && deny.length === 0) {
     throw new TypeError("ipRestriction() requires at least one allow or deny rule");
   }
-  const forbidden = statusMessage(403) || "403";
+  const forbidden = statusMessage(403);
   return async (c, next) => {
     const address = parseAddress(c.ip);
     // Fail closed: no readable address → refuse, in every configuration.

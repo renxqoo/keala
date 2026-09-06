@@ -219,6 +219,9 @@ export const timing = (): RouteHandler => {
  * the line's shape: "text" (default, the human one-liner) or "json" (a flat
  * object for log shippers — ts/method/path/status/duration_ms, plus
  * request_id when the requestId middleware ran, plus the caller's `fields`).
+ * Core fields are written AFTER `fields`, so a `fields` key named
+ * `ts`/`method`/`path`/`status`/`duration_ms`/`request_id` can never
+ * overwrite the request's actual values — the log line stays truthful.
  */
 export interface LoggerOptions {
   /** Override the sink (default console.log). */
@@ -241,15 +244,16 @@ export const logger = (options: LoggerOptions = {}): RouteHandler => {
       const duration = Math.round(performance.now() - start);
       const id = (c.state as { requestId?: string }).requestId;
       if (asJson) {
-        const entry: Record<string, unknown> = {
-          ts: new Date().toISOString(), // ISO 8601, millisecond precision
-          method: c.method,
-          path: c.path,
-          status,
-          duration_ms: duration,
-        };
-        if (id !== undefined) entry.request_id = id;
+        // Caller fields first, core fields second: a same-named `fields`
+        // key loses to the request's own value (core fields always win).
+        const entry: Record<string, unknown> = {};
         if (fields !== undefined) Object.assign(entry, fields);
+        entry.ts = new Date().toISOString(); // ISO 8601, millisecond precision
+        entry.method = c.method;
+        entry.path = c.path;
+        entry.status = status;
+        entry.duration_ms = duration;
+        if (id !== undefined) entry.request_id = id;
         write(JSON.stringify(entry));
         return;
       }

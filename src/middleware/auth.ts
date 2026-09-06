@@ -81,8 +81,11 @@ const authScheme = (header: string): { scheme: string; rest: string } => {
  * realm ending in one — `realm="My\"` — used to terminate the quote early
  * and corrupt the challenge (SEC-5). A realm that strips to nothing is a
  * setup error, not a silent empty protection-space label.
+ *
+ * Shared by every challenge-issuing guard (basic/bearer here, apiKeyAuth in
+ * its tier) so the quoted-string rules cannot drift apart.
  */
-const realmPayload = (middleware: string, realm: string | undefined): string => {
+export const realmPayload = (middleware: string, realm: string | undefined): string => {
   const stripped = (realm ?? "Restricted").replaceAll('"', "").replaceAll("\\", "");
   if (stripped.length === 0) {
     throw new TypeError(`${middleware}: realm must keep characters other than '"' and "\\"`);
@@ -120,7 +123,7 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
       }
     }
     if (!accepted) {
-      return c.text(statusMessage(401) || "401", 401, { "www-authenticate": challenge });
+      return c.text(statusMessage(401), 401, { "www-authenticate": challenge });
     }
     await next();
   };
@@ -141,8 +144,10 @@ export interface BearerAuthOptions {
 
 const MAX_TOKEN_BYTES = 8192;
 
-/** True for any whitespace or C0 control byte — never valid inside a token. */
-const hasWhitespaceOrControl = (value: string): boolean => {
+/** True for any whitespace or C0 control byte — never valid inside a token.
+ * Shared with apiKeyAuth's key grammar so the malformed-credential rules
+ * stay identical across guards. */
+export const hasWhitespaceOrControl = (value: string): boolean => {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
     if (code <= 0x20 || code === 0x7f) return true;
@@ -189,11 +194,11 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
     if (token === null) {
       const hasAuth = c.header("authorization").length > 0;
       if (hasAuth) {
-        return c.text(statusMessage(400) || "400", 400, {
+        return c.text(statusMessage(400), 400, {
           "www-authenticate": `${challenge}, error="invalid_request"`,
         });
       }
-      return c.text(statusMessage(401) || "401", 401, { "www-authenticate": challenge });
+      return c.text(statusMessage(401), 401, { "www-authenticate": challenge });
     }
     const validToken = token as string; // null already returned
     const verifyFn = options.verify as (t: string) => boolean | Promise<boolean>;
@@ -201,7 +206,7 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
       ? tokens.some((t) => timingSafeEqual(t, validToken))
       : await verifyFn(validToken);
     if (!accepted) {
-      return c.text(statusMessage(401) || "401", 401, {
+      return c.text(statusMessage(401), 401, {
         "www-authenticate": `${challenge}, error="invalid_token"`,
       });
     }

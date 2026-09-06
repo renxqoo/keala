@@ -19,6 +19,12 @@
  * 3. body consumption — the MAC runs over `c.raw.clone().text()`, so the
  *    original body stays readable for the downstream handler
  *
+ * MOUNT ORDER: this middleware must be mounted BEFORE any body-consuming
+ * middleware (bodyParser, a `c.raw.text()` reader, anything that drains the
+ * request stream). `clone()` of an already-consumed body throws, and the
+ * webhook answers 500 instead of verifying — the signature check can only
+ * run on a still-unread stream.
+ *
  * Statuses: missing/empty/malformed signature or a stale timestamp → 400
  * (the request is not verifiable), a well-formed signature that does not
  * verify → 401.
@@ -122,6 +128,10 @@ const parseSlack = (value: string, timestampHeader: string): ParsedSignature | n
   let timestamp = timestampHeader.trim();
   const comma = signature.indexOf(","); // base64 never contains a comma
   if (comma !== -1) {
+    // Timestamp precedence: the dedicated x-slack-request-timestamp header
+    // wins; the comma-embedded `v0=<ts>,<mac>` form is the FALLBACK, read
+    // only when the header is absent/empty. When both are present they must
+    // agree — the MAC covers whichever timestamp was chosen.
     if (timestamp.length === 0) timestamp = signature.slice(0, comma).trim();
     signature = signature.slice(comma + 1).trim();
   }

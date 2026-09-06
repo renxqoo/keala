@@ -81,6 +81,34 @@ describe("healthCheck defaults", () => {
     expect(res.status).toBe(503);
     expect((await bodyOf(res)).status).toBe("not ready");
   });
+
+  it("hideError: true omits the error name — a bare {status:'not ready'} 503", async () => {
+    const app = new Keala(quiet);
+    app.use(
+      healthCheck({
+        ready: (): boolean => {
+          throw new Error("PostgresError: password rejected");
+        },
+        hideError: true,
+      }),
+    );
+    const res = await app.handle(req("/readyz"));
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body).toEqual({ status: "not ready" });
+    expect("error" in body).toBe(false);
+    expect(JSON.stringify(body)).not.toContain("Postgres");
+  });
+
+  it("hideError stays off by default (the error name is still published)", async () => {
+    const app = probeApp((): boolean => {
+      const err = new Error("detail");
+      err.name = "TimeoutError";
+      throw err;
+    });
+    const body = await bodyOf(await app.handle(req("/readyz")));
+    expect(body.error).toBe("TimeoutError");
+  });
 });
 
 describe("healthCheck wiring", () => {
@@ -91,6 +119,27 @@ describe("healthCheck wiring", () => {
     expect((await app.handle(req("/ready", { method: "GET" }))).status).toBe(200);
     expect((await app.handle(req("/healthz"))).status).toBe(404);
     expect((await app.handle(req("/readyz"))).status).toBe(404);
+  });
+
+  it("when livenessPath === readinessPath the always-200 liveness answer wins", async () => {
+    let probed = 0;
+    const app = new Keala(quiet);
+    app.use(
+      healthCheck({
+        livenessPath: "/probe",
+        readinessPath: "/probe",
+        ready: () => {
+          probed += 1;
+          return false;
+        },
+      }),
+    );
+    const res = await app.handle(req("/probe"));
+    expect(res.status).toBe(200);
+    expect(await bodyOf(res)).toEqual({ status: "ok" });
+    // The readiness predicate is never consulted on the shared path — a
+    // liveness probe that flips with readiness is the cascade-restart bug.
+    expect(probed).toBe(0);
   });
 
   it("non-probe paths and non-GET methods fall through to the app", async () => {

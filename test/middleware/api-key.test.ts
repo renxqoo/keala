@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { bearerAuth } from "../../src/middleware/auth.ts";
@@ -9,7 +9,26 @@ import { some } from "../../src/middleware/combine.ts";
  * verify callbacks (sync + async), the RFC 6750-style three-way (missing →
  * 401, malformed → 400, rejected → 401), custom header names, and the
  * multi-auth composition with some().
+ *
+ * The timing-safety lock is PROBE-based: auth.ts's timingSafeEqual is
+ * wrapped by a counting spy, so the tests observe the mechanism (every
+ * static-key check is delegated to the constant-time comparator — never a
+ * plaintext `===` fast path, never a skipped candidate) instead of an
+ * outcome a plain `===` would produce just as well.
  */
+
+/** Every (a, b) pair handed to timingSafeEqual, in order. */
+const compareLog = vi.hoisted(() => [] as Array<[string | Uint8Array, string | Uint8Array]>);
+vi.mock("../../src/middleware/auth.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/middleware/auth.ts")>();
+  return {
+    ...actual,
+    timingSafeEqual: (a: string | Uint8Array, b: string | Uint8Array): boolean => {
+      compareLog.push([a, b]);
+      return actual.timingSafeEqual(a, b);
+    },
+  };
+});
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
@@ -51,13 +70,47 @@ describe("apiKeyAuth — static keys", () => {
     expect(res.status).toBe(401);
     expect(res.headers.get("www-authenticate")).toBe('ApiKey realm="API", error="invalid_token"');
   });
+});
 
-  it("is timing-safe: a matching prefix of a valid key is still rejected", async () => {
+describe("apiKeyAuth — timing-safety probe (comparison spy)", () => {
+  beforeEach(() => {
+    compareLog.length = 0;
+  });
+
+  it("routes every static-key check through timingSafeEqual — no plaintext === fast path", async () => {
+    const app = guarded({ keys: ["key-1", "key-2", "key-3"] });
+    const res = await app.handle(req("/me", { headers: { "x-api-key": "key-9" } }));
+    expect(res.status).toBe(401);
+    // A `===` implementation would issue ZERO comparator calls; one that
+    // pre-filtered by length or prefix would issue fewer than the key count.
+    // All three configured keys were compared for the wrong credential.
+    expect(compareLog).toHaveLength(3);
+  });
+
+  it("compares the presented key verbatim against each configured key in order", async () => {
+    const app = guarded({ keys: ["key-1", "key-2"] });
+    const res = await app.handle(req("/me", { headers: { "x-api-key": "key-2" } }));
+    expect(res.status).toBe(200);
+    expect(compareLog).toEqual([
+      ["key-1", "key-2"],
+      ["key-2", "key-2"],
+    ]);
+  });
+
+  it("a prefix of a valid key is delegated to the comparator, never pre-filtered", async () => {
     const app = guarded({ keys: ["key-123456"] });
-    // A === comparison would also reject the prefix, but a length-blind one
-    // would not; timingSafeEqual compares every byte and the length differs.
     const res = await app.handle(req("/me", { headers: { "x-api-key": "key-1" } }));
     expect(res.status).toBe(401);
+    // The pair reached timingSafeEqual intact — no early length/prefix
+    // rejection outside the constant-time comparator.
+    expect(compareLog).toEqual([["key-123456", "key-1"]]);
+  });
+
+  it("touches no secret at all for a missing or malformed key", async () => {
+    const app = guarded({ keys: ["key-1"] });
+    await app.handle(req("/me"));
+    await app.handle(req("/me", { headers: { "x-api-key": "bad key" } }));
+    expect(compareLog).toHaveLength(0);
   });
 });
 
@@ -150,6 +203,20 @@ describe("apiKeyAuth — configuration", () => {
 
   it("throws on a missing keys/verify option", () => {
     expect(() => apiKeyAuth({})).toThrow(/verify|keys/);
+  });
+
+  it("throws when both keys and verify are given (verify would be dead code)", () => {
+    expect(() => apiKeyAuth({ keys: ["k"], verify: () => true })).toThrow(/not both/);
+  });
+
+  it("judges verify strictly: a truthy non-boolean return rejects, only true admits", async () => {
+    const app = guarded({
+      // The classic verify bug: returning a record/string instead of a
+      // boolean — truthy, but not `true`.
+      verify: (key) => (key === "yes" ? ("truthy-but-not-true" as unknown as boolean) : false),
+    });
+    expect((await app.handle(req("/me", { headers: { "x-api-key": "yes" } }))).status).toBe(401);
+    expect((await app.handle(req("/me", { headers: { "x-api-key": "no" } }))).status).toBe(401);
   });
 
   it("throws on an empty header name (loud setup error, not a silent 401-all)", () => {

@@ -76,7 +76,12 @@ export interface JwksKeys {
   verify(token: string, options?: VerifyOptions): Promise<boolean>;
   /** Force a re-fetch now, TTL notwithstanding. Rejects on network failure. */
   refresh(): Promise<void>;
-  /** The currently cached key set (re-fetching first when stale). */
+  /**
+   * The currently cached key set (re-fetching first when stale). REJECTS
+   * when the cache is cold and the fetch fails — unlike `verify()`, which
+   * turns that state into `false`, and `warmup()`, which swallows it.
+   * Callers of `keys()` get the failure surfaced.
+   */
   keys(): Promise<JwkKey[]>;
 }
 
@@ -165,16 +170,23 @@ export const jwks = (options: JwksOptions): JwksKeys => {
           throw new TypeError("jwks: document is not { keys: [...] }");
         }
         const next = new Map<string, CachedKey>();
+        let kidlessTaken = false; // the "" slot is single-occupancy
         for (const entry of doc.keys) {
           if (typeof entry !== "object" || entry === null) continue;
           const jwk = entry as JwkKey;
           const params = importParams(jwk);
           if (params === null) continue;
+          // A second kid-less key must not overwrite the first under the ""
+          // cache key (silent last-wins). Only the FIRST kid-less entry is
+          // kept — and since a kid-less token only matches a single-key set
+          // (see lookup), two kid-less keys are a publisher bug either way.
+          if (jwk.kid === undefined && kidlessTaken) continue;
           try {
             next.set(jwk.kid ?? "", {
               key: await crypto.subtle.importKey("jwk", jwk, params, false, ["verify"]),
               jwk,
             });
+            if (jwk.kid === undefined) kidlessTaken = true;
           } catch {
             // One unimportable entry is skipped — the rest of the set serves.
           }

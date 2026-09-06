@@ -35,6 +35,17 @@ const hookApp = (options: WebhookOptions, handler?: RouteHandler) => {
 const post = (app: Keala, headers: Record<string, string>, body = BODY) =>
   app.handle(new Request("http://localhost:3000/hook", { method: "POST", headers, body }));
 
+/**
+ * A body-consuming middleware: drains the request stream, so a webhook
+ * mounted AFTER it has nothing left to clone — the route 500s instead of
+ * verifying. Locks the documented ordering requirement (doc note in
+ * webhook.ts): webhook goes BEFORE any body reader.
+ */
+const bodyReader: RouteHandler = async (c, next) => {
+  await c.raw.text();
+  await next();
+};
+
 describe("webhook: valid signatures pass", () => {
   it("stripe format accepts t=…,v1=<base64>", async () => {
     const ts = String(nowSeconds());
@@ -110,6 +121,22 @@ describe("webhook: valid signatures pass", () => {
         )
       ).status,
     ).toBe(200);
+  });
+
+  it("slack: the timestamp header wins when both forms are present (locked precedence)", async () => {
+    const headerTs = String(nowSeconds());
+    // An hour-old embedded timestamp: stale if chosen, harmless when ignored.
+    const embeddedTs = String(nowSeconds() - 3600);
+    // The MAC covers the HEADER timestamp — the one that will be chosen.
+    const signature = mac(SECRET, `v0:${headerTs}:${BODY}`).base64;
+    const res = await post(
+      hookApp({ secret: SECRET, header: "x-slack-signature", format: "slack" }),
+      {
+        "x-slack-signature": `v0=${embeddedTs},${signature}`,
+        "x-slack-request-timestamp": headerTs,
+      },
+    );
+    expect(res.status).toBe(200);
   });
 
   it("raw format accepts a bare hex signature", async () => {
@@ -315,6 +342,20 @@ describe("webhook: body preservation contract", () => {
     const res = await post(app, { "x-signature": mac(SECRET, BODY).base64 });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("body-intact");
+  });
+});
+
+describe("webhook: mount-order contract", () => {
+  it("a body consumed upstream turns verification into a 500 — mount webhook BEFORE body readers", async () => {
+    const app = new Keala(quiet);
+    app.post(
+      "/hook",
+      bodyReader,
+      webhook({ secret: SECRET, header: "x-signature", format: "raw" }),
+      (c) => c.text("received"),
+    );
+    const res = await post(app, { "x-signature": mac(SECRET, BODY).hex });
+    expect(res.status).toBe(500);
   });
 });
 

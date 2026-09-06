@@ -112,7 +112,7 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
         // must key it on Origin like every other negotiated answer (below).
         if (varyOrigin) addVary(c, "Origin");
         if (options.reject !== undefined) return options.reject(origin);
-        return c.text(statusMessage(403) || "403", 403);
+        return c.text(statusMessage(403), 403);
       }
       c.setHeader("Access-Control-Allow-Origin", wildcard ? "*" : origin);
       c.setHeader("Access-Control-Allow-Methods", methods);
@@ -149,7 +149,7 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
       // Vary rides along onto the committed answer.)
       if (varyOrigin) addVary(c, "Origin");
       if (options.reject !== undefined) return options.reject(origin);
-      return c.text(statusMessage(403) || "403", 403);
+      return c.text(statusMessage(403), 403);
     }
 
     await next();

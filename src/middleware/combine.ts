@@ -36,6 +36,14 @@ const NEXT_TWICE = "next() called multiple times in the same middleware";
  * - Nobody decided (every candidate passed through, or none was given):
  *   call `next()` — an empty `some()` is a plain pass-through.
  *
+ * Which failure surfaces when EVERY candidate refuses is order-dependent by
+ * design: the LAST candidate's refusal is the one returned, and a thrown
+ * error remembered by an earlier candidate is dropped as soon as any later
+ * candidate refuses with a Response (and vice versa — a later throw
+ * overrides an earlier remembered Response). Mixing throwing and
+ * returning-refusal candidates therefore flips the client-visible failure
+ * (500 vs 4xx) with candidate order; order candidates deliberately.
+ *
  * @example
  * ```ts
  * import { some } from "keala/middleware";
@@ -96,16 +104,17 @@ export const some = (...candidates: readonly RouteHandler[]): RouteHandler => {
  */
 export const all = (...candidates: readonly RouteHandler[]): RouteHandler => {
   return async (c, next) => {
-    // Depth-first runner: candidate i's next() runs candidate i+1; the tail
-    // is the group's own next(). Returns the first self-answered Response
-    // from depth >= i so the group commits it (last-committer-wins order —
-    // an outer candidate's own answer still overrides a deeper one).
+    // Depth-first runner: candidate i's next() runs candidate i+1; past the
+    // last candidate the tail is the group's own next(). Returns the first
+    // self-answered Response from depth >= i so the group commits it
+    // (last-committer-wins order — an outer candidate's own answer still
+    // overrides a deeper one).
     const run = async (i: number): Promise<Response | undefined> => {
-      if (i === candidates.length) {
+      const handler = candidates[i];
+      if (handler === undefined) {
         await next();
         return undefined;
       }
-      const handler = candidates[i] as RouteHandler;
       let advanced = false;
       let downstream: Response | undefined;
       const innerNext = (): Promise<void> => {
@@ -118,7 +127,8 @@ export const all = (...candidates: readonly RouteHandler[]): RouteHandler => {
       const result = await handler(c, innerNext);
       return result instanceof Response ? result : downstream;
     };
-    const answer = await run(0);
-    if (answer !== undefined) return answer;
+    // Returning undefined here is the pass-through — identical to falling
+    // off the end of the middleware.
+    return run(0);
   };
 };

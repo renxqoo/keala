@@ -9,12 +9,17 @@
  * well-formed key that fails verification is 401 `invalid_token`.
  */
 
-import { timingSafeEqual } from "./auth.ts";
+import { hasWhitespaceOrControl, realmPayload, timingSafeEqual } from "./auth.ts";
 import { statusMessage } from "../http/status.ts";
 import type { RouteHandler } from "../router/router.ts";
 
 export interface ApiKeyAuthOptions {
-  /** Accept the key; compare hashes, never plaintext with `===`. */
+  /**
+   * Accept the key; compare hashes, never plaintext with `===`. The result
+   * is judged strictly — only a resolved `true` admits; any other value
+   * (false, undefined, a truthy non-boolean) rejects. A `verify` that
+   * accidentally returns a record/string cannot grant access.
+   */
   verify?(key: string): boolean | Promise<boolean>;
   /** Static key(s) — timing-safe comparison (no `verify` needed). */
   keys?: string | string[];
@@ -27,29 +32,6 @@ export interface ApiKeyAuthOptions {
 /** Same cap as bearerAuth's tokens — a longer key is malformed, not slow. */
 const MAX_KEY_LENGTH = 8192;
 
-/** True for any whitespace or C0 control byte — never valid inside a key. */
-const hasWhitespaceOrControl = (value: string): boolean => {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code <= 0x20 || code === 0x7f) return true;
-  }
-  return false;
-};
-
-/**
- * Realm payload for the WWW-Authenticate challenge, sanitized exactly like
- * basicAuth/bearerAuth (SEC-5): `"` and `\` are stripped so the realm stays
- * a closed quoted-string, and a realm that strips to nothing is a setup
- * error rather than a silent empty protection-space label.
- */
-const realmPayload = (realm: string | undefined): string => {
-  const stripped = (realm ?? "Restricted").replaceAll('"', "").replaceAll("\\", "");
-  if (stripped.length === 0) {
-    throw new TypeError('apiKeyAuth: realm must keep characters other than \'"\' and "\\"');
-  }
-  return stripped;
-};
-
 export const apiKeyAuth = (options: ApiKeyAuthOptions): RouteHandler => {
   const keysOption = options.keys;
   const hasKeys = keysOption !== undefined;
@@ -58,6 +40,11 @@ export const apiKeyAuth = (options: ApiKeyAuthOptions): RouteHandler => {
     : keysOption !== undefined
       ? [keysOption]
       : [];
+  // Setup-time validation, once: exactly one of { keys, verify } must be
+  // given — both makes `verify` dead code, neither rejects everything.
+  if (hasKeys && typeof options?.verify === "function") {
+    throw new TypeError("apiKeyAuth: provide either { keys } or { verify }, not both");
+  }
   if (!hasKeys && typeof options?.verify !== "function") {
     throw new TypeError("apiKeyAuth requires { verify } or { keys }");
   }
@@ -65,26 +52,30 @@ export const apiKeyAuth = (options: ApiKeyAuthOptions): RouteHandler => {
   if (headerName.length === 0) {
     throw new TypeError("apiKeyAuth: header must be a non-empty header name");
   }
-  const challenge = `ApiKey realm="${realmPayload(options.realm)}"`;
+  const challenge = `ApiKey realm="${realmPayload("apiKeyAuth", options.realm)}"`;
+  // The per-request credential check, resolved at setup: static keys go
+  // through timingSafeEqual, dynamic ones through the caller's verify.
+  const check = hasKeys
+    ? (key: string): boolean => keys.some((k) => timingSafeEqual(k, key))
+    : (options.verify as (key: string) => boolean | Promise<boolean>);
   return async (c, next) => {
     const raw = c.header(headerName);
     // fetch headers cannot distinguish an absent header from an empty one —
     // both are "no credential presented" (401), never a 400.
     if (raw.length === 0) {
-      return c.text(statusMessage(401) || "401", 401, { "www-authenticate": challenge });
+      return c.text(statusMessage(401), 401, { "www-authenticate": challenge });
     }
     const key = raw.trim();
     // PRESENT but malformed (blank, internal whitespace/control bytes,
     // oversized) is invalid_request (400) — the RFC 6750 §3.1 split.
     if (key.length === 0 || key.length > MAX_KEY_LENGTH || hasWhitespaceOrControl(key)) {
-      return c.text(statusMessage(400) || "400", 400, {
+      return c.text(statusMessage(400), 400, {
         "www-authenticate": `${challenge}, error="invalid_request"`,
       });
     }
-    const verifyFn = options.verify as ((k: string) => boolean | Promise<boolean>) | undefined;
-    const accepted = hasKeys ? keys.some((k) => timingSafeEqual(k, key)) : await verifyFn!(key);
-    if (!accepted) {
-      return c.text(statusMessage(401) || "401", 401, {
+    // Strict truth: only a resolved `true` from verify() admits.
+    if ((await check(key)) !== true) {
+      return c.text(statusMessage(401), 401, {
         "www-authenticate": `${challenge}, error="invalid_token"`,
       });
     }

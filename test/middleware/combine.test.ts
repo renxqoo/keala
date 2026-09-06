@@ -56,6 +56,14 @@ const scenario = () => {
       trace.push(label);
       throw new Error(label);
     };
+  /** Records "<l>:pre" before next() and "<l>:post" after — onion order. */
+  const layer =
+    (label: string): RouteHandler =>
+    async (_c, next) => {
+      trace.push(`${label}:pre`);
+      await next();
+      trace.push(`${label}:post`);
+    };
   const appOf = (guard: RouteHandler): Keala => {
     const app = new Keala(quiet);
     app.use(guard);
@@ -65,7 +73,7 @@ const scenario = () => {
     });
     return app;
   };
-  return { trace, pass, deny, serve, boom, appOf };
+  return { trace, pass, deny, serve, boom, layer, appOf };
 };
 
 describe("some()", () => {
@@ -146,6 +154,27 @@ describe("all()", () => {
     const res = await s.appOf(all(s.pass("a"), s.pass("b"))).handle(req("/x"));
     expect(res.status).toBe(200);
     expect(s.trace).toEqual(["a", "b", "route"]);
+  });
+
+  it("unwinds post-work in reverse order after the downstream answers", async () => {
+    const s = scenario();
+    const res = await s.appOf(all(s.layer("a"), s.layer("b"), s.layer("c"))).handle(req("/x"));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
+    // Pre-work in candidate order, post-work in REVERSE — exactly like
+    // registering a, b, c as three separate middleware.
+    expect(s.trace).toEqual(["a:pre", "b:pre", "c:pre", "route", "c:post", "b:post", "a:post"]);
+  });
+
+  it("a mid-group self-answer still unwinds the outer candidates' post-work", async () => {
+    const s = scenario();
+    const res = await s
+      .appOf(all(s.layer("a"), s.layer("b"), s.deny("deny", 403)))
+      .handle(req("/x"));
+    expect(res.status).toBe(403);
+    // The route never ran, but every layer that already called next() still
+    // unwinds its post-work on the way out — and the refusal is committed.
+    expect(s.trace).toEqual(["a:pre", "b:pre", "deny", "b:post", "a:post"]);
   });
 
   it("a rejection from the FIRST candidate short-circuits the group", async () => {

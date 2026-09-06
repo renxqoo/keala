@@ -335,4 +335,36 @@ describe("jwks endpoint shapes", () => {
     expect(list[1]).toMatchObject({ kty: "EC", kid: "ec-1", crv: "P-256" });
     expect(typeof list[0]?.n).toBe("string");
   });
+
+  it("two kid-less keys do not silently overwrite each other — the first is kept", async () => {
+    const idp = new Idp();
+    // JSON.stringify drops `kid: undefined`, so both entries arrive kid-less
+    // and would collide on the cache's "" slot under last-wins semantics.
+    idp.keys = [
+      { ...primary.jwk, kid: undefined },
+      { ...rotated.jwk, kid: undefined },
+    ];
+    vi.stubGlobal("fetch", idp.fetch as unknown as typeof fetch);
+    const keys = jwks({ url: URL_JWKS });
+    await warmedApp(keys).handle(req("/x"));
+    const list = await keys.keys();
+    expect(list).toHaveLength(1); // the SECOND entry did not replace the first
+    expect((list[0] as { n?: string }).n).toBe(primary.jwk.n);
+    // A kid-less token matches the single cached key — the kept one.
+    const byPrimary = await signJWT({ sub: "u" }, primary.private, { alg: "RS256" });
+    await expect(keys.verify(byPrimary)).resolves.toBe(true);
+    const byRotated = await signJWT({ sub: "u" }, rotated.private, { alg: "RS256" });
+    await expect(keys.verify(byRotated)).resolves.toBe(false);
+  });
+
+  it("keys() rejects on a cold cache with an unreachable endpoint", async () => {
+    const idp = new Idp();
+    idp.down = true;
+    vi.stubGlobal("fetch", idp.fetch as unknown as typeof fetch);
+    const keys = jwks({ url: URL_JWKS });
+    // The declared contract: keys() surfaces the cold failure…
+    await expect(keys.keys()).rejects.toThrow("network unreachable");
+    // …while verify() keeps its always-boolean contract for the same state.
+    await expect(keys.verify(await signedBy(primary))).resolves.toBe(false);
+  });
 });

@@ -83,7 +83,7 @@ values, offset)` 是"要整个 map"的官方适配器(sink 镜像边界同款)�
 - **jwks**：JWKS 远程密钥——kid 索引、TTL 缓存（默认 5min）、
   stale-serving（网络失败用旧缓存）、kid 风暴退避（恶意 kid 不放大
   IdP fetch）、RSA+EC 密钥导入、单飞 refresh
-- **healthCheck**：自动注册 /healthz（liveness 永远 200，不查依赖
+- **healthCheck**：挂载后提供 /healthz 探针（liveness 永远 200，不查依赖
   防级联重启）+ /readyz（异步谓词决定 200/503，抛错 503 只带 err.name）
 - **logger JSON 格式**：`logger({ format: "json", fields: {...} })`——
   输出 {ts, method, path, status, duration_ms, request_id, ...fields}，
