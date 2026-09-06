@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/index.ts";
 import { startNodeServer } from "../../src/adapters/node.ts";
-import { rateLimit } from "../../src/middleware/rate-limit.ts";
+import { memoryRateLimitStore, rateLimit } from "../../src/middleware/rate-limit.ts";
 import { metrics } from "../../src/middleware/metrics.ts";
 import { createError } from "../../src/http/errors.ts";
 import type { SunkHandler, Context } from "../../src/index.ts";
@@ -349,19 +349,20 @@ describe("query: targeted read semantics (0.6.2)", () => {
 
 describe("review fixes: 0.6.3 regression locks", () => {
   it("rateLimit evicts expired keys — the store stays bounded across windows", async () => {
-    const store = new Map<string, { count: number; resetAt: number }>();
+    const store = memoryRateLimitStore(10);
     const app = new Keala(quiet);
-    app.use(
-      rateLimit({ limit: 5, windowMs: 30, maxKeys: 10, key: (c) => c.header("x-k") ?? "?", store }),
-    );
+    app.use(rateLimit({ limit: 5, windowMs: 30, key: (c) => c.header("x-k") ?? "?", store }));
     app.get("/x", (c) => c.text("ok"));
     const hit = (k: string) =>
       app.handle(new Request("http://127.0.0.1:3000/x", { headers: { "x-k": k } }));
     for (let i = 0; i < 30; i++) await hit(`k${i}`);
-    expect(store.size).toBeLessThanOrEqual(10);
+    // 30 distinct keys through a 10-bucket store: only the newest survive.
+    expect(store.get("k0")).toBeUndefined();
+    expect(store.get("k29")).toBeDefined();
     await new Promise((r) => setTimeout(r, 50));
     await hit("fresh");
-    expect(store.size).toBeLessThanOrEqual(10);
+    expect(store.get("fresh")?.count).toBe(1);
+    expect(store.get("k29")).toBeDefined();
   });
 
   it("trustedHosts also gates X-Forwarded-Host under proxy trust", async () => {

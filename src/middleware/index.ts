@@ -48,5 +48,11 @@ export {
 export { bodyOf } from "../plugins/body-parser.ts";
 export { serveStatic, type ServeStaticOptions } from "./serve-static.ts";
 export { validator, validOf, type StandardSchema } from "./validator.ts";
-export { rateLimit, type RateLimitOptions } from "./rate-limit.ts";
+export {
+  rateLimit,
+  memoryRateLimitStore,
+  type RateLimitOptions,
+  type RateLimitStore,
+  type RateLimitBucket,
+} from "./rate-limit.ts";
 export { metrics, type Metrics, type MetricsRegistry, type MetricsSnapshot } from "./metrics.ts";

@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { compress } from "../../src/middleware/etag.ts";
-import { rateLimit } from "../../src/middleware/rate-limit.ts";
+import { memoryRateLimitStore, rateLimit } from "../../src/middleware/rate-limit.ts";
 import { csrfToken } from "../../src/middleware/csrf-token.ts";
 import { parseCookies } from "../../src/plugins/cookies/cookies.ts";
 import {
@@ -221,13 +221,12 @@ describe("parseCookies: charCode trim + decode early-out equivalence", () => {
 
 describe("rateLimit takeSlot: insertion-order eviction, hard bound", () => {
   it("evicts oldest-first even when every entry is still live", async () => {
-    const store = new Map<string, { count: number; resetAt: number }>();
+    const store = memoryRateLimitStore(5);
     const app = new Keala(quiet);
     app.use(
       rateLimit({
         limit: 100,
         windowMs: 3_600_000, // nothing expires during the test
-        maxKeys: 5,
         key: (c) => c.header("x-k") ?? "?",
         store,
       }),
@@ -236,8 +235,11 @@ describe("rateLimit takeSlot: insertion-order eviction, hard bound", () => {
     const hit = (k: string) =>
       app.handle(new Request("http://127.0.0.1:3000/x", { headers: { "x-k": k } }));
     for (let i = 0; i < 8; i++) await hit(`k${i}`);
-    expect(store.size).toBe(5);
-    expect([...store.keys()]).toEqual(["k3", "k4", "k5", "k6", "k7"]);
+    // The 0.8 store interface exposes get(), not size/keys — the eviction
+    // bound is asserted through bucket presence.
+    expect(store.get("k2")).toBeUndefined();
+    expect(store.get("k3")).toBeDefined();
+    expect(store.get("k7")).toBeDefined();
   });
 });
 

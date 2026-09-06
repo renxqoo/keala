@@ -363,21 +363,21 @@ const requestId: RouteHandler = async (c, next) => {
 
 ### 8.2 内置全家（`keala/middleware`）
 
-| 中间件                         | 干什么       | 要点                                                                                        |
-| ------------------------------ | ------------ | ------------------------------------------------------------------------------------------- |
-| `cors()`                       | 跨域         | Vary: Origin 正确处理（缓存投毒防线）；预检 204；`reject` 钩子自定义拒绝                    |
-| `secureHeaders()`              | 安全头全家   | CSP/HSTS/XFO/nosniff；错误页也覆盖                                                          |
-| `logger()`                     | 访问日志     | `方法 路径 → 状态 耗时 id`；读 `c.status` 而非拦截                                          |
-| `basicAuth()` / `bearerAuth()` | 认证         | RFC 7617/6750；`verify` 回调（**永远委托，别在闭包里比明文**）；配 `keala/helpers/password` |
-| `rateLimit()`                  | 限流         | 固定窗口 per-key（默认 c.ip）；429+Retry-After；可共享 store                                |
-| `metrics()`                    | Prometheus   | 计数/gauge/直方分桶；`metrics.page` 挂暴露端点                                              |
-| `etag()`                       | 协商缓存     | 弱 ETag + If-None-Match→304（GET/HEAD）；对 sugar 产物生效                                  |
-| `compress()`                   | gzip         | q 感知；no-transform/206/已压缩类型自动跳过；与 etag 任意顺序都正确                         |
-| `csrf()`                       | 跨站请求防护 | Origin/Referer 校验 + `csrfToken()`；Origin: null 拒绝                                      |
-| `validator()`                  | 入参校验     | Standard Schema（zod/valibot 通用接口）                                                     |
-| `serveStatic()`                | 静态文件     | GET/HEAD only；dotfile 默认忽略；ETag/Range                                                 |
-| `createBodyParser()`           | body 解析    | 见 §4.3——建议全局挂                                                                         |
-| `bodyLimit()`                  | 体积限制     | 与 sink 共存需 `noOpFor(bodyLimit(...))` 透明声明                                           |
+| 中间件                         | 干什么       | 要点                                                                                                          |
+| ------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| `cors()`                       | 跨域         | Vary: Origin 正确处理（缓存投毒防线）；预检 204；`reject` 钩子自定义拒绝                                      |
+| `secureHeaders()`              | 安全头全家   | CSP/HSTS/XFO/nosniff；错误页也覆盖                                                                            |
+| `logger()`                     | 访问日志     | `方法 路径 → 状态 耗时 id`；读 `c.status` 而非拦截                                                            |
+| `basicAuth()` / `bearerAuth()` | 认证         | RFC 7617/6750；`verify` 回调（**永远委托，别在闭包里比明文**）；配 `keala/helpers/password`                   |
+| `rateLimit()`                  | 限流         | 固定窗口 per-key（默认 c.ip）；429+Retry-After；共享 store 为原子 `{ hit, get }` 接口（0.8 起不再接受裸 Map） |
+| `metrics()`                    | Prometheus   | 计数/gauge/直方分桶；`metrics.page` 挂暴露端点                                                                |
+| `etag()`                       | 协商缓存     | 弱 ETag + If-None-Match→304（GET/HEAD）；对 sugar 产物生效                                                    |
+| `compress()`                   | gzip         | q 感知；no-transform/206/已压缩类型自动跳过；与 etag 任意顺序都正确                                           |
+| `csrf()`                       | 跨站请求防护 | Origin/Referer 校验 + `csrfToken()`；Origin: null 拒绝                                                        |
+| `validator()`                  | 入参校验     | Standard Schema（zod/valibot 通用接口）                                                                       |
+| `serveStatic()`                | 静态文件     | GET/HEAD only；dotfile 默认忽略；ETag/Range                                                                   |
+| `createBodyParser()`           | body 解析    | 见 §4.3——建议全局挂                                                                                           |
+| `bodyLimit()`                  | 体积限制     | 与 sink 共存需 `noOpFor(bodyLimit(...))` 透明声明                                                             |
 
 ### 8.3 与热路由共存的透明声明
 
