@@ -18,6 +18,8 @@ const REAL_BUN = typeof Bun !== "undefined";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
+const post = (headers: Record<string, string>): Request =>
+  new Request("http://localhost:3000/x", { method: "POST", headers });
 const NATIVE = typeof Bun !== "undefined";
 
 // Driving the fallback explicitly: forge/direct the HMAC format regardless
@@ -283,9 +285,6 @@ describe.skipIf(REAL_BUN)("csrfToken cross-backend consistency", () => {
   });
 });
 describe("csrf", () => {
-  const post = (headers: Record<string, string>): Request =>
-    new Request("http://localhost:3000/x", { method: "POST", headers });
-
   it("safe methods pass without origins", async () => {
     const app = new Keala(quiet);
     app.use(csrf());
@@ -305,5 +304,79 @@ describe("csrf", () => {
     expect((await app.handle(evil)).status).toBe(403);
     const none = post({});
     expect((await app.handle(none)).status).toBe(403);
+  });
+});
+
+describe("csrf: allow exemption hook", () => {
+  it("allow → true lets an Origin-less request through (direct API calls)", async () => {
+    const app = new Keala(quiet);
+    app.use(csrf({ allow: () => true }));
+    app.post("/x", (c) => c.text("ok"));
+    const res = await app.handle(post({}));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
+  });
+
+  it("allow → false keeps the full Origin/Referer validation", async () => {
+    const app = new Keala(quiet);
+    app.use(csrf({ allow: () => false }));
+    app.post("/x", (c) => c.text("ok"));
+    expect((await app.handle(post({}))).status).toBe(403);
+    expect((await app.handle(post({ origin: "https://evil.site" }))).status).toBe(403);
+    expect((await app.handle(post({ origin: "http://localhost:3000" }))).status).toBe(200);
+  });
+
+  it("allow may be async (Promise<boolean>)", async () => {
+    const app = new Keala(quiet);
+    app.use(csrf({ allow: async (c) => c.header("authorization").length > 0 }));
+    app.post("/x", (c) => c.text("ok"));
+    const bearer = post({ authorization: "Bearer t" });
+    expect((await app.handle(bearer)).status).toBe(200);
+    const anonymous = post({});
+    expect((await app.handle(anonymous)).status).toBe(403);
+  });
+
+  it("allow receives the request context — the authenticated-API pattern", async () => {
+    const seen: string[] = [];
+    const app = new Keala(quiet);
+    app.use(
+      csrf({
+        allow: (c) => {
+          seen.push(`${c.method} ${c.path}`);
+          return c.header("authorization").length > 0;
+        },
+      }),
+    );
+    app.post("/api/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      new Request("http://localhost:3000/api/x", {
+        method: "POST",
+        headers: { authorization: "Bearer t" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(seen).toEqual(["POST /api/x"]);
+  });
+
+  it("the hook is consulted BEFORE Origin/Referer validation — same-origin is never affected", async () => {
+    const calls: number[] = [];
+    const app = new Keala(quiet);
+    app.use(
+      csrf({
+        allow: (c) => {
+          calls.push(1);
+          return c.header("authorization").length > 0;
+        },
+      }),
+    );
+    app.post("/x", (c) => c.text("ok"));
+    app.get("/read", (c) => c.text("ok"));
+    // A cross-site request WITH an exempting header bypasses the 403 — the
+    // hook's answer wins over the origin verdict, by design.
+    const exempt = post({ origin: "https://evil.site", authorization: "Bearer t" });
+    expect((await app.handle(exempt)).status).toBe(200);
+    // Safe methods never consult the hook (they were never checked).
+    expect((await app.handle(req("/read"))).status).toBe(200);
+    expect(calls).toHaveLength(1);
   });
 });

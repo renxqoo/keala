@@ -13,7 +13,7 @@
 
 export { basicAuth, bearerAuth, type BasicAuthOptions, type BearerAuthOptions } from "./auth.ts";
 export { cache, type ResponseCacheOptions } from "./cache.ts";
-export { cors, csrf, type CorsOptions } from "./cors.ts";
+export { cors, csrf, type CorsOptions, type CsrfOptions } from "./cors.ts";
 export {
   csrfToken,
   csrfTokenGuard,

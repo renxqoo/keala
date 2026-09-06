@@ -12,6 +12,7 @@
 import { createError } from "../http/errors.ts";
 import { statusMessage } from "../http/status.ts";
 import { toURL } from "../utils/url.ts";
+import type { Context } from "../core/context/context.ts";
 import type { RouteHandler } from "../router/router.ts";
 
 export interface CorsOptions {
@@ -169,17 +170,33 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
   };
 };
 
+export interface CsrfOptions {
+  /**
+   * Exemption hook, consulted BEFORE the Origin/Referer validation.
+   * Returning true skips the check entirely (`next()` directly) — the
+   * escape hatch for callers browsers never impersonate: direct API
+   * clients (curl, service-to-service) that authenticate by some other
+   * means, e.g. `allow: (c) => c.header("authorization").length > 0`.
+   * The exemption must NOT rest on request properties an attacker's
+   * browser page can set.
+   */
+  allow?: (c: Context) => boolean | Promise<boolean>;
+}
+
 /**
  * CSRF — Origin/Referer validation for state-changing requests (no tokens).
  *
  * Safe methods (GET/HEAD/OPTIONS) and same-origin requests pass; anything
  * else answers 403. Requests without BOTH Origin and Referer are rejected:
- * browsers always send one on cross-site state changes.
+ * browsers always send one on cross-site state changes. An optional `allow`
+ * hook (see CsrfOptions) exempts non-browser callers before validation.
  */
-export const csrf = (): RouteHandler => {
+export const csrf = (options: CsrfOptions = {}): RouteHandler => {
   const SAFE = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
+  const allow = options.allow;
   return async (c, next) => {
     if (SAFE.has(c.method)) return next();
+    if (allow !== undefined && Boolean(await allow(c))) return next();
     const originHeader = c.header("origin");
     const source = originHeader.length > 0 ? originHeader : c.header("referer");
     // Sandboxed iframes and privacy extensions send the literal "null" —
