@@ -14,12 +14,37 @@ import { statusMessage } from "../http/status.ts";
 import type { RouteHandler } from "../router/router.ts";
 
 // ---------------------------------------------------------------------------
+// timingSafeEqual — constant-time comparison for secrets (M7)
+// ---------------------------------------------------------------------------
+
+const tsencoder = new TextEncoder();
+
+/**
+ * Constant-time equality for tokens/secrets. For equal-length inputs every
+ * byte is compared (no short-circuit); different lengths are inherently
+ * public knowledge (the wire carries them) and return immediately.
+ */
+export const timingSafeEqual = (a: string | Uint8Array, b: string | Uint8Array): boolean => {
+  const bytesA = typeof a === "string" ? tsencoder.encode(a) : a;
+  const bytesB = typeof b === "string" ? tsencoder.encode(b) : b;
+  if (bytesA.length !== bytesB.length) return false;
+  let diff = 0;
+  for (let i = 0; i < bytesA.length; i++) {
+    diff |= bytesA[i]! ^ bytesB[i]!;
+  }
+  return diff === 0;
+};
+
+// ---------------------------------------------------------------------------
 // Basic authentication (RFC 7617)
 // ---------------------------------------------------------------------------
 
 export interface BasicAuthOptions {
   /** Accept the credentials; compare hashes, never plaintext with `===`. */
   verify(username: string, password: string): boolean | Promise<boolean>;
+  /** Static credentials (timing-safe — no `verify` needed for simple cases). */
+  username?: string;
+  password?: string;
   /** Protection space label. Default "Restricted". */
   realm?: string;
 }
@@ -66,8 +91,9 @@ const realmPayload = (middleware: string, realm: string | undefined): string => 
 };
 
 export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
-  if (typeof options?.verify !== "function") {
-    throw new TypeError("basicAuth({ verify }) requires a verify function");
+  const hasStatic = options.username !== undefined && options.password !== undefined;
+  if (!hasStatic && typeof options?.verify !== "function") {
+    throw new TypeError("basicAuth requires { verify } or { username, password }");
   }
   const realm = realmPayload("basicAuth", options.realm);
   const challenge = `Basic realm="${realm}", charset="UTF-8"`;
@@ -78,14 +104,16 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
     if (scheme === "basic") {
       const credentials = decodeBasic(rest.trim());
       if (credentials !== null) {
-        accepted = await options.verify(credentials.username, credentials.password);
+        if (hasStatic) {
+          accepted =
+            timingSafeEqual(credentials.username, options.username as string) &&
+            timingSafeEqual(credentials.password, options.password as string);
+        } else {
+          accepted = await options.verify!(credentials.username, credentials.password);
+        }
       }
     }
     if (!accepted) {
-      // U3b return form — body and header bytes match the old staged-401
-      // fallback (status-message body + challenge); the content-type becomes
-      // explicit (text/plain; charset=utf-8) instead of the runtime default
-      // — semantically equivalent, cross-runtime consistent (D1 family).
       return c.text(statusMessage(401) || "401", 401, { "www-authenticate": challenge });
     }
     await next();
@@ -99,6 +127,8 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
 export interface BearerAuthOptions {
   /** Accept the token; compare hashes, never plaintext with `===`. */
   verify(token: string): boolean | Promise<boolean>;
+  /** Static token(s) — timing-safe comparison (no `verify` needed). */
+  token?: string | string[];
   /** Protection space label. Default "Restricted". */
   realm?: string;
 }
@@ -115,8 +145,15 @@ const hasWhitespaceOrControl = (value: string): boolean => {
 };
 
 export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
-  if (typeof options?.verify !== "function") {
-    throw new TypeError("bearerAuth({ verify }) requires a verify function");
+  const tokenOption = options.token;
+  const hasToken = tokenOption !== undefined;
+  const tokens: string[] = Array.isArray(tokenOption)
+    ? tokenOption
+    : tokenOption !== undefined
+      ? [tokenOption]
+      : [];
+  if (!hasToken && typeof options?.verify !== "function") {
+    throw new TypeError("bearerAuth requires { verify } or { token }");
   }
   const realm = realmPayload("bearerAuth", options.realm);
   const challenge = `Bearer realm="${realm}"`;
@@ -125,7 +162,6 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
     let token: string | null = null;
     if (scheme === "bearer") {
       const candidate = rest.trim();
-      // One opaque token — internal whitespace/control bytes are malformed.
       token =
         candidate.length > 0 &&
         candidate.length <= MAX_TOKEN_BYTES &&
@@ -133,11 +169,24 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
           ? candidate
           : null;
     }
+    // RFC 6750 §3.1 three-way: a PRESENT but malformed token (wrong scheme,
+    // internal whitespace, control bytes, empty) is `invalid_request` (400);
+    // a well-formed token that FAILS verification is `invalid_token` (401).
     if (token === null) {
+      const hasAuth = c.header("authorization").length > 0;
+      if (hasAuth) {
+        return c.text(statusMessage(400) || "400", 400, {
+          "www-authenticate": `${challenge}, error="invalid_request"`,
+        });
+      }
       return c.text(statusMessage(401) || "401", 401, { "www-authenticate": challenge });
     }
-    if (!(await options.verify(token))) {
-      // Present-but-rejected is `invalid_token` per RFC 6750 §3.
+    const validToken = token as string; // null already returned
+    const verifyFn = options.verify as (t: string) => boolean | Promise<boolean>;
+    const accepted = hasToken
+      ? tokens.some((t) => timingSafeEqual(t, validToken))
+      : await verifyFn(validToken);
+    if (!accepted) {
       return c.text(statusMessage(401) || "401", 401, {
         "www-authenticate": `${challenge}, error="invalid_token"`,
       });

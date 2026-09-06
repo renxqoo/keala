@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
-import { basicAuth, bearerAuth } from "../../src/middleware/auth.ts";
+import { basicAuth, bearerAuth, timingSafeEqual } from "../../src/middleware/auth.ts";
 import {
   bunPasswordHasher,
   hashPassword,
@@ -133,17 +133,25 @@ describe("bearerAuth", () => {
     expect(res.status).toBe(200);
   });
 
+  it("answers 401 + realm for a missing header", async () => {
+    const app = bearerApp(() => true);
+    const res = await app.handle(req("/me"));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toBe('Bearer realm="API"');
+  });
+
+  // M7: RFC 6750 §3.1 — a PRESENT but malformed Authorization (wrong scheme,
+  // empty/whitespace/control-byte token) is invalid_request (400), not 401.
   it.each([
-    ["missing header", undefined],
     ["wrong scheme", { authorization: "Basic abc" }],
     ["empty token", { authorization: "Bearer " }],
     ["whitespace inside token", { authorization: "Bearer to ken" }],
     ["control byte inside token", { authorization: `Bearer to\x01ken` }],
-  ])("answers 401 + realm for %s", async (_label, headers) => {
+  ])("answers 400 + error=invalid_request for %s", async (_label, headers) => {
     const app = bearerApp(() => true);
-    const res = await app.handle(req("/me", headers === undefined ? {} : { headers }));
-    expect(res.status).toBe(401);
-    expect(res.headers.get("www-authenticate")).toBe('Bearer realm="API"');
+    const res = await app.handle(req("/me", { headers }));
+    expect(res.status).toBe(400);
+    expect(res.headers.get("www-authenticate")).toContain('error="invalid_request"');
   });
 
   it("a present-but-rejected token carries error=invalid_token (RFC 6750)", async () => {
@@ -307,5 +315,126 @@ describe("auth realm: quoted-string safety", () => {
   it("bearerAuth realms get the same treatment", async () => {
     const challenge = await challengeOf(bearerAuth({ verify, realm: "API v\\2" }));
     expect(challenge).toBe('Bearer realm="API v2"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// M7: timingSafeEqual + token option + RFC 6750 three-way + static credentials
+// ---------------------------------------------------------------------------
+
+describe("M7: timingSafeEqual", () => {
+  it("equal strings → true", () => {
+    expect(timingSafeEqual("secret", "secret")).toBe(true);
+  });
+  it("different strings → false", () => {
+    expect(timingSafeEqual("secret", "secreU")).toBe(false);
+  });
+  it("different lengths → false (no throw)", () => {
+    expect(timingSafeEqual("short", "a-much-longer-secret")).toBe(false);
+  });
+  it("empty strings → true", () => {
+    expect(timingSafeEqual("", "")).toBe(true);
+  });
+  it("Uint8Array inputs work", () => {
+    expect(timingSafeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 3]))).toBe(true);
+    expect(timingSafeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4]))).toBe(false);
+  });
+});
+
+describe("M7: bearerAuth({ token }) — static token with timing-safe compare", () => {
+  it("correct token → 200", async () => {
+    const app = new Keala(quiet);
+    app.use(bearerAuth({ token: "my-static-token" }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      req("/x", { headers: { authorization: "Bearer my-static-token" } }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("wrong token → 401 + error=invalid_token", async () => {
+    const app = new Keala(quiet);
+    app.use(bearerAuth({ token: "my-static-token" }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(req("/x", { headers: { authorization: "Bearer wrong" } }));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toContain('error="invalid_token"');
+  });
+
+  it("token array — any match passes", async () => {
+    const app = new Keala(quiet);
+    app.use(bearerAuth({ token: ["key-a", "key-b"] }));
+    app.get("/x", (c) => c.text("ok"));
+    const a = await app.handle(req("/x", { headers: { authorization: "Bearer key-b" } }));
+    const c = await app.handle(req("/x", { headers: { authorization: "Bearer key-z" } }));
+    expect(a.status).toBe(200);
+    expect(c.status).toBe(401);
+  });
+});
+
+describe("M7: RFC 6750 three-way — malformed → 400 invalid_request", () => {
+  it("token with internal whitespace → 400 error=invalid_request", async () => {
+    const app = new Keala(quiet);
+    app.use(bearerAuth({ verify: () => true }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      req("/x", { headers: { authorization: "Bearer not@valid token" } }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.headers.get("www-authenticate")).toContain('error="invalid_request"');
+  });
+
+  it("token with control bytes → 400", async () => {
+    const app = new Keala(quiet);
+    app.use(bearerAuth({ verify: () => true }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      req("/x", { headers: { authorization: `Bearer tok${"\x01"}en` } }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("empty Bearer token → 400", async () => {
+    const app = new Keala(quiet);
+    app.use(bearerAuth({ verify: () => true }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(req("/x", { headers: { authorization: "Bearer " } }));
+    expect(res.status).toBe(400);
+  });
+
+  it("verify-rejected (valid format) → 401 + error=invalid_token", async () => {
+    const app = new Keala(quiet);
+    app.use(bearerAuth({ verify: () => false }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(req("/x", { headers: { authorization: "Bearer valid-format" } }));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toContain('error="invalid_token"');
+  });
+});
+
+describe("M7: basicAuth({ username, password }) — static credentials", () => {
+  it("correct credentials → 200", async () => {
+    const app = new Keala(quiet);
+    app.use(basicAuth({ username: "admin", password: "s3cret" }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(req("/x", { headers: basic("admin", "s3cret") }));
+    expect(res.status).toBe(200);
+  });
+
+  it("wrong password → 401", async () => {
+    const app = new Keala(quiet);
+    app.use(basicAuth({ username: "admin", password: "s3cret" }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(req("/x", { headers: basic("admin", "wrong") }));
+    expect(res.status).toBe(401);
+  });
+
+  it("timing-safe (not === on plaintext)", async () => {
+    const app = new Keala(quiet);
+    app.use(basicAuth({ username: "admin", password: "s3cret" }));
+    app.get("/x", (c) => c.text("ok"));
+    // Prefix-match attempt (=== would short-circuit true on partial match)
+    const res = await app.handle(req("/x", { headers: basic("admin", "s3cr") }));
+    expect(res.status).toBe(401);
   });
 });
