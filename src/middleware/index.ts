@@ -32,6 +32,17 @@ export {
   type LoggerOptions,
 } from "./headers.ts";
 export { bodyLimit, timeout } from "./limits.ts";
+export {
+  jwt,
+  signJWT,
+  verifyJWT,
+  type JWTKey,
+  type JWTOptions,
+  type JWTPayload,
+  type SignOptions,
+  type SignatureAlgorithm,
+  type VerifyOptions,
+} from "./jwt.ts";
 // The typed body-reader accessor rides the middleware aggregate too — it is
 // the companion every bodyParser consumer imports alongside the plugin.
 export { bodyOf } from "../plugins/body-parser.ts";
