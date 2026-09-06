@@ -41,7 +41,17 @@
  * the mirror would decline/403 would be a plain 200 one layer down.
  */
 
-import { serveStatic } from "../middleware/serve-static.ts";
+/**
+ * The `{dir}` mirror is the ONE place core reaches into a middleware — and
+ * it must not tax every import: serve-static drags the MIME table along
+ * (~12KB of closure, MBs of loaded-module RSS). Lazy module + registration-
+ * time warmup: apps that never sink a directory never load it, apps that do
+ * have it resolved long before the first request.
+ */
+type ServeStaticFn = (typeof import("../middleware/serve-static.ts"))["serveStatic"];
+let serveStaticModule: Promise<ServeStaticFn> | null = null;
+const loadServeStatic = (): Promise<ServeStaticFn> =>
+  (serveStaticModule ??= import("../middleware/serve-static.ts").then((m) => m.serveStatic));
 import {
   EMPTY_PARAMS,
   paramsRecord,
@@ -311,7 +321,11 @@ export const registerSink = (
   if (isDir) {
     const dir = (entry as NativeDirSink).dir;
     const prefix = path.slice(0, -2);
-    const handler = serveStatic({ root: dir, prefix });
+    // Warm at registration: the promise resolves once for the app's lifetime;
+    // the mirror awaits it per request (a resolved-promise await is a no-op
+    // microtask — the sink's own Bun.file serving dominates any path it takes).
+    const handlerP = loadServeStatic().then((serveStatic) => serveStatic({ root: dir, prefix }));
+    const handler: RouteHandler = (c, next) => handlerP.then((h) => h(c, next));
     const firstDef = router.defs.length;
     // Wildcard mirror for the tree, plus a static twin: the native {dir}
     // route does not serve the bare prefix (it falls through to fetch), so
