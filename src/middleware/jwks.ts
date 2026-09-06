@@ -30,7 +30,7 @@
  * ```
  */
 
-import { verifyJWT } from "./jwt.ts";
+import { verifyJWT, type VerifyOptions } from "./jwt.ts";
 import type { webcrypto } from "node:crypto";
 import type { RouteHandler } from "../router/router.ts";
 
@@ -73,7 +73,7 @@ export interface JwksKeys {
    * false for every failure (unknown kid, bad signature, expired claims,
    * endpoint down with a cold cache) — it never rejects.
    */
-  verify(token: string): Promise<boolean>;
+  verify(token: string, options?: VerifyOptions): Promise<boolean>;
   /** Force a re-fetch now, TTL notwithstanding. Rejects on network failure. */
   refresh(): Promise<void>;
   /** The currently cached key set (re-fetching first when stale). */
@@ -227,7 +227,7 @@ export const jwks = (options: JwksOptions): JwksKeys => {
     };
   };
 
-  const verify = async (token: string): Promise<boolean> => {
+  const verify = async (token: string, verifyOptions?: VerifyOptions): Promise<boolean> => {
     if (typeof token !== "string") return false;
     try {
       await ensureFresh();
@@ -252,7 +252,7 @@ export const jwks = (options: JwksOptions): JwksKeys => {
       if (entry === undefined) return false;
     }
     try {
-      await verifyJWT(token, entry.key);
+      await verifyJWT(token, entry.key, verifyOptions);
       return true;
     } catch {
       return false; // shape, algorithm, signature or claims failure

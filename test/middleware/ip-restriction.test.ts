@@ -150,3 +150,32 @@ describe("bracketed IPv6 from XFF/proxy forms", () => {
     expect(res.status).toBe(200); // not denied → pass
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-review fix: IPv4-mapped IPv6 normalization
+// ---------------------------------------------------------------------------
+describe("IPv4-mapped IPv6 addresses match IPv4 rules", () => {
+  it("deny rule catches ::ffff: form (was fail-open)", async () => {
+    const app = new Keala({ env: "test" });
+    app.use(ipRestriction({ deny: ["203.0.113.0/24"] }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", {
+        headers: { "x-forwarded-for": "::ffff:203.0.113.9" },
+      }),
+    );
+    expect(res.status).toBe(403); // was 200 (bypass)
+  });
+  it("allow rule admits ::ffff: form (was fail-closed for allow-only)", async () => {
+    const app = new Keala({ env: "test", proxy: true });
+    app.use(ipRestriction({ allow: ["10.0.0.0/8"] }));
+    app.get("/x", (c) => c.text("ok"));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "x-forwarded-for": "::ffff:10.1.2.3" } }),
+    );
+    expect(res.status).toBe(200);
+  });
+  it("triple-segment CIDR rule throws at setup", () => {
+    expect(() => ipRestriction({ allow: ["10.0.0.0/8/24"] })).toThrow(TypeError);
+  });
+});

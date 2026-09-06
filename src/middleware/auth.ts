@@ -92,6 +92,9 @@ const realmPayload = (middleware: string, realm: string | undefined): string => 
 
 export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
   const hasStatic = options.username !== undefined && options.password !== undefined;
+  if (hasStatic && typeof options?.verify === "function") {
+    throw new TypeError("basicAuth: provide either { username, password } or { verify }, not both");
+  }
   if (!hasStatic && typeof options?.verify !== "function") {
     throw new TypeError("basicAuth requires { verify } or { username, password }");
   }
@@ -105,9 +108,12 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
       const credentials = decodeBasic(rest.trim());
       if (credentials !== null) {
         if (hasStatic) {
-          accepted =
-            timingSafeEqual(credentials.username, options.username as string) &&
-            timingSafeEqual(credentials.password, options.password as string);
+          // Review M7: `&&` short-circuits — a wrong username skips the
+          // password comparison, leaking username correctness via timing.
+          // Compute both, then combine (the & on booleans is non-short-circuit).
+          const userOk = timingSafeEqual(credentials.username, options.username as string);
+          const passOk = timingSafeEqual(credentials.password, options.password as string);
+          accepted = userOk === passOk && userOk; // both true → true
         } else {
           accepted = await options.verify!(credentials.username, credentials.password);
         }
@@ -152,6 +158,14 @@ export const bearerAuth = (options: BearerAuthOptions): RouteHandler => {
     : tokenOption !== undefined
       ? [tokenOption]
       : [];
+  // Review M7: both paths given → verify is silently dead code. An empty
+  // token array silently rejects everything. Both are assembly bugs — loud.
+  if (hasToken && typeof options.verify === "function") {
+    throw new TypeError("bearerAuth: provide either { token } or { verify }, not both");
+  }
+  if (hasToken && tokens.length === 0) {
+    throw new TypeError("bearerAuth: token array must not be empty");
+  }
   if (!hasToken && typeof options?.verify !== "function") {
     throw new TypeError("bearerAuth requires { verify } or { token }");
   }

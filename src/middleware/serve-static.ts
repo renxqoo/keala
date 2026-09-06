@@ -121,13 +121,29 @@ const stripPrefixOf = (rawPrefix: string | undefined): string | undefined => {
  * token match; `*` accepts either.
  */
 const acceptedEncodings = (accept: string): { encoding: string; ext: string }[] => {
-  const tokens = new Set(accept.split(",").map((token) => token.split(";")[0]?.trim() ?? ""));
+  // q-aware: `gzip;q=0` is a REFUSAL (RFC 9110 §12.5.2 — q=0 = not
+  // acceptable), not a preference to be overridden by a later wildcard.
+  // The old token-only match served rejected encodings (and let a rejected
+  // br outrank an explicitly accepted gzip).
   const out: { encoding: string; ext: string }[] = [];
-  if (tokens.has("br") || tokens.has("*")) out.push({ encoding: "br", ext: ".br" });
-  if (tokens.has("gzip") || tokens.has("x-gzip") || tokens.has("*")) {
-    out.push({ encoding: "gzip", ext: ".gz" });
+  let wildcard = false;
+  for (const raw of accept.split(",")) {
+    const token = raw.split(";")[0]?.trim() ?? "";
+    const qMatch = /;\s*q\s*=\s*([\d.]+)/.exec(raw);
+    if (qMatch !== null && Number.parseFloat(qMatch[1] ?? "1") === 0) {
+      continue; // q=0: refused — do not offer this encoding
+    }
+    if (token === "br" || token === "*") wildcard = token === "*";
+    if (token === "br") out.push({ encoding: "br", ext: ".br" });
+    if (token === "gzip" || token === "x-gzip") out.push({ encoding: "gzip", ext: ".gz" });
   }
-  return out;
+  // `*` accepts everything not explicitly refused above.
+  if (wildcard) {
+    if (!out.some((e) => e.encoding === "br")) out.push({ encoding: "br", ext: ".br" });
+    if (!out.some((e) => e.encoding === "gzip")) out.push({ encoding: "gzip", ext: ".gz" });
+  }
+  // Deterministic preference order: br first (better compression).
+  return out.sort((a, b) => (a.encoding === "br" ? -1 : b.encoding === "br" ? 1 : 0));
 };
 
 export const serveStatic = (options: ServeStaticOptions): RouteHandler => {

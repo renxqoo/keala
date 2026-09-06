@@ -436,3 +436,20 @@ describe("M7: basicAuth({ username, password }) — static credentials", () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-review fixes: token+verify conflict, empty token array, timing
+// ---------------------------------------------------------------------------
+describe("M7 review: assembly-bug guards", () => {
+  it("bearerAuth: token + verify both given → TypeError", () => {
+    expect(() => bearerAuth({ token: "x", verify: () => true })).toThrow(/not both/);
+  });
+  it("basicAuth: username + verify both given → TypeError", () => {
+    expect(() => basicAuth({ username: "a", password: "b", verify: () => true })).toThrow(
+      /not both/,
+    );
+  });
+  it("bearerAuth: empty token array → TypeError", () => {
+    expect(() => bearerAuth({ token: [] })).toThrow(/not.*empty/);
+  });
+});

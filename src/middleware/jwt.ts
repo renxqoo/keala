@@ -484,7 +484,17 @@ export const jwt = (options: JWTOptions): RouteHandler => {
       // (RFC 6750 error="invalid_token").
       unauthorized(c, challenge, "invalid_token", "invalid bearer token", err);
     }
-    c.state.jwt = payload;
+    // Review M6: strip the __proto__ own key — a payload carrying it would
+    // set the prototype of any downstream Object.assign({}, c.state.jwt).
+    if (typeof payload === "object" && payload !== null && "__proto__" in payload) {
+      const clean = Object.create(null);
+      for (const key of Object.keys(payload)) {
+        if (key !== "__proto__") clean[key] = (payload as Record<string, unknown>)[key];
+      }
+      c.state.jwt = clean;
+    } else {
+      c.state.jwt = payload;
+    }
     await next();
   };
 };

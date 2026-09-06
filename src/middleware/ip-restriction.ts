@@ -97,13 +97,28 @@ const compileRule = (rule: string): CompiledRule => {
   if (typeof rule !== "string" || rule.trim().length === 0) {
     throw new TypeError(`ipRestriction: invalid rule ${JSON.stringify(rule)}`);
   }
-  const [address = "", prefixText] = rule.trim().split("/");
-  const v4 = !address.includes(":");
-  const bits = v4 ? ipToInt(address) : ipv6ToBits(address);
+  const segments = rule.trim().split("/");
+  if (segments.length > 2) {
+    throw new TypeError(
+      `ipRestriction: invalid rule ${JSON.stringify(rule)} (multiple "/" separators)`,
+    );
+  }
+  const [address = "", prefixText] = segments;
+  const isV6 = address.includes(":");
+  let bits = isV6 ? ipv6ToBits(address) : ipToInt(address);
   if (bits === null) {
     throw new TypeError(
       `ipRestriction: invalid rule ${JSON.stringify(rule)} (unparseable address)`,
     );
+  }
+  // Normalize ::ffff:a.b.c.d rules to IPv4 (same as parseAddress) so rules
+  // and addresses live in the same family after the mapped-range collapse.
+  let v4 = !isV6;
+  let prefixAdjust = 0;
+  if (isV6 && bits >> 32n === 0xffffn) {
+    v4 = true;
+    bits = bits & 0xffffffffn;
+    prefixAdjust = 96; // ::ffff:0:0/96 maps to 0.0.0.0/0 in v4
   }
   const width = v4 ? 32 : 128;
   if (prefixText === undefined) {
@@ -112,8 +127,9 @@ const compileRule = (rule: string): CompiledRule => {
   if (!PREFIX_RE.test(prefixText)) {
     throw new TypeError(`ipRestriction: invalid rule ${JSON.stringify(rule)} (bad prefix)`);
   }
-  const prefix = Number(prefixText);
-  if (prefix > width) {
+  const rawPrefix = Number(prefixText);
+  const prefix = v4 && isV6 ? rawPrefix - prefixAdjust : rawPrefix;
+  if (prefix < 0 || prefix > width) {
     throw new TypeError(`ipRestriction: invalid rule ${JSON.stringify(rule)} (prefix > /${width})`);
   }
   const mask = prefixMask(prefix, width);
@@ -137,7 +153,17 @@ const parseAddress = (ip: string): { v4: boolean; bits: bigint } | null => {
     // and a deny-only config would 403 every proxied IPv6 client.
     const unbracketed = ip.startsWith("[") && ip.endsWith("]") ? ip.slice(1, -1) : ip;
     const bits = ipv6ToBits(unbracketed);
-    return bits === null ? null : { v4: false, bits };
+    if (bits === null) return null;
+    // IPv4-mapped IPv6 (::ffff:a.b.c.d / ::ffff:0:0/96) — Bun's dual-stack
+    // socket and Node's socket.remoteAddress report IPv4 clients in this
+    // form. Without normalization, IPv4 deny rules never match them (the
+    // family check `rule.v4 === address.v4` fails), making a deny-only
+    // config fail-OPEN for every proxied IPv4 client. Map back to v4.
+    // ::ffff:a.b.c.d: the top 96 bits are 0:0:0:0:0:ffff — normalize to v4.
+    if (bits >> 32n === 0xffffn) {
+      return { v4: true, bits: bits & 0xffffffffn };
+    }
+    return { v4: false, bits };
   }
   const bits = ipToInt(ip);
   return bits === null ? null : { v4: true, bits };
