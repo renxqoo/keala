@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { cache } from "../../src/middleware/cache.ts";
+import { compress, etag } from "../../src/middleware/etag.ts";
 /**
  * responseCache tests: hits rebuild fresh Responses, eligibility is
  * conservative, TTL/LRU behave, and captures never disturb the live response.
@@ -287,5 +288,69 @@ describe("audit DP-P1: the store is byte-budgeted", () => {
     const head = await app.handle(new Request("http://localhost/h", { method: "HEAD" }));
     expect(head.headers.get("content-length")).toBe("5");
     expect(head.headers.get("x-cache")).toBe("hit");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// M2 audit fixes: BUG-4 (concurrent capture accounting) + BUG-5 (hit not transformable)
+// ---------------------------------------------------------------------------
+
+describe("M2 BUG-4: concurrent captures of the same key don't double-count bytes", () => {
+  it("two concurrent misses on the same key keep totalBytes consistent", async () => {
+    // maxBytes=1024, body ~600B: two captures of the same key should total
+    // ~600 (one entry), not ~1200 (which would evict itself).
+    const body = "x".repeat(600);
+    let misses = 0;
+    const app = new Keala({ env: "test" });
+    app.use(cache({ maxBytes: 1024, ttl: 60_000 }));
+    app.get("/x", (c) => {
+      misses++;
+      return c.text(body);
+    });
+    // Two concurrent requests (same tick) — both miss, both capture.
+    const [_a, _b] = await Promise.all([
+      app.handle(new Request("http://localhost:3000/x")),
+      app.handle(new Request("http://localhost:3000/x")),
+    ]);
+    // The third request must HIT (the entry survived its own accounting).
+    const c = await app.handle(new Request("http://localhost:3000/x"));
+    expect(c.headers.get("x-cache")).not.toBe(null);
+    expect(misses).toBeLessThan(3); // at most 2 misses (concurrent), 3rd is a hit
+  });
+});
+
+describe("M2 BUG-5: cache hits are transformable by outer middleware", () => {
+  it("a hit response gets gzipped by an outer compress()", async () => {
+    const app = new Keala({ env: "test" });
+    app.use(compress());
+    app.use(cache({ maxBytes: 1 << 20, ttl: 60_000 }));
+    app.get("/x", (c) => c.text("hello world ".repeat(50)));
+    // First request: miss → captured → compressed.
+    const first = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "accept-encoding": "gzip" } }),
+    );
+    expect(first.headers.get("content-encoding")).toBe("gzip");
+    // Second request: hit → the stored body must ALSO get compressed.
+    const second = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "accept-encoding": "gzip" } }),
+    );
+    expect(second.headers.get("x-cache")).toBe("hit");
+    expect(second.headers.get("content-encoding")).toBe("gzip");
+  });
+
+  it("a hit response gets an ETag from an outer etag()", async () => {
+    const app = new Keala({ env: "test" });
+    app.use(etag());
+    app.use(cache({ maxBytes: 1 << 20, ttl: 60_000 }));
+    app.get("/x", (c) => c.text("stable body"));
+    const first = await app.handle(new Request("http://localhost:3000/x"));
+    expect(first.headers.get("etag")).toMatch(/^W\//);
+    const tag = first.headers.get("etag");
+    const second = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "if-none-match": tag ?? "" } }),
+    );
+    // x-cache drops on the 304 rebuild (not a retained header — correct);
+    // the 304 itself proves etag saw the hit and negotiated.
+    expect(second.status).toBe(304);
   });
 });

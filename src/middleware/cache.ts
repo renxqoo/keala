@@ -165,7 +165,14 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
       }
       return new Response(null, { status: 200, headers: head });
     }
-    return new Response(entry.body, { status: 200, headers });
+    // BUG-5 fix: brand the hit as a snapshot body — the stored string is
+    // context-independent, so outer transforms (etag/compress) may treat it
+    // exactly like a fresh sugar product. The memo saves the clone cost for
+    // text entries: etag/compress read bodySerializedValue instead of cloning.
+    if (typeof entry.body === "string") c.bodySerializedValue = entry.body;
+    const hit = new Response(entry.body, { status: 200, headers });
+    c.directBodyResponseValue = hit;
+    return hit;
   };
 
   return async (c, next) => {
@@ -227,6 +234,11 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     // The TTL window starts when the REPRESENTATION was produced (after the
     // handler settled), not when the request began — a handler slower than
     // the ttl would otherwise mint entries that are born expired.
+    // BUG-4 fix: a concurrent capture may have already stored this key —
+    // subtract the old entry's bytes before adding the new ones, or
+    // totalBytes double-counts and evicts the entry on its own weight.
+    const previous = store.get(key);
+    if (previous !== undefined) totalBytes -= previous.sizeBytes;
     store.set(key, { expires: Date.now() + ttl, body, headers, sizeBytes });
     totalBytes += sizeBytes;
     // LRU eviction keeps the freshest `max` entries within BOTH budgets —
