@@ -70,6 +70,9 @@ export type { AdmissionStrategy } from "./types.ts";
 export { compilePattern, type CompiledSegment, type PatternIR } from "./router/pattern.ts";
 export type { AppOptions, HeaderValue, ListenOptions, Runtime, Next } from "./types.ts";
 export type { RouteHandler } from "./router/router.ts";
+/** The "I need the whole map" adapter over a request's route params (U2) —
+ * the same boundary the sink mirror uses. Logs/traces enumerate with it. */
+export { paramsRecord } from "./router/router.ts";
 export type { Plugin } from "./types.ts";
 // The typed context-extension channel (EXT-1): merge into ContextExtensions
 // to type `app.decorate` members app-wide; createMiddleware<C>() narrows a

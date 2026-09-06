@@ -29,6 +29,7 @@ const ROOT_EXPORTS = new Set([
   "createError",
   "isHttpError",
   "noOpFor",
+  "paramsRecord",
   "normalizeError",
   "isEmptyStatus",
   "isRedirectStatus",
