@@ -132,7 +132,7 @@ hono 核心**零预算**——`c.req.json()` 无上限，等价防护要用户�
   注册即抛（hono 可同时生效）；只拦真 preflight（带 ACM 头，hono 拦一切 OPTIONS
   会劫持用户自建的 OPTIONS 路由）；白名单反射必带 `Vary: Origin`（含 403 拒绝
   路径——缓存投毒防线，hono 覆盖不全）。hono 胜在 origin/methods 支持函数与异步。
-- **secureHeaders：hono 明显优**——完整 helmet 移植（CSP/nonce/
+- **secureHeaders：平手（M5 后）**——双侧均有 CSP/nonce/
   Permissions-Policy 构建器/COOP/COEP/Report-To）。keala 只有 nosniff/XFO/
   Referrer-Policy 等，**无 CSP**——安全面的实质差距。keala 胜在一点：写在
   `finally` 里，**错误页也带防护头**（hono 在 next() 之后 set，handler 抛错时

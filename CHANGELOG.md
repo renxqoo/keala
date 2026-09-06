@@ -46,6 +46,28 @@ values, offset)` 是"要整个 map"的官方适配器(sink 镜像边界同款)�
   是结构性的:core 纯度/可摇/类型诚实)。签名+轮换/fail-closed/secure
   派生/400 天上限等语义逐字不变(83 项 cookie 测试零改写断言)。
 
+### 安全加固（中间件审计 M1-M8）
+
+- **secureHeaders 补 CSP 全套**：CSP/CSP-Report-Only/nonce 回调/
+  Permissions-Policy/COOP/COEP/CORP/X-XSS-Protection:0/X-DNS-Prefetch-Control
+  - 每头 boolean|string 开关（handler 覆写不被 finally 踩掉）+ timing
+    finally 补齐（错误页也带 Server-Timing）
+- **JWT 中间件（新）**：HS256/384/512 + RS256/384/512 + ES256/384/512
+  全 9 算法；alg 白名单 + 算法混淆防护 + exp/nbf/iss/aud + 常数时间比对；
+  c.state.jwt 提取；零依赖全 Web Crypto
+- **auth 升级**：timingSafeEqual 导出（常数时间比对）；bearerAuth 加
+  token 静态选项（自动 timing-safe）；basicAuth 加 username/password
+  静态选项；RFC 6750 三路合规（畸形 → 400 error=invalid_request）
+- **etag 304 retained headers**：RFC 9110 §15.4.5 的
+  Cache-Control/Expires/Vary 等随行（此前丢失导致共享缓存 TTL 错误）
+- **compress 强 ETag 转弱**：gzip 后表示变了，强验证子必须 W/ 前缀化
+- **cache 并发记账**：并发捕获同 key 不再 double-count totalBytes
+- **cache 命中可变换**：外层 etag/compress 现在对命中响应照常工作
+  （brand + memo），热门缓存路径恢复 gzip 和 304
+- **cors origin 函数 + ACRH 反射**；**csrf allow 豁免钩子**；
+  **rateLimit hit() 原子接口**；**serve-static precompressed + 钩子**
+- **metrics 首套单元测试**（19 条——此前零覆盖）
+
 ### 性能
 
 - **整表单 regex 快速层**(router):R413 的 per-bucket regex 升级为
