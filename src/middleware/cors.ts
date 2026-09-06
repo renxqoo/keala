@@ -1,9 +1,12 @@
 /**
  * CORS — the safe defaults from the security design:
- *  - `allowCredentials: true` NEVER reflects arbitrary origins (whitelist only)
- *  - whitelists REFLECT the request origin, so every negotiated response
- *    carries `Vary: Origin` (a constant "*" answer never varies and omits it)
+ *  - `allowCredentials: true` NEVER reflects arbitrary origins (whitelist or
+ *    origin predicate only)
+ *  - whitelists (and origin predicates) REFLECT the request origin, so every
+ *    negotiated response carries `Vary: Origin` (a constant "*" answer never
+ *    varies and omits it)
  *  - preflight responses never carry cookies
+ *  - `Access-Control-Request-Headers` reflection is opt-in (`reflectHeaders`)
  */
 
 import { createError } from "../http/errors.ts";
@@ -12,11 +15,20 @@ import { toURL } from "../utils/url.ts";
 import type { RouteHandler } from "../router/router.ts";
 
 export interface CorsOptions {
-  /** Allowed origin(s). "*" (default) or an explicit whitelist. */
-  origin?: string | string[];
+  /**
+   * Allowed origin(s). "*" (default), an explicit whitelist, or a predicate
+   * consulted on EVERY request (multi-tenant / dynamically provisioned
+   * domains): returning true reflects that request's Origin, false rejects
+   * like a whitelist miss. Called with `undefined` when the request carries
+   * no Origin header — there is nothing to reflect then.
+   */
+  origin?: string | string[] | ((origin: string | undefined) => boolean | Promise<boolean>);
   /** Request methods allowed (preflight answer). Default GET,HEAD,PUT,POST,DELETE. */
   allowMethods?: string[];
-  /** Request headers allowed — never reflect the request's own list. */
+  /**
+   * Request headers allowed — never reflect the request's own list.
+   * (See `reflectHeaders` for the explicit opt-in to reflection.)
+   */
   allowHeaders?: string[];
   /** Expose response headers to the browser. */
   exposeHeaders?: string[];
@@ -24,6 +36,13 @@ export interface CorsOptions {
   allowCredentials?: boolean;
   /** Preflight cache time in seconds. */
   maxAge?: number;
+  /**
+   * Preflight opt-in: with no `allowHeaders` configured, reflect the
+   * request's `Access-Control-Request-Headers` back (hono behavior) and add
+   * `Vary: Access-Control-Request-Headers` — the answer depends on what the
+   * browser asked for. Default false: an unset list stays unset.
+   */
+  reflectHeaders?: boolean;
   /** Handler invoked when the origin is rejected. Default: plain 403. */
   reject?: (origin: string) => Response;
 }
@@ -54,8 +73,13 @@ const addVary = (c: Parameters<RouteHandler>[0], field: string): void => {
 };
 
 export const cors = (options: CorsOptions = {}): RouteHandler => {
-  const originAllow = options.origin ?? "*";
-  if (options.allowCredentials === true && originAllow === "*") {
+  // A predicate is an explicit decision surface exactly like a whitelist —
+  // the construction guard below keeps targeting only the constant "*".
+  const originFn = typeof options.origin === "function" ? options.origin : null;
+  const originList: string | string[] =
+    typeof options.origin === "string" || Array.isArray(options.origin) ? options.origin : "*";
+  const wildcard = originFn === null && originList === "*";
+  if (options.allowCredentials === true && wildcard) {
     throw new TypeError(
       "cors({ allowCredentials: true }) requires an explicit origin whitelist — reflecting arbitrary origins with credentials enables any-site data theft",
     );
@@ -64,15 +88,20 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
   const allowHeaders = options.allowHeaders?.join(", ").toLowerCase();
   const exposeHeaders = options.exposeHeaders?.join(", ");
   const maxAge = options.maxAge;
-  // A whitelist REFLECTS the request origin — the response is origin-dependent
-  // and shared caches must key on it, so `Vary: Origin` is mandatory on every
-  // negotiated answer. With a constant "*" the response never varies, and the
-  // header would only needlessly disable caching.
-  const varyOrigin = originAllow !== "*";
+  // A whitelist (or predicate) REFLECTS the request origin — the response is
+  // origin-dependent and shared caches must key on it, so `Vary: Origin` is
+  // mandatory on every negotiated answer. With a constant "*" the response
+  // never varies, and the header would only needlessly disable caching.
+  const varyOrigin = originFn !== null || originList !== "*";
+  // ACRH reflection only ever applies when no explicit list is configured.
+  const reflectHeaders = options.reflectHeaders === true && allowHeaders === undefined;
 
   return async (c, next) => {
     const origin = c.header("origin");
-    const allowed = origin.length > 0 && isAllowed(origin, originAllow);
+    const allowed =
+      originFn !== null
+        ? Boolean(await originFn(origin.length > 0 ? origin : undefined)) && origin.length > 0
+        : origin.length > 0 && isAllowed(origin, originList);
 
     const preflight =
       c.method === "OPTIONS" && c.header("access-control-request-method").length > 0;
@@ -84,9 +113,27 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
         if (options.reject !== undefined) return options.reject(origin);
         return c.text(statusMessage(403) || "403", 403);
       }
-      c.setHeader("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
+      c.setHeader("Access-Control-Allow-Origin", wildcard ? "*" : origin);
       c.setHeader("Access-Control-Allow-Methods", methods);
-      if (allowHeaders !== undefined) c.setHeader("Access-Control-Allow-Headers", allowHeaders);
+      if (allowHeaders !== undefined) {
+        c.setHeader("Access-Control-Allow-Headers", allowHeaders);
+      } else if (reflectHeaders) {
+        // Reflect the browser's own request-header list (hono parity): the
+        // answer depends on it, so shared caches must key on the header.
+        const requested = c.header("access-control-request-headers");
+        const reflected =
+          requested.length > 0
+            ? requested
+                .split(",")
+                .map((header) => header.trim())
+                .filter((header) => header.length > 0)
+                .join(", ")
+            : "";
+        if (reflected.length > 0) {
+          c.setHeader("Access-Control-Allow-Headers", reflected);
+          addVary(c, "Access-Control-Request-Headers");
+        }
+      }
       if (options.allowCredentials === true)
         c.setHeader("Access-Control-Allow-Credentials", "true");
       if (maxAge !== undefined) c.setHeader("Access-Control-Max-Age", String(Math.trunc(maxAge)));
@@ -114,7 +161,7 @@ export const cors = (options: CorsOptions = {}): RouteHandler => {
       addVary(c, "Origin");
     }
     if (allowed) {
-      c.setHeader("Access-Control-Allow-Origin", originAllow === "*" ? "*" : origin);
+      c.setHeader("Access-Control-Allow-Origin", wildcard ? "*" : origin);
       if (exposeHeaders !== undefined) c.setHeader("Access-Control-Expose-Headers", exposeHeaders);
       if (options.allowCredentials === true)
         c.setHeader("Access-Control-Allow-Credentials", "true");

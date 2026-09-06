@@ -238,7 +238,7 @@ if (
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `createBodyParser`                    | 一次有界的记忆化读取；每个读取器都会重新校验各自的限制（413）；畸形 JSON/formData → 抛出 400                                                                                             |
 | `validator`                           | Standard Schema（zod 4 / valibot / typebox）；issues → 400；经 `validOf<T>(c)` 类型化取值（运行时槽位 `c.valid` 的类型是 `unknown`）                                                     |
-| `cors` / `csrf`                       | 携带凭证时要求 origin 白名单；反射 origin 始终带 `Vary: Origin`（恒定回答 `*` 的不带 —— 它永不变化）；拒绝 `Origin: null`；只处理真正的预检（带 `Access-Control-Request-Method` 的请求） |
+| `cors` / `csrf`                       | 携带凭证时要求 origin 白名单；反射 origin 始终带 `Vary: Origin`（恒定回答 `*` 的不带 —— 它永不变化）；拒绝 `Origin: null`；只处理真正的预检（带 `Access-Control-Request-Method` 的请求）；`origin` 也接受逐请求判定的函数；预检反射 `Access-Control-Request-Headers` 需显式开启（`reflectHeaders`） |
 | `etag` / `compress`                   | 弱 tag + 304（If-None-Match 优先级遵循 RFC 9110）；异步 gzip，gzip 实现可注入用于测试                                                                                                    |
 | `serveStatic`                         | 解码 → 归一化 → 包含性检查；NUL 字节 400；出现任一符号链接组件即拒绝（目录也算）；index 路径重新做包含性检查                                                                             |
 | `streamSSE` / `stream` / `streamText` | 帧 CRLF/CR 净化、心跳对抗 Bun 的 10s 空闲超时、`onAbort`、背压信号                                                                                                                       |
