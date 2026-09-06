@@ -214,28 +214,52 @@ export const timing = (): RouteHandler => {
   };
 };
 
-/** Structured request logging (`logger()` writes one line per request). */
+/**
+ * Request logging (`logger()` writes one line per request). `format` picks
+ * the line's shape: "text" (default, the human one-liner) or "json" (a flat
+ * object for log shippers — ts/method/path/status/duration_ms, plus
+ * request_id when the requestId middleware ran, plus the caller's `fields`).
+ */
 export interface LoggerOptions {
   /** Override the sink (default console.log). */
   write?: (line: string) => void;
+  /** Line format. Default "text". */
+  format?: "text" | "json";
+  /** Extra fields flattened into every JSON line (`service`, `env`…). */
+  fields?: Record<string, unknown>;
 }
 
 export const logger = (options: LoggerOptions = {}): RouteHandler => {
   const write = options.write ?? ((line: string): void => console.log(line));
+  const asJson = (options.format ?? "text") === "json";
+  const fields = options.fields;
   return async (c, next) => {
     const start = performance.now();
     // The one-line-per-request contract includes failures, like the finally
     // blocks of secureHeaders/requestId — a throwing downstream still logs.
+    const emit = (status: number): void => {
+      const duration = Math.round(performance.now() - start);
+      const id = (c.state as { requestId?: string }).requestId;
+      if (asJson) {
+        const entry: Record<string, unknown> = {
+          ts: new Date().toISOString(), // ISO 8601, millisecond precision
+          method: c.method,
+          path: c.path,
+          status,
+          duration_ms: duration,
+        };
+        if (id !== undefined) entry.request_id = id;
+        if (fields !== undefined) Object.assign(entry, fields);
+        write(JSON.stringify(entry));
+        return;
+      }
+      write(`${c.method} ${c.path} -> ${status} ${duration}ms ${id ?? "-"}`);
+    };
     try {
       await next();
-      const id = (c.state as { requestId?: string }).requestId ?? "-";
-      write(
-        `${c.method} ${c.path} -> ${c.status} ${Math.round(performance.now() - start)}ms ${id}`,
-      );
+      emit(c.status);
     } catch (err) {
-      const status = isHttpError(err) ? err.status : 500;
-      const id = (c.state as { requestId?: string }).requestId ?? "-";
-      write(`${c.method} ${c.path} -> ${status} ${Math.round(performance.now() - start)}ms ${id}`);
+      emit(isHttpError(err) ? err.status : 500);
       throw err;
     }
   };
