@@ -114,8 +114,7 @@ describe("basicAuth", () => {
   });
 
   it("throws on a missing verify option", () => {
-    // @ts-expect-error -- runtime contract check for JS callers
-    expect(() => basicAuth({})).toThrow(/verify/);
+    expect(() => basicAuth({})).toThrow(/verify|username/);
   });
 });
 
@@ -168,8 +167,7 @@ describe("bearerAuth", () => {
   });
 
   it("throws on a missing verify option", () => {
-    // @ts-expect-error -- runtime contract check for JS callers
-    expect(() => bearerAuth({})).toThrow(/verify/);
+    expect(() => bearerAuth({})).toThrow(/verify|token/);
   });
 });
 

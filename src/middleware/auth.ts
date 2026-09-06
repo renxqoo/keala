@@ -41,7 +41,7 @@ export const timingSafeEqual = (a: string | Uint8Array, b: string | Uint8Array):
 
 export interface BasicAuthOptions {
   /** Accept the credentials; compare hashes, never plaintext with `===`. */
-  verify(username: string, password: string): boolean | Promise<boolean>;
+  verify?(username: string, password: string): boolean | Promise<boolean>;
   /** Static credentials (timing-safe — no `verify` needed for simple cases). */
   username?: string;
   password?: string;
@@ -126,7 +126,7 @@ export const basicAuth = (options: BasicAuthOptions): RouteHandler => {
 
 export interface BearerAuthOptions {
   /** Accept the token; compare hashes, never plaintext with `===`. */
-  verify(token: string): boolean | Promise<boolean>;
+  verify?(token: string): boolean | Promise<boolean>;
   /** Static token(s) — timing-safe comparison (no `verify` needed). */
   token?: string | string[];
   /** Protection space label. Default "Restricted". */
