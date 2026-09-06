@@ -56,3 +56,4 @@ export {
   type RateLimitBucket,
 } from "./rate-limit.ts";
 export { metrics, type Metrics, type MetricsRegistry, type MetricsSnapshot } from "./metrics.ts";
+export { webhook, type WebhookFormat, type WebhookOptions } from "./webhook.ts";
