@@ -7,7 +7,7 @@ import {
   sign,
   unsign,
   type CookiesHost,
-} from "../../src/context/cookies.ts";
+} from "../../src/plugins/cookies/cookies.ts";
 
 describe("parseCookies", () => {
   it("parses pairs", () => {

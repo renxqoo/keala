@@ -16,7 +16,7 @@ import { compress } from "../../src/middleware/etag.ts";
 import { etag } from "../../src/middleware/etag.ts";
 import { cache } from "../../src/middleware/cache.ts";
 import { compilePattern } from "../../src/router/pattern.ts";
-import { parseCookies, serializeCookie } from "../../src/context/cookies.ts";
+import { parseCookies, serializeCookie } from "../../src/plugins/cookies/cookies.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);

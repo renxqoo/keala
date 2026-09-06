@@ -1,29 +1,18 @@
 /**
- * cookies — the cookie facade plugin.
+ * The cookie facade plugin: `app.use(createCookies({ keys }))`.
  *
- * `app.use(createCookies({ keys }))` installs the lazy `c.cookies` facade
- * (get/set with RFC 6265 serialization, HMAC-SHA256 signing and key
- * rotation when `keys` is provided). Installing is registration-time work
- * (the plugin protocol, same as `createBodyParser`): no per-request layer,
- * no ordering constraints — the facade materializes on first touch and
- * never costs requests that don't touch cookies.
- *
- * The type arrives with the import: this module declaration-merges
- * `cookies` into `ContextExtensions`, so `c.cookies.set(...)` type-checks
- * the moment `createCookies` is in scope — no manual `declare module`.
- *
- * Uninstalled apps carry none of this: the facade (and the signing code,
- * and the lazy crypto bridge behind it) shakes out of the closure entirely.
+ * Registration-time decorate (bodyParser protocol); the type merges into
+ * ContextExtensions with the import. Uninstalled apps shake this out.
  */
 
-import type { Context } from "../core/context/context.ts";
-import type { Application } from "../core/app.ts";
-import type { Plugin } from "../types.ts";
-import type { HeaderMap } from "../types.ts";
-import { createCookiesFacade, type CookiesFacade, type SigningKeys } from "../context/cookies.ts";
-import { sourceHeader } from "../core/request-source.ts";
+import type { Context } from "../../core/context/context.ts";
+import type { Application } from "../../core/app.ts";
+import type { Plugin } from "../../types.ts";
+import type { HeaderMap } from "../../types.ts";
+import { createCookiesFacade, type CookiesFacade, type SigningKeys } from "./cookies.ts";
+import { sourceHeader } from "../../core/request-source.ts";
 
-declare module "../types.ts" {
+declare module "../../types.ts" {
   interface ContextExtensions {
     /** Installed by `app.use(createCookies(...))` — the lazy cookie facade. */
     readonly cookies: CookiesFacade;

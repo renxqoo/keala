@@ -31,7 +31,7 @@ const MODULES = [
   ["router/pattern", "../../../src/router/pattern.ts"],
   ["router/trie", "../../../src/router/trie.ts"],
   ["router/router", "../../../src/router/router.ts"],
-  ["context/cookies", "../../../src/context/cookies.ts"],
+  ["context/cookies", "../../../src/plugins/cookies/cookies.ts"],
   ["core/request-source", "../../../src/core/request-source.ts"],
   ["core/context/context", "../../../src/core/context/context.ts"],
   ["core/compose", "../../../src/core/compose.ts"],

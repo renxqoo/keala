@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala, createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
-import { serializeCookie } from "../../src/context/cookies.ts";
+import { serializeCookie } from "../../src/plugins/cookies/cookies.ts";
 import { acceptsCharset, acceptsType, acceptsLanguage } from "../../src/negotiation/accepts.ts";
 
 const quiet = { env: "test" } as const;

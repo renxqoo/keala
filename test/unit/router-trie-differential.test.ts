@@ -18,7 +18,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala, createCookies } from "../../src/index.ts";
-import { sign } from "../../src/context/cookies.ts";
+import { sign } from "../../src/plugins/cookies/cookies.ts";
 import { compilePattern } from "../../src/router/pattern.ts";
 import {
   paramsRecord,

@@ -76,7 +76,7 @@ import { requestId } from "../../src/middleware/headers.ts";
 import { serveStatic } from "../../src/middleware/serve-static.ts";
 import { streamSSE } from "../../src/helpers/streams.ts";
 import { csrfToken } from "../../src/middleware/csrf-token.ts";
-import { parseCookies, sign, unsign } from "../../src/context/cookies.ts";
+import { parseCookies, sign, unsign } from "../../src/plugins/cookies/cookies.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, request: Request) => app.handle(request);

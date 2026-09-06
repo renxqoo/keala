@@ -38,7 +38,7 @@ import {
   sign,
   unsign,
   type CookieOptions,
-} from "../../src/context/cookies.ts";
+} from "../../src/plugins/cookies/cookies.ts";
 import { acceptsCharset, acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
 import { typeIs } from "../../src/negotiation/typeis.ts";
 import { expandShorthand, extensionFromMime, mimeFromExtension } from "../../src/utils/mime.ts";

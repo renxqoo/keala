@@ -19,7 +19,7 @@ import { Keala } from "../../src/core/app.ts";
 import { compress } from "../../src/middleware/etag.ts";
 import { rateLimit } from "../../src/middleware/rate-limit.ts";
 import { csrfToken } from "../../src/middleware/csrf-token.ts";
-import { parseCookies } from "../../src/context/cookies.ts";
+import { parseCookies } from "../../src/plugins/cookies/cookies.ts";
 import {
   acceptsCharset,
   acceptsGzip,

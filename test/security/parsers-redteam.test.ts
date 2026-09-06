@@ -68,7 +68,7 @@ import {
   acceptsLanguage,
   acceptsType,
 } from "../../src/negotiation/accepts.ts";
-import { parseCookies, serializeCookie, sign, unsign } from "../../src/context/cookies.ts";
+import { parseCookies, serializeCookie, sign, unsign } from "../../src/plugins/cookies/cookies.ts";
 import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
 import { serveStatic } from "../../src/middleware/serve-static.ts";
 

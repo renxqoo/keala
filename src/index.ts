@@ -35,7 +35,7 @@ export {
   type HandlerResult,
   type MiddlewareContext,
 } from "./core/compose.ts";
-export { createCookies, type CookiesPluginOptions } from "./plugins/cookies.ts";
+export { createCookies, type CookiesPluginOptions } from "./plugins/cookies/plugin.ts";
 export type { Context } from "./core/context/context.ts";
 export { createContext, resetContext, baseContextProto } from "./core/context/context.ts";
 export {
@@ -46,7 +46,7 @@ export {
   type CookieOptions,
   type CookiesFacade,
   type SigningKeys,
-} from "./context/cookies.ts";
+} from "./plugins/cookies/cookies.ts";
 export {
   createError,
   isHttpError,

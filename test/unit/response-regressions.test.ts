@@ -336,7 +336,7 @@ describe("cookie facade", () => {
       got = c.cookies.get("s", { signed: true });
       return c.text("ok");
     });
-    const { sign } = await import("../../src/context/cookies.ts");
+    const { sign } = await import("../../src/plugins/cookies/cookies.ts");
     const signed = sign("v", "k");
     await hit(app, "/read", { headers: { cookie: `s=${signed}` } });
     expect(got).toBe("v");

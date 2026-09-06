@@ -5,7 +5,7 @@ import type { Context } from "../../src/core/context/context.ts";
 import {
   createCookiesFacade as createCookies,
   type CookiesHost,
-} from "../../src/context/cookies.ts";
+} from "../../src/plugins/cookies/cookies.ts";
 import { acceptsType } from "../../src/negotiation/accepts.ts";
 import { typeIs } from "../../src/negotiation/typeis.ts";
 import { charsetFromContentType } from "../../src/utils/mime.ts";

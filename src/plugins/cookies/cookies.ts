@@ -1,12 +1,13 @@
 /**
  * Cookies: RFC 6265 parsing/serialization, HMAC-SHA256 signing with key
+ * rotation, and the createCookies() plugin that installs c.cookies.
  * rotation (Keygrip-compatible `value.signature` format) and the per-request
  * cookie facade used by `ctx.cookies`.
  */
 
-import type { HeaderMap } from "../types.ts";
-import { nodeCrypto } from "../utils/node-lazy.ts";
-import { hasCrlf, isValidCookieName, isValidCookieValue } from "../utils/text.ts";
+import type { HeaderMap } from "../../types.ts";
+import { nodeCrypto } from "../../utils/node-lazy.ts";
+import { hasCrlf, isValidCookieName, isValidCookieValue } from "../../utils/text.ts";
 
 export interface CookieOptions {
   maxAge?: number;

@@ -22,7 +22,7 @@ import {
 } from "../../src/negotiation/accepts.ts";
 import { encodeUrlValue } from "../../src/utils/url.ts";
 import { parseQuery } from "../../src/utils/query.ts";
-import { parseCookies } from "../../src/context/cookies.ts";
+import { parseCookies } from "../../src/plugins/cookies/cookies.ts";
 
 const quiet = { env: "test" } as const;
 const under = (label: string, ms: number, budget = 500): void => {

@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { Keala } from "../../src/core/app.ts";
 import { createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
-import { sign, unsign } from "../../src/context/cookies.ts";
+import { sign, unsign } from "../../src/plugins/cookies/cookies.ts";
 
 const quiet = { env: "test" } as const;
 

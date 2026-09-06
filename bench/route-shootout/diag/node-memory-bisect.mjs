@@ -33,7 +33,7 @@ await import("../../../src/helpers/html.ts");
 sample("+ helpers/html");
 await import("../../../src/helpers/password.ts");
 sample("+ helpers/password");
-await import("../../../src/context/cookies.ts");
+await import("../../../src/plugins/cookies/cookies.ts");
 sample("+ context/cookies");
 await import("../../../src/index.ts");
 sample("+ FULL root barrel (src/index.ts)");
