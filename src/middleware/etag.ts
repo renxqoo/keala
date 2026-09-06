@@ -61,6 +61,15 @@ const textTagOf = (text: string): string => {
   return `W/"${text.length.toString(16)}${fnv1aText(text)}"`;
 };
 
+/** RFC 9110 §15.4.5: a 304 SHOULD send these if they'd accompany the 200. */
+const RETAINED_304_HEADERS = [
+  "cache-control",
+  "content-location",
+  "date",
+  "expires",
+  "vary",
+] as const;
+
 export const etag = (): RouteHandler => {
   return async (c, next) => {
     await next();
@@ -81,10 +90,16 @@ export const etag = (): RouteHandler => {
     const noneMatch = c.header("if-none-match");
     if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {
       // 304 short-circuit: rebuilt CLEAN — no body, no content-describing
-      // headers (§2.3-2) — with the validator; staged headers (Vary,
-      // security) merge onto it at finalize. Returning it replaces the
-      // committed answer (last-committer-wins).
-      return new Response(null, { status: 304, headers: { etag: tag } });
+      // headers (§2.3-2) — with the validator and the RFC 9110 §15.4.5
+      // retained headers (the ones that would accompany the 200); staged
+      // headers (security) merge onto it at finalize. Returning it replaces
+      // the committed answer (last-committer-wins).
+      const headers = new Headers({ etag: tag });
+      for (const name of RETAINED_304_HEADERS) {
+        const value = committed.headers.get(name);
+        if (value !== null) headers.set(name, value);
+      }
+      return new Response(null, { status: 304, headers });
     }
     // Post-commit header writes land directly on the committed Response.
     committed.headers.set("etag", tag);
@@ -229,6 +244,13 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
     const headers = new Headers(committed.headers);
     headers.set("content-encoding", "gzip");
     headers.delete("content-length");
+    // RFC 9110 §8.8.3: a strong ETag is a promise about byte-identical
+    // representations — content-encoding changed it, so the validator
+    // weakens (W/"..." → stays; "..." → W/"...").
+    const existingTag = headers.get("etag");
+    if (existingTag !== null && !existingTag.startsWith("W/")) {
+      headers.set("etag", `W/${existingTag}`);
+    }
     const replacement = new Response(packed, { status: committed.status, headers });
     // Re-brand the replacement (adversarial review): packed bytes are as
     // context-independent a snapshot as the original, and an OUTER etag()

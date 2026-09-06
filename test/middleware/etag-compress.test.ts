@@ -123,3 +123,85 @@ describe("etag + compress", () => {
     expect(head.status).toBe(304);
   });
 });
+
+// ---------------------------------------------------------------------------
+// M1 audit fixes: BUG-1 (304 retained headers) + BUG-2 (compress strong→weak)
+// ---------------------------------------------------------------------------
+
+describe("M1: 304 retains RFC 9110 §15.4.5 headers from the committed answer", () => {
+  it("cache-control, expires, and vary ride onto the 304", async () => {
+    const app = new Keala(quiet);
+    app.use(etag());
+    app.get("/x", (c) =>
+      c.text("stable body", 200, {
+        "cache-control": "public, max-age=60",
+        expires: "Wed, 21 Oct 2026 07:28:00 GMT",
+        vary: "Accept-Encoding",
+      }),
+    );
+    const first = await app.handle(new Request("http://localhost:3000/x"));
+    const tag = first.headers.get("etag");
+    expect(tag).toMatch(/^W\//);
+
+    const nm = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "if-none-match": tag ?? "" } }),
+    );
+    expect(nm.status).toBe(304);
+    // RFC 9110 §15.4.5: a 304 SHOULD send Cache-Control, Content-Location,
+    // Date, ETag, Expires, and Vary — the ones that would accompany a 200.
+    expect(nm.headers.get("cache-control")).toBe("public, max-age=60");
+    expect(nm.headers.get("expires")).toBe("Wed, 21 Oct 2026 07:28:00 GMT");
+    expect(nm.headers.get("vary")).toBe("Accept-Encoding");
+    expect(nm.headers.get("etag")).toBe(tag);
+  });
+
+  it("304 without those headers on the 200 stays clean (no phantom headers)", async () => {
+    const app = new Keala(quiet);
+    app.use(etag());
+    app.get("/x", (c) => c.text("bare"));
+    const first = await app.handle(new Request("http://localhost:3000/x"));
+    const nm = await app.handle(
+      new Request("http://localhost:3000/x", {
+        headers: { "if-none-match": first.headers.get("etag") ?? "" },
+      }),
+    );
+    expect(nm.status).toBe(304);
+    expect(nm.headers.get("cache-control")).toBeNull();
+    expect(nm.headers.get("vary")).toBeNull();
+  });
+});
+
+describe("M1: compress converts a strong ETag to weak (RFC 9110 §8.8.3)", () => {
+  it("a strong validator on the origin becomes W/ after gzip", async () => {
+    const app = new Keala(quiet);
+    app.use(compress());
+    app.get("/x", (c) => c.text("hello world ".repeat(50), 200, { etag: '"strongValidator"' }));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "accept-encoding": "gzip" } }),
+    );
+    expect(res.headers.get("content-encoding")).toBe("gzip");
+    // The representation changed (gzip) — the strong validator must weaken.
+    expect(res.headers.get("etag")).toBe('W/"strongValidator"');
+  });
+
+  it("an already-weak validator stays weak (no double-W)", async () => {
+    const app = new Keala(quiet);
+    app.use(compress());
+    app.get("/x", (c) => c.text("hello world ".repeat(50), 200, { etag: 'W/"already-weak"' }));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "accept-encoding": "gzip" } }),
+    );
+    expect(res.headers.get("etag")).toBe('W/"already-weak"');
+  });
+
+  it("no etag on the origin — compress doesn't add one", async () => {
+    const app = new Keala(quiet);
+    app.use(compress());
+    app.get("/x", (c) => c.text("hello world ".repeat(50)));
+    const res = await app.handle(
+      new Request("http://localhost:3000/x", { headers: { "accept-encoding": "gzip" } }),
+    );
+    expect(res.headers.get("content-encoding")).toBe("gzip");
+    expect(res.headers.get("etag")).toBeNull();
+  });
+});
