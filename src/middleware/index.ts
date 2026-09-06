@@ -45,6 +45,7 @@ export {
   type SignatureAlgorithm,
   type VerifyOptions,
 } from "./jwt.ts";
+export { jwks, type JwkKey, type JwksKeys, type JwksOptions } from "./jwks.ts";
 // The typed body-reader accessor rides the middleware aggregate too — it is
 // the companion every bodyParser consumer imports alongside the plugin.
 export { bodyOf } from "../plugins/body-parser.ts";
