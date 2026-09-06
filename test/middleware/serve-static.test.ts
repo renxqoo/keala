@@ -3,6 +3,7 @@
  * (traversal, null bytes, symlinks, root containment).
  */
 
+import { statSync } from "node:fs";
 import { mkdtemp, mkdir, symlink, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -20,6 +21,8 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "bk-static-"));
   await writeFile(join(root, "index.html"), "<h1>index</h1>");
   await writeFile(join(root, "app.js"), "console.log(1)");
+  await writeFile(join(root, "app.js.br"), "pretend-brotli(app.js)");
+  await writeFile(join(root, "app.js.gz"), "pretend-gzip(app.js)");
   await writeFile(join(root, "data.json"), '{"ok":true}');
   await writeFile(join(root, "report.txt"), "year-end report");
   await mkdir(join(root, "sub"));
@@ -39,6 +42,12 @@ afterAll(async () => {
 const OUTSIDE_NAME = "bk-outside-secret";
 
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
+
+const getFrom = (
+  app: { handle(r: Request): Promise<Response> },
+  path: string,
+  headers?: Record<string, string>,
+) => app.handle(new Request(`http://localhost:3000${path}`, { headers }));
 
 const appWith = () => {
   const app = new Keala(quiet);
@@ -229,6 +238,145 @@ describe("serveStatic: coverage top-up", () => {
     app.use(serveStatic({ root }));
     const res = await app.handle(req("/%FF%FE%zz"));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("serveStatic: precompressed variants", () => {
+  const preApp = (options: { precompressed?: boolean } = {}) => {
+    const app = new Keala(quiet);
+    app.use(serveStatic({ root, ...options }));
+    return app;
+  };
+
+  it("serves the .br sibling for Accept-Encoding: br, typed by the ORIGINAL extension", async () => {
+    const res = await getFrom(preApp({ precompressed: true }), "/app.js", {
+      "accept-encoding": "br",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("pretend-brotli(app.js)");
+    expect(res.headers.get("content-encoding")).toBe("br");
+    expect(res.headers.get("vary")).toBe("Accept-Encoding");
+    expect(res.headers.get("content-type")).toBe("text/javascript");
+  });
+
+  it("serves the .gz sibling for gzip acceptance", async () => {
+    const res = await getFrom(preApp({ precompressed: true }), "/app.js", {
+      "accept-encoding": "gzip, deflate",
+    });
+    expect(await res.text()).toBe("pretend-gzip(app.js)");
+    expect(res.headers.get("content-encoding")).toBe("gzip");
+    expect(res.headers.get("vary")).toBe("Accept-Encoding");
+  });
+
+  it("prefers brotli when the client accepts both encodings", async () => {
+    const res = await getFrom(preApp({ precompressed: true }), "/app.js", {
+      "accept-encoding": "gzip, deflate, br",
+    });
+    expect(await res.text()).toBe("pretend-brotli(app.js)");
+    expect(res.headers.get("content-encoding")).toBe("br");
+  });
+
+  it("accepts x-gzip and the * wildcard as gzip/any acceptance", async () => {
+    const app = preApp({ precompressed: true });
+    const xgzip = await getFrom(app, "/app.js", { "accept-encoding": "x-gzip" });
+    expect([xgzip.headers.get("content-encoding"), await xgzip.text()]).toEqual([
+      "gzip",
+      "pretend-gzip(app.js)",
+    ]);
+    // q-parameters are stripped before the token match.
+    const weighted = await getFrom(app, "/app.js", { "accept-encoding": "gzip;q=0.8, br;q=1.0" });
+    expect(weighted.headers.get("content-encoding")).toBe("br");
+    const wildcard = await getFrom(app, "/app.js", { "accept-encoding": "*" });
+    expect(wildcard.headers.get("content-encoding")).toBe("br");
+  });
+
+  it("falls back to the original when the file has no matching sibling", async () => {
+    const res = await getFrom(preApp({ precompressed: true }), "/data.json", {
+      "accept-encoding": "br, gzip",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"ok":true}');
+    expect(res.headers.get("content-encoding")).toBeNull();
+    expect(res.headers.get("vary")).toBeNull();
+  });
+
+  it("no encoding acceptance serves the original bytes untouched", async () => {
+    const app = preApp({ precompressed: true });
+    const bare = await getFrom(app, "/app.js");
+    expect(await bare.text()).toBe("console.log(1)");
+    const identity = await getFrom(app, "/app.js", { "accept-encoding": "identity" });
+    expect(await identity.text()).toBe("console.log(1)");
+    expect(identity.headers.get("content-encoding")).toBeNull();
+  });
+
+  it("is opt-in: without the flag the siblings are ignored", async () => {
+    const res = await getFrom(preApp(), "/app.js", { "accept-encoding": "br" });
+    expect(await res.text()).toBe("console.log(1)");
+    expect(res.headers.get("content-encoding")).toBeNull();
+  });
+
+  it("variant responses carry representation-specific validators", async () => {
+    const app = preApp({ precompressed: true });
+    const plain = await getFrom(app, "/app.js");
+    const encoded = await getFrom(app, "/app.js", { "accept-encoding": "br" });
+    expect(plain.headers.get("etag")).not.toBe(encoded.headers.get("etag"));
+  });
+
+  it("a lone .br sibling whose original is missing still answers 404 (hono parity)", async () => {
+    await writeFile(join(root, "ghost.css.br"), "orphan");
+    const res = await getFrom(preApp({ precompressed: true }), "/ghost.css", {
+      "accept-encoding": "br",
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("serveStatic: onFound / onNotFound hooks", () => {
+  it("onFound receives the request path and the served file's size", async () => {
+    const seen: Array<[string, number]> = [];
+    const app = new Keala(quiet);
+    app.use(serveStatic({ root, onFound: (path, size) => void seen.push([path, size]) }));
+    const res = await app.handle(req("/report.txt"));
+    expect(res.status).toBe(200);
+    expect(seen).toEqual([["/report.txt", statSync(join(root, "report.txt")).size]]);
+  });
+
+  it("onFound reports the precompressed sibling's size when it is served", async () => {
+    const seen: Array<[string, number]> = [];
+    const app = new Keala(quiet);
+    app.use(
+      serveStatic({
+        root,
+        precompressed: true,
+        onFound: (path, size) => void seen.push([path, size]),
+      }),
+    );
+    await app.handle(
+      new Request("http://localhost:3000/app.js", { headers: { "accept-encoding": "br" } }),
+    );
+    expect(seen).toEqual([["/app.js", statSync(join(root, "app.js.br")).size]]);
+  });
+
+  it("onNotFound fires with the request path on a missing file", async () => {
+    const seen: string[] = [];
+    const app = new Keala(quiet);
+    app.use(serveStatic({ root, onNotFound: (path) => void seen.push(path) }));
+    const res = await app.handle(req("/missing.js"));
+    expect(res.status).toBe(404);
+    expect(seen).toEqual(["/missing.js"]);
+  });
+
+  it("a dotfile decline and a traversal refusal are NOT disk misses — no onNotFound", async () => {
+    await writeFile(join(root, ".env"), "SECRET");
+    const seen: string[] = [];
+    const app = new Keala(quiet);
+    app.use(serveStatic({ root, onNotFound: (path) => void seen.push(path) }));
+    // Dotfile policy declines via next() — a policy refusal, not a disk miss.
+    const dot = await app.handle(req("/.env"));
+    expect(dot.status).toBe(404);
+    const traversal = await app.handle(req("/..%2f..%2fetc/passwd"));
+    expect(traversal.status).toBeGreaterThanOrEqual(400);
+    expect(seen).toEqual([]);
   });
 });
 

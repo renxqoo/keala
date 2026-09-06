@@ -14,7 +14,7 @@
  */
 
 import { mkdtemp, mkdir, symlink, writeFile, rm } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -32,6 +32,8 @@ const OUTSIDE_NAME = "bk-lean-outside";
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "bk-lean-"));
   await writeFile(join(root, "file.txt"), "plain\n");
+  await writeFile(join(root, "file.txt.br"), "plain-br\n");
+  await writeFile(join(root, "file.txt.gz"), "plain-gz\n");
   await writeFile(join(root, "app.js"), "console.log(1)");
   await writeFile(join(root, "index.html"), "<h1>idx</h1>");
   await mkdir(join(root, "sub"));
@@ -170,5 +172,54 @@ describe.skipIf(REAL_BUN)("serveStatic lean path: fast when eligible, identical 
     app.use(serveStaticMod!.serveStatic({ root, prefix: "/assets" }));
     const res = await app.handle(req("/assets/file.txt"));
     expect([res.status, await res.text()]).toEqual([200, "plain\n"]);
+  });
+
+  it("the lean path negotiates precompressed siblings like the slow path", async () => {
+    const app = new KealaMod!.Keala({ env: "test" });
+    app.use(serveStaticMod!.serveStatic({ root, precompressed: true }));
+    const br = await app.handle(
+      new Request("http://localhost:3000/file.txt", { headers: { "accept-encoding": "br" } }),
+    );
+    expect([br.status, await br.text()]).toEqual([200, "plain-br\n"]);
+    expect(br.headers.get("content-encoding")).toBe("br");
+    expect(br.headers.get("vary")).toBe("Accept-Encoding");
+    expect(br.headers.get("content-type")).toBe("text/plain");
+    // Still the lean response: no Last-Modified validator layer.
+    expect(br.headers.get("last-modified")).toBeNull();
+    const gz = await app.handle(
+      new Request("http://localhost:3000/file.txt", { headers: { "accept-encoding": "gzip" } }),
+    );
+    expect([gz.headers.get("content-encoding"), await gz.text()]).toEqual(["gzip", "plain-gz\n"]);
+  });
+
+  it("the lean path falls back to the original when no sibling matches", async () => {
+    const app = new KealaMod!.Keala({ env: "test" });
+    app.use(serveStaticMod!.serveStatic({ root, precompressed: true }));
+    const res = await app.handle(
+      new Request("http://localhost:3000/app.js", { headers: { "accept-encoding": "br, gzip" } }),
+    );
+    expect([res.status, await res.text()]).toEqual([200, "console.log(1)"]);
+    expect(res.headers.get("content-encoding")).toBeNull();
+    expect(res.headers.get("vary")).toBeNull();
+  });
+
+  it("onFound/onNotFound fire on the lean path with the served size", async () => {
+    const found: Array<[string, number]> = [];
+    const missing: string[] = [];
+    const app = new KealaMod!.Keala({ env: "test" });
+    app.use(
+      serveStaticMod!.serveStatic({
+        root,
+        precompressed: true,
+        onFound: (path, size) => void found.push([path, size]),
+        onNotFound: (path) => void missing.push(path),
+      }),
+    );
+    await app.handle(
+      new Request("http://localhost:3000/file.txt", { headers: { "accept-encoding": "br" } }),
+    );
+    expect(found).toEqual([["/file.txt", statSync(join(root, "file.txt.br")).size]]);
+    await app.handle(req("/nope.txt"));
+    expect(missing).toEqual(["/nope.txt"]);
   });
 });

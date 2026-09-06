@@ -4,6 +4,10 @@
  * rejection, empty-segment refusal, GET/HEAD-only methods, symlink denial
  * (opt-in via lstat), nosniff, weak ETag + Last-Modified/304.
  *
+ * `precompressed: true` additionally serves build-time `<file>.br` /
+ * `<file>.gz` siblings when Accept-Encoding accepts them (brotli first);
+ * `onFound` / `onNotFound` are synchronous observability hooks.
+ *
  * Under Bun, requests WITHOUT conditional headers (If-None-Match /
  * If-Modified-Since / Range) and without index resolution take a leaner
  * path: stat and the symlink audit still run (a vanished file must 404, a
@@ -56,6 +60,27 @@ export interface ServeStaticOptions {
    * behavior for roots that genuinely publish dotfiles.
    */
   dotfiles?: "allow" | "ignore";
+  /**
+   * Serve precompressed `<file>.br` / `<file>.gz` siblings when the
+   * request's Accept-Encoding accepts them (brotli preferred over gzip —
+   * better ratio, hono parity). Default false. The variant replaces the
+   * response only when the ORIGINAL file exists; the hit carries
+   * `Content-Encoding` and `Vary: Accept-Encoding`, and stays typed by the
+   * original extension's mime. No variant → the original bytes, untouched.
+   */
+  precompressed?: boolean;
+  /**
+   * Fires whenever a file is found and served (200/206/304 alike, both the
+   * lean and the slow path): the request URL path and the SERVED file's
+   * size in bytes (the precompressed sibling's, when it wins).
+   */
+  onFound?: (path: string, size: number) => void;
+  /**
+   * Fires when the requested file is missing on disk (the 404 path — a
+   * genuine fs miss; policy refusals like dotfile declines and traversal
+   * 403s are not disk misses).
+   */
+  onNotFound?: (path: string) => void;
 }
 
 /**
@@ -90,6 +115,21 @@ const stripPrefixOf = (rawPrefix: string | undefined): string | undefined => {
   return rawPrefix;
 };
 
+/**
+ * Accept-Encoding candidates in preference order (brotli before gzip —
+ * better ratio, hono parity). The q-parameter is stripped before the
+ * token match; `*` accepts either.
+ */
+const acceptedEncodings = (accept: string): { encoding: string; ext: string }[] => {
+  const tokens = new Set(accept.split(",").map((token) => token.split(";")[0]?.trim() ?? ""));
+  const out: { encoding: string; ext: string }[] = [];
+  if (tokens.has("br") || tokens.has("*")) out.push({ encoding: "br", ext: ".br" });
+  if (tokens.has("gzip") || tokens.has("x-gzip") || tokens.has("*")) {
+    out.push({ encoding: "gzip", ext: ".gz" });
+  }
+  return out;
+};
+
 export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
   if (typeof options.root !== "string" || options.root.length === 0) {
     throw new TypeError("serveStatic({ root }) requires a directory path");
@@ -97,6 +137,9 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
   const indexName = options.index === undefined ? "index.html" : options.index;
   const prefix = stripPrefixOf(options.prefix);
   const dotfiles = options.dotfiles ?? "ignore";
+  const precompressed = options.precompressed === true;
+  const onFound = options.onFound;
+  const onNotFound = options.onNotFound;
   // Resolved on the first request — keeps the path bridge out of setup.
   let rootCache: string | null = null;
 
@@ -172,22 +215,50 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       try {
         syncInfo = statSync(absolute);
       } catch {
+        onNotFound?.(c.path);
         throw createError(404);
       }
       if (!syncInfo.isDirectory()) {
+        // Precompressed negotiation: a sibling variant replaces the served
+        // path only once the ORIGINAL is confirmed present (hono parity —
+        // an orphan .br never conjures a routable file).
+        let servingPath = absolute;
+        let servingInfo = syncInfo;
+        let encoding: string | null = null;
+        if (precompressed) {
+          for (const candidate of acceptedEncodings(c.header("accept-encoding"))) {
+            try {
+              const variant = statSync(absolute + candidate.ext);
+              if (!variant.isDirectory()) {
+                servingPath = absolute + candidate.ext;
+                servingInfo = variant;
+                encoding = candidate.encoding;
+                break;
+              }
+            } catch {
+              // No such sibling — next candidate, then the original.
+            }
+          }
+        }
         if (options.followSymlinks !== true) {
-          const link = findSymlinkSync(root, absolute);
+          const link = findSymlinkSync(root, servingPath);
           if (link !== null) {
             throw createError(403, "symlinks are not followed", { expose: true });
           }
         }
         const leanHeaders: Record<string, string> = {
-          etag: weakEtag(syncInfo.size, syncInfo.mtime.getTime()),
+          etag: weakEtag(servingInfo.size, servingInfo.mtime.getTime()),
           "x-content-type-options": "nosniff",
         };
+        // The variant keeps the ORIGINAL extension's content type.
         const leanMime = mimeFromExtension(absolute);
         if (leanMime !== null) leanHeaders["content-type"] = leanMime;
-        return new Response(bunFile(absolute), { headers: leanHeaders });
+        if (encoding !== null) {
+          leanHeaders["content-encoding"] = encoding;
+          leanHeaders["vary"] = "Accept-Encoding";
+        }
+        onFound?.(c.path, servingInfo.size);
+        return new Response(bunFile(servingPath), { headers: leanHeaders });
       }
     }
 
@@ -196,6 +267,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     try {
       info = await stat(absolute);
     } catch {
+      onNotFound?.(c.path);
       throw createError(404);
     }
     let filePath = absolute;
@@ -209,23 +281,46 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       try {
         info = await stat(filePath);
       } catch {
+        onNotFound?.(c.path);
         throw createError(404);
+      }
+    }
+    // Precompressed negotiation runs AFTER the original (or its index) is
+    // confirmed present: the sibling replaces the served path, the original
+    // keeps supplying the content type.
+    const typedPath = filePath;
+    let encoding: string | null = null;
+    if (precompressed) {
+      for (const candidate of acceptedEncodings(c.header("accept-encoding"))) {
+        try {
+          const variant = await stat(filePath + candidate.ext);
+          if (!variant.isDirectory()) {
+            filePath += candidate.ext;
+            info = variant;
+            encoding = candidate.encoding;
+            break;
+          }
+        } catch {
+          // No such sibling — next candidate, then the original.
+        }
       }
     }
     if (options.followSymlinks !== true) {
       // ANY symlink component under root — a linked directory just as much
       // as a linked file — is denied, even when it points back inside root.
       // (root itself may legitimately be a symlink.) The walk covers the
-      // FINAL served path (the directory-index resolution included): walking
-      // only `absolute` would leave a symlinked <dir>/index.html unexamined
-      // exactly when the directory path was requested.
+      // FINAL served path (the directory-index and precompressed variant
+      // resolutions included): walking only `absolute` would leave a
+      // symlinked <dir>/index.html or <file>.br unexamined exactly when an
+      // earlier resolution step had moved the target.
       const link = await findSymlink(root, filePath);
       if (link !== null) {
         throw createError(403, "symlinks are not followed", { expose: true });
       }
     }
+    onFound?.(c.path, info.size);
 
-    const mime = mimeFromExtension(filePath);
+    const mime = mimeFromExtension(typedPath);
     const etag = weakEtag(info.size, info.mtime.getTime());
     const lastModified = info.mtime.toUTCString();
     const headers: Record<string, string> = {
@@ -234,6 +329,10 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       "x-content-type-options": "nosniff",
     };
     if (mime !== null) headers["content-type"] = mime;
+    if (encoding !== null) {
+      headers["content-encoding"] = encoding;
+      headers["vary"] = "Accept-Encoding";
+    }
 
     // RFC 9110 §13.2.2 via isNotModified: If-None-Match decides when
     // present — a match is a 304, a MISMATCH falls through to the full 200
