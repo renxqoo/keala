@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
+const root = '/tmp/keala-bench-opt.JhAsdh';
+const sha = value => createHash('sha256').update(value).digest('hex');
+const treeHash = (directory, hash = createHash('sha256'), prefix = '') => {
+  for (const name of readdirSync(directory).sort((a,b)=>a.localeCompare(b))) {
+    const path = join(directory,name), relative = prefix+name;
+    if (statSync(path).isDirectory()) treeHash(path,hash,relative+'/');
+    else hash.update(relative).update('\0').update(readFileSync(path)).update('\0');
+  }
+  return hash;
+};
+const stage = process.argv[2] ?? 'full';
+const raw = readFileSync(`${root}/${stage}/results.json`), data = JSON.parse(raw);
+const expected = stage === 'full' ? 312 : 156;
+assert(data.finishedAt && !data.failure);
+assert.equal(data.samples.length, expected);
+assert.equal(data.verification.reduce((a,v)=>a+v.checks,0),stage==='full'?176:88);
+assert.equal(data.rejectedTimingSamples.length, 0);
+assert.deepEqual(data.cleanup.livePids, []);
+const live = data.cleanup.ownedPids.filter(pid=>existsSync(`/proc/${pid}`));
+assert.deepEqual(live, []);
+for(const s of data.samples) for(const key of ['errors','timeouts','non2xx']) assert.equal(s.load[key],0);
+const manifestPath = stage==='full' ? 'bundle' : 'final-bundle';
+const manifest = JSON.parse(readFileSync(`${root}/${manifestPath}/manifest.json`));
+assert.equal(treeHash(`${root}/${manifestPath}/dist`).digest('hex'),manifest.distSha256);
+assert.equal(treeHash(`${root}/${manifestPath}/bench`).digest('hex'),manifest.harnessSha256);
+assert.equal(treeHash(`${root}/${manifestPath}/before/dist`).digest('hex'),manifest.before.distSha256);
+const originalServices = readFileSync(`${root}/services-before.txt`,'utf8').trim().split('\n').map(l=>{
+  const [pid,ppid,name]=l.trim().split(/\s+/); assert.equal(ppid,'1');
+  assert.equal(readFileSync(`/proc/${pid}/comm`,'utf8').trim(),name); return {pid:Number(pid),name};
+});
+const oomBefore = Number(readFileSync(`${root}/oom-before.txt`,'utf8').trim().split(/\s+/)[1]);
+const oomAfter = Number(readFileSync('/proc/vmstat','utf8').match(/^oom_kill (\d+)$/m)[1]);
+assert.equal(oomAfter,oomBefore);
+const proof = {verifiedAt:new Date().toISOString(),stage,samples:data.samples.length,checks:data.verification.reduce((a,v)=>a+v.checks,0),requests:data.samples.reduce((a,s)=>a+s.load.total,0),ownedPids:data.cleanup.ownedPids.length,remainingPids:live,originalServices,oomBefore,oomAfter,rawSha256:sha(raw),manifestSha256:sha(readFileSync(`${root}/${manifestPath}/manifest.json`)),sourceSha256:manifest.sourceSha256,beforeSourceSha256:manifest.before.sourceSha256,distSha256:manifest.distSha256,harnessSha256:manifest.harnessSha256,free:execFileSync('free',['-m'],{encoding:'utf8'}),uptime:execFileSync('uptime',{encoding:'utf8'})};
+writeFileSync(`${root}/verification-${stage}.json`,JSON.stringify(proof,null,2)+'\n');
+console.log(JSON.stringify(proof));

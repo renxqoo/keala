@@ -1,0 +1,4 @@
+
+> keala@0.7.3 build
+> tsc --noEmit && rm -rf dist && tsc -p tsconfig.build.json && node scripts/rewrite-imports.mjs
+

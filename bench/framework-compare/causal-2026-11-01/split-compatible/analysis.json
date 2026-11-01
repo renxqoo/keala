@@ -1,0 +1,414 @@
+{
+  "diagnosticOnly": true,
+  "experiment": "Compatible extraction of eager extension installer, same three defineProperty calls and order, isolated candidate vs Xi",
+  "checks": 44,
+  "samples": 72,
+  "requests": 4765967,
+  "ownedPids": 148,
+  "livePids": [],
+  "comparisons": [
+    {
+      "a": "keala-before-bun",
+      "b": "keala-bun",
+      "scenario": "hello",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": -1.1256365655329503,
+        "min": -10.210262761145817,
+        "max": 6.712302169345574,
+        "bootstrap95": [-4.910910145912051, 0.2912366103416386],
+        "positive": 4,
+        "negative": 8,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": 1.578867687475194,
+        "min": -6.858669914400428,
+        "max": 9.715243519955363,
+        "bootstrap95": [-0.09968150382811958, 2.424342619548203],
+        "positive": 8,
+        "negative": 4,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": 0.5057691663425015,
+        "min": -2.389927340391438,
+        "max": 2.96389209319646,
+        "bootstrap95": [-0.02991757676882223, 0.7776882954787965],
+        "positive": 8,
+        "negative": 4,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": 0.05680110557462115,
+        "min": -0.5147009750685427,
+        "max": 1.4000741002944945,
+        "bootstrap95": [-0.15159932013191213, 0.22478387286462098],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": 0.40256308046023115,
+        "min": -2.385383044778049,
+        "max": 2.083363173780871,
+        "bootstrap95": [-0.9755515626710505, 0.7040464004954572],
+        "positive": 7,
+        "negative": 5,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": 0,
+        "min": -3,
+        "max": 6,
+        "bootstrap95": [0, 0.5],
+        "positive": 4,
+        "negative": 3,
+        "ties": 5
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": -4.910910145912051,
+          "cpuPercent": 4.965091812642286,
+          "p99Difference": 2
+        },
+        {
+          "round": 2,
+          "rpsPercent": -5.194190479492611,
+          "cpuPercent": 2.3474261840249033,
+          "p99Difference": 0
+        },
+        {
+          "round": 3,
+          "rpsPercent": -0.5596720971131397,
+          "cpuPercent": 0.8103091909254845,
+          "p99Difference": 0
+        },
+        {
+          "round": 4,
+          "rpsPercent": 5.418112083922777,
+          "cpuPercent": -2.556279186162802,
+          "p99Difference": -3
+        },
+        {
+          "round": 5,
+          "rpsPercent": -4.602340403399774,
+          "cpuPercent": 3.8590788242806484,
+          "p99Difference": 1
+        },
+        {
+          "round": 6,
+          "rpsPercent": 6.712302169345574,
+          "cpuPercent": -6.858669914400428,
+          "p99Difference": -2
+        },
+        {
+          "round": 7,
+          "rpsPercent": -3.338327761556581,
+          "cpuPercent": 2.4997604814212426,
+          "p99Difference": 0
+        },
+        {
+          "round": 8,
+          "rpsPercent": 0.6826678865015534,
+          "cpuPercent": -0.36039742129247987,
+          "p99Difference": 0
+        },
+        {
+          "round": 9,
+          "rpsPercent": -0.10019466581827619,
+          "cpuPercent": 0.16103441363624071,
+          "p99Difference": 1
+        },
+        {
+          "round": 10,
+          "rpsPercent": 3.9667313093687984,
+          "cpuPercent": -3.646800017141816,
+          "p99Difference": -2
+        },
+        {
+          "round": 11,
+          "rpsPercent": -1.691601033952761,
+          "cpuPercent": 2.3489247576751637,
+          "p99Difference": 0
+        },
+        {
+          "round": 12,
+          "rpsPercent": -10.210262761145817,
+          "cpuPercent": 9.715243519955363,
+          "p99Difference": 6
+        }
+      ]
+    },
+    {
+      "a": "keala-before-bun",
+      "b": "keala-bun",
+      "scenario": "route-2",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": 1.4220796545119652,
+        "min": -7.707948464113034,
+        "max": 32.69615957204588,
+        "bootstrap95": [0.00913064384806539, 4.746067817266853],
+        "positive": 7,
+        "negative": 5,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": -0.7743492039648969,
+        "min": -20.76072020631309,
+        "max": 7.108167045084568,
+        "bootstrap95": [-3.4943329158947876, 1.4384685593560431],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": -0.2651451508767799,
+        "min": -9.477191759363969,
+        "max": 2.40794241303972,
+        "bootstrap95": [-1.2267285679060436, 0.4914590329653912],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": -0.17826868695881348,
+        "min": -5.450954360190018,
+        "max": 1.5736068851761935,
+        "bootstrap95": [-0.97856466290275, 0.5056863176350523],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": -0.3339367081543454,
+        "min": -4.0806457373682115,
+        "max": 2.1903807055993383,
+        "bootstrap95": [-0.9927908740976061, -0.014227284669662055],
+        "positive": 5,
+        "negative": 7,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": -0.5,
+        "min": -11,
+        "max": 4,
+        "bootstrap95": [-1, -0.5],
+        "positive": 3,
+        "negative": 6,
+        "ties": 3
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": 1.0854537576751921,
+          "cpuPercent": -2.008277333575892,
+          "p99Difference": 0
+        },
+        {
+          "round": 2,
+          "rpsPercent": 12.637863975507546,
+          "cpuPercent": -1.710882019322768,
+          "p99Difference": -5
+        },
+        {
+          "round": 3,
+          "rpsPercent": -5.546103793241597,
+          "cpuPercent": 4.6486630812661245,
+          "p99Difference": 2
+        },
+        {
+          "round": 4,
+          "rpsPercent": 32.69615957204588,
+          "cpuPercent": -20.76072020631309,
+          "p99Difference": -10
+        },
+        {
+          "round": 5,
+          "rpsPercent": -7.707948464113034,
+          "cpuPercent": 7.108167045084568,
+          "p99Difference": 4
+        },
+        {
+          "round": 6,
+          "rpsPercent": 8.35749086104487,
+          "cpuPercent": -7.150849443182549,
+          "p99Difference": -1
+        },
+        {
+          "round": 7,
+          "rpsPercent": -0.7519034092272059,
+          "cpuPercent": 0.16218361139297421,
+          "p99Difference": 0
+        },
+        {
+          "round": 8,
+          "rpsPercent": 29.545017589826394,
+          "cpuPercent": -18.02183451073568,
+          "p99Difference": -11
+        },
+        {
+          "round": 9,
+          "rpsPercent": 8.406681876858514,
+          "cpuPercent": -8.840029853465147,
+          "p99Difference": -2
+        },
+        {
+          "round": 10,
+          "rpsPercent": -1.7404442636526074,
+          "cpuPercent": 2.23986633219333,
+          "p99Difference": 0
+        },
+        {
+          "round": 11,
+          "rpsPercent": 1.7587055513487382,
+          "cpuPercent": 0.8094480550635552,
+          "p99Difference": -1
+        },
+        {
+          "round": 12,
+          "rpsPercent": -2.0556732437078007,
+          "cpuPercent": 2.067489063648531,
+          "p99Difference": 1
+        }
+      ]
+    },
+    {
+      "a": "keala-before-bun",
+      "b": "keala-bun",
+      "scenario": "route-12",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": -0.8981894281075764,
+        "min": -6.929944762023609,
+        "max": 29.780058369236496,
+        "bootstrap95": [-3.23078706779113, 7.967944208739364],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": 2.1514745029826643,
+        "min": -8.046190697610033,
+        "max": 10.273887706882622,
+        "bootstrap95": [-3.909500973757829, 3.558026865909669],
+        "positive": 7,
+        "negative": 5,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": 0.8012551492130413,
+        "min": -3.2712439032003715,
+        "max": 3.7620940022924145,
+        "bootstrap95": [-1.5485673174716652, 1.2872556357787168],
+        "positive": 7,
+        "negative": 5,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": -0.22326511112424008,
+        "min": -1.6057377625858749,
+        "max": 2.199863362056547,
+        "bootstrap95": [-0.622569206987869, 0.3173537117980736],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": 0.2984083194238263,
+        "min": -1.6995208866625262,
+        "max": 1.910852885835432,
+        "bootstrap95": [-0.9374483331538528, 1.1008072761721408],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": 0,
+        "min": -7,
+        "max": 2,
+        "bootstrap95": [-1, 1],
+        "positive": 4,
+        "negative": 5,
+        "ties": 3
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": -3.4482410242105965,
+          "cpuPercent": 3.558026865909669,
+          "p99Difference": 1
+        },
+        {
+          "round": 2,
+          "rpsPercent": -3.23078706779113,
+          "cpuPercent": 4.7412635134038705,
+          "p99Difference": 0
+        },
+        {
+          "round": 3,
+          "rpsPercent": -6.767742334322458,
+          "cpuPercent": 8.218457087663866,
+          "p99Difference": 0
+        },
+        {
+          "round": 4,
+          "rpsPercent": 10.311532910646903,
+          "cpuPercent": -8.046190697610033,
+          "p99Difference": -6
+        },
+        {
+          "round": 5,
+          "rpsPercent": -2.9391980726536038,
+          "cpuPercent": 2.4076582366947985,
+          "p99Difference": 1
+        },
+        {
+          "round": 6,
+          "rpsPercent": 2.267458766059871,
+          "cpuPercent": -3.844961465145158,
+          "p99Difference": 2
+        },
+        {
+          "round": 7,
+          "rpsPercent": 2.958064465270116,
+          "cpuPercent": -2.0040629159129963,
+          "p99Difference": 1
+        },
+        {
+          "round": 8,
+          "rpsPercent": -6.929944762023609,
+          "cpuPercent": 10.273887706882622,
+          "p99Difference": -1
+        },
+        {
+          "round": 9,
+          "rpsPercent": -2.394728358038334,
+          "cpuPercent": 3.5143100546663364,
+          "p99Difference": 0
+        },
+        {
+          "round": 10,
+          "rpsPercent": 0.598349501823181,
+          "cpuPercent": 1.89529076927053,
+          "p99Difference": -1
+        },
+        {
+          "round": 11,
+          "rpsPercent": 7.967944208739364,
+          "cpuPercent": -6.646056640838571,
+          "p99Difference": -1
+        },
+        {
+          "round": 12,
+          "rpsPercent": 29.780058369236496,
+          "cpuPercent": -3.909500973757829,
+          "p99Difference": -7
+        }
+      ]
+    }
+  ],
+  "withinFrameworkPeriods": []
+}

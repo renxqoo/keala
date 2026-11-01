@@ -20,6 +20,7 @@ export interface CpuSnapshot {
 }
 
 export interface ClientSample {
+  driver?: "native-go";
   pid: number;
   env: string;
   runtimeVersion: string;
@@ -93,7 +94,7 @@ export const aggregateLoad = (samples: readonly ClientSample[]) => {
     const { result, cpu } = sample;
     if (
       sample.env !== "production" ||
-      !/^v\d+\./.test(sample.runtimeVersion) ||
+      !(sample.driver === "native-go" ? /^go\d+\./ : /^v\d+\./).test(sample.runtimeVersion) ||
       !positive(sample.startedAt) ||
       !positive(sample.finishedAt - sample.startedAt) ||
       !count(sample.pid) ||

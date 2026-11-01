@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-01T03:18:06.864Z",
+  "remoteDirectory": "/tmp/keala-bench-wr.dcq9gl",
+  "remoteRemoved": true,
+  "localDirectory": "/tmp/keala-wr-package.wpmC6A",
+  "localRemoved": true,
+  "remainingOwnedProcesses": [],
+  "existingServicesUnchanged": true,
+  "hostOomDelta": 0,
+  "remoteConfirmation": "161972\t/tmp/keala-bench-wr.dcq9gl\nREMOTE_TEMP_REMOVED=true\n 03:18:08 up 4 days,  1:03,  3 users,  load average: 0.43, 1.37, 1.27\n               total        used        free      shared  buff/cache   available\nMem:            1967         478         398           2        1285        1488\nSwap:              0           0           0"
+}

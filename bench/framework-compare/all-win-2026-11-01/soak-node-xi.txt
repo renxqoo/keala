@@ -1,0 +1,17 @@
+
+> keala@0.7.3 soak:node
+> node --experimental-strip-types --expose-gc scripts/soak-node.ts
+
+✓ round 0: 10,000 req over node:http, retained drift 440.7 B/req (budget 1500)
+✓ round 1: 10,000 req over node:http, retained drift -451.7 B/req (budget 1500)
+✓ round 2: 10,000 req over node:http, retained drift -17.6 B/req (budget 1500)
+✓ round 3: 10,000 req over node:http, retained drift 44.5 B/req (budget 1500)
+✓ round 4: 10,000 req over node:http, retained drift 51.6 B/req (budget 1500)
+✓ round 5: 10,000 req over node:http, retained drift -17.9 B/req (budget 1500)
+✓ round 6: 10,000 req over node:http, retained drift 46.4 B/req (budget 1500)
+✓ round 7: 10,000 req over node:http, retained drift 44.7 B/req (budget 1500)
+✓ round 8: 10,000 req over node:http, retained drift 44.1 B/req (budget 1500)
+✓ round 9: 10,000 req over node:http, retained drift -19.1 B/req (budget 1500)
+✓ round 10: 10,000 req over node:http, retained drift 42.3 B/req (budget 1500)
+✓ round 11: 10,000 req over node:http, retained drift 44.5 B/req (budget 1500)
+SOAK-NODE OK — no retained-heap growth beyond budget

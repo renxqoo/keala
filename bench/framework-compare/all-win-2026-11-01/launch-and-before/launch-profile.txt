@@ -1,0 +1,5 @@
+ExecStart={ path=/usr/bin/env ; argv[]=/usr/bin/env NODE_OPTIONS=--max-old-space-size=128 UV_THREADPOOL_SIZE=2 LD_LIBRARY_PATH=/tmp/keala-all-win.cDctk1/bundle/runtime BENCH_NATIVE_CLIENT=/tmp/keala-all-win.cDctk1/epsilon/runtime/native-client BENCH_BEFORE=/tmp/keala-all-win.cDctk1/epsilon/before BENCH_OUTPUT=/tmp/keala-all-win.cDctk1/bun-profile-results BENCH_BUN=/tmp/keala-all-win.cDctk1/bun-profile.sh BENCH_RUNTIMES=bun BENCH_ROUNDS=1 BENCH_SERVER_CPU=0 BENCH_CLIENT_CPU=1 /usr/bin/taskset --cpu-list 1 /tmp/keala-all-win.cDctk1/bundle/runtime/node /tmp/keala-all-win.cDctk1/epsilon/bench/framework-compare/remote-run.mjs --hello ; ignore_errors=no ; start_time=[Sun 2026-11-01 08:06:54 UTC] ; stop_time=[n/a] ; pid=142867 ; code=(null) ; status=0/0 }
+CPUQuotaPerSecUSec=1.500000s
+CPUQuotaPeriodUSec=10ms
+MemoryMax=671088640
+TasksMax=128

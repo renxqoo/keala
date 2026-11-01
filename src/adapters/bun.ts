@@ -39,6 +39,12 @@ interface RequestIPHost {
 }
 
 const transportClosers = new WeakMap<ServerHandle, (force?: boolean) => Promise<void>>();
+const nativeBunResponse = (value: Response | Promise<Response>): Response | Promise<Response> => {
+  const response = value as Response & { _toNodeResponse?: unknown; _response?: Response };
+  if (response?._toNodeResponse) return response._response!;
+  const promise = value as Promise<Response>;
+  return typeof promise?.then === "function" ? promise.then(nativeBunResponse) : value;
+};
 const defaultServeImplementation = (): ServeImplementation | undefined =>
   typeof Bun !== "undefined" && typeof Bun.serve === "function"
     ? (options) => {
@@ -53,8 +59,49 @@ const defaultServeImplementation = (): ServeImplementation | undefined =>
           bun: { ...options, hostname: options["hostname"] } as SrvxOptions["bun"],
           silent: true,
           gracefulShutdown: false,
+          manual: true,
           fetch: (request: ServerRequest) => fetch(request, request.runtime?.bun?.server),
         });
+        const nativeOptions = (transport as unknown as { serveOptions?: Record<string, unknown> })
+          .serveOptions;
+        if (nativeOptions !== undefined) {
+          const waitUntil = { value: transport.waitUntil };
+          const runtimeDescriptor: PropertyDescriptor = { enumerable: true, value: undefined };
+          const ipDescriptor: PropertyDescriptor = {
+            enumerable: true,
+            configurable: true,
+            get: undefined,
+          };
+          let extending = false;
+          nativeOptions["fetch"] = (request: Request, server: RequestIPHost) => {
+            // Instrumented defineProperty can reenter before consuming its
+            // descriptor. Nested calls must leave the outer scratch intact.
+            const owner = !extending;
+            const runtime = owner ? runtimeDescriptor : { enumerable: true, value: undefined };
+            const ip: PropertyDescriptor = owner
+              ? ipDescriptor
+              : { enumerable: true, configurable: true, get: undefined };
+            extending = true;
+            // Reuse only private descriptor containers. Values and the borrowed
+            // IP getter still belong to this request. DefineProperty copies the
+            // descriptor before a Proxy trap can reenter this handler.
+            try {
+              Object.defineProperty(request, "waitUntil", waitUntil);
+              runtime.value = { name: "bun", bun: { server } };
+              Object.defineProperty(request, "runtime", runtime);
+              const get = () => server?.requestIP(request)?.address;
+              ip.get = get;
+              Object.defineProperty(request, "ip", ip);
+            } finally {
+              // Keep the server closure from retaining the final Request/body.
+              runtime.value = undefined;
+              ip.get = undefined;
+              if (owner) extending = false;
+            }
+            return nativeBunResponse(fetch(request, server));
+          };
+          void transport.serve();
+        }
         const server = transport.bun!.server as unknown as ServerHandle;
         transportClosers.set(server, (force) => transport.close(force));
         return server;

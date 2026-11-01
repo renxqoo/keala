@@ -1,0 +1,134 @@
+[
+  {
+    "path": "experiments/rejected-header-isolated/results.json",
+    "rawSha256": "48a1537534b49095fefc1c1deefd074acc8f48e2c1dab6ecee7596d184a213dc",
+    "gzip": "experiments/rejected-header-isolated/results.raw.json.gz",
+    "rawBytes": 71174
+  },
+  {
+    "path": "experiments/rejected-header-overlap/results.json",
+    "rawSha256": "401087e9e3b5d8d1acb5d031fcf2f0aa45613f33683709522674d07a80c9d1c9",
+    "gzip": "experiments/rejected-header-overlap/results.raw.json.gz",
+    "rawBytes": 71717
+  },
+  {
+    "path": "linux-profiles/h3.cpuprofile",
+    "rawSha256": "8dfbe06f206dd087e68b258d0c8894c31bd3fa584c0e387a445e61285eb25845",
+    "gzip": "linux-profiles/h3.cpuprofile.gz",
+    "rawBytes": 146097,
+    "archivedOnly": true
+  },
+  {
+    "path": "linux-profiles/hono.cpuprofile",
+    "rawSha256": "db1ef9c314130c18744afe0d6352315d68035c8f53d29411bb51c0b3d3364719",
+    "gzip": "linux-profiles/hono.cpuprofile.gz",
+    "rawBytes": 133724,
+    "archivedOnly": true
+  },
+  {
+    "path": "linux-profiles/keala-before.cpuprofile",
+    "rawSha256": "89c91d89ca0cfce525795538140771daaf88251e91bd5f49e21a78694b3e745f",
+    "gzip": "linux-profiles/keala-before.cpuprofile.gz",
+    "rawBytes": 145945,
+    "archivedOnly": true
+  },
+  {
+    "path": "linux-profiles/keala.cpuprofile",
+    "rawSha256": "9f3ed914f19a6bb4326c87d7356f24275ff62d5f19416230517ff65d7431eedf",
+    "gzip": "linux-profiles/keala.cpuprofile.gz",
+    "rawBytes": 138343,
+    "archivedOnly": true
+  },
+  {
+    "path": "local-final-ab/results.json",
+    "rawSha256": "7e7e53eb06e8bb4900e0afc9a50f97e8d2fbcda382361dc1b308fda3a1002955",
+    "gzip": "local-final-ab/results.raw.json.gz",
+    "rawBytes": 70768
+  },
+  {
+    "path": "local-transport-ab/results.json",
+    "rawSha256": "631f326f848f11dcc0f740771190e48d0b097959b240a954574cd2ed5f06ff67",
+    "gzip": "local-transport-ab/results.raw.json.gz",
+    "rawBytes": 70248
+  },
+  {
+    "path": "profiles/after.cpuprofile",
+    "rawSha256": "2efd07ca6998ec4b9c8f9372b5d2f089092cad311e5c9981f3ef9f85567a3956",
+    "gzip": "profiles/after.cpuprofile.gz",
+    "rawBytes": 175294,
+    "archivedOnly": true
+  },
+  {
+    "path": "profiles/before.cpuprofile",
+    "rawSha256": "8b029d432ad5b3f12bf4d2772d9b109db418f5f45382899ce98dd39febd6ad21",
+    "gzip": "profiles/before.cpuprofile.gz",
+    "rawBytes": 178992,
+    "archivedOnly": true
+  },
+  {
+    "path": "results.json",
+    "rawSha256": "48eafeaaa9bb880a0133e92a5aa83dfd13769cbab3491477413051ce5627c220",
+    "gzip": "results.raw.json.gz",
+    "rawBytes": 3854993
+  },
+  {
+    "path": "screen/results.json",
+    "rawSha256": "92fb0594cf8cf6223f4823cce90a31d00e13b9cb76215d76180f7338c2ee96c0",
+    "gzip": "screen/results.raw.json.gz",
+    "rawBytes": 657263
+  },
+  {
+    "path": "node-final/results.json",
+    "rawSha256": "be58a679388797dff8a0aea0f189633fe536f357af415bdfe62e8f886acb91bd",
+    "gzip": "node-final/results.raw.json.gz",
+    "rawBytes": 1932288
+  },
+  {
+    "path": "hello-diagnostic/r1-2-hono.cpuprofile",
+    "rawSha256": "8e7ca28b97e88a9a2643e73a2ca37d9790f76d47b31d56358410dc3d7d99f23f",
+    "gzip": "hello-diagnostic/r1-2-hono.cpuprofile.gz",
+    "rawBytes": 136284,
+    "archivedOnly": true
+  },
+  {
+    "path": "hello-diagnostic/r1-2-keala.cpuprofile",
+    "rawSha256": "1722aa85b9b421f331522ccc46daf786da757b6d4999fe72ad577d06788350e4",
+    "gzip": "hello-diagnostic/r1-2-keala.cpuprofile.gz",
+    "rawBytes": 137074,
+    "archivedOnly": true
+  },
+  {
+    "path": "hello-diagnostic/r2-2-hono.cpuprofile",
+    "rawSha256": "720a14300035040e134989bd7bdba3e50f3d80de908b92ef38fd7cf076f519b8",
+    "gzip": "hello-diagnostic/r2-2-hono.cpuprofile.gz",
+    "rawBytes": 137258,
+    "archivedOnly": true
+  },
+  {
+    "path": "hello-diagnostic/r2-2-keala.cpuprofile",
+    "rawSha256": "22aebfb1504544676a9838741809c22db8888e3ada287d7e7d7a5902601915b6",
+    "gzip": "hello-diagnostic/r2-2-keala.cpuprofile.gz",
+    "rawBytes": 140446,
+    "archivedOnly": true
+  },
+  {
+    "path": "hello-diagnostic/r3-2-hono.cpuprofile",
+    "rawSha256": "2c972c5549c30eca32e579341648eebac50b74114f0f269bb027af18bbe1eac6",
+    "gzip": "hello-diagnostic/r3-2-hono.cpuprofile.gz",
+    "rawBytes": 136027,
+    "archivedOnly": true
+  },
+  {
+    "path": "hello-diagnostic/r3-2-keala.cpuprofile",
+    "rawSha256": "2e2887021c22a796bda4cb02abcbb723ac1746c4d157c71e27ebba78a6818b07",
+    "gzip": "hello-diagnostic/r3-2-keala.cpuprofile.gz",
+    "rawBytes": 134703,
+    "archivedOnly": true
+  },
+  {
+    "path": "hello-diagnostic/results.json",
+    "rawSha256": "c61a5f15589ec1410d06a5f6c1bc1849a35338a83ded4b4c0e9f0c1053381790",
+    "gzip": "hello-diagnostic/results.raw.json.gz",
+    "rawBytes": 32086
+  }
+]

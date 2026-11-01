@@ -109,9 +109,13 @@ export const releaseInFlight = (lc: LifecycleState): void => {
   lc.inFlight--;
   if (lc.queue.length > 0) refillFromQueue(lc);
   if (lc.inFlight === 0 && lc.closeWaiters.length > 0) {
-    const waiters = lc.closeWaiters.splice(0);
-    for (const wake of waiters) wake();
+    wakeCloseWaiters(lc);
   }
+};
+
+const wakeCloseWaiters = (lc: LifecycleState): void => {
+  const waiters = lc.closeWaiters.splice(0);
+  for (const wake of waiters) wake();
 };
 
 const refillFromQueue = (lc: LifecycleState): void => {
@@ -128,6 +132,13 @@ const refillFromQueue = (lc: LifecycleState): void => {
  * (pull-based wrapper, zero buffering) — draining must not cut streams it
  * promised to let finish.
  */
+/** No queue or close waiters can exist before an uncapped app starts draining. */
+export const settleUncappedRequest = (lc: LifecycleState, value: Response): Response => {
+  if (lc.draining) return settleRequest(lc, value);
+  lc.inFlight--;
+  return value;
+};
+
 export const settleRequest = (lc: LifecycleState, value: Response): Response => {
   if (lc.draining && value.body !== null) return holdBody(lc, value);
   releaseInFlight(lc);

@@ -1,0 +1,9 @@
+
+> keala@0.7.3 process:check
+> node scripts/process-check.mjs
+
+  ✓ Bun source
+  ✓ Node source
+  ✓ Bun dist
+  ✓ Node dist
+PROCESS CHECK OK

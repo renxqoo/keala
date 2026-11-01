@@ -1,0 +1,4 @@
+
+> keala@0.7.3 typecheck
+> tsc --noEmit
+

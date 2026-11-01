@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+
+ Test Files  3 passed (3)
+      Tests  20 passed (20)
+   Start at  18:28:59
+   Duration  880ms (transform 393ms, setup 0ms, import 548ms, tests 211ms, environment 0ms)
+

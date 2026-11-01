@@ -1,0 +1,12 @@
+{
+  "tag": "v20.67.0",
+  "url": "https://github.com/uNetworking/uWebSockets.js/tree/v20.67.0",
+  "sha256": {
+    "uws.js": "41d51682940c2d35271f2960e0af2ff53bafff497cc2f3e3b7741d7c265d10c3",
+    "package.json": "7effe27bd68a98721772a0f1f5d3ad50816727ed6776be430a0c8ca9bcb7b0b3",
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "index.d.ts": "7719a661a691dcf1a84eed5581eb223494502f579aa1e2425178b6f20ec8fcd0",
+    "uws_linux_x64_147.node": "d42f6695012dfdf863e750f8263ee8b743c4ce71b017bd92f3eff35743a3bc7f",
+    "uws_darwin_arm64_147.node": "b99887768222bec4a680b4e018f65a7098bd690d8c51dea251370d8dadf94312"
+  }
+}

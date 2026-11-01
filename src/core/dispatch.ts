@@ -4,9 +4,9 @@
  */
 
 import type { Application } from "./app.ts";
-import type { Chain, RouteHandler, RouterState } from "../router/router.ts";
+import type { Chain, RouteHandler, RouteMatch, RouterState } from "../router/router.ts";
 import { matchRoute } from "../router/router.ts";
-import { splitPathSearch } from "../utils/url.ts";
+import { primeRequestUrl } from "./request-url.ts";
 import { isEmptyStatus } from "../http/status.ts";
 import { DIRECT_HANDLER, NOOP_TAIL, type HandlerResult } from "./compose.ts";
 import type { Context } from "./context/context.ts";
@@ -190,92 +190,63 @@ export const dispatchChain = (
  * the commit slot and a second finalization pass from the dominant endpoint
  * shape without weakening onion semantics anywhere they can exist.
  */
+const invalidDirectResult = (
+  app: Application,
+  c: Context,
+  result: unknown,
+): Response | Promise<Response> => {
+  if (typeof (result as PromiseLike<unknown>).then === "function") {
+    return errorResponse(
+      app,
+      c,
+      new TypeError("handler returned a promise — await it inside the handler instead"),
+    );
+  }
+  return errorResponse(
+    app,
+    c,
+    new TypeError(`handler returned ${typeof result}; only Response, undefined or null are valid`),
+  );
+};
+
+const finishDirect = (
+  app: Application,
+  c: Context,
+  result: HandlerResult,
+  method: string,
+): Response | Promise<Response> => {
+  try {
+    if (result === undefined || result === null) return finalizeGuarded(app, c);
+    if (!(result instanceof Response)) return invalidDirectResult(app, c, result);
+    if (
+      c.headersRecord === null &&
+      method !== "HEAD" &&
+      app.onStreamError === undefined &&
+      !(isEmptyStatus(result.status) && result.body !== null)
+    ) {
+      return result;
+    }
+    c._res = result;
+    return finalizeGuarded(app, c);
+  } catch (error) {
+    return errorResponse(app, c, error);
+  }
+};
+
 const dispatchDirect = (
   app: Application,
   c: Context,
   handler: RouteHandler,
   method: string,
 ): Response | Promise<Response> => {
-  const finish = (result: HandlerResult): Response | Promise<Response> => {
-    // DUAL-WRITE ANCHOR (DEAD-25): this async-settle body is deliberately
-    // duplicated by the SYNC INLINE block further down (search
-    // "DUAL-WRITE ANCHOR #2") — a closure for the sync path would cost an
-    // allocation per request. The two blocks MUST evolve in lockstep: any
-    // change to the result classification, the fast-path condition or the
-    // commit fallback here applies verbatim there, and vice versa.
-    try {
-      if (result === undefined || result === null) return finalizeGuarded(app, c);
-      if (!(result instanceof Response)) {
-        if (typeof (result as PromiseLike<unknown>).then === "function") {
-          return errorResponse(
-            app,
-            c,
-            new TypeError("handler returned a promise — await it inside the handler instead"),
-          );
-        }
-        return errorResponse(
-          app,
-          c,
-          new TypeError(
-            `handler returned ${typeof result}; only Response, undefined or null are valid`,
-          ),
-        );
-      }
-      if (
-        c.headersRecord === null &&
-        method !== "HEAD" &&
-        app.onStreamError === undefined &&
-        !(isEmptyStatus(result.status) && result.body !== null)
-      ) {
-        return result;
-      }
-      c._res = result;
-      return finalizeGuarded(app, c);
-    } catch (error) {
-      return errorResponse(app, c, error);
-    }
-  };
   try {
     const result = handler(c, NOOP_TAIL);
-    if (result instanceof Promise) {
-      return result.then(finish, (error: unknown) => errorResponse(app, c, error));
-    }
-    // Sync fast path: no closure was needed — finish would only allocate
-    // one per sync request for nothing (~3-5ns + 64B each).
-    // DUAL-WRITE ANCHOR #2 (DEAD-25): this block is the verbatim sync twin
-    // of the `finish` closure above (search "DUAL-WRITE ANCHOR") — keep the
-    // two in lockstep; a change to one without the other is a divergence bug.
-    try {
-      if (result === undefined || result === null) return finalizeGuarded(app, c);
-      if (!(result instanceof Response)) {
-        if (typeof (result as PromiseLike<unknown>).then === "function") {
-          return errorResponse(
-            app,
-            c,
-            new TypeError("handler returned a promise — await it inside the handler instead"),
-          );
-        }
-        return errorResponse(
-          app,
-          c,
-          new TypeError(
-            `handler returned ${typeof result}; only Response, undefined or null are valid`,
-          ),
-        );
-      }
-      if (
-        c.headersRecord === null &&
-        method !== "HEAD" &&
-        app.onStreamError === undefined &&
-        !(isEmptyStatus(result.status) && result.body !== null)
-      ) {
-        return result;
-      }
-      c._res = result;
-      return finalizeGuarded(app, c);
-    } catch (error) {
-      return errorResponse(app, c, error);
-    }
+    return result instanceof Promise
+      ? result.then(
+          (value) => finishDirect(app, c, value, method),
+          (error: unknown) => errorResponse(app, c, error),
+        )
+      : finishDirect(app, c, result, method);
   } catch (error) {
     return errorResponse(app, c, error);
   }
@@ -298,6 +269,46 @@ const finishDispatch = (
  * compiled each route's applicable middleware; request time only chooses the
  * chain or the precompiled fallback.
  */
+const publishMatch = (c: Context, match: RouteMatch): void => {
+  c.paramNames = match.names;
+  c.paramValues = match.values;
+  c.paramOffset = match.offset;
+  c.routePath = match.target.pattern;
+  c.routeName = match.target.name;
+};
+
+const alternateMethodChain = (match: RouteMatch, method: string): Chain | undefined =>
+  (method === "HEAD" ? (match.target.methods.get("GET") as Chain | undefined) : undefined) ??
+  (match.target.methods.get("ALL") as Chain | undefined);
+
+const dispatchFallback = (
+  app: Application,
+  c: Context,
+  middleware: MiddlewareStack,
+  path: string,
+  match: RouteMatch | null,
+): Response | Promise<Response> => {
+  if (match !== null) for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
+  const fallback = fallbackMiddlewareForPath(middleware, path);
+  return fallback === null ? finalizeGuarded(app, c) : dispatchChain(app, c, fallback);
+};
+
+const dispatchRoutedChain = (
+  app: Application,
+  c: Context,
+  chain: Chain,
+  router: RouterState,
+  middleware: MiddlewareStack,
+  method: string,
+  path: string,
+): Response | Promise<Response> =>
+  dispatchChain(
+    app,
+    c,
+    chain,
+    router.devTrace ? { method, path, marked: hasMiddlewareForPath(middleware, path) } : undefined,
+  );
+
 export const dispatchRequest = (
   app: Application,
   c: Context,
@@ -305,49 +316,32 @@ export const dispatchRequest = (
   middleware: MiddlewareStack,
   request: RequestSource,
 ): Response | Promise<Response> => {
-  const rawUrl = sourceUrl(request);
   // One pass yields both the match path and the context's path+search view
   // (R413: getPath + getSearch paid two scans). First-touch c.path/c.url
   // reads stay memo reads; a later rewrite invalidates both.
-  const [path, search] = splitPathSearch(rawUrl);
-  c.pathValue = path;
-  c.urlValue = search.length === 0 ? path : path + search;
+  const path = primeRequestUrl(c, sourceUrl(request));
   const match = matchRoute(router, path);
   if (match !== null) {
-    c.paramNames = match.names;
-    c.paramValues = match.values;
-    c.paramOffset = match.offset;
     // Matched-pattern facts (R411 Fix 4), published beside params: visible
     // to every chain layer, the 405 path below and post-next() observers —
     // metrics labels and span names get the route TEMPLATE, never the
     // high-cardinality raw path.
-    c.routePath = match.target.pattern;
-    c.routeName = match.target.name;
+    publishMatch(c, match);
     const rawMethod = sourceMethod(request);
     const method = rawMethod === "GET" ? "GET" : rawMethod.toUpperCase();
     // Express-style convenience: HEAD falls back to the GET handler.
     const chain =
       (match.target.methods.get(method) as Chain | undefined) ??
-      (method === "HEAD" ? (match.target.methods.get("GET") as Chain | undefined) : undefined) ??
-      (match.target.methods.get("ALL") as Chain | undefined);
+      alternateMethodChain(match, method);
     if (chain !== undefined) {
       const directHandler = chain[DIRECT_HANDLER];
       if (directHandler !== undefined) {
         return dispatchDirect(app, c, directHandler, method);
       }
-      return dispatchChain(
-        app,
-        c,
-        chain,
-        router.devTrace
-          ? { method, path, marked: hasMiddlewareForPath(middleware, path) }
-          : undefined,
-      );
+      return dispatchRoutedChain(app, c, chain, router, middleware, method, path);
     }
-    for (const allowed of match.target.allowed) c.routerAllowed.add(allowed);
   }
   // No handler: global middleware still runs (koa contract), then the
   // finalizer decides between 405/501/OPTIONS and not-found.
-  const fallback = fallbackMiddlewareForPath(middleware, path);
-  return fallback === null ? finalizeGuarded(app, c) : dispatchChain(app, c, fallback);
+  return dispatchFallback(app, c, middleware, path, match);
 };

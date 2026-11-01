@@ -1,0 +1,35 @@
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+ ❯ test/integration/node-connection-lifecycle.test.ts (9 tests | 2 failed) 328ms
+     × emits one native close and restores closeIdleConnections (own method: false) 18ms
+     × emits one native close and restores closeIdleConnections (own method: true) 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: false)
+ FAIL  test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: true)
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ test/integration/node-connection-lifecycle.test.ts:58:27
+     56|       await expect(app.close({ drain: 500 })).resolves.toMatchObject({…
+     57|       await new Promise<void>((resolve) => setImmediate(resolve));
+     58|       expect(closeEvents).toBe(1);
+       |                           ^
+     59|       expect(Object.getOwnPropertyDescriptor(native, "closeIdleConnect…
+     60|     },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  13:28:34
+   Duration  587ms (transform 137ms, setup 0ms, import 178ms, tests 328ms, environment 0ms)
+

@@ -1,10 +1,168 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Keala } from "../../src/core/app.ts";
 import { streamSSE } from "../../src/helpers/streams.ts";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe.skipIf(typeof Bun === "undefined")("srvx Bun transport and policy parity", () => {
+  it("leaves startup ownership with a loader-provided handle without a URL", async () => {
+    const app = new Keala({ env: "test" });
+    const handle = {
+      port: 54321,
+      hostname: "127.0.0.1",
+      stop: vi.fn(),
+      reload: vi.fn(),
+      fetch: async () => new Response("loader"),
+    };
+    vi.stubGlobal("__srvxLoader__", ({ server }: { server: { bun: { server?: unknown } } }) => {
+      server.bun.server = handle;
+    });
+    try {
+      expect(app.listen({ port: 0, hostname: "127.0.0.1" })).toBe(handle);
+      expect(await (await handle.fetch()).text()).toBe("loader");
+    } finally {
+      vi.unstubAllGlobals();
+      await app.close({ drain: 0 });
+      handle.stop(true);
+    }
+  });
+
+  it("preserves request metadata descriptors, isolation and waitUntil shutdown", async () => {
+    type TransportRequest = Request & {
+      waitUntil(task: Promise<void>): void;
+      runtime: { name: string; bun: { server: unknown }; marker?: string };
+      readonly ip: string;
+    };
+    const app = new Keala({ env: "test" });
+    const requests: TransportRequest[] = [];
+    const addresses: string[] = [];
+    let release!: () => void;
+    const task = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    app.get("/", (c) => {
+      const raw = c.raw as TransportRequest;
+      requests.push(raw);
+      if (requests.length === 1) {
+        raw.waitUntil(task);
+        raw.runtime.bun.server = null;
+      }
+      // Bun owns the peer address while the request is active.
+      addresses.push(raw.ip);
+      return c.text("ok");
+    });
+    const server = app.listen({ port: 0, hostname: "127.0.0.1" });
+    try {
+      const url = `http://127.0.0.1:${server.port}/`;
+      expect(await (await fetch(url)).text()).toBe("ok");
+      const first = requests[0]!;
+      expect(Object.getOwnPropertyDescriptor(first, "runtime")).toEqual({
+        value: first.runtime,
+        writable: false,
+        enumerable: true,
+        configurable: false,
+      });
+      expect(Object.getOwnPropertyDescriptor(first, "waitUntil")).toMatchObject({
+        value: first.waitUntil,
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      });
+      expect(Object.getOwnPropertyDescriptor(first, "ip")).toMatchObject({
+        get: expect.any(Function),
+        enumerable: true,
+        configurable: true,
+      });
+      expect(Object.getOwnPropertyDescriptor(first, "ip")!.get!.name).toBe("get");
+      first.runtime.marker = "first";
+      expect(addresses[0]).toBe("127.0.0.1");
+      expect(await (await fetch(url)).text()).toBe("ok");
+      const second = requests[1]!;
+      expect(second.runtime).not.toBe(first.runtime);
+      expect(second.runtime.name).toBe("bun");
+      expect(second.runtime.marker).toBeUndefined();
+      expect(second.runtime.bun.server).toBe(server);
+      expect(second.waitUntil).toBe(first.waitUntil);
+      let closed = false;
+      const closing = app.close({ drain: 500 }).then((status) => {
+        closed = true;
+        return status;
+      });
+      await delay(20);
+      expect(closed).toBe(false);
+      release();
+      expect((await closing).timedOut).toBe(false);
+    } finally {
+      release();
+      await app.close({ drain: 0 });
+      server.stop(true);
+    }
+  });
+
+  it("keeps descriptor values isolated through synchronous metadata reentry and errors", async () => {
+    type Fetch = (
+      request: Request,
+      server: { requestIP(request: Request): { address: string } },
+    ) => Response | Promise<Response>;
+    let dispatch!: Fetch;
+    const nativeServe = Bun.serve;
+    const serve = vi.spyOn(Bun, "serve").mockImplementation(((options: { fetch: Fetch }) => {
+      dispatch = options.fetch;
+      return Reflect.apply(nativeServe, Bun, [options]);
+    }) as typeof Bun.serve);
+    const app = new Keala({ env: "test" });
+    app.get("/", (c) => c.text(c.ip!));
+    const server = app.listen({ port: 0, hostname: "127.0.0.1" });
+    serve.mockRestore();
+    const outer = new Request("http://example.test/");
+    const inner = new Request("http://example.test/");
+    const outerHost = {
+      requestIP: (request: Request) => ({ address: request === outer ? "outer" : "wrong" }),
+    };
+    const innerHost = {
+      requestIP: (request: Request) => ({ address: request === inner ? "inner" : "wrong" }),
+    };
+    const nativeDefine = Object.defineProperty;
+    let nested: Response | Promise<Response> | undefined;
+    const define = vi
+      .spyOn(Object, "defineProperty")
+      .mockImplementation((target, key, descriptor) => {
+        if (target === outer && key === "runtime") nested = dispatch(inner, innerHost);
+        return nativeDefine(target, key, descriptor);
+      });
+    try {
+      const response = dispatch(outer, outerHost);
+      define.mockRestore();
+      expect(await (await response).text()).toBe("outer");
+      expect(await (await nested!).text()).toBe("inner");
+      expect(Reflect.get(outer, "runtime").bun.server).toBe(outerHost);
+      expect(Reflect.get(inner, "runtime").bun.server).toBe(innerHost);
+      expect(Object.getOwnPropertyDescriptor(outer, "ip")!.get!.call(inner)).toBe("outer");
+      const rejected = new Request("http://example.test/");
+      const fault = new Error("metadata fault");
+      const fail = vi
+        .spyOn(Object, "defineProperty")
+        .mockImplementation((target, key, descriptor) => {
+          if (target === rejected && key === "runtime") throw fault;
+          return nativeDefine(target, key, descriptor);
+        });
+      try {
+        expect(() => dispatch(rejected, outerHost)).toThrow(fault);
+      } finally {
+        fail.mockRestore();
+      }
+      const after = new Request("http://example.test/");
+      const afterHost = { requestIP: () => ({ address: "after" }) };
+      expect(await (await dispatch(after, afterHost)).text()).toBe("after");
+      expect(Reflect.get(after, "runtime").bun.server).toBe(afterHost);
+    } finally {
+      define.mockRestore();
+      serve.mockRestore();
+      await app.close({ drain: 100 });
+      server.stop(true);
+    }
+  });
+
   it("keeps Host protection on native sink mirrors, including late registrations", async () => {
     const app = new Keala({ env: "test", trustedHosts: ["trusted.test"] });
     app.sink("/early", () => new Response("protected"));

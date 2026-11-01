@@ -1,0 +1,114 @@
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+ ❯ test/unit/response-result-inspection.test.ts (2 tests | 2 failed) 5ms
+   × maps inspection failures even for an original sugar response 3ms
+   × sanitizes empty status bodies after a sugar response is modified 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/unit/response-result-inspection.test.ts > maps inspection failures even for an original sugar response
+Error: status inspection
+ ❯ Response.get test/unit/response-result-inspection.test.ts:15:15
+     13|     Object.defineProperty(response, "status", {
+     14|       get() {
+     15|         throw new Error("status inspection");
+       |               ^
+     16|       },
+     17|     });
+ ❯ test/unit/response-result-inspection.test.ts:21:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/unit/response-result-inspection.test.ts > sanitizes empty status bodies after a sugar response is modified
+AssertionError: expected ReadableStream { locked: false, state: 'readable', supportsBYOB: true } to be null
+
+- Expected:
+null
+
++ Received:
+ReadableStream {
+  Symbol(kType): "ReadableStream",
+  Symbol(kState): {
+    "closedPromise": undefined,
+    "controller": ReadableByteStreamController {
+      Symbol(kType): "ReadableByteStreamController",
+      Symbol(kState): {
+        "autoAllocateChunkSize": undefined,
+        "byobRequest": null,
+        "cancelAlgorithm": [Function anonymous],
+        "closeRequested": true,
+        "highWaterMark": 0,
+        "pendingPullIntos": Queue {
+          "capacityMask": -1,
+          "dequeuedSize": 0,
+          "head": 0,
+          "length": 0,
+          "list": [],
+          "tail": 0,
+        },
+        "pullAgain": false,
+        "pullAlgorithm": [Function anonymous],
+        "pullFulfilled": undefined,
+        "pullRejected": undefined,
+        "pulling": false,
+        "queue": Queue {
+          "capacityMask": 7,
+          "dequeuedSize": 0,
+          "head": 0,
+          "length": 1,
+          "list": [
+            {
+              "buffer": ArrayBuffer [
+                98,
+                111,
+                100,
+                121,
+              ],
+              "byteLength": 4,
+              "byteOffset": 0,
+            },
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+          ],
+          "tail": 1,
+        },
+        "queueTotalSize": 4,
+        "started": true,
+        "stream": [Circular],
+      },
+    },
+    "disturbed": false,
+    "reader": undefined,
+    "state": "readable",
+    "storedError": undefined,
+    "transfer": {
+      "port1": undefined,
+      "port2": undefined,
+      "promise": undefined,
+      "writable": undefined,
+    },
+  },
+}
+
+ ❯ test/unit/response-result-inspection.test.ts:36:23
+     34|   const result = await app.handle(new Request("http://example.test/"));
+     35|   expect(result.status).toBe(204);
+     36|   expect(result.body).toBeNull();
+       |                       ^
+     37|   expect(await result.text()).toBe("");
+     38|   expect(app.inFlight).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  16:52:15
+   Duration  244ms (transform 116ms, setup 0ms, import 152ms, tests 5ms, environment 0ms)
+

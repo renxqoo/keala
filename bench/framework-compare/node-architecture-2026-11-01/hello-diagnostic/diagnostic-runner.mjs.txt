@@ -1,0 +1,40 @@
+import { spawn } from 'node:child_process';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import assert from 'node:assert/strict';
+const root='/tmp/keala-bench-opt.JhAsdh';
+const final=JSON.parse(readFileSync(`${root}/node-final/results.json`));
+assert(final.finishedAt && !final.failure && final.samples.length===156);
+const output=`${root}/hello-diagnostic`;mkdirSync(output);
+const cg='/sys/fs/cgroup'+readFileSync('/proc/self/cgroup','utf8').trim().split('\n').find(x=>x.startsWith('0::')).slice(3);
+assert(cg.includes('keala-bench-'));
+const data={startedAt:new Date().toISOString(),sourceSha256:'290a323faa77b894e7c2a60a558f4777136bb39028c7a76b1a9e675ad6b29ec6',diagnosticOnly:true,configs:[{duration:3,profiler:false},{duration:8,profiler:false},{duration:8,profiler:true}],samples:[],health:[]};
+let child;
+const save=()=>writeFileSync(`${output}/results.json`,JSON.stringify(data));
+const guard=()=>{
+  const available=Number(readFileSync('/proc/meminfo','utf8').match(/^MemAvailable:\s+(\d+)/m)[1])*1024;
+  const current=Number(readFileSync(`${cg}/memory.current`,'utf8'));
+  const peak=Number(readFileSync(`${cg}/memory.peak`,'utf8'));
+  const tasks=Number(readFileSync(`${cg}/pids.current`,'utf8'));
+  const oom=Number(readFileSync(`${cg}/memory.events`,'utf8').match(/^oom (\d+)$/m)[1]);
+  const load=os.loadavg()[0];data.health.push({at:new Date().toISOString(),available,current,peak,tasks,oom,load});
+  assert(available>=384*2**20 && current<=560*2**20 && tasks<=110 && oom===0 && load<=3.5,'health guard');
+};
+const timer=setInterval(()=>{try{guard();save()}catch(e){data.failure=String(e);save();child?.kill('SIGTERM');process.exit(1)}},1000);
+try{
+  guard();
+  for(let round=1;round<=3;round++)for(const [index,config] of data.configs.entries()){
+    let order=['keala','hono'];if((round+index)%2===0)order.reverse();
+    for(const framework of order){
+      guard();const id=`r${round}-${index}-${framework}`,profile=`${output}/${id}.cpuprofile`;
+      child=spawn(process.execPath,[`${root}/diagnostic/bench/framework-compare/profile.mjs`,framework,'hello','/','Hello World',profile],{env:{...process.env,BENCH_PROFILE_CONNECTIONS:'50',BENCH_PROFILE_PROCESSES:'1',BENCH_PROFILE_DURATION:String(config.duration),BENCH_PROFILE_ENABLED:config.profiler?'1':'0'},stdio:['ignore','pipe','pipe']});
+      const pid=child.pid;let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
+      const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve)});
+      writeFileSync(`${output}/${id}.stderr.txt`,stderr);assert.equal(code,0,stderr);
+      const value=JSON.parse(stdout);assert.equal(value.profiler,config.profiler);data.samples.push({round,config:index,framework,pid,...value});save();console.log(id,Math.round(value.rps),value.cpu.nsPerRequest/1000);
+      await new Promise(resolve=>setTimeout(resolve,500));
+    }
+  }
+  assert.equal(data.samples.length,18);data.finishedAt=new Date().toISOString();
+}catch(e){data.failure=String(e);process.exitCode=1;throw e}
+finally{clearInterval(timer);guard();save()}

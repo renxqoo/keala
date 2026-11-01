@@ -39,10 +39,11 @@ class PlannedResponse {
     return true;
   }
 
-  constructor(body: DirectResponseBody, init: ResponseInit = {}, implicitContentType?: string) {
+  constructor(body: DirectResponseBody, init?: ResponseInit, implicitContentType?: string) {
     this.directBody = typeof body === "string" ? body : new Uint8Array(body);
     this.implicitContentType =
       implicitContentType ?? (typeof body === "string" ? STRING_CONTENT_TYPE : undefined);
+    if (init === undefined) return;
     // Only exact primitive defaults avoid Response construction. All other
     // statuses/reasons retain the native constructor's validation/coercion.
     if (
@@ -152,7 +153,7 @@ Object.setPrototypeOf(PlannedResponse.prototype, Response.prototype);
 
 export const createPlannedResponse = (
   body: DirectResponseBody,
-  init: ResponseInit = {},
+  init?: ResponseInit,
   implicitContentType?: string,
 ): Response => new PlannedResponse(body, init, implicitContentType) as unknown as Response;
 

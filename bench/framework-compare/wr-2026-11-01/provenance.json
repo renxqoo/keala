@@ -1,0 +1,34 @@
+{
+  "nodeArchive": {
+    "url": "https://nodejs.org/dist/v26.9.0/node-v26.9.0-linux-x64.tar.xz",
+    "sha256": "c6ecd8efc1c1d395265891675319da7a7b3785c6be174bd78933cf4f057624d1",
+    "verifiedAgainst": "official SHASUMS256.txt"
+  },
+  "privateLibatomic": {
+    "version": "14.2.0-4ubuntu2~24.04.1",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/libatomic1_14.2.0-4ubuntu2%7e24.04.1_amd64.deb",
+    "sha512": "4631a023da29026cfd116ca479bbdb69eb3ca402e26912804201f3e53110e6f585012682637ed7372a7e5cebe71efdb401cb3966fff9d278ff202b1a3f5f6f41",
+    "verifiedAgainst": "wr APT metadata",
+    "systemInstalled": false
+  },
+  "payloadSha256": "68913d8caa534a034677c7722edadfca6940a6ee0150680a579f31bfa94fac97",
+  "remotePayloadVerified": true,
+  "pilot": {
+    "samples": 6,
+    "failures": null,
+    "livePids": [],
+    "memoryPeakBytes": 141897728
+  },
+  "limits": {
+    "cpuMax": "150000 100000",
+    "memoryMax": 671088640,
+    "pidsMax": 128
+  },
+  "results": {
+    "originalArchive": "results.raw.json.gz",
+    "remoteRawSha256": "33d781dab980a51b672caa18d6367373a96f10ec1cc3c508ccd016306b799a8a",
+    "formattedJson": "results.json",
+    "formattedSha256": "cba3d47ceb9fdc6d1d200181d22a6fceeef3079ce13ea31507bf4c8f49c83d68",
+    "parsedValuesDeepEqual": true
+  }
+}

@@ -1,0 +1,38 @@
+
+> keala@0.7.3 soak
+> bun scripts/soak.ts
+
+keala soak — 24 rounds x 20,000 (Bun 1.4.4)
+✓ round 0 A in-process: 20,000 req, retained drift 57.8 B/req (budget 1500)
+✓ round 0 B http: 8,000 req over HTTP, retained drift 13.4 B/req
+✓ round 1 A in-process: 20,000 req, retained drift 0.9 B/req (budget 1500)
+✓ round 2 A in-process: 20,000 req, retained drift 0.0 B/req (budget 1500)
+✓ round 3 A in-process: 20,000 req, retained drift 0.3 B/req (budget 1500)
+✓ round 3 C concurrent: 2,560 concurrent req, retained drift 21.5 B/req
+✓ round 4 A in-process: 20,000 req, retained drift -0.9 B/req (budget 1500)
+✓ round 5 A in-process: 20,000 req, retained drift 0.1 B/req (budget 1500)
+✓ round 6 A in-process: 20,000 req, retained drift 0.1 B/req (budget 1500)
+✓ round 6 B http: 8,000 req over HTTP, retained drift 13.7 B/req
+✓ round 7 A in-process: 20,000 req, retained drift 0.7 B/req (budget 1500)
+✓ round 8 A in-process: 20,000 req, retained drift 2.3 B/req (budget 1500)
+✓ round 9 A in-process: 20,000 req, retained drift 0.2 B/req (budget 1500)
+✓ round 9 C concurrent: 2,560 concurrent req, retained drift 16.3 B/req
+✓ round 10 A in-process: 20,000 req, retained drift -1.3 B/req (budget 1500)
+✓ round 11 A in-process: 20,000 req, retained drift 0.2 B/req (budget 1500)
+✓ round 12 A in-process: 20,000 req, retained drift 0.4 B/req (budget 1500)
+✓ round 12 B http: 8,000 req over HTTP, retained drift 1.2 B/req
+✓ round 13 A in-process: 20,000 req, retained drift -1.6 B/req (budget 1500)
+✓ round 14 A in-process: 20,000 req, retained drift 0.3 B/req (budget 1500)
+✓ round 15 A in-process: 20,000 req, retained drift 0.1 B/req (budget 1500)
+✓ round 15 C concurrent: 2,560 concurrent req, retained drift 10.8 B/req
+✓ round 16 A in-process: 20,000 req, retained drift -1.3 B/req (budget 1500)
+✓ round 17 A in-process: 20,000 req, retained drift 0.1 B/req (budget 1500)
+✓ round 18 A in-process: 20,000 req, retained drift 0.1 B/req (budget 1500)
+✓ round 18 B http: 8,000 req over HTTP, retained drift -0.8 B/req
+✓ round 19 A in-process: 20,000 req, retained drift 0.9 B/req (budget 1500)
+✓ round 20 A in-process: 20,000 req, retained drift -2.0 B/req (budget 1500)
+✓ round 21 A in-process: 20,000 req, retained drift 0.6 B/req (budget 1500)
+✓ round 21 C concurrent: 2,560 concurrent req, retained drift 12.4 B/req
+✓ round 22 A in-process: 20,000 req, retained drift -0.7 B/req (budget 1500)
+✓ round 23 A in-process: 20,000 req, retained drift 0.1 B/req (budget 1500)
+SOAK OK — no retained-heap growth beyond budget

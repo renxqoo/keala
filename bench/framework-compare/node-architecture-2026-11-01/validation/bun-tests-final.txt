@@ -1,0 +1,13 @@
+
+> keala@0.7.3 test:bun
+> bun --bun x vitest run
+
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+
+ Test Files  176 passed | 2 skipped (178)
+      Tests  2894 passed | 93 skipped (2987)
+   Start at  13:44:41
+   Duration  94.71s (transform 1.37s, setup 0ms, import 8.37s, tests 78.38s, environment 22ms)
+

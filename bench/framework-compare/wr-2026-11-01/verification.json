@@ -1,0 +1,61 @@
+{
+  "checkedAt": "2026-11-01T03:17:36.598Z",
+  "samples": 234,
+  "requests": 6004500,
+  "resultsSha256": "33d781dab980a51b672caa18d6367373a96f10ec1cc3c508ccd016306b799a8a",
+  "servicesBefore": [
+    {
+      "pid": 26761,
+      "ppid": 1,
+      "name": "xray",
+      "elapsedSeconds": 303408
+    },
+    {
+      "pid": 26769,
+      "ppid": 1,
+      "name": "hysteria",
+      "elapsedSeconds": 303408
+    },
+    {
+      "pid": 71250,
+      "ppid": 1,
+      "name": "fail2ban-server",
+      "elapsedSeconds": 293010
+    }
+  ],
+  "servicesAfter": [
+    {
+      "pid": 26761,
+      "ppid": 1,
+      "name": "xray",
+      "elapsedSeconds": 303408,
+      "alive": true,
+      "currentName": "xray"
+    },
+    {
+      "pid": 26769,
+      "ppid": 1,
+      "name": "hysteria",
+      "elapsedSeconds": 303408,
+      "alive": true,
+      "currentName": "hysteria"
+    },
+    {
+      "pid": 71250,
+      "ppid": 1,
+      "name": "fail2ban-server",
+      "elapsedSeconds": 293010,
+      "alive": true,
+      "currentName": "fail2ban-server"
+    }
+  ],
+  "oomBefore": 0,
+  "oomAfter": 0,
+  "liveOwnedPids": [],
+  "benchmarkCgroupsExist": [],
+  "memoryAfter": [
+    "MemTotal:        2015016 kB",
+    "MemFree:          247320 kB",
+    "MemAvailable:    1516056 kB"
+  ]
+}

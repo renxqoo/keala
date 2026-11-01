@@ -1,0 +1,26 @@
+{
+  "profile": "/tmp/keala-bench-opt.JhAsdh/profiles/h3.cpuprofile",
+  "framework": "h3",
+  "suite": "hello",
+  "path": "/",
+  "config": { "connections": 50, "duration": 8, "processes": 1 },
+  "diagnosticOnly": true,
+  "rps": 8115.427717594322,
+  "cpu": {
+    "user": 4714119,
+    "system": 1968862,
+    "elapsedUs": 8162847,
+    "cores": 0.8187071250998579,
+    "percentOfOneCore": 81.8707125099858,
+    "nsPerRequest": 102539.02570003836
+  },
+  "latency": {
+    "average": 5.633878020713464,
+    "p50": 4,
+    "p90": 10,
+    "p99": 30,
+    "p99_9": 43,
+    "max": 186,
+    "totalCount": 65175
+  }
+}

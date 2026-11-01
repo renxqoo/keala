@@ -7,6 +7,7 @@
  */
 
 import type { Server, ServerOptions, IncomingMessage, ServerResponse } from "node:http";
+import { Server as HttpServer } from "node:http";
 import { serve as serveNode } from "srvx/node";
 import {
   failNodeSend,
@@ -22,7 +23,21 @@ import type { GracefulStopOptions } from "../core/lifecycle.ts";
 import { installSignalBridge } from "../core/lifecycle.ts";
 import { attachServer, assertCanStart } from "../core/server-slot.ts";
 import { InvalidRequestTargetError, mayCarryBody, NodeRequestSource } from "./node-source.ts";
-import { registerSocketClose, unregisterSocketClose } from "./node-socket-fanout.ts";
+import {
+  registerSocketClose,
+  unregisterSocketClose,
+  type SocketCloseRegistration,
+} from "./node-socket-fanout.ts";
+import { createNodeDrainTracker, holdNodeClose, releaseNodeClose } from "./node-drain.ts";
+
+const WIRE_SOURCE = Symbol("keala.wireSource");
+const WIRE_FANOUT = Symbol("keala.wireFanout");
+const WIRE_RELEASE = Symbol("keala.wireRelease");
+type TrackedResponse = ServerResponse & {
+  [WIRE_SOURCE]?: NodeRequestSource | null;
+  [WIRE_FANOUT]?: SocketCloseRegistration;
+  [WIRE_RELEASE]?: () => void;
+};
 
 export interface NodeServerHandle {
   readonly port: number;
@@ -166,8 +181,38 @@ export const startNodeServer = (
         // Stop accepting; idle keep-alives go first so the drain window only
         // covers real work (draining responses carry `connection: close`, so
         // their sockets end themselves).
-        server.close();
-        server.closeIdleConnections();
+        if (drainTracker === undefined) {
+          server.close();
+          server.closeIdleConnections();
+        } else {
+          // HTTP close() calls closeIdleConnections(), whose idle test can
+          // include end()-called buffered output that has not flushed yet.
+          // Replace only that synchronous step. A single HTTP close also
+          // clears its request timeout interval and emits close only once.
+          const idleDescriptor = Object.getOwnPropertyDescriptor(server, "closeIdleConnections");
+          const replaceable =
+            idleDescriptor === undefined
+              ? Object.isExtensible(server)
+              : idleDescriptor.configurable === true ||
+                ("value" in idleDescriptor && idleDescriptor.writable === true);
+          if (!replaceable) {
+            // An immutable user hook retains its original close contract.
+            server.close();
+            drainTracker.closeIdle();
+          } else {
+            Object.defineProperty(server, "closeIdleConnections", {
+              value: () => drainTracker.closeIdle(),
+              ...(idleDescriptor === undefined ? { configurable: true } : {}),
+            });
+            try {
+              server.close();
+            } finally {
+              if (idleDescriptor === undefined)
+                delete (server as Partial<Server>).closeIdleConnections;
+              else Object.defineProperty(server, "closeIdleConnections", idleDescriptor);
+            }
+          }
+        }
         let done = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         let appSettled = false;
@@ -178,14 +223,17 @@ export const startNodeServer = (
           // trySettle until both conditions align — see onWireDone); retire
           // them here so a later stopGraceful starts clean.
           wireWaiters.length = 0;
+          drainTracker?.stop();
           if (timer !== undefined) clearTimeout(timer);
           if (timedOut) server.closeAllConnections();
+          else if (drainTracker !== undefined) drainTracker.closeIdle();
           else server.closeIdleConnections();
           resolve({ timedOut });
         };
         const trySettle = (): void => {
-          if (wireInFlight === 0 && appSettled) finish(false);
+          if (wireInFlight === 0 && (drainTracker?.pending ?? 0) === 0 && appSettled) finish(false);
         };
+        drainTracker?.start(trySettle);
         // Operator escalation (second SIGTERM): kill sockets AND this wait.
         grace.registerForce?.(() => finish(true));
         // Arm the timer BEFORE the settled checks (FINDING-6): a finish on
@@ -204,7 +252,7 @@ export const startNodeServer = (
         }
         // Subscribe to the wire's last response finishing; onWireDone wakes all
         // waiters the moment wireInFlight reaches zero.
-        if (wireInFlight > 0) wireWaiters.push(trySettle);
+        wireWaiters.push(trySettle);
         trySettle();
       });
     },
@@ -233,6 +281,96 @@ export const startNodeServer = (
     },
   });
   const server = transport.node!.server as Server;
+  // Real Node assigns the active response to its socket before emitting
+  // request, and its own socket-close handler emits that response's close.
+  // Only queued pipeline responses need the extra socket fanout. Preserve
+  // the conservative bridge for custom response classes and Bun's shim.
+  const boundResponseClose =
+    directBufferedResponses && process.versions.bun === undefined && server instanceof HttpServer;
+  const drainTracker = boundResponseClose ? createNodeDrainTracker(server) : undefined;
+  function onWireDone(this: TrackedResponse): void {
+    const source = this[WIRE_SOURCE];
+    if (source === undefined) return;
+    this[WIRE_SOURCE] = undefined;
+    wireInFlight--;
+    const release = this[WIRE_RELEASE];
+    if (release !== undefined) {
+      this[WIRE_RELEASE] = undefined;
+      release();
+    }
+    const fanout = this[WIRE_FANOUT];
+    if (fanout !== undefined) {
+      this[WIRE_FANOUT] = undefined;
+      unregisterSocketClose(fanout);
+    }
+    if (!this.writableEnded && source !== null) {
+      source.disconnect(new DOMException("client disconnected", "AbortError"));
+    }
+    if (wireInFlight === 0 && wireWaiters.length > 0) {
+      for (const wake of wireWaiters) wake();
+    }
+  }
+  const trackWire = (
+    incoming: IncomingMessage,
+    out: TrackedResponse,
+    source: NodeRequestSource | null,
+  ): void => {
+    out[WIRE_SOURCE] = source;
+    if (drainTracker !== undefined) out[WIRE_RELEASE] = drainTracker.queue(incoming);
+    out.on("close", onWireDone);
+    if (!boundResponseClose || out.socket !== incoming.socket) {
+      out[WIRE_FANOUT] = registerSocketClose(incoming.socket, () => onWireDone.call(out));
+    }
+  };
+  const envelope = (error: unknown): Response => {
+    const status = error instanceof InvalidRequestTargetError ? 400 : 500;
+    const message = status === 400 ? "Bad Request" : "Internal Server Error";
+    return new Response(message, {
+      status,
+      statusText: message,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "content-length": String(Buffer.byteLength(message)),
+      },
+    });
+  };
+  const fail = (error: unknown, out: ServerResponse): Response | Promise<Response> => {
+    consoleFallback(app, undefined, toHttpError(error));
+    if (!(error instanceof InvalidRequestTargetError) && options.onServeError !== undefined) {
+      try {
+        const mapped = prepareNodeResponse(options.onServeError(toHttpError(error)), out, draining);
+        return mapped instanceof Promise ? mapped.catch(() => envelope(error)) : mapped;
+      } catch {
+        /* A hostile mapper must not break the transport envelope. */
+      }
+    }
+    return envelope(error);
+  };
+  const answer = (
+    response: Response,
+    source: NodeRequestSource,
+    out: ServerResponse,
+    direct: boolean,
+  ): Response | void | Promise<Response> => {
+    const abandonedRead = source.hasPendingOwnedRead();
+    if (mayCarryBody(source.method)) source.cleanupUnread();
+    if (abandonedRead) {
+      const socket = out.socket ?? source.incoming.socket;
+      holdNodeClose(out);
+      out.once("close", () => {
+        try {
+          source.disconnect(new DOMException("early answer abandoned the body", "AbortError"));
+          socket?.destroy();
+        } finally {
+          releaseNodeClose(out);
+        }
+      });
+    }
+    const closeAfter = draining || abandonedRead;
+    if (direct && directBufferedResponses && tryWriteBareNodeResponse(response, out, closeAfter))
+      return;
+    return prepareNodeResponse(response, out, closeAfter);
+  };
   function dispatch(incoming: IncomingMessage, out: ServerResponse): Response | Promise<Response>;
   function dispatch(
     incoming: IncomingMessage,
@@ -244,88 +382,31 @@ export const startNodeServer = (
     out: ServerResponse,
     direct = false,
   ): Response | void | Promise<Response | void> {
-    wireInFlight++;
-    // Wire truth + client-disconnect bridge, one handler registered twice.
-    // res 'close' fires for every STARTED response — completed OR terminated
-    // prematurely — so a separate 'finish' listener is redundant, and 'close'
-    // is the more honest settle point. A pipelined response that never
-    // started writing gets no res 'close' on socket death (REVIEW-SEC-17),
-    // so the SOCKET's own close settles the wire count too. Idempotent
-    // through `wireDone`; the socket registration is detached on first
-    // settle — a keep-alive socket must not accumulate per-request listeners.
-    const socket = incoming.socket;
-    let source: NodeRequestSource | null = null;
-    let wireDone = false;
-    let fanout: ReturnType<typeof registerSocketClose> | undefined;
-    const onWireDone = (): void => {
-      if (wireDone) return;
-      wireDone = true;
-      wireInFlight--;
-      if (fanout !== undefined) unregisterSocketClose(fanout);
-      if (!out.writableEnded && source !== null) {
-        source.disconnect(new DOMException("client disconnected", "AbortError"));
-      }
-      if (wireInFlight === 0 && wireWaiters.length > 0) {
-        // Waiters stay registered (cleared only when a close finishes): a
-        // zero-crossing can be unproductive — the app counter may settle
-        // later, and a LATE keep-alive request can dip the wire to zero
-        // again (REVIEW-BUG-9). Every zero-crossing re-runs trySettle;
-        // the done-guard makes repeats free.
-        for (const wake of wireWaiters) wake();
-      }
-    };
-    out.on("close", onWireDone);
-    fanout = registerSocketClose(socket, onWireDone);
-    const fail = (error: unknown): Response | Promise<Response> => {
-      consoleFallback(app, undefined, toHttpError(error));
-      if (!(error instanceof InvalidRequestTargetError) && options.onServeError !== undefined) {
-        try {
-          const mapped = prepareNodeResponse(
-            options.onServeError(toHttpError(error)),
-            out,
-            draining,
-          );
-          return mapped instanceof Promise ? mapped.catch(() => envelope(error)) : mapped;
-        } catch {
-          /* A hostile mapper must not break the transport envelope. */
-        }
-      }
-      return envelope(error);
-    };
-    const envelope = (error: unknown): Response => {
-      const status = error instanceof InvalidRequestTargetError ? 400 : 500;
-      const message = status === 400 ? "Bad Request" : "Internal Server Error";
-      return new Response(message, {
-        status,
-        statusText: message,
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-          "content-length": String(Buffer.byteLength(message)),
-        },
-      });
-    };
-    const answer = (response: Response): Response | void | Promise<Response> => {
-      const abandonedRead = source !== null && source.hasPendingOwnedRead();
-      if (source !== null && mayCarryBody(source.method)) source.cleanupUnread();
-      if (abandonedRead) {
-        out.once("close", () => {
-          source?.disconnect(new DOMException("early answer abandoned the body", "AbortError"));
-          socket.destroy();
-        });
-      }
-      const closeAfter = draining || abandonedRead;
-      if (direct && directBufferedResponses && tryWriteBareNodeResponse(response, out, closeAfter))
-        return;
-      return prepareNodeResponse(response, out, closeAfter);
-    };
+    // A queued response may close before it is ever assigned a socket;
+    // that is not a FIFO finish and cannot stand for its predecessor.
+    const connectionTracked = drainTracker !== undefined && out.socket === incoming.socket;
+    if (connectionTracked) drainTracker.track(incoming, out);
+    else wireInFlight++;
+    let tracked = false;
     try {
-      source = new NodeRequestSource(incoming, handle, options.maxRequestBodySize);
+      const source = new NodeRequestSource(incoming, handle, options.maxRequestBodySize, out);
+      if (!connectionTracked) {
+        tracked = true;
+        trackWire(incoming, out, source);
+      }
       const result = (app as NativeApplication)[HANDLE_REQUEST_SOURCE](source);
-      if (result instanceof Promise) return result.then(answer).catch(fail);
-      const prepared = answer(result);
-      return prepared instanceof Promise ? prepared.catch(fail) : prepared;
+      if (result instanceof Promise) {
+        return result
+          .then((response) => answer(response, source, out, direct))
+          .catch((error: unknown) => fail(error, out));
+      }
+      const prepared = answer(result, source, out, direct);
+      return prepared instanceof Promise
+        ? prepared.catch((error: unknown) => fail(error, out))
+        : prepared;
     } catch (error) {
-      return fail(error);
+      if (!tracked && !connectionTracked) trackWire(incoming, out, null);
+      return fail(error, out);
     }
   }
 

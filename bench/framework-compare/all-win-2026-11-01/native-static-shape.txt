@@ -1,0 +1,23 @@
+native {
+  instance: true,
+  own: {},
+  proto: [ "params", "cookies", "clone" ],
+  sameGlobal: false,
+  params: [Object: null prototype] {},
+  getUrl: "http://127.0.0.1:51889/user?x=1",
+  url: "http://127.0.0.1:51889/user?x=1",
+}
+fallback {
+  instance: true,
+  own: {},
+  proto: [
+    "arrayBuffer", "blob", "body", "bodyUsed", "bytes", "cache", "clone", "credentials", "destination",
+    "formData", "headers", "integrity", "json", "method", "mode", "redirect", "referrer", "referrerPolicy",
+    "signal", "text", "textStream", "url", "constructor"
+  ],
+  sameGlobal: true,
+  params: undefined,
+  getUrl: "http://127.0.0.1:51889/other?x=1",
+  url: "http://127.0.0.1:51889/other?x=1",
+}
+sameProto false

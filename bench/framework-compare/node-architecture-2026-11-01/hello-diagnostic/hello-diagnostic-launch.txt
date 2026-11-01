@@ -1,0 +1,7 @@
+ExecStart={ path=/usr/bin/env ; argv[]=/usr/bin/env NODE_OPTIONS=--max-old-space-size=128 UV_THREADPOOL_SIZE=2 LD_LIBRARY_PATH=/tmp/keala-bench-opt.JhAsdh/bundle/runtime /tmp/keala-bench-opt.JhAsdh/bundle/runtime/node /tmp/keala-bench-opt.JhAsdh/diagnostic-remote.mjs ; ignore_errors=no ; start_time=[Sun 2026-11-01 06:01:19 UTC] ; stop_time=[n/a] ; pid=124461 ; code=(null) ; status=0/0 }
+CPUWeight=1
+CPUQuotaPerSecUSec=1.500000s
+MemoryHigh=536870912
+MemoryMax=671088640
+TasksMax=128
+Nice=15

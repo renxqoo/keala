@@ -1,0 +1,30 @@
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+ ❯ test/integration/bun-request-contract.test.ts (6 tests | 1 failed) 28ms
+     × keeps fetch-only reload behavior and existing native sinks 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/integration/bun-request-contract.test.ts > Bun request compatibility contracts > keeps fetch-only reload behavior and existing native sinks
+AssertionError: expected 'reloaded' to be 'sink' // Object.is equality
+
+Expected: "sink"
+Received: "reloaded"
+
+ ❯ test/integration/bun-request-contract.test.ts:199:58
+    197|       expect(await (await fetch(base + "/user")).text()).toBe("reloade…
+    198|       expect(await (await fetch(base + "/other")).text()).toBe("reload…
+    199|       expect(await (await fetch(base + "/sink")).text()).toBe("sink");
+       |                                                          ^
+    200|     } finally {
+    201|       await app.close({ drain: 100 });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  16:42:34
+   Duration  192ms (transform 102ms, setup 0ms, import 130ms, tests 28ms, environment 0ms)
+

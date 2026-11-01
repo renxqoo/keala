@@ -1,0 +1,951 @@
+{
+  "diagnosticOnly": true,
+  "experiment": "Node POST scheduling: same Xi A/A entry and Hono, only owned cgroup period 1ms/10ms changes, total quota remains 150%",
+  "checks": 120,
+  "samples": 72,
+  "requests": 1468938,
+  "ownedPids": 150,
+  "livePids": [],
+  "comparisons": [
+    {
+      "a": "keala-node-cfs1000us",
+      "b": "keala-before-node-cfs1000us",
+      "scenario": "route-8",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": 3.1094102983774685,
+        "min": -10.386400962803233,
+        "max": 10.55678570938252,
+        "bootstrap95": [-2.84957641558623, 5.838564920089217],
+        "positive": 7,
+        "negative": 5,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": -2.550151703547759,
+        "min": -7.757980784991936,
+        "max": 9.014220086555301,
+        "bootstrap95": [-5.13955310722864, 1.1559785392372568],
+        "positive": 5,
+        "negative": 7,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": -3.4397680541726885,
+        "min": -10.960726201527478,
+        "max": 13.03113513829527,
+        "bootstrap95": [-7.276630328590201, 1.5044189390160412],
+        "positive": 5,
+        "negative": 7,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": -1.507796264267327,
+        "min": -9.333022054979011,
+        "max": 10.963863008468465,
+        "bootstrap95": [-5.146645371587908, 2.5700934139447895],
+        "positive": 5,
+        "negative": 7,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": -1.2088551777943088,
+        "min": -3.601795626588334,
+        "max": 3.710784893589583,
+        "bootstrap95": [-1.6632695537142936, -0.2416997803011789],
+        "positive": 4,
+        "negative": 8,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": 0.5,
+        "min": -14,
+        "max": 11,
+        "bootstrap95": [-2, 3],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": -8.785063773523504,
+          "cpuPercent": 8.08591298036787,
+          "p99Difference": 11
+        },
+        {
+          "round": 2,
+          "rpsPercent": 6.358778706212176,
+          "cpuPercent": -3.6317747095922948,
+          "p99Difference": -3
+        },
+        {
+          "round": 3,
+          "rpsPercent": 1.4350924759669814,
+          "cpuPercent": -1.4685286975032241,
+          "p99Difference": -1
+        },
+        {
+          "round": 4,
+          "rpsPercent": 7.202199427513345,
+          "cpuPercent": -6.181898118525697,
+          "p99Difference": -4
+        },
+        {
+          "round": 5,
+          "rpsPercent": 6.76404769381338,
+          "cpuPercent": -6.9978268759814615,
+          "p99Difference": -14
+        },
+        {
+          "round": 6,
+          "rpsPercent": -9.964723054631241,
+          "cpuPercent": 9.014220086555301,
+          "p99Difference": 8
+        },
+        {
+          "round": 7,
+          "rpsPercent": 4.783728120787956,
+          "cpuPercent": -5.276565076121809,
+          "p99Difference": 4
+        },
+        {
+          "round": 8,
+          "rpsPercent": -3.6775314133953962,
+          "cpuPercent": 1.4747349165002754,
+          "p99Difference": 2
+        },
+        {
+          "round": 9,
+          "rpsPercent": 5.318351133966259,
+          "cpuPercent": -5.00254113833547,
+          "p99Difference": -4
+        },
+        {
+          "round": 10,
+          "rpsPercent": 10.55678570938252,
+          "cpuPercent": -7.757980784991936,
+          "p99Difference": 6
+        },
+        {
+          "round": 11,
+          "rpsPercent": -10.386400962803233,
+          "cpuPercent": 7.18579397450736,
+          "p99Difference": 3
+        },
+        {
+          "round": 12,
+          "rpsPercent": -2.021621417777064,
+          "cpuPercent": 0.8372221619742382,
+          "p99Difference": -3
+        }
+      ]
+    },
+    {
+      "a": "keala-node-cfs1000us",
+      "b": "hono-node-cfs1000us",
+      "scenario": "route-8",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": 15.882214906000836,
+        "min": 4.701691557280485,
+        "max": 27.783551583177445,
+        "bootstrap95": [12.680717343173642, 20.760939058847207],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": -14.239554694714702,
+        "min": -21.652085140789147,
+        "max": -6.586352209283019,
+        "bootstrap95": [-17.945828455540212, -12.2184518968873],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": -20.955246867284473,
+        "min": -38.415551607190565,
+        "max": -9.65134791618604,
+        "bootstrap95": [-28.283024708645684, -18.536983807611904],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": -19.77087622793941,
+        "min": -36.11801051271995,
+        "max": -8.495198061029996,
+        "bootstrap95": [-23.23920471043806, -18.11780586467205],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": -2.080472592221291,
+        "min": -6.2447518964900866,
+        "max": 4.119812577983467,
+        "bootstrap95": [-4.86104879162535, -1.572129273687299],
+        "positive": 2,
+        "negative": 10,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": -6.5,
+        "min": -14,
+        "max": 9,
+        "bootstrap95": [-9, -4],
+        "positive": 2,
+        "negative": 9,
+        "ties": 1
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": 10.498985871536748,
+          "cpuPercent": -10.438699533614892,
+          "p99Difference": 9
+        },
+        {
+          "round": 2,
+          "rpsPercent": 14.862448814810536,
+          "cpuPercent": -13.687778740012835,
+          "p99Difference": -8
+        },
+        {
+          "round": 3,
+          "rpsPercent": 8.40093101093553,
+          "cpuPercent": -12.257424202917743,
+          "p99Difference": -1
+        },
+        {
+          "round": 4,
+          "rpsPercent": 22.208730108007924,
+          "cpuPercent": -18.97892672075121,
+          "p99Difference": -7
+        },
+        {
+          "round": 5,
+          "rpsPercent": 21.61038168594729,
+          "cpuPercent": -15.496653195200693,
+          "p99Difference": -12
+        },
+        {
+          "round": 6,
+          "rpsPercent": 6.852263675803272,
+          "cpuPercent": -9.466591422941672,
+          "p99Difference": -2
+        },
+        {
+          "round": 7,
+          "rpsPercent": 27.783551583177445,
+          "cpuPercent": -21.652085140789147,
+          "p99Difference": -14
+        },
+        {
+          "round": 8,
+          "rpsPercent": 4.701691557280485,
+          "cpuPercent": -6.586352209283019,
+          "p99Difference": -6
+        },
+        {
+          "round": 9,
+          "rpsPercent": 21.362172671486725,
+          "cpuPercent": -17.945828455540212,
+          "p99Difference": -12
+        },
+        {
+          "round": 10,
+          "rpsPercent": 20.15970544620769,
+          "cpuPercent": -18.46113246824135,
+          "p99Difference": 3
+        },
+        {
+          "round": 11,
+          "rpsPercent": 10.556255459106856,
+          "cpuPercent": -10.749125053761766,
+          "p99Difference": 0
+        },
+        {
+          "round": 12,
+          "rpsPercent": 16.901980997191135,
+          "cpuPercent": -14.791330649416567,
+          "p99Difference": -14
+        }
+      ]
+    },
+    {
+      "a": "keala-node-cfs10000us",
+      "b": "keala-before-node-cfs10000us",
+      "scenario": "route-8",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": 0.6010833425722117,
+        "min": -9.620682347955078,
+        "max": 10.530586982410117,
+        "bootstrap95": [-5.969970124292123, 3.905044286757131],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": -0.15439521010293666,
+        "min": -6.443491481782582,
+        "max": 7.759515353225743,
+        "bootstrap95": [-3.1006020385742628, 4.104084236760186],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": -0.16230404739669524,
+        "min": -7.8072877070923425,
+        "max": 8.366677642411801,
+        "bootstrap95": [-3.9230422365921243, 4.7962317298279515],
+        "positive": 6,
+        "negative": 6,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": -1.2780914186515417,
+        "min": -6.98900492397803,
+        "max": 7.829683807967939,
+        "bootstrap95": [-2.5665010891213456, 3.998639157977692],
+        "positive": 5,
+        "negative": 7,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": -0.24651785458581443,
+        "min": -2.264018432925617,
+        "max": 3.0643039960884764,
+        "bootstrap95": [-1.1750431093276603, 0.2918890313977158],
+        "positive": 5,
+        "negative": 7,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": 0,
+        "min": -4,
+        "max": 7,
+        "bootstrap95": [-1.5, 5],
+        "positive": 5,
+        "negative": 5,
+        "ties": 2
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": 1.2853890553175207,
+          "cpuPercent": -0.8414876133561733,
+          "p99Difference": -4
+        },
+        {
+          "round": 2,
+          "rpsPercent": -0.0832223701730972,
+          "cpuPercent": 0.5326971931503,
+          "p99Difference": -1
+        },
+        {
+          "round": 3,
+          "rpsPercent": 10.530586982410117,
+          "cpuPercent": -2.2131313915018103,
+          "p99Difference": -2
+        },
+        {
+          "round": 4,
+          "rpsPercent": -6.462947855242652,
+          "cpuPercent": 5.8142440201650825,
+          "p99Difference": 3
+        },
+        {
+          "round": 5,
+          "rpsPercent": 9.028003700436503,
+          "cpuPercent": -6.443491481782582,
+          "p99Difference": 0
+        },
+        {
+          "round": 6,
+          "rpsPercent": -2.774963149527254,
+          "cpuPercent": 2.0063391047940193,
+          "p99Difference": 0
+        },
+        {
+          "round": 7,
+          "rpsPercent": -9.620682347955078,
+          "cpuPercent": 6.274588568354722,
+          "p99Difference": 6
+        },
+        {
+          "round": 8,
+          "rpsPercent": -5.969970124292123,
+          "cpuPercent": 4.104084236760186,
+          "p99Difference": 5
+        },
+        {
+          "round": 9,
+          "rpsPercent": 3.905044286757131,
+          "cpuPercent": -3.1006020385742628,
+          "p99Difference": 7
+        },
+        {
+          "round": 10,
+          "rpsPercent": 4.407108851705166,
+          "cpuPercent": -4.654637403112694,
+          "p99Difference": -3
+        },
+        {
+          "round": 11,
+          "rpsPercent": 3.631296199054801,
+          "cpuPercent": -3.7244364529736673,
+          "p99Difference": -3
+        },
+        {
+          "round": 12,
+          "rpsPercent": -7.242160936909714,
+          "cpuPercent": 7.759515353225743,
+          "p99Difference": 7
+        }
+      ]
+    },
+    {
+      "a": "keala-node-cfs10000us",
+      "b": "hono-node-cfs10000us",
+      "scenario": "route-8",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": 20.368770947176795,
+        "min": 7.045389965943438,
+        "max": 38.158677307203014,
+        "bootstrap95": [16.097325593538603, 22.695496981465823],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": -16.778424882610068,
+        "min": -25.999275249960462,
+        "max": -9.53146788516952,
+        "bootstrap95": [-18.235090689687606, -14.933817900446588],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": -24.243902263630055,
+        "min": -39.82705553389414,
+        "max": -13.590201804880252,
+        "bootstrap95": [-26.545284924706444, -21.358245286564696],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": -22.572690710347054,
+        "min": -34.23572351625671,
+        "max": -11.289602774952286,
+        "bootstrap95": [-23.958689451331608, -16.754773022961757],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": -3.158565753303904,
+        "min": -5.809863366788413,
+        "max": 1.0860139940213145,
+        "bootstrap95": [-3.7063423164082927, -2.7385175817239293],
+        "positive": 1,
+        "negative": 11,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": -5.5,
+        "min": -14,
+        "max": 2,
+        "bootstrap95": [-13, -2],
+        "positive": 2,
+        "negative": 10,
+        "ties": 0
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": 27.841960490122553,
+          "cpuPercent": -20.874391619353617,
+          "p99Difference": -8
+        },
+        {
+          "round": 2,
+          "rpsPercent": 22.301391762782007,
+          "cpuPercent": -17.121552174715283,
+          "p99Difference": -6
+        },
+        {
+          "round": 3,
+          "rpsPercent": 23.08960220014964,
+          "cpuPercent": -19.34862920465993,
+          "p99Difference": -13
+        },
+        {
+          "round": 4,
+          "rpsPercent": 20.898766394682756,
+          "cpuPercent": -16.724809356375026,
+          "p99Difference": -14
+        },
+        {
+          "round": 5,
+          "rpsPercent": 38.158677307203014,
+          "cpuPercent": -25.999275249960462,
+          "p99Difference": -5
+        },
+        {
+          "round": 6,
+          "rpsPercent": 19.838775499670835,
+          "cpuPercent": -16.832040408845106,
+          "p99Difference": -2
+        },
+        {
+          "round": 7,
+          "rpsPercent": 7.045389965943438,
+          "cpuPercent": -9.53146788516952,
+          "p99Difference": -9
+        },
+        {
+          "round": 8,
+          "rpsPercent": 16.99184522291406,
+          "cpuPercent": -14.933817900446588,
+          "p99Difference": -2
+        },
+        {
+          "round": 9,
+          "rpsPercent": 16.097325593538603,
+          "cpuPercent": -15.563758130367066,
+          "p99Difference": 2
+        },
+        {
+          "round": 10,
+          "rpsPercent": 15.24915552666104,
+          "cpuPercent": -14.523294104144735,
+          "p99Difference": -2
+        },
+        {
+          "round": 11,
+          "rpsPercent": 26.32918822227306,
+          "cpuPercent": -20.6096612183731,
+          "p99Difference": -13
+        },
+        {
+          "round": 12,
+          "rpsPercent": 16.101251634244782,
+          "cpuPercent": -14.555837945303274,
+          "p99Difference": 1
+        }
+      ]
+    }
+  ],
+  "withinFrameworkPeriods": [
+    {
+      "a": "keala-before-node-cfs1000us",
+      "b": "keala-before-node-cfs10000us",
+      "scenario": "route-8",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": -21.789421661402226,
+        "min": -31.45828911059223,
+        "max": -15.920164967355632,
+        "bootstrap95": [-25.18559074564021, -18.07199647114799],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": 15.330069445644522,
+        "min": 7.590533745788797,
+        "max": 27.285281270712993,
+        "bootstrap95": [12.934449771159784, 18.812363849382074],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": 17.949706469164518,
+        "min": 9.603936304157216,
+        "max": 33.060343394830056,
+        "bootstrap95": [13.946537482173156, 23.0110253859715],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": 14.204630488602383,
+        "min": 9.534252816062235,
+        "max": 26.784950728114765,
+        "bootstrap95": [12.39895882214249, 16.68612587131176],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": 3.062005520204366,
+        "min": -0.472367686717341,
+        "max": 6.941988536341263,
+        "bootstrap95": [1.5475786600306591, 6.27539266671527],
+        "positive": 11,
+        "negative": 1,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": 5,
+        "min": -2,
+        "max": 25,
+        "bootstrap95": [4.5, 9],
+        "positive": 11,
+        "negative": 1,
+        "ties": 0
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": -20.77544067440218,
+          "cpuPercent": 14.215519734797933,
+          "p99Difference": -2
+        },
+        {
+          "round": 2,
+          "rpsPercent": -22.081809112071838,
+          "cpuPercent": 13.413343580541293,
+          "p99Difference": 5
+        },
+        {
+          "round": 3,
+          "rpsPercent": -16.363990514454574,
+          "cpuPercent": 15.232042159574654,
+          "p99Difference": 9
+        },
+        {
+          "round": 4,
+          "rpsPercent": -30.769578851913536,
+          "cpuPercent": 24.86630624985835,
+          "p99Difference": 18
+        },
+        {
+          "round": 5,
+          "rpsPercent": -31.45828911059223,
+          "cpuPercent": 27.285281270712993,
+          "p99Difference": 25
+        },
+        {
+          "round": 6,
+          "rpsPercent": -24.62128938198026,
+          "cpuPercent": 16.72004448235933,
+          "p99Difference": 4
+        },
+        {
+          "round": 7,
+          "rpsPercent": -25.749892109300156,
+          "cpuPercent": 20.90468321640482,
+          "p99Difference": 9
+        },
+        {
+          "round": 8,
+          "rpsPercent": -21.497034210732615,
+          "cpuPercent": 15.42809673171439,
+          "p99Difference": 3
+        },
+        {
+          "round": 9,
+          "rpsPercent": -15.920164967355632,
+          "cpuPercent": 7.590533745788797,
+          "p99Difference": 4
+        },
+        {
+          "round": 10,
+          "rpsPercent": -28.625429020618686,
+          "cpuPercent": 21.827859686915563,
+          "p99Difference": 5
+        },
+        {
+          "round": 11,
+          "rpsPercent": -16.992540328208563,
+          "cpuPercent": 10.100321479864016,
+          "p99Difference": 12
+        },
+        {
+          "round": 12,
+          "rpsPercent": -18.07199647114799,
+          "cpuPercent": 12.934449771159784,
+          "p99Difference": 4
+        }
+      ]
+    },
+    {
+      "a": "keala-node-cfs1000us",
+      "b": "keala-node-cfs10000us",
+      "scenario": "route-8",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": -21.95090846810495,
+        "min": -32.88155114241533,
+        "max": -13.460975079682624,
+        "bootstrap95": [-29.423991366889375, -18.320640352260043],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": 14.31110979635517,
+        "min": 5.478749284787754,
+        "max": 26.531098181941815,
+        "bootstrap95": [10.614020365280563, 24.618645269123775],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": 16.851816289171722,
+        "min": 6.5993560035749255,
+        "max": 31.25458945764825,
+        "bootstrap95": [12.817148189074736, 28.85958875138371],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": 14.513336967899818,
+        "min": 6.192620444131322,
+        "max": 25.092109769848378,
+        "bootstrap95": [12.22052544367805, 23.356809033874086],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": 3.325151507524872,
+        "min": -2.800900212677348,
+        "max": 6.1624796877998875,
+        "bootstrap95": [1.9529690867886487, 5.502779717509618],
+        "positive": 9,
+        "negative": 3,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": 10.5,
+        "min": -7,
+        "max": 18,
+        "bootstrap95": [5, 11.5],
+        "positive": 9,
+        "negative": 2,
+        "ties": 1
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": -28.652462177853298,
+          "cpuPercent": 24.498526953755317,
+          "p99Difference": 13
+        },
+        {
+          "round": 2,
+          "rpsPercent": -17.05813759786774,
+          "cpuPercent": 8.715303083032012,
+          "p99Difference": 3
+        },
+        {
+          "round": 3,
+          "rpsPercent": -23.24634666205799,
+          "cpuPercent": 16.109481945181226,
+          "p99Difference": 10
+        },
+        {
+          "round": 4,
+          "rpsPercent": -20.65547027415191,
+          "cpuPercent": 10.710235184216788,
+          "p99Difference": 11
+        },
+        {
+          "round": 5,
+          "rpsPercent": -32.88155114241533,
+          "cpuPercent": 26.531098181941815,
+          "p99Difference": 11
+        },
+        {
+          "round": 6,
+          "rpsPercent": -30.195520555925448,
+          "cpuPercent": 24.73876358449223,
+          "p99Difference": 12
+        },
+        {
+          "round": 7,
+          "rpsPercent": -13.916111337423542,
+          "cpuPercent": 7.763361372837441,
+          "p99Difference": 7
+        },
+        {
+          "round": 8,
+          "rpsPercent": -19.583143106652344,
+          "cpuPercent": 12.512737647529114,
+          "p99Difference": 0
+        },
+        {
+          "round": 9,
+          "rpsPercent": -14.77651879137305,
+          "cpuPercent": 5.478749284787754,
+          "p99Difference": -7
+        },
+        {
+          "round": 10,
+          "rpsPercent": -24.421399695355138,
+          "cpuPercent": 17.862552179655154,
+          "p99Difference": 14
+        },
+        {
+          "round": 11,
+          "rpsPercent": -28.220552275673995,
+          "cpuPercent": 22.577214195203066,
+          "p99Difference": 18
+        },
+        {
+          "round": 12,
+          "rpsPercent": -13.460975079682624,
+          "cpuPercent": 5.679727344596519,
+          "p99Difference": -6
+        }
+      ]
+    },
+    {
+      "a": "hono-node-cfs1000us",
+      "b": "hono-node-cfs10000us",
+      "scenario": "route-8",
+      "rounds": 12,
+      "rpsPercent": {
+        "median": -18.226742339091718,
+        "min": -27.886779499377433,
+        "max": -10.143605752226648,
+        "bootstrap95": [-21.71168814588099, -15.754047282453058],
+        "positive": 0,
+        "negative": 12,
+        "ties": 0
+      },
+      "cpuPercent": {
+        "median": 9.5133462525128,
+        "min": 2.458572763230804,
+        "max": 24.43462135118302,
+        "bootstrap95": [7.8802294957664785, 12.297670661165526],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "cpuUsDifference": {
+        "median": 13.457223642784683,
+        "min": 3.5162341259284062,
+        "max": 34.83948529114798,
+        "bootstrap95": [11.115878452586685, 18.091752202477963],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "userUsDifference": {
+        "median": 12.92723267272521,
+        "min": 4.656363385572405,
+        "max": 31.021028181898984,
+        "bootstrap95": [9.395321884319827, 15.53301932232985],
+        "positive": 12,
+        "negative": 0,
+        "ties": 0
+      },
+      "systemUsDifference": {
+        "median": 1.3282054790656908,
+        "min": -2.6972155523536756,
+        "max": 7.368922452267952,
+        "bootstrap95": [0.9217273121230889, 1.9806252536400137],
+        "positive": 8,
+        "negative": 4,
+        "ties": 0
+      },
+      "p99MsDifference": {
+        "median": 6,
+        "min": -4,
+        "max": 18,
+        "bootstrap95": [4, 12],
+        "positive": 10,
+        "negative": 2,
+        "ties": 0
+      },
+      "byRound": [
+        {
+          "round": 1,
+          "rpsPercent": -17.454363590897724,
+          "cpuPercent": 9.991945588234952,
+          "p99Difference": -4
+        },
+        {
+          "round": 2,
+          "rpsPercent": -11.68649709416637,
+          "cpuPercent": 4.390264123048748,
+          "p99Difference": 5
+        },
+        {
+          "round": 3,
+          "rpsPercent": -12.845982329963624,
+          "cpuPercent": 6.725712074742307,
+          "p99Difference": -2
+        },
+        {
+          "round": 4,
+          "rpsPercent": -21.50596970001003,
+          "cpuPercent": 13.790345746104759,
+          "p99Difference": 4
+        },
+        {
+          "round": 5,
+          "rpsPercent": -23.748318288959112,
+          "cpuPercent": 10.804995576226295,
+          "p99Difference": 18
+        },
+        {
+          "round": 6,
+          "rpsPercent": -21.71168814588099,
+          "cpuPercent": 14.59049882580663,
+          "p99Difference": 12
+        },
+        {
+          "round": 7,
+          "rpsPercent": -27.886779499377433,
+          "cpuPercent": 24.43462135118302,
+          "p99Difference": 12
+        },
+        {
+          "round": 8,
+          "rpsPercent": -10.143605752226648,
+          "cpuPercent": 2.458572763230804,
+          "p99Difference": 4
+        },
+        {
+          "round": 9,
+          "rpsPercent": -18.473622972495075,
+          "cpuPercent": 8.540845871449786,
+          "p99Difference": 7
+        },
+        {
+          "round": 10,
+          "rpsPercent": -27.510059810384867,
+          "cpuPercent": 23.554606701783666,
+          "p99Difference": 9
+        },
+        {
+          "round": 11,
+          "rpsPercent": -17.97986170568836,
+          "cpuPercent": 9.034746916790649,
+          "p99Difference": 5
+        },
+        {
+          "round": 12,
+          "rpsPercent": -14.053730974008394,
+          "cpuPercent": 5.971796273169283,
+          "p99Difference": 9
+        }
+      ]
+    }
+  ]
+}

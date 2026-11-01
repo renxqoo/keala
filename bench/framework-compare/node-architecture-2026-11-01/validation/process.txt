@@ -1,0 +1,5 @@
+  ✓ Bun source
+  ✓ Node source
+  ✓ Bun dist
+  ✓ Node dist
+PROCESS CHECK OK

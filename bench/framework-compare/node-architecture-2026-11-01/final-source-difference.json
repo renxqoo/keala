@@ -1,0 +1,6 @@
+{
+  "before": "6f20eeb0cc68fb73365ff2e396197d89e63af50a1c03dbca2122a9d5d46b6117",
+  "after": "290a323faa77b894e7c2a60a558f4777136bb39028c7a76b1a9e675ad6b29ec6",
+  "changed": ["adapters/node.ts"],
+  "detail": "Only native Node cold stopGraceful changed; no HTTP request path changes."
+}

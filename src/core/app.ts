@@ -7,9 +7,10 @@ import type { AppOptions, Plugin as AppOptionsPlugin, Runtime } from "../types.t
 import type { RequestSettings } from "./context/settings.ts";
 import {
   baseContextProto,
-  createBoundContext,
+  createContextConstructor,
   resetContext,
   type Context,
+  type ContextConstructor,
 } from "./context/context.ts";
 import { createPool, type ContextPool } from "./context/pool.ts";
 import { createDecorators, type Decorators } from "./context/decorate.ts";
@@ -34,6 +35,7 @@ import {
   normalizeRequestTimeout,
   registerShutdownHandler,
   settleRequest,
+  settleUncappedRequest,
   type LifecycleState,
 } from "./lifecycle.ts";
 import { raceDeadline } from "./lifecycle-deadline.ts";
@@ -102,6 +104,7 @@ export class Keala implements NativeApplication {
 
   // Per-app prototype; decorators never leak across applications.
   #contextProto: object;
+  #contextConstructor: ContextConstructor;
   #decorators: Decorators;
   // R4.3: single error-mapper slot — a second onError registration throws.
   #errorMapper: ErrorMapper | undefined;
@@ -120,6 +123,10 @@ export class Keala implements NativeApplication {
   // per-app settle callback releases it with zero per-request allocation.
   #lifecycle: LifecycleState;
   #settle: (value: Response) => Response;
+  #serveRequest: (
+    request: RequestSource,
+    runtime: Runtime | undefined,
+  ) => Response | Promise<Response>;
   // R4.6 request deadline in ms (0 = off).
   #requestTimeout: number;
   // Host whitelist predicate (null = admit all; see trusted-hosts.ts).
@@ -142,13 +149,22 @@ export class Keala implements NativeApplication {
       appSettings: this.settings,
       flags: this.env === "development" ? FLAG_DEV_CHAIN : 0,
     });
+    this.#contextConstructor = createContextConstructor(this.#contextProto);
     this.#decorators = createDecorators(this.#contextProto);
     this.#errorMapper = undefined;
     this.#poolingEnabled = options.pooling === true;
     this.#lifecycle = createLifecycle(options.overload);
-    this.#settle = (value: Response): Response => settleRequest(this.#lifecycle, value);
+    const lifecycle = this.#lifecycle;
+    this.#settle =
+      lifecycle.overload === null
+        ? (value: Response): Response => settleUncappedRequest(lifecycle, value)
+        : (value: Response): Response => settleRequest(lifecycle, value);
     this.#requestTimeout = normalizeRequestTimeout(options.requestTimeout);
     this.#trustedHosts = compileTrustedHosts(options.trustedHosts);
+    this.#serveRequest =
+      !this.#poolingEnabled && this.#requestTimeout === 0 && this.#trustedHosts === null
+        ? this.#serveSimple
+        : this.#serve;
     if (this.#trustedHosts !== null || options.overload !== undefined || this.#requestTimeout > 0) {
       requireRequestKernel(this);
     }
@@ -325,16 +341,23 @@ export class Keala implements NativeApplication {
     const lc = this.#lifecycle;
     if (!lc.draining && lc.overload === null) {
       lc.inFlight++;
-      return this.#serve(request, runtime);
+      return this.#serveRequest(request, runtime);
     }
     const admission = admitRequest(lc, request);
     if (admission !== null) {
       // Queued admission resolves null once a slot transfers in.
       return admission instanceof Response
         ? admission
-        : admission.then((wake) => (wake === null ? this.#serve(request, runtime) : wake));
+        : admission.then((wake) => (wake === null ? this.#serveRequest(request, runtime) : wake));
     }
-    return this.#serve(request, runtime);
+    return this.#serveRequest(request, runtime);
+  }
+
+  /** The immutable default configuration needs no pooling or deadline machinery. */
+  #serveSimple(request: RequestSource, runtime: Runtime | undefined): Response | Promise<Response> {
+    const c = new this.#contextConstructor(request, runtime);
+    const settled = dispatchRequest(this, c, this.router, this.#middleware, request);
+    return settled instanceof Promise ? settled.then(this.#settle) : this.#settle(settled);
   }
 
   /** Post-admission request pipeline: context, dispatch, settle, deadline. */
@@ -346,7 +369,7 @@ export class Keala implements NativeApplication {
     const recycled = this.#pool?.acquire();
     const c =
       recycled === undefined
-        ? createBoundContext(this.#contextProto, request, runtime)
+        ? new this.#contextConstructor(request, runtime)
         : resetContext(recycled, request, runtime);
 
     const settled = dispatchRequest(this, c, this.router, this.#middleware, request);

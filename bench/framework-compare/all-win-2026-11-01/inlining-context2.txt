@@ -1,0 +1,539 @@
+Considering 0xb68d42d30 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} for inlining with 0xb68cef2f8 {0x0e6180c312e1 <FeedbackVector[41]>}
+Considering 0xb68d366d0 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>} for inlining with 0xb68440230 {0x0e6180c2fbe1 <FeedbackVector[12]>}
+Cannot consider 0xb68d3a8c8 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Budget used: 0/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #36 with frequency 0.998447, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d366d0 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 40
+Considering 0xb68d2e8d0 {0x3dcb6ec4c069 <SharedFunctionInfo BoundContext>} for inlining with 0xb6844a590 {0x0e6180c2fe11 <FeedbackVector[4]>}
+Inlining small function(s) at call site #74:JSConstruct
+Inlining 0xb68d2e8d0 {0x3dcb6ec4c069 <SharedFunctionInfo BoundContext>} into 0xb68d2e490 {0x172594dc1861 <SharedFunctionInfo #serve>}
+Budget used: 0/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #79 with frequency 0.998172, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d42d30 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>}, bytecode size: 358, existing opt code's inlined bytecode size: 42
+Inlining 0xb68d366d0 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>} into 0xb68d364a0 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>}
+Inlining 0xb68d42d30 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} into 0xb68d42490 {0x3dcb6ec4ee61 <SharedFunctionInfo>} (inside try-block)
+Considering 0xb68d2ede8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>} for inlining with 0xb6844c6f8 {0x0e6180c30f31 <FeedbackVector[57]>}
+Considering 0xb68d2f918 {0x205082c2e3e1 <SharedFunctionInfo settleNativeHandle>} for inlining with 0xb6844d3e8 {0x0e6180c31ff1 <FeedbackVector[25]>}
+Budget used: 0/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #221 with frequency 0.998652, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d2f918 {0x205082c2e3e1 <SharedFunctionInfo settleNativeHandle>}, bytecode size: 177, existing opt code's inlined bytecode size: 59
+- candidate: JSCall node #126 with frequency 0.998652, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d2ede8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}, bytecode size: 400, existing opt code's inlined bytecode size: 62
+Inlining 0xb68d2f918 {0x205082c2e3e1 <SharedFunctionInfo settleNativeHandle>} into 0xb68d2e490 {0x172594dc1861 <SharedFunctionInfo #serve>}
+Inlinee contains 12 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb6844d4b8 {0x3dcb6ec4a9e1 <SharedFunctionInfo Keala.#settle>} for inlining with 0xb68e00430 {0x0e6180c30649 <FeedbackVector[4]>}
+Considering 0xb68cf0f20 {0x3dcb6ec530b1 <SharedFunctionInfo track>} for inlining with 0xb6891c928 {0x0e6180c2fb71 <FeedbackVector[8]>}
+Budget used: 177/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #363 with frequency 0.998087, has_heapnum_param:0, 1 target(s):
+  - target: 0xb6844d4b8 {0x3dcb6ec4a9e1 <SharedFunctionInfo Keala.#settle>}, bytecode size: 23, existing opt code's inlined bytecode size: 36
+- candidate: JSCall node #126 with frequency 0.998652, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d2ede8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}, bytecode size: 400, existing opt code's inlined bytecode size: 62
+Inlining 0xb6844d4b8 {0x3dcb6ec4a9e1 <SharedFunctionInfo Keala.#settle>} into 0xb68d2e490 {0x172594dc1861 <SharedFunctionInfo #serve>}
+Considering 0xb68cf1090 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>} for inlining with 0xb6891ccb8 {0x0e6180c2fc71 <FeedbackVector[46]>}
+Considering 0xb68e01550 {0x205082c36b49 <SharedFunctionInfo settleRequest>} for inlining with 0xb68e01980 {0x0e6180c305d9 <FeedbackVector[8]>}
+Considering 0xb68a528e0 {0x3dcb6ec44861 <SharedFunctionInfo hasPendingOwnedRead>} for inlining with 0xb68a53e28 {0x0e6180c308d9 <FeedbackVector[14]>}
+Considering 0xb68d266d0 {0x172594dd9679 <SharedFunctionInfo liveStaged>} for inlining with 0xb68d27d00 {0x0e6180c2ff81 <FeedbackVector[2]>}
+Inlining small function(s) at call site #37:JSCall
+Inlining 0xb68d266d0 {0x172594dd9679 <SharedFunctionInfo liveStaged>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Considering 0xb68cf1288 {0x172594dc1e71 <SharedFunctionInfo>} for inlining with 0xb6891d1b8 {0x0e6180c31d71 <FeedbackVector[28]>}
+Budget used: 200/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #450 with frequency 0.996901, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68e01550 {0x205082c36b49 <SharedFunctionInfo settleRequest>}, bytecode size: 36
+- candidate: JSCall node #126 with frequency 0.998652, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d2ede8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}, bytecode size: 400, existing opt code's inlined bytecode size: 62
+Inlining 0xb68e01550 {0x205082c36b49 <SharedFunctionInfo settleRequest>} into 0xb68d2e490 {0x172594dc1861 <SharedFunctionInfo #serve>}
+Considering 0xb68a52ce8 {0x3dcb6ec445b9 <SharedFunctionInfo mayCarryBody>} for inlining with 0xb68440228 {0x0e6180c30979 <FeedbackVector[0]>}
+Inlining small function(s) at call site #54:JSCall
+Inlining 0xb68a52ce8 {0x3dcb6ec445b9 <SharedFunctionInfo mayCarryBody>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}
+Considering 0xb68d26e00 {0x172594dd6e41 <SharedFunctionInfo sourceMethod>} for inlining with 0xb6845ae00 {0x0e6180c2fab1 <FeedbackVector[2]>}
+Inlining small function(s) at call site #131:JSCall
+Inlining 0xb68d26e00 {0x172594dd6e41 <SharedFunctionInfo sourceMethod>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Considering 0xb68cf1418 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>} for inlining with 0xb6891d328 {0x0e6180c30ba9 <FeedbackVector[28]>}
+Considering 0xb68e01a40 {0x205082c36ab9 <SharedFunctionInfo releaseInFlight>} for inlining with 0xb68e01f50 {0x0e6180c30479 <FeedbackVector[38]>}
+Considering 0xb68a53820 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>} for inlining with 0xb684416b8 {0x0e6180c309d9 <FeedbackVector[52]>}
+Considering 0xb68d279d0 {0x172594dd9511 <SharedFunctionInfo textResponse>} for inlining with 0xb6845b318 {0x0e6180c31b49 <FeedbackVector[14]>}
+Budget used: 358/920 -- 4 candidate(s) for inlining:
+- candidate: JSCall node #247 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf0f20 {0x3dcb6ec530b1 <SharedFunctionInfo track>}, bytecode size: 42
+- candidate: JSCall node #393 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1288 {0x172594dc1e71 <SharedFunctionInfo>}, bytecode size: 149
+- candidate: JSConstruct node #322 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1090 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 242, existing opt code's inlined bytecode size: 40
+- candidate: JSCall node #436 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1418 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+Inlining 0xb68cf0f20 {0x3dcb6ec530b1 <SharedFunctionInfo track>} into 0xb68d42490 {0x3dcb6ec4ee61 <SharedFunctionInfo>} (inside try-block)
+Budget used: 236/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #499 with frequency 0.995718, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68e01a40 {0x205082c36ab9 <SharedFunctionInfo releaseInFlight>}, bytecode size: 202
+- candidate: JSCall node #126 with frequency 0.998652, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d2ede8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}, bytecode size: 400, existing opt code's inlined bytecode size: 62
+Inlining 0xb68e01a40 {0x205082c36ab9 <SharedFunctionInfo releaseInFlight>} into 0xb68d2e490 {0x172594dc1861 <SharedFunctionInfo #serve>}
+Budget used: 0/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #29 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a528e0 {0x3dcb6ec44861 <SharedFunctionInfo hasPendingOwnedRead>}, bytecode size: 62
+- candidate: JSCall node #127 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a53820 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}, bytecode size: 234, existing opt code's inlined bytecode size: 85
+Inlining 0xb68a528e0 {0x3dcb6ec44861 <SharedFunctionInfo hasPendingOwnedRead>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}
+Considering 0xb68d27ad8 {0x172594dd96c1 <SharedFunctionInfo clearStagedInPlace>} for inlining with 0xb6845b378 {0x0e6180c300d1 <FeedbackVector[25]>}
+Budget used: 0/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #215 with frequency 0.998789, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d279d0 {0x172594dd9511 <SharedFunctionInfo textResponse>}, bytecode size: 81, existing opt code's inlined bytecode size: 44
+- candidate: JSCall node #255 with frequency 0.998789, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d27ad8 {0x172594dd96c1 <SharedFunctionInfo clearStagedInPlace>}, bytecode size: 145
+Inlining 0xb68d279d0 {0x172594dd9511 <SharedFunctionInfo textResponse>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Inlinee contains 7 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 438/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #126 with frequency 0.998652, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d2ede8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}, bytecode size: 400, existing opt code's inlined bytecode size: 62
+Budget used: 62/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #127 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a53820 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}, bytecode size: 234, existing opt code's inlined bytecode size: 85
+Inlining 0xb68a53820 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}
+Considering 0xb6845b418 {0x172594dd6df9 <SharedFunctionInfo isNativeRequestSource>} for inlining with 0xb6845c818 {0x0e6180c2ffc1 <FeedbackVector[2]>}
+Inlining small function(s) at call site #363:JSCall
+Inlining 0xb6845b418 {0x172594dd6df9 <SharedFunctionInfo isNativeRequestSource>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Budget used: 400/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #393 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1288 {0x172594dc1e71 <SharedFunctionInfo>}, bytecode size: 149
+- candidate: JSConstruct node #322 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1090 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 242, existing opt code's inlined bytecode size: 40
+- candidate: JSCall node #436 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1418 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+Inlining 0xb68cf1288 {0x172594dc1e71 <SharedFunctionInfo>} into 0xb68d42490 {0x3dcb6ec4ee61 <SharedFunctionInfo>} (inside try-block)
+Considering 0xb684703b0 {0x172594ddb9a1 <SharedFunctionInfo get status>} for inlining with 0xb68470538 {0x0e6180c2faf1 <FeedbackVector[4]>}
+Inlining small function(s) at call site #543:JSCall
+Inlining 0xb684703b0 {0x172594ddb9a1 <SharedFunctionInfo get status>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}
+Considering 0xb6845b510 {0x172594ddbf91 <SharedFunctionInfo createPlannedResponse>} for inlining with 0xb68469bf0 {0x0e6180c30051 <FeedbackVector[2]>}
+Inlining small function(s) at call site #403:JSCall
+Inlining 0xb6845b510 {0x172594ddbf91 <SharedFunctionInfo createPlannedResponse>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Inlinee contains 11 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68441de8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>} for inlining with 0xb684707f8 {0x0e6180c31cb9 <FeedbackVector[17]>}
+Considering 0xb68469cd8 {0x172594ddb8d1 <SharedFunctionInfo PlannedResponse>} for inlining with 0xb68469e08 {0x0e6180c31e81 <FeedbackVector[30]>}
+Considering 0xb6845b5d8 {0x172594dd94c9 <SharedFunctionInfo directResponse>} for inlining with 0xb68469e68 {0x0e6180c30091 <FeedbackVector[2]>}
+Inlining small function(s) at call site #408:JSCall
+Inlining 0xb6845b5d8 {0x172594dd94c9 <SharedFunctionInfo directResponse>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Considering 0xb6891dff0 {0x172594dc1861 <SharedFunctionInfo #serve>} for inlining with 0xb6891f6f8 {0x0e6180c30699 <FeedbackVector[66]>}
+Considering 0xb68470910 {0x172594ddb939 <SharedFunctionInfo get planned>} for inlining with 0xb68470a80 {0x0e6180c309a9 <FeedbackVector[0]>}
+Inlining small function(s) at call site #592:JSCall
+Inlining 0xb68470910 {0x172594ddb939 <SharedFunctionInfo get planned>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}
+Budget used: 81/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #255 with frequency 0.998789, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d27ad8 {0x172594dd96c1 <SharedFunctionInfo clearStagedInPlace>}, bytecode size: 145
+- candidate: JSConstruct node #501 with frequency 0.995286, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68469cd8 {0x172594ddb8d1 <SharedFunctionInfo PlannedResponse>}, bytecode size: 180, existing opt code's inlined bytecode size: 12
+Inlining 0xb68d27ad8 {0x172594dd96c1 <SharedFunctionInfo clearStagedInPlace>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Budget used: 549/920 -- 3 candidate(s) for inlining:
+- candidate: JSConstruct node #322 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1090 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 242, existing opt code's inlined bytecode size: 40
+- candidate: JSCall node #436 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1418 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+- candidate: JSCall node #735 with frequency 0.996564, has_heapnum_param:0, 1 target(s):
+  - target: 0xb6891dff0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 18
+Inlining 0xb68cf1090 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>} into 0xb68d42490 {0x3dcb6ec4ee61 <SharedFunctionInfo>} (inside try-block)
+Considering 0xb68441fa8 {0x3fff757435e9 <SharedFunctionInfo byteLength>} for inlining with 0xb68471f00 {0x0e6180c31621 <FeedbackVector[21]>}
+Budget used: 226/920 -- 1 candidate(s) for inlining:
+- candidate: JSConstruct node #501 with frequency 0.995286, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68469cd8 {0x172594ddb8d1 <SharedFunctionInfo PlannedResponse>}, bytecode size: 180, existing opt code's inlined bytecode size: 12
+Inlining 0xb68469cd8 {0x172594ddb8d1 <SharedFunctionInfo PlannedResponse>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Cannot consider 0xb68442150 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Inlinee contains 16 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb6846a990 {0x172594ddbf49 <SharedFunctionInfo PlannedResponse>} for inlining with 0xb6846b208 {0x0e6180c30001 <FeedbackVector[4]>}
+Inlining small function(s) at call site #597:JSCall
+Inlining 0xb6846a990 {0x172594ddbf49 <SharedFunctionInfo PlannedResponse>} into 0xb68d264a0 {0x172594dd97e1 <SharedFunctionInfo sugarText>}
+Considering 0xb68444b70 {0x18237efa87e1 <SharedFunctionInfo writeHead>} for inlining with 0xb68473048 {0x0e6180c311f9 <FeedbackVector[6]>}
+Considering 0xb6891f7e8 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>} for inlining with 0xb68923088 {0x0e6180c2fbe1 <FeedbackVector[12]>}
+Considering 0xb68444c48 {0x18237efa8829 <SharedFunctionInfo end>} for inlining with 0xb684736c8 {0x0e6180c31279 <FeedbackVector[7]>}
+Budget used: 791/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #855 with frequency 0.995642, has_heapnum_param:0, 1 target(s):
+  - target: 0xb6891f7e8 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 40
+- candidate: JSCall node #436 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1418 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+- candidate: JSCall node #735 with frequency 0.996564, has_heapnum_param:0, 1 target(s):
+  - target: 0xb6891dff0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Inlining 0xb6891f7e8 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>} into 0xb68d42490 {0x3dcb6ec4ee61 <SharedFunctionInfo>} (inside try-block)
+Budget used: 296/920 -- 4 candidate(s) for inlining:
+- candidate: JSCall node #497 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68444b70 {0x18237efa87e1 <SharedFunctionInfo writeHead>}, bytecode size: 33
+- candidate: JSCall node #510 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68444c48 {0x18237efa8829 <SharedFunctionInfo end>}, bytecode size: 52
+- candidate: JSCall node #322 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68441de8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>}, bytecode size: 101
+- candidate: JSCall node #422 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68441fa8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68444b70 {0x18237efa87e1 <SharedFunctionInfo writeHead>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>} (inside try-block)
+Considering 0xb68a42bf0 {0x18237efa8709 <SharedFunctionInfo>} for inlining with 0xb68a42db8 {0x0e6180c303b9 <FeedbackVector[4]>}
+Inlining small function(s) at call site #34:JSCall
+Inlining 0xb68a42bf0 {0x18237efa8709 <SharedFunctionInfo>} into 0xb68a42490 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>}
+Inlinee contains 6 calls without local exception handler; linking to surrounding exception handler.
+Inlinee contains 3 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68a43878 {0x172594dd7fd1 <SharedFunctionInfo text>} for inlining with 0xb68a43e08 {0x0e6180c30379 <FeedbackVector[2]>}
+Inlining small function(s) at call site #60:JSCall
+Budget used: 329/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #510 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68444c48 {0x18237efa8829 <SharedFunctionInfo end>}, bytecode size: 52
+- candidate: JSCall node #322 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68441de8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>}, bytecode size: 101
+- candidate: JSCall node #422 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68441fa8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68444c48 {0x18237efa8829 <SharedFunctionInfo end>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>} (inside try-block)
+Budget used: 831/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #436 with frequency 0.99719, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cf1418 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+- candidate: JSCall node #735 with frequency 0.996564, has_heapnum_param:0, 1 target(s):
+  - target: 0xb6891dff0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Inlining 0xb68a43878 {0x172594dd7fd1 <SharedFunctionInfo text>} into 0xb68a42490 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>}
+Inlinee contains 5 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68a43eb8 {0x172594dd97e1 <SharedFunctionInfo sugarText>} for inlining with 0xb68a43f60 {0x0e6180c301c9 <FeedbackVector[48]>}
+Budget used: 0/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #97 with frequency 0.993269, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a43eb8 {0x172594dd97e1 <SharedFunctionInfo sugarText>}, bytecode size: 316, existing opt code's inlined bytecode size: 477
+Budget used: 381/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #322 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68441de8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>}, bytecode size: 101
+- candidate: JSCall node #422 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68441fa8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68441de8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}
+Budget used: 482/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #422 with frequency 0.997987, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68441fa8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68441fa8 {0x3fff757435e9 <SharedFunctionInfo byteLength>} into 0xb68a524a0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}
+Considering 0xb68455a60 {0x172594ddb9a1 <SharedFunctionInfo get status>} for inlining with 0xb68455be8 {0x0e6180c2faf1 <FeedbackVector[4]>}
+Inlining small function(s) at call site #172:JSCall
+Inlining 0xb68455a60 {0x172594ddb9a1 <SharedFunctionInfo get status>} into 0xb68a404a0 {0x205082c2e549 <SharedFunctionInfo finishDirect>} (inside try-block)
+Inlinee contains 1 calls without local exception handler; linking to surrounding exception handler.
+Cannot consider 0xb68442150 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Considering 0xb689d8bf8 {0x3dcb6ec530b1 <SharedFunctionInfo track>} for inlining with 0xb68446fb8 {0x0e6180c2fb71 <FeedbackVector[8]>}
+Considering 0xb689d9178 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>} for inlining with 0xb68447368 {0x0e6180c2fc71 <FeedbackVector[46]>}
+Considering 0xb689d99a8 {0x172594dc1e71 <SharedFunctionInfo>} for inlining with 0xb684479f8 {0x0e6180c31d71 <FeedbackVector[28]>}
+Considering 0xb689d9ab0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>} for inlining with 0xb68984e60 {0x0e6180c30ba9 <FeedbackVector[28]>}
+Budget used: 0/920 -- 4 candidate(s) for inlining:
+- candidate: JSCall node #78 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d8bf8 {0x3dcb6ec530b1 <SharedFunctionInfo track>}, bytecode size: 42
+- candidate: JSCall node #222 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d99a8 {0x172594dc1e71 <SharedFunctionInfo>}, bytecode size: 149
+- candidate: JSConstruct node #151 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9178 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 242, existing opt code's inlined bytecode size: 40
+- candidate: JSCall node #265 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9ab0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+Inlining 0xb689d8bf8 {0x3dcb6ec530b1 <SharedFunctionInfo track>} into 0xb689d8498 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>}
+Considering 0xb68a40c80 {0x172594dc9699 <SharedFunctionInfo isEmptyStatus>} for inlining with 0xb68455f98 {0x0e6180c30449 <FeedbackVector[0]>}
+Inlining small function(s) at call site #124:JSCall
+Inlining 0xb68a40c80 {0x172594dc9699 <SharedFunctionInfo isEmptyStatus>} into 0xb68a404a0 {0x205082c2e549 <SharedFunctionInfo finishDirect>} (inside try-block)
+Budget used: 42/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #222 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d99a8 {0x172594dc1e71 <SharedFunctionInfo>}, bytecode size: 149
+- candidate: JSConstruct node #151 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9178 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 242, existing opt code's inlined bytecode size: 40
+- candidate: JSCall node #265 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9ab0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+Inlining 0xb689d99a8 {0x172594dc1e71 <SharedFunctionInfo>} into 0xb689d8498 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} (inside try-block)
+Inlinee contains 11 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb689859a0 {0x172594dc1861 <SharedFunctionInfo #serve>} for inlining with 0xb68986f18 {0x0e6180c30699 <FeedbackVector[66]>}
+Budget used: 191/920 -- 3 candidate(s) for inlining:
+- candidate: JSConstruct node #151 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9178 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 242, existing opt code's inlined bytecode size: 40
+- candidate: JSCall node #265 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9ab0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+- candidate: JSCall node #527 with frequency 0.998389, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689859a0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Inlining 0xb689d9178 {0x3dcb6ec44721 <SharedFunctionInfo NodeRequestSource>} into 0xb689d8498 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} (inside try-block)
+Inlinee contains 16 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68987008 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>} for inlining with 0xb68987c40 {0x0e6180c2fbe1 <FeedbackVector[12]>}
+Budget used: 433/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #647 with frequency 0.997465, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68987008 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>}, bytecode size: 40
+- candidate: JSCall node #265 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9ab0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+- candidate: JSCall node #527 with frequency 0.998389, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689859a0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Inlining 0xb68987008 {0x3dcb6ec44aa1 <SharedFunctionInfo NodeRequestSource>} into 0xb689d8498 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} (inside try-block)
+Considering 0xb689d08e0 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>} for inlining with 0xb689d1928 {0x0e6180c30409 <FeedbackVector[2]>}
+Inlinee contains 6 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb689d0cf8 {0x205082c2e549 <SharedFunctionInfo finishDirect>} for inlining with 0xb68cf90b0 {0x0e6180c314d9 <FeedbackVector[35]>}
+Budget used: 0/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #40 with frequency 0.99899, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d08e0 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>}, bytecode size: 31, existing opt code's inlined bytecode size: 38
+- candidate: JSCall node #87 with frequency 0.99899, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d0cf8 {0x205082c2e549 <SharedFunctionInfo finishDirect>}, bytecode size: 215, existing opt code's inlined bytecode size: 52
+Inlining 0xb689d08e0 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>} into 0xb689d04a0 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} (inside try-block)
+Budget used: 473/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #265 with frequency 0.999017, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d9ab0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>}, bytecode size: 207, existing opt code's inlined bytecode size: 79
+- candidate: JSCall node #527 with frequency 0.998389, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689859a0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Inlining 0xb689d9ab0 {0x3dcb6ec4ee19 <SharedFunctionInfo answer>} into 0xb689d8498 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68cfa590 {0x18237efa8709 <SharedFunctionInfo>} for inlining with 0xb68cfa6e0 {0x0e6180c303b9 <FeedbackVector[4]>}
+Inlining small function(s) at call site #159:JSCall
+Inlining 0xb68cfa590 {0x18237efa8709 <SharedFunctionInfo>} into 0xb689d04a0 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68cfa7a0 {0x172594dd7fd1 <SharedFunctionInfo text>} for inlining with 0xb68cfacc0 {0x0e6180c30379 <FeedbackVector[2]>}
+Inlining small function(s) at call site #192:JSCall
+Inlinee contains 13 calls without local exception handler; linking to surrounding exception handler.
+Inlining 0xb68cfa7a0 {0x172594dd7fd1 <SharedFunctionInfo text>} into 0xb689d04a0 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68cfad70 {0x172594dd97e1 <SharedFunctionInfo sugarText>} for inlining with 0xb68cfae18 {0x0e6180c301c9 <FeedbackVector[48]>}
+Budget used: 31/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #87 with frequency 0.99899, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689d0cf8 {0x205082c2e549 <SharedFunctionInfo finishDirect>}, bytecode size: 215, existing opt code's inlined bytecode size: 52
+- candidate: JSCall node #236 with frequency 0.992266, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cfad70 {0x172594dd97e1 <SharedFunctionInfo sugarText>}, bytecode size: 316, existing opt code's inlined bytecode size: 477
+Inlining 0xb689d0cf8 {0x205082c2e549 <SharedFunctionInfo finishDirect>} into 0xb689d04a0 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} (inside try-block)
+Considering 0xb68ad6860 {0x3dcb6ec44861 <SharedFunctionInfo hasPendingOwnedRead>} for inlining with 0xb68ad6e18 {0x0e6180c308d9 <FeedbackVector[14]>}
+Considering 0xb68a3ec30 {0x172594dc1861 <SharedFunctionInfo #serve>} for inlining with 0xb68cf4d90 {0x0e6180c30699 <FeedbackVector[66]>}
+Inlinee contains 3 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68ad6948 {0x3dcb6ec445b9 <SharedFunctionInfo mayCarryBody>} for inlining with 0xb68ad70c8 {0x0e6180c30979 <FeedbackVector[0]>}
+Inlining small function(s) at call site #1005:JSCall
+Inlining 0xb68ad6948 {0x3dcb6ec445b9 <SharedFunctionInfo mayCarryBody>} into 0xb689d8498 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} (inside try-block)
+Budget used: 0/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #70 with frequency 0.999372, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a3ec30 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Considering 0xb68bb45e8 {0x172594ddb9a1 <SharedFunctionInfo get status>} for inlining with 0xb68bb47c8 {0x0e6180c2faf1 <FeedbackVector[4]>}
+Inlining small function(s) at call site #431:JSCall
+Inlining 0xb68bb45e8 {0x172594ddb9a1 <SharedFunctionInfo get status>} into 0xb689d04a0 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} (inside try-block)
+Considering 0xb68ad6a60 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>} for inlining with 0xb68ad7148 {0x0e6180c309d9 <FeedbackVector[52]>}
+Inlinee contains 1 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68cfaf58 {0x172594dc9699 <SharedFunctionInfo isEmptyStatus>} for inlining with 0xb68bb4ac0 {0x0e6180c30449 <FeedbackVector[0]>}
+Inlining small function(s) at call site #373:JSCall
+Inlining 0xb68cfaf58 {0x172594dc9699 <SharedFunctionInfo isEmptyStatus>} into 0xb689d04a0 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} (inside try-block)
+Budget used: 680/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #981 with frequency 0.998011, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ad6860 {0x3dcb6ec44861 <SharedFunctionInfo hasPendingOwnedRead>}, bytecode size: 62
+- candidate: JSCall node #1078 with frequency 0.998011, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ad6a60 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}, bytecode size: 234, existing opt code's inlined bytecode size: 85
+- candidate: JSCall node #527 with frequency 0.998389, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689859a0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Inlining 0xb68ad6860 {0x3dcb6ec44861 <SharedFunctionInfo hasPendingOwnedRead>} into 0xb689d8498 {0x3dcb6ec4e981 <SharedFunctionInfo dispatch>} (inside try-block)
+Budget used: 246/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #236 with frequency 0.992266, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cfad70 {0x172594dd97e1 <SharedFunctionInfo sugarText>}, bytecode size: 316, existing opt code's inlined bytecode size: 477
+Considering 0xb68a4b840 {0x1c4f3a67b0c1 <SharedFunctionInfo EventEmitter>} for inlining with 0xb68a4bc38 {0x3dcb6ec712e9 <FeedbackVector[6]>}
+Inlining small function(s) at call site #38:JSConstruct
+Inlining 0xb68a4b840 {0x1c4f3a67b0c1 <SharedFunctionInfo EventEmitter>} into 0xb68a4a488 {0x18237efa8799 <SharedFunctionInfo Output>}
+Inlinee contains 3 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68455980 {0x1c4f3a67b669 <SharedFunctionInfo>} for inlining with 0xb68455f50 {0x3dcb6ec71199 <FeedbackVector[36]>}
+Considering 0xb68d308d8 {0x172594dd6e89 <SharedFunctionInfo sourceUrl>} for inlining with 0xb68ce6768 {0x0e6180c2fe61 <FeedbackVector[2]>}
+Inlining small function(s) at call site #32:JSCall
+Inlining 0xb68d308d8 {0x172594dd6e89 <SharedFunctionInfo sourceUrl>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}
+Budget used: 742/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #1078 with frequency 0.998011, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ad6a60 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}, bytecode size: 234, existing opt code's inlined bytecode size: 85
+- candidate: JSCall node #527 with frequency 0.998389, has_heapnum_param:0, 1 target(s):
+  - target: 0xb689859a0 {0x172594dc1861 <SharedFunctionInfo #serve>}, bytecode size: 409, existing opt code's inlined bytecode size: 456
+Budget used: 0/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #121 with frequency 0.997056, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68455980 {0x1c4f3a67b669 <SharedFunctionInfo>}, bytecode size: 163
+Inlining 0xb68455980 {0x1c4f3a67b669 <SharedFunctionInfo>} into 0xb68a4a488 {0x18237efa8799 <SharedFunctionInfo Output>}
+Considering 0xb68d30cd0 {0x172594dd52f9 <SharedFunctionInfo splitPathSearch>} for inlining with 0xb68ce6b20 {0x0e6180c317d1 <FeedbackVector[39]>}
+Considering 0xb68d31990 {0x205082c26ba1 <SharedFunctionInfo matchRoute>} for inlining with 0xb68aac248 {0x0e6180c31939 <FeedbackVector[60]>}
+Considering 0xb68d31ad0 {0x205082c2e621 <SharedFunctionInfo publishMatch>} for inlining with 0xb68aac2a8 {0x0e6180c2fea1 <FeedbackVector[22]>}
+Considering 0xb68d31ba8 {0x172594dd6e41 <SharedFunctionInfo sourceMethod>} for inlining with 0xb68aad308 {0x0e6180c2fab1 <FeedbackVector[2]>}
+Inlining small function(s) at call site #313:JSCall
+Inlining 0xb68d31ba8 {0x172594dd6e41 <SharedFunctionInfo sourceMethod>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}
+Considering 0xb68ce5c78 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} for inlining with 0xb68aae870 {0x0e6180c31739 <FeedbackVector[13]>}
+Budget used: 0/920 -- 4 candidate(s) for inlining:
+- candidate: JSCall node #298 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d31ad0 {0x205082c2e621 <SharedFunctionInfo publishMatch>}, bytecode size: 52
+- candidate: JSCall node #412 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ce5c78 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>}, bytecode size: 127
+- candidate: JSCall node #278 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d31990 {0x205082c26ba1 <SharedFunctionInfo matchRoute>}, bytecode size: 308
+- candidate: JSCall node #48 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30cd0 {0x172594dd52f9 <SharedFunctionInfo splitPathSearch>}, bytecode size: 317
+Inlining 0xb68d31ad0 {0x205082c2e621 <SharedFunctionInfo publishMatch>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}
+Budget used: 52/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #412 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ce5c78 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>}, bytecode size: 127
+- candidate: JSCall node #278 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d31990 {0x205082c26ba1 <SharedFunctionInfo matchRoute>}, bytecode size: 308
+- candidate: JSCall node #48 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30cd0 {0x172594dd52f9 <SharedFunctionInfo splitPathSearch>}, bytecode size: 317
+Inlining 0xb68ce5c78 {0x205082c2e591 <SharedFunctionInfo dispatchDirect>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}
+Considering 0xb68ab1260 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>} for inlining with 0xb68ab1440 {0x0e6180c30409 <FeedbackVector[2]>}
+Considering 0xb68ab1358 {0x205082c2e549 <SharedFunctionInfo finishDirect>} for inlining with 0xb68ab1af8 {0x0e6180c314d9 <FeedbackVector[35]>}
+Budget used: 179/920 -- 4 candidate(s) for inlining:
+- candidate: JSCall node #770 with frequency 0.998143, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ab1260 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>}, bytecode size: 31, existing opt code's inlined bytecode size: 38
+- candidate: JSCall node #815 with frequency 0.998143, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ab1358 {0x205082c2e549 <SharedFunctionInfo finishDirect>}, bytecode size: 215, existing opt code's inlined bytecode size: 52
+- candidate: JSCall node #278 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d31990 {0x205082c26ba1 <SharedFunctionInfo matchRoute>}, bytecode size: 308
+- candidate: JSCall node #48 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30cd0 {0x172594dd52f9 <SharedFunctionInfo splitPathSearch>}, bytecode size: 317
+Inlining 0xb68ab1260 {0x3dcb6ec4e281 <SharedFunctionInfo guarded>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb689070a8 {0x18237efa8709 <SharedFunctionInfo>} for inlining with 0xb68907140 {0x0e6180c303b9 <FeedbackVector[4]>}
+Inlining small function(s) at call site #889:JSCall
+Inlining 0xb689070a8 {0x18237efa8709 <SharedFunctionInfo>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68907200 {0x172594dd7fd1 <SharedFunctionInfo text>} for inlining with 0xb68909590 {0x0e6180c30379 <FeedbackVector[2]>}
+Inlining small function(s) at call site #922:JSCall
+Inlining 0xb68907200 {0x172594dd7fd1 <SharedFunctionInfo text>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68909640 {0x172594dd97e1 <SharedFunctionInfo sugarText>} for inlining with 0xb689096e8 {0x0e6180c301c9 <FeedbackVector[48]>}
+Budget used: 210/920 -- 4 candidate(s) for inlining:
+- candidate: JSCall node #815 with frequency 0.998143, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ab1358 {0x205082c2e549 <SharedFunctionInfo finishDirect>}, bytecode size: 215, existing opt code's inlined bytecode size: 52
+- candidate: JSCall node #278 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d31990 {0x205082c26ba1 <SharedFunctionInfo matchRoute>}, bytecode size: 308
+- candidate: JSCall node #48 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30cd0 {0x172594dd52f9 <SharedFunctionInfo splitPathSearch>}, bytecode size: 317
+- candidate: JSCall node #966 with frequency 0.991425, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68909640 {0x172594dd97e1 <SharedFunctionInfo sugarText>}, bytecode size: 316, existing opt code's inlined bytecode size: 477
+Inlining 0xb68ab1358 {0x205082c2e549 <SharedFunctionInfo finishDirect>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>} (inside try-block)
+Considering 0xb68cf0bd0 {0x172594ddb9a1 <SharedFunctionInfo get status>} for inlining with 0xb68cf0d58 {0x0e6180c2faf1 <FeedbackVector[4]>}
+Inlining small function(s) at call site #279:JSCall
+Inlining 0xb68cf0bd0 {0x172594ddb9a1 <SharedFunctionInfo get status>} into 0xb68a46498 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}
+Inlinee contains 3 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68a46be8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>} for inlining with 0xb68cf1130 {0x0e6180c31cb9 <FeedbackVector[17]>}
+Considering 0xb68cf1248 {0x172594ddb939 <SharedFunctionInfo get planned>} for inlining with 0xb68cf13b8 {0x0e6180c309a9 <FeedbackVector[0]>}
+Inlining small function(s) at call site #328:JSCall
+Considering 0xb6890a730 {0x172594ddb9a1 <SharedFunctionInfo get status>} for inlining with 0xb6890aee0 {0x0e6180c2faf1 <FeedbackVector[4]>}
+Inlining small function(s) at call site #1159:JSCall
+Inlining 0xb6890a730 {0x172594ddb9a1 <SharedFunctionInfo get status>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>} (inside try-block)
+Inlining 0xb68cf1248 {0x172594ddb939 <SharedFunctionInfo get planned>} into 0xb68a46498 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}
+Inlinee contains 1 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68909b30 {0x172594dc9699 <SharedFunctionInfo isEmptyStatus>} for inlining with 0xb6890b150 {0x0e6180c30449 <FeedbackVector[0]>}
+Inlining small function(s) at call site #1101:JSCall
+Inlining 0xb68909b30 {0x172594dc9699 <SharedFunctionInfo isEmptyStatus>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>} (inside try-block)
+Considering 0xb68a477b8 {0x3fff757435e9 <SharedFunctionInfo byteLength>} for inlining with 0xb68cf3e58 {0x0e6180c31621 <FeedbackVector[21]>}
+Cannot consider 0xb68a47960 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Budget used: 425/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #278 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d31990 {0x205082c26ba1 <SharedFunctionInfo matchRoute>}, bytecode size: 308
+- candidate: JSCall node #48 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30cd0 {0x172594dd52f9 <SharedFunctionInfo splitPathSearch>}, bytecode size: 317
+- candidate: JSCall node #966 with frequency 0.991425, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68909640 {0x172594dd97e1 <SharedFunctionInfo sugarText>}, bytecode size: 316, existing opt code's inlined bytecode size: 477
+Inlining 0xb68d31990 {0x205082c26ba1 <SharedFunctionInfo matchRoute>} into 0xb68d304a8 {0x205082c2e741 <SharedFunctionInfo dispatchRequest>}
+Considering 0xb68a47af0 {0x18237efa87e1 <SharedFunctionInfo writeHead>} for inlining with 0xb68ada370 {0x0e6180c311f9 <FeedbackVector[6]>}
+Budget used: 733/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #48 with frequency 0.999153, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30cd0 {0x172594dd52f9 <SharedFunctionInfo splitPathSearch>}, bytecode size: 317
+- candidate: JSCall node #966 with frequency 0.991425, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68909640 {0x172594dd97e1 <SharedFunctionInfo sugarText>}, bytecode size: 316, existing opt code's inlined bytecode size: 477
+Considering 0xb68cefc18 {0x18237efa8829 <SharedFunctionInfo end>} for inlining with 0xb68ada6e8 {0x0e6180c31279 <FeedbackVector[7]>}
+Budget used: 0/920 -- 4 candidate(s) for inlining:
+- candidate: JSCall node #233 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a47af0 {0x18237efa87e1 <SharedFunctionInfo writeHead>}, bytecode size: 33
+- candidate: JSCall node #246 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cefc18 {0x18237efa8829 <SharedFunctionInfo end>}, bytecode size: 52
+- candidate: JSCall node #57 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a46be8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>}, bytecode size: 101
+- candidate: JSCall node #158 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a477b8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68a47af0 {0x18237efa87e1 <SharedFunctionInfo writeHead>} into 0xb68a46498 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>} (inside try-block)
+Inlinee contains 3 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 33/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #246 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68cefc18 {0x18237efa8829 <SharedFunctionInfo end>}, bytecode size: 52
+- candidate: JSCall node #57 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a46be8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>}, bytecode size: 101
+- candidate: JSCall node #158 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a477b8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68cefc18 {0x18237efa8829 <SharedFunctionInfo end>} into 0xb68a46498 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>} (inside try-block)
+Inlinee contains 5 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 85/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #57 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a46be8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>}, bytecode size: 101
+- candidate: JSCall node #158 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a477b8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68a46be8 {0x172594ddbfd9 <SharedFunctionInfo responseFactsOf>} into 0xb68a46498 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}
+Budget used: 186/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #158 with frequency 0.998993, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68a477b8 {0x3fff757435e9 <SharedFunctionInfo byteLength>}, bytecode size: 135
+Inlining 0xb68a477b8 {0x3fff757435e9 <SharedFunctionInfo byteLength>} into 0xb68a46498 {0x3dcb6ec43039 <SharedFunctionInfo tryWriteBareNodeResponse>}
+Cannot consider 0xb68a47960 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Considering 0xb68d30bd8 {0x18237efa8799 <SharedFunctionInfo Output>} for inlining with 0xb68d31c28 {0x0e6180c30d91 <FeedbackVector[16]>}
+Considering 0xb68d30d90 {0x3dcb6ec4ee61 <SharedFunctionInfo>} for inlining with 0xb68d31cb0 {0x0e6180c30cb9 <FeedbackVector[21]>}
+Considering 0xb68ce5c60 {0x3fff7575bc99 <SharedFunctionInfo setImmediate>} for inlining with 0xb68ce65a8 {0x0e6180c39479 <FeedbackVector[6]>}
+Cannot consider 0xb68d319a0 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Budget used: 0/920 -- 3 candidate(s) for inlining:
+- candidate: JSConstruct node #208 with frequency 729, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30bd8 {0x18237efa8799 <SharedFunctionInfo Output>}, bytecode size: 74, existing opt code's inlined bytecode size: 184
+- candidate: JSCall node #225 with frequency 729, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30d90 {0x3dcb6ec4ee61 <SharedFunctionInfo>}, bytecode size: 147, existing opt code's inlined bytecode size: 831
+- candidate: JSCall node #423 with frequency 0.666667, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ce5c60 {0x3fff7575bc99 <SharedFunctionInfo setImmediate>}, bytecode size: 49
+Inlining 0xb68d30bd8 {0x18237efa8799 <SharedFunctionInfo Output>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 13 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 74/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #225 with frequency 729, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d30d90 {0x3dcb6ec4ee61 <SharedFunctionInfo>}, bytecode size: 147, existing opt code's inlined bytecode size: 831
+- candidate: JSCall node #423 with frequency 0.666667, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ce5c60 {0x3fff7575bc99 <SharedFunctionInfo setImmediate>}, bytecode size: 49
+Inlining 0xb68ce5c60 {0x3fff7575bc99 <SharedFunctionInfo setImmediate>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 5 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68ce8598 {0x1c4f3a657c19 <SharedFunctionInfo wrappedFn>} for inlining with 0xb68ce9fe8 {0x18237efa5f99 <FeedbackVector[6]>}
+Considering 0xb68ce9ec8 {0x1c4f3a660351 <SharedFunctionInfo Immediate>} for inlining with 0xb68904230 {0x0e6180c39371 <FeedbackVector[27]>}
+Cannot consider 0xb68d319a0 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Budget used: 123/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #637 with frequency 0.657143, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ce8598 {0x1c4f3a657c19 <SharedFunctionInfo wrappedFn>}, bytecode size: 75
+- candidate: JSConstruct node #664 with frequency 0.657143, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ce9ec8 {0x1c4f3a660351 <SharedFunctionInfo Immediate>}, bytecode size: 93
+Inlining 0xb68ce8598 {0x1c4f3a657c19 <SharedFunctionInfo wrappedFn>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb689053c8 {0x1c4f3a664aa9 <SharedFunctionInfo>} for inlining with 0xb68905470 {0x1e1fed1eba69 <FeedbackVector[2]>}
+Inlining small function(s) at call site #718:JSCall
+Inlining 0xb689053c8 {0x1c4f3a664aa9 <SharedFunctionInfo>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 1 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 198/920 -- 1 candidate(s) for inlining:
+- candidate: JSConstruct node #664 with frequency 0.657143, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68ce9ec8 {0x1c4f3a660351 <SharedFunctionInfo Immediate>}, bytecode size: 93
+Inlining 0xb68ce9ec8 {0x1c4f3a660351 <SharedFunctionInfo Immediate>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 18 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68905830 {0x1c4f3a65ec29 <SharedFunctionInfo initAsyncResource>} for inlining with 0xb68906d20 {0x0e6180c35b51 <FeedbackVector[18]>}
+Considering 0xb68905908 {0x1c4f3a660429 <SharedFunctionInfo ref>} for inlining with 0xb68907150 {0x0e6180c39239 <FeedbackVector[13]>}
+Considering 0xb68905a40 {0x1c4f3a65f469 <SharedFunctionInfo append>} for inlining with 0xb68907d78 {0x0e6180c392d1 <FeedbackVector[14]>}
+Budget used: 291/920 -- 3 candidate(s) for inlining:
+- candidate: JSCall node #907 with frequency 0.648141, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68905a40 {0x1c4f3a65f469 <SharedFunctionInfo append>}, bytecode size: 41
+- candidate: JSCall node #859 with frequency 0.648141, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68905908 {0x1c4f3a660429 <SharedFunctionInfo ref>}, bytecode size: 71
+- candidate: JSCall node #850 with frequency 0.648141, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68905830 {0x1c4f3a65ec29 <SharedFunctionInfo initAsyncResource>}, bytecode size: 99
+Inlining 0xb68905a40 {0x1c4f3a65f469 <SharedFunctionInfo append>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 3 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 332/920 -- 2 candidate(s) for inlining:
+- candidate: JSCall node #859 with frequency 0.648141, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68905908 {0x1c4f3a660429 <SharedFunctionInfo ref>}, bytecode size: 71
+- candidate: JSCall node #850 with frequency 0.648141, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68905830 {0x1c4f3a65ec29 <SharedFunctionInfo initAsyncResource>}, bytecode size: 99
+Inlining 0xb68905908 {0x1c4f3a660429 <SharedFunctionInfo ref>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 10 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 403/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #850 with frequency 0.648141, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68905830 {0x1c4f3a65ec29 <SharedFunctionInfo initAsyncResource>}, bytecode size: 99
+Inlining 0xb68905830 {0x1c4f3a65ec29 <SharedFunctionInfo initAsyncResource>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 17 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68aea3c8 {0x1c4f3a662291 <SharedFunctionInfo newAsyncId>} for inlining with 0xb68aeaa80 {0x0e6180c22aa9 <FeedbackVector[5]>}
+Inlining small function(s) at call site #1252:JSCall
+Inlining 0xb68aea3c8 {0x1c4f3a662291 <SharedFunctionInfo newAsyncId>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 4 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68aea4b0 {0x1c4f3a662421 <SharedFunctionInfo getDefaultTriggerAsyncId>} for inlining with 0xb68aeb340 {0x0e6180c22b01 <FeedbackVector[4]>}
+Considering 0xb68aea5b8 {0x1c4f3a6788c1 <SharedFunctionInfo activeCurrent>} for inlining with 0xb68aebbe8 {0x0e6180c39779 <FeedbackVector[2]>}
+Inlining small function(s) at call site #1319:JSCall
+Inlining 0xb68aea5b8 {0x1c4f3a6788c1 <SharedFunctionInfo activeCurrent>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Cannot consider 0xb68d319a0 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+Considering 0xb68aea690 {0x1c4f3a662809 <SharedFunctionInfo initHooksExist>} for inlining with 0xb68aec048 {0x0e6180c22b51 <FeedbackVector[2]>}
+Inlining small function(s) at call site #1337:JSCall
+Inlining 0xb68aea690 {0x1c4f3a662809 <SharedFunctionInfo initHooksExist>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68aec0e8 {0x1c4f3a662679 <SharedFunctionInfo hasHooks>} for inlining with 0xb68aec180 {0x3dcb6ec6bc51 <FeedbackVector[2]>}
+Inlining small function(s) at call site #1575:JSCall
+Inlining 0xb68aec0e8 {0x1c4f3a662679 <SharedFunctionInfo hasHooks>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 2 calls without local exception handler; linking to surrounding exception handler.
+Budget used: 502/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #1283 with frequency 0.640139, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68aea4b0 {0x1c4f3a662421 <SharedFunctionInfo getDefaultTriggerAsyncId>}, bytecode size: 34
+Inlining 0xb68aea4b0 {0x1c4f3a662421 <SharedFunctionInfo getDefaultTriggerAsyncId>} into 0xb68d30488 {0x18237efa8871 <SharedFunctionInfo batch>} (inside try-block)
+Inlinee contains 5 calls without local exception handler; linking to surrounding exception handler.
+Considering 0xb68d31e08 {0x1c4f3a67b669 <SharedFunctionInfo>} for inlining with 0xb68cf4bd8 {0x3dcb6ec71199 <FeedbackVector[36]>}
+Budget used: 0/920 -- 1 candidate(s) for inlining:
+- candidate: JSCall node #28 with frequency 0.998077, has_heapnum_param:0, 1 target(s):
+  - target: 0xb68d31e08 {0x1c4f3a67b669 <SharedFunctionInfo>}, bytecode size: 163
+Inlining 0xb68d31e08 {0x1c4f3a67b669 <SharedFunctionInfo>} into 0xb68d30488 {0x1c4f3a67b0c1 <SharedFunctionInfo EventEmitter>}
+Cannot consider 0xb68d308c8 {0x3f8dc57c91d9 <FeedbackCell[many closures]>} for inlining (no feedback vector)
+{"framework":"keala","samples":[{"round":1,"ns":157.01,"elapsed":29.421791},{"round":2,"ns":140.245,"elapsed":28.956584000000007},{"round":3,"ns":140.095,"elapsed":29.101833},{"round":4,"ns":136.95,"elapsed":28.555000000000007},{"round":5,"ns":139.68,"elapsed":29.07258300000001}],"sink":12100000,"last":"Hello World"}

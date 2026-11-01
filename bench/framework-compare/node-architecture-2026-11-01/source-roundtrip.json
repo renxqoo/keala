@@ -1,0 +1,17 @@
+[
+  {
+    "stage": "before",
+    "expected": "05df8d2775e7fe59d944cde7cac74f7462db566292d262d413621b0319a2ba4a",
+    "actual": "05df8d2775e7fe59d944cde7cac74f7462db566292d262d413621b0319a2ba4a"
+  },
+  {
+    "stage": "stage",
+    "expected": "6f20eeb0cc68fb73365ff2e396197d89e63af50a1c03dbca2122a9d5d46b6117",
+    "actual": "6f20eeb0cc68fb73365ff2e396197d89e63af50a1c03dbca2122a9d5d46b6117"
+  },
+  {
+    "stage": "final",
+    "expected": "290a323faa77b894e7c2a60a558f4777136bb39028c7a76b1a9e675ad6b29ec6",
+    "actual": "290a323faa77b894e7c2a60a558f4777136bb39028c7a76b1a9e675ad6b29ec6"
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "baselineSource": "33f23a18be16853fdaa06371aee662a1138723e229b0e9fac06d02c0b82b2067",
+  "ablatedSource": "afe63b189aa6631ed699942544e86483322d881f34fc19814786d0a49f58f79f",
+  "diagnosticOnly": true,
+  "removed": "Bun waitUntil/runtime/ip installation only; incompatible raw extensions, never a product candidate"
+}

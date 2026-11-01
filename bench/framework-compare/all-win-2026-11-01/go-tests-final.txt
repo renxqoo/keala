@@ -1,0 +1,1 @@
+ok  	_/Users/wrr/work/bun-koa/bench/native-load	1.478s

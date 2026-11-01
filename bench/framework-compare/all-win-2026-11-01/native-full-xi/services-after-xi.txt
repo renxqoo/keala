@@ -1,0 +1,9 @@
+89c476267eddc15dd7c54db9969bff91031c7081fbb35de8e031c22be6789860  /tmp/keala-all-win.cDctk1/native-full-xi/results.json
+    PID COMMAND
+  26761 xray
+  26769 hysteria
+  71250 fail2ban-server
+oom_kill 0
+               total        used        free      shared  buff/cache   available
+Mem:            1967         451         518           2        1191        1516
+Swap:              0           0           0

@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-11-01T05:52:59.532Z",
+  "remoteAlias": "wr",
+  "remoteTemporaryRoot": "/tmp/keala-bench-opt.JhAsdh",
+  "runtimes": {
+    "node": "26.9.0",
+    "bun": "1.4.4",
+    "compatibilityNode": "20.19.5"
+  },
+  "nodeLinuxArchiveSha256": "c6ecd8efc1c1d395265891675319da7a7b3785c6be174bd78933cf4f057624d1",
+  "nodeMac20ArchiveSha256": "cfed7503d8d99fbcf2f52e408ec52f616058eb0867b34dbc3437259993ef5cba",
+  "libatomicDebSha512": "4631a023da29026cfd116ca479bbdb69eb3ca402e26912804201f3e53110e6f585012682637ed7372a7e5cebe71efdb401cb3966fff9d278ff202b1a3f5f6f41",
+  "libatomicVersion": "14.2.0-4ubuntu2~24.04.1",
+  "installation": "Private bundled runtime and libatomic; no host package installs, no Docker.",
+  "officialNodeSource": "https://nodejs.org/dist/v26.9.0/SHASUMS256.txt",
+  "libatomicSource": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/libatomic1_14.2.0-4ubuntu2%7e24.04.1_amd64.deb",
+  "fullRawSha256": "48eafeaaa9bb880a0133e92a5aa83dfd13769cbab3491477413051ce5627c220",
+  "sourceVersions": {
+    "baseline": "05df8d2775e7fe59d944cde7cac74f7462db566292d262d413621b0319a2ba4a",
+    "fullMatrix": "6f20eeb0cc68fb73365ff2e396197d89e63af50a1c03dbca2122a9d5d46b6117",
+    "final": "290a323faa77b894e7c2a60a558f4777136bb39028c7a76b1a9e675ad6b29ec6"
+  },
+  "independentReview": "Full matrix, archived raw bytes and source roundtrips independently recounted; final lifecycle diff reviewed with no remaining required fixes."
+}

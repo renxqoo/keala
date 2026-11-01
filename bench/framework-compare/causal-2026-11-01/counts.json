@@ -1,0 +1,60 @@
+{
+  "rows": [
+    {
+      "stage": "calibration-aa",
+      "samples": 128,
+      "checks": 16,
+      "requests": 6199164,
+      "owned": 264,
+      "live": 0,
+      "minAvailableMiB": 1379.046875,
+      "peakMiB": 118.9375
+    },
+    {
+      "stage": "bun-extensions",
+      "samples": 72,
+      "checks": 44,
+      "requests": 4892964,
+      "owned": 148,
+      "live": 0,
+      "minAvailableMiB": 1411.92578125,
+      "peakMiB": 118.9375
+    },
+    {
+      "stage": "node-scheduling",
+      "samples": 72,
+      "checks": 120,
+      "requests": 1468938,
+      "owned": 150,
+      "live": 0,
+      "minAvailableMiB": 1387.28125,
+      "peakMiB": 118.9375
+    },
+    {
+      "stage": "batch-compatible",
+      "samples": 72,
+      "checks": 44,
+      "requests": 2137273,
+      "owned": 148,
+      "live": 0,
+      "minAvailableMiB": 1402.25390625,
+      "peakMiB": 94.625
+    },
+    {
+      "stage": "split-compatible",
+      "samples": 72,
+      "checks": 44,
+      "requests": 4765967,
+      "owned": 148,
+      "live": 0,
+      "minAvailableMiB": 1392.52734375,
+      "peakMiB": 94.56640625
+    }
+  ],
+  "totals": {
+    "samples": 416,
+    "checks": 268,
+    "requests": 19464306,
+    "owned": 858
+  }
+}

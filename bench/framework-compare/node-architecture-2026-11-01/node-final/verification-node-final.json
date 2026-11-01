@@ -1,0 +1,33 @@
+{
+  "verifiedAt": "2026-11-01T05:56:30.715Z",
+  "stage": "node-final",
+  "samples": 156,
+  "checks": 88,
+  "requests": 3214881,
+  "ownedPids": 320,
+  "remainingPids": [],
+  "originalServices": [
+    {
+      "pid": 26761,
+      "name": "xray"
+    },
+    {
+      "pid": 26769,
+      "name": "hysteria"
+    },
+    {
+      "pid": 71250,
+      "name": "fail2ban-server"
+    }
+  ],
+  "oomBefore": 0,
+  "oomAfter": 0,
+  "rawSha256": "be58a679388797dff8a0aea0f189633fe536f357af415bdfe62e8f886acb91bd",
+  "manifestSha256": "e65cc59042cc5aa2f0745e6a030445faa6e382f207cdfa4c295af0d2fb52baa0",
+  "sourceSha256": "290a323faa77b894e7c2a60a558f4777136bb39028c7a76b1a9e675ad6b29ec6",
+  "beforeSourceSha256": "05df8d2775e7fe59d944cde7cac74f7462db566292d262d413621b0319a2ba4a",
+  "distSha256": "e8b84a0022fa0561a74af5ce7bf8bd902616f1810c60891e66cde23be08317e6",
+  "harnessSha256": "33950e878f54701330036f573e2a4d528be7d45656d3d65bb43445c40e663cfa",
+  "free": "               total        used        free      shared  buff/cache   available\nMem:            1967         494         226           2        1441        1472\nSwap:              0           0           0\n",
+  "uptime": " 05:56:30 up 4 days,  3:41,  3 users,  load average: 0.42, 1.34, 1.30\n"
+}

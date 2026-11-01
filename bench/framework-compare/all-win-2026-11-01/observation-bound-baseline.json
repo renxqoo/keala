@@ -1,0 +1,6 @@
+{
+  "source": "/Users/wrr/work/bun-koa/src/core/app.ts",
+  "signature": "function serve() { [native code] }",
+  "body": "ok",
+  "keys": ["waitUntil", "runtime", "ip"]
+}

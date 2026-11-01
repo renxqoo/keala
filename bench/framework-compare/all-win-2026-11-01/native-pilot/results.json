@@ -1,0 +1,2963 @@
+{
+  "startedAt": "2026-11-01T07:19:39.740Z",
+  "config": {
+    "connections": 10,
+    "duration": 1,
+    "rounds": 1,
+    "processes": 1,
+    "cooldownMs": 500,
+    "loadDriver": "native-go",
+    "serverCpu": "0",
+    "clientCpu": "1"
+  },
+  "pilot": true,
+  "helloOnly": false,
+  "screen": false,
+  "verifyOnly": false,
+  "environment": {
+    "cpu": "Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz",
+    "cpus": 2,
+    "memory": 2063376384,
+    "platform": "linux",
+    "release": "6.8.0-48-generic",
+    "arch": "x64",
+    "loadAtStart": [1.3, 0.91, 0.59],
+    "loadAtEnd": [1.5, 1, 0.63]
+  },
+  "versions": {
+    "node": "26.9.0",
+    "bun": "1.4.4",
+    "keala": "0.7.3",
+    "hono": "4.13.5",
+    "h3": "2.0.8",
+    "honoNode": "2.1.1",
+    "srvx": "1.0.8",
+    "autocannon": "8.0.0",
+    "nativeClient": "go1.27.0"
+  },
+  "source": {
+    "commit": "f14940b6cdb1912483add39e76617d51246d346e",
+    "dirty": true,
+    "dirtyFiles": [
+      "M bench/framework-compare/README.md",
+      " M bench/framework-compare/report.mjs",
+      " M bench/framework-compare/server.mjs",
+      " M bench/load-metrics.ts",
+      " M src/adapters/node-socket-fanout.ts",
+      " M src/adapters/node-source.ts",
+      " M src/adapters/node.ts",
+      " M src/core/app.ts",
+      " M src/core/context/context.ts",
+      " M src/core/dispatch.ts",
+      " M src/core/lifecycle.ts",
+      " M src/core/response-plan.ts",
+      " M src/utils/url.ts",
+      "?? bench/framework-compare/REMOTE.md",
+      "?? bench/framework-compare/node-architecture-2026-11-01/",
+      "?? bench/framework-compare/pack-remote.mjs",
+      "?? bench/framework-compare/profile-server.mjs",
+      "?? bench/framework-compare/profile.mjs",
+      "?? bench/framework-compare/remote-run.mjs",
+      "?? bench/framework-compare/wr-2026-11-01/",
+      "?? bench/native-load.mjs",
+      "?? bench/native-load/",
+      "?? docs/NODE-PERFORMANCE.md",
+      "?? src/adapters/node-drain.ts",
+      "?? test/integration/node-connection-lifecycle.test.ts"
+    ],
+    "distSha256": "540b9134250a9b9ade880c46ff0b9ba6df708bda8b6a255ab78849e2d1b606b9",
+    "sourceSha256": "90e77a29e4daf48d1c769ac659b2d27ee8dbbb550fd9d52f77b2c3ee7d3287aa",
+    "harnessSha256": "a3ad3d5ca1d9e4c293499dfef614b0b4599a0a01c939939a4f720e0b3aaf913f",
+    "nativeClient": {
+      "binarySha256": "2c0beecdf7b714207228be04e6627b21e5f88d9fffedc95ae7ec303feaee2fc9",
+      "sourceSha256": "3463deeda6c129e3d5648c0d51e6de10677f57895451d515b488b2e44f36f651"
+    },
+    "before": {
+      "sourceSha256": "f76b7a94c9d685409a9f27d8e00f1e01f69c1f0f74e26e7a12fa04e361bb5237",
+      "distSha256": "263e65ae634e752f875c8e2126e553d734e83c4ef6308f2ee79b5528e7cb5a19"
+    }
+  },
+  "limits": {
+    "cpuMax": "15000 10000",
+    "memoryMax": 671088640,
+    "pidsMax": 128
+  },
+  "stacks": [
+    {
+      "id": "keala-before-node",
+      "framework": "keala-before",
+      "runtime": "node"
+    },
+    {
+      "id": "keala-node",
+      "framework": "keala",
+      "runtime": "node"
+    },
+    {
+      "id": "hono-node",
+      "framework": "hono",
+      "runtime": "node"
+    },
+    {
+      "id": "h3-node",
+      "framework": "h3",
+      "runtime": "node"
+    },
+    {
+      "id": "keala-before-bun",
+      "framework": "keala-before",
+      "runtime": "bun"
+    },
+    {
+      "id": "keala-bun",
+      "framework": "keala",
+      "runtime": "bun"
+    },
+    {
+      "id": "hono-bun",
+      "framework": "hono",
+      "runtime": "bun"
+    },
+    {
+      "id": "h3-bun",
+      "framework": "h3",
+      "runtime": "bun"
+    }
+  ],
+  "scenarios": [
+    {
+      "method": "GET",
+      "route": "/",
+      "path": "/",
+      "body": "Hello World",
+      "id": "hello",
+      "suite": "hello"
+    }
+  ],
+  "verification": [
+    {
+      "stack": "keala-before-node",
+      "suite": "hello",
+      "checks": 2
+    },
+    {
+      "stack": "keala-node",
+      "suite": "hello",
+      "checks": 2
+    },
+    {
+      "stack": "hono-node",
+      "suite": "hello",
+      "checks": 2
+    },
+    {
+      "stack": "h3-node",
+      "suite": "hello",
+      "checks": 2
+    },
+    {
+      "stack": "keala-before-bun",
+      "suite": "hello",
+      "checks": 2
+    },
+    {
+      "stack": "keala-bun",
+      "suite": "hello",
+      "checks": 2
+    },
+    {
+      "stack": "hono-bun",
+      "suite": "hello",
+      "checks": 2
+    },
+    {
+      "stack": "h3-bun",
+      "suite": "hello",
+      "checks": 2
+    }
+  ],
+  "samples": [
+    {
+      "stack": "keala-before-node",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:19:44.494Z",
+      "pid": 135764,
+      "hostLoadBefore": [1.3, 0.91, 0.59],
+      "hostLoadAfter": [1.27, 0.91, 0.59],
+      "beforeMetrics": {
+        "pid": 135764,
+        "cpu": {
+          "user": 888323,
+          "system": 257459
+        },
+        "monotonicUs": 363907591906,
+        "memory": {
+          "rss": 89899008,
+          "heapTotal": 19533824,
+          "heapUsed": 13109712,
+          "external": 4412999,
+          "arrayBuffers": 212272
+        }
+      },
+      "afterMetrics": {
+        "pid": 135764,
+        "cpu": {
+          "user": 1506790,
+          "system": 526624
+        },
+        "monotonicUs": 363908620631,
+        "memory": {
+          "rss": 90382336,
+          "heapTotal": 19795968,
+          "heapUsed": 11589840,
+          "external": 4413039,
+          "arrayBuffers": 212272
+        }
+      },
+      "serverCpu": {
+        "user": 618467,
+        "system": 269165,
+        "elapsedUs": 1028725,
+        "cores": 0.8628467277455102,
+        "percentOfOneCore": 86.28467277455101,
+        "nsPerRequest": 115727.77053455019
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:19:43.462Z",
+        "availableBytes": 1494736896,
+        "cgroupBytes": 88309760,
+        "peakBytes": 88309760,
+        "cpu": {
+          "usage_usec": 4005445,
+          "user_usec": 3085402,
+          "system_usec": 920043,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 424,
+          "nr_throttled": 33,
+          "throttled_usec": 53605,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 20,
+        "load": [1.3, 0.91, 0.59],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:19:44.493Z",
+        "availableBytes": 1494892544,
+        "cgroupBytes": 89305088,
+        "peakBytes": 89305088,
+        "cpu": {
+          "usage_usec": 5390166,
+          "user_usec": 3891337,
+          "system_usec": 1498829,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 527,
+          "nr_throttled": 96,
+          "throttled_usec": 146781,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 16,
+        "load": [1.27, 0.91, 0.59],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 93176,
+      "load": {
+        "rps": 7670,
+        "total": 7670,
+        "duration": 1,
+        "startedAt": 1793517583465,
+        "finishedAt": 1793517584465,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.7586701434159061,
+          "p50": 0,
+          "p90": 2,
+          "p99": 6,
+          "p99_9": 18,
+          "max": 19,
+          "totalCount": 7670
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135772,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517583465,
+            "finishedAt": 1793517584465,
+            "cpu": {
+              "elapsedUs": 1000707.586,
+              "system": 330942,
+              "user": 136254,
+              "percentOfOneCore": 46.686565240048054
+            },
+            "result": {
+              "totalCompletedRequests": 7670,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAADd4nJNpmSzMwMAgxsDAwMjAwMDKAAGMEEpdAMY/Yt+lMYPjCksTYwejl4CQEhMDG6cAEwCpkwaG"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stack": "keala-node",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:19:47.385Z",
+      "pid": 135778,
+      "hostLoadBefore": [1.27, 0.91, 0.59],
+      "hostLoadAfter": [1.27, 0.91, 0.59],
+      "beforeMetrics": {
+        "pid": 135778,
+        "cpu": {
+          "user": 925830,
+          "system": 315508
+        },
+        "monotonicUs": 363910497924,
+        "memory": {
+          "rss": 90562560,
+          "heapTotal": 19271680,
+          "heapUsed": 11205376,
+          "external": 4412999,
+          "arrayBuffers": 212272
+        }
+      },
+      "afterMetrics": {
+        "pid": 135778,
+        "cpu": {
+          "user": 1545337,
+          "system": 592113
+        },
+        "monotonicUs": 363911511632,
+        "memory": {
+          "rss": 90836992,
+          "heapTotal": 19533824,
+          "heapUsed": 10926664,
+          "external": 4413039,
+          "arrayBuffers": 212272
+        }
+      },
+      "serverCpu": {
+        "user": 619507,
+        "system": 276605,
+        "elapsedUs": 1013708,
+        "cores": 0.8839942074048938,
+        "percentOfOneCore": 88.39942074048938,
+        "nsPerRequest": 112098.07355516638
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:19:46.368Z",
+        "availableBytes": 1486245888,
+        "cgroupBytes": 92434432,
+        "peakBytes": 92434432,
+        "cpu": {
+          "usage_usec": 7091557,
+          "user_usec": 5015642,
+          "system_usec": 2075914,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 668,
+          "nr_throttled": 152,
+          "throttled_usec": 261890,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 19,
+        "load": [1.27, 0.91, 0.59],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:19:47.385Z",
+        "availableBytes": 1485303808,
+        "cgroupBytes": 93827072,
+        "peakBytes": 93827072,
+        "cpu": {
+          "usage_usec": 8474591,
+          "user_usec": 5820647,
+          "system_usec": 2653943,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 770,
+          "nr_throttled": 216,
+          "throttled_usec": 374658,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 16,
+        "load": [1.27, 0.91, 0.59],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 112768,
+      "load": {
+        "rps": 7986.013986013987,
+        "total": 7994,
+        "duration": 1.001,
+        "startedAt": 1793517586370,
+        "finishedAt": 1793517587371,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.6906429822366775,
+          "p50": 0,
+          "p90": 2,
+          "p99": 5,
+          "p99_9": 13,
+          "max": 15,
+          "totalCount": 7994
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135786,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517586370,
+            "finishedAt": 1793517587371,
+            "cpu": {
+              "elapsedUs": 1001054.948,
+              "system": 318636,
+              "user": 147846,
+              "percentOfOneCore": 46.599040435490664
+            },
+            "result": {
+              "totalCompletedRequests": 7994,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAADV4nJNpmSzMwMAgwsDAwMjAwMDKAAGMEEpdAMbvcF2ksYpjG8sCRgsXBQ4uDmYuDiYAl5UGCw=="
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stack": "hono-node",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:19:50.213Z",
+      "pid": 135790,
+      "hostLoadBefore": [1.65, 1, 0.62],
+      "hostLoadAfter": [1.65, 1, 0.62],
+      "beforeMetrics": {
+        "pid": 135790,
+        "cpu": {
+          "user": 900659,
+          "system": 313989
+        },
+        "monotonicUs": 363913315735,
+        "memory": {
+          "rss": 90972160,
+          "heapTotal": 19533824,
+          "heapUsed": 9648128,
+          "external": 4376449,
+          "arrayBuffers": 212272
+        }
+      },
+      "afterMetrics": {
+        "pid": 135790,
+        "cpu": {
+          "user": 1538456,
+          "system": 569788
+        },
+        "monotonicUs": 363914339988,
+        "memory": {
+          "rss": 90509312,
+          "heapTotal": 19533824,
+          "heapUsed": 12120536,
+          "external": 4376489,
+          "arrayBuffers": 212272
+        }
+      },
+      "serverCpu": {
+        "user": 637797,
+        "system": 255799,
+        "elapsedUs": 1024253,
+        "cores": 0.8724367905195298,
+        "percentOfOneCore": 87.24367905195298,
+        "nsPerRequest": 123510.1589495508
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:19:49.185Z",
+        "availableBytes": 1481777152,
+        "cgroupBytes": 96243712,
+        "peakBytes": 96243712,
+        "cpu": {
+          "usage_usec": 10113959,
+          "user_usec": 6886443,
+          "system_usec": 3227516,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 904,
+          "nr_throttled": 260,
+          "throttled_usec": 438385,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 20,
+        "load": [1.65, 1, 0.62],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:19:50.213Z",
+        "availableBytes": 1480151040,
+        "cgroupBytes": 96333824,
+        "peakBytes": 97230848,
+        "cpu": {
+          "usage_usec": 11529143,
+          "user_usec": 7719100,
+          "system_usec": 3810043,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1007,
+          "nr_throttled": 328,
+          "throttled_usec": 549196,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 16,
+        "load": [1.65, 1, 0.62],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 110811,
+      "load": {
+        "rps": 7227.772227772229,
+        "total": 7235,
+        "duration": 1.001,
+        "startedAt": 1793517589194,
+        "finishedAt": 1793517590195,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.8385625431928128,
+          "p50": 0,
+          "p90": 2,
+          "p99": 8,
+          "p99_9": 29,
+          "max": 33,
+          "totalCount": 7235
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135798,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517589194,
+            "finishedAt": 1793517590195,
+            "cpu": {
+              "elapsedUs": 1001007.01,
+              "system": 346361,
+              "user": 141966,
+              "percentOfOneCore": 48.783574452690395
+            },
+            "result": {
+              "totalCompletedRequests": 7235,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAAEB4nJNpmSzMwMAgz8DAwMjAwMDKAAGMEEpdAMbvsOzSusf+hCnPy05BTouJmYmPg4VBiFmAiZuNhY2BCQDllAao"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stack": "h3-node",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:19:52.965Z",
+      "pid": 135802,
+      "hostLoadBefore": [1.65, 1, 0.62],
+      "hostLoadAfter": [1.65, 1, 0.62],
+      "beforeMetrics": {
+        "pid": 135802,
+        "cpu": {
+          "user": 843194,
+          "system": 299140
+        },
+        "monotonicUs": 363916081563,
+        "memory": {
+          "rss": 92676096,
+          "heapTotal": 19185664,
+          "heapUsed": 11302768,
+          "external": 4465364,
+          "arrayBuffers": 277908
+        }
+      },
+      "afterMetrics": {
+        "pid": 135802,
+        "cpu": {
+          "user": 1503301,
+          "system": 541712
+        },
+        "monotonicUs": 363917091630,
+        "memory": {
+          "rss": 93331456,
+          "heapTotal": 19185664,
+          "heapUsed": 13394376,
+          "external": 4465404,
+          "arrayBuffers": 277908
+        }
+      },
+      "serverCpu": {
+        "user": 660107,
+        "system": 242572,
+        "elapsedUs": 1010067,
+        "cores": 0.8936823002830505,
+        "percentOfOneCore": 89.36823002830505,
+        "nsPerRequest": 123570.0205338809
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:19:51.952Z",
+        "availableBytes": 1474908160,
+        "cgroupBytes": 100630528,
+        "peakBytes": 100630528,
+        "cpu": {
+          "usage_usec": 13109110,
+          "user_usec": 8715990,
+          "system_usec": 4393119,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1133,
+          "nr_throttled": 359,
+          "throttled_usec": 597740,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 20,
+        "load": [1.65, 1, 0.62],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:19:52.964Z",
+        "availableBytes": 1473826816,
+        "cgroupBytes": 101449728,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 14496260,
+          "user_usec": 9554442,
+          "system_usec": 4941818,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1234,
+          "nr_throttled": 424,
+          "throttled_usec": 704783,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 16,
+        "load": [1.65, 1, 0.62],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 107043,
+      "load": {
+        "rps": 7297.702297702299,
+        "total": 7305,
+        "duration": 1.001,
+        "startedAt": 1793517591954,
+        "finishedAt": 1793517592955,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.8313483915126626,
+          "p50": 1,
+          "p90": 2,
+          "p99": 7,
+          "p99_9": 12,
+          "max": 12,
+          "totalCount": 7305
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135810,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517591954,
+            "finishedAt": 1793517592955,
+            "cpu": {
+              "elapsedUs": 1000824.34,
+              "system": 339233,
+              "user": 133485,
+              "percentOfOneCore": 47.232864060840086
+            },
+            "result": {
+              "totalCompletedRequests": 7305,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAADN4nJNpmSzMwMAgxMDAwMjAwMDKAAGMEEpdAMZ/YnZDaw/HE5YGxgCnADk+ARYRAJhqBxc="
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stack": "keala-before-bun",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:19:55.603Z",
+      "pid": 135814,
+      "hostLoadBefore": [1.68, 1.01, 0.63],
+      "hostLoadAfter": [1.68, 1.01, 0.63],
+      "beforeMetrics": {
+        "pid": 135814,
+        "cpu": {
+          "user": 510204,
+          "system": 378568
+        },
+        "monotonicUs": 1108783,
+        "memory": {
+          "rss": 46993408,
+          "heapTotal": 3874816,
+          "heapUsed": 9459289,
+          "external": 9401225,
+          "arrayBuffers": 0
+        }
+      },
+      "afterMetrics": {
+        "pid": 135814,
+        "cpu": {
+          "user": 863006,
+          "system": 760732
+        },
+        "monotonicUs": 2116592,
+        "memory": {
+          "rss": 47984640,
+          "heapTotal": 3809280,
+          "heapUsed": 5871289,
+          "external": 5836089,
+          "arrayBuffers": 0
+        }
+      },
+      "serverCpu": {
+        "user": 352802,
+        "system": 382164,
+        "elapsedUs": 1007809,
+        "cores": 0.7292711218097874,
+        "percentOfOneCore": 72.92711218097874,
+        "nsPerRequest": 34663.302362873175
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:19:54.593Z",
+        "availableBytes": 1500020736,
+        "cgroupBytes": 76648448,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 16036470,
+          "user_usec": 10277561,
+          "system_usec": 5758908,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1349,
+          "nr_throttled": 507,
+          "throttled_usec": 876960,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 21,
+        "load": [1.68, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:19:55.603Z",
+        "availableBytes": 1505841152,
+        "cgroupBytes": 75669504,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 17447477,
+          "user_usec": 10819366,
+          "system_usec": 6628110,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1450,
+          "nr_throttled": 605,
+          "throttled_usec": 1132561,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 17,
+        "load": [1.68, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 255601,
+      "load": {
+        "rps": 21203,
+        "total": 21203,
+        "duration": 1,
+        "startedAt": 1793517594595,
+        "finishedAt": 1793517595595,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.13073621657312645,
+          "p50": 0,
+          "p90": 0,
+          "p99": 3,
+          "p99_9": 5,
+          "max": 9,
+          "totalCount": 21203
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135821,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517594595,
+            "finishedAt": 1793517595595,
+            "cpu": {
+              "elapsedUs": 1000385.479,
+              "system": 465351,
+              "user": 198582,
+              "percentOfOneCore": 66.36771663895773
+            },
+            "result": {
+              "totalCompletedRequests": 21203,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAADB4nJNpmSzMwMDAz8DAwMjAwMDKAAGMEEpdAMZfsZ1pGfsN1lUss5g0mAVYAHwmBgk="
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stack": "keala-bun",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:19:58.228Z",
+      "pid": 135826,
+      "hostLoadBefore": [1.68, 1.01, 0.63],
+      "hostLoadAfter": [1.68, 1.01, 0.63],
+      "beforeMetrics": {
+        "pid": 135826,
+        "cpu": {
+          "user": 525859,
+          "system": 371180
+        },
+        "monotonicUs": 1099060,
+        "memory": {
+          "rss": 45031424,
+          "heapTotal": 4071424,
+          "heapUsed": 8917043,
+          "external": 8655379,
+          "arrayBuffers": 0
+        }
+      },
+      "afterMetrics": {
+        "pid": 135826,
+        "cpu": {
+          "user": 872297,
+          "system": 753417
+        },
+        "monotonicUs": 2106956,
+        "memory": {
+          "rss": 46944256,
+          "heapTotal": 4775936,
+          "heapUsed": 1664537,
+          "external": 1446777,
+          "arrayBuffers": 0
+        }
+      },
+      "serverCpu": {
+        "user": 346438,
+        "system": 382237,
+        "elapsedUs": 1007896,
+        "cores": 0.7229664568566598,
+        "percentOfOneCore": 72.29664568566598,
+        "nsPerRequest": 37018.644584434056
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:19:57.218Z",
+        "availableBytes": 1500524544,
+        "cgroupBytes": 74788864,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 18944513,
+          "user_usec": 11511583,
+          "system_usec": 7432930,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1563,
+          "nr_throttled": 679,
+          "throttled_usec": 1277312,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 21,
+        "load": [1.68, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:19:58.227Z",
+        "availableBytes": 1501528064,
+        "cgroupBytes": 75968512,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 20324058,
+          "user_usec": 12078037,
+          "system_usec": 8246021,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1664,
+          "nr_throttled": 769,
+          "throttled_usec": 1486400,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 17,
+        "load": [1.68, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 209088,
+      "load": {
+        "rps": 19664.335664335667,
+        "total": 19684,
+        "duration": 1.001,
+        "startedAt": 1793517597220,
+        "finishedAt": 1793517598221,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.1575899207478155,
+          "p50": 0,
+          "p90": 0,
+          "p99": 3,
+          "p99_9": 12,
+          "max": 18,
+          "totalCount": 19684
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135833,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517597220,
+            "finishedAt": 1793517598221,
+            "cpu": {
+              "elapsedUs": 1001425.814,
+              "system": 430583,
+              "user": 210372,
+              "percentOfOneCore": 64.00424185590246
+            },
+            "result": {
+              "totalCompletedRequests": 19684,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAADN4nJNpmSzMwMAgxMDAwMjAwMDKAAGMEEpdAMbfMpfpG+cG1jaWF4w2MpxMIuxCAJM5BqI="
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stack": "hono-bun",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:20:00.815Z",
+      "pid": 135838,
+      "hostLoadBefore": [1.63, 1.01, 0.63],
+      "hostLoadAfter": [1.63, 1.01, 0.63],
+      "beforeMetrics": {
+        "pid": 135838,
+        "cpu": {
+          "user": 403151,
+          "system": 396109
+        },
+        "monotonicUs": 1059551,
+        "memory": {
+          "rss": 41549824,
+          "heapTotal": 3975168,
+          "heapUsed": 9163660,
+          "external": 9283372,
+          "arrayBuffers": 0
+        }
+      },
+      "afterMetrics": {
+        "pid": 135838,
+        "cpu": {
+          "user": 758393,
+          "system": 801045
+        },
+        "monotonicUs": 2067762,
+        "memory": {
+          "rss": 42344448,
+          "heapTotal": 4466688,
+          "heapUsed": 567346,
+          "external": 764050,
+          "arrayBuffers": 0
+        }
+      },
+      "serverCpu": {
+        "user": 355242,
+        "system": 404936,
+        "elapsedUs": 1008211,
+        "cores": 0.7539870126392194,
+        "percentOfOneCore": 75.39870126392194,
+        "nsPerRequest": 39555.52086585493
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:19:59.805Z",
+        "availableBytes": 1499246592,
+        "cgroupBytes": 73830400,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 21771278,
+          "user_usec": 12669600,
+          "system_usec": 9101677,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1774,
+          "nr_throttled": 855,
+          "throttled_usec": 1706629,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 20,
+        "load": [1.63, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:20:00.815Z",
+        "availableBytes": 1498783744,
+        "cgroupBytes": 72486912,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 23178124,
+          "user_usec": 13225167,
+          "system_usec": 9952957,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1875,
+          "nr_throttled": 938,
+          "throttled_usec": 1896780,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 16,
+        "load": [1.63, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 190151,
+      "load": {
+        "rps": 19218,
+        "total": 19218,
+        "duration": 1,
+        "startedAt": 1793517599806,
+        "finishedAt": 1793517600806,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.17951920074929753,
+          "p50": 0,
+          "p90": 0,
+          "p99": 4,
+          "p99_9": 14,
+          "max": 20,
+          "totalCount": 19218
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135842,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517599806,
+            "finishedAt": 1793517600806,
+            "cpu": {
+              "elapsedUs": 1000086.114,
+              "system": 452620,
+              "user": 184367,
+              "percentOfOneCore": 63.69321512247295
+            },
+            "result": {
+              "totalCompletedRequests": 19218,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAADt4nJNpmSzMwMAgxcDAwMjAwMDKAAGMEEpdAMY/N53pEOcSll9M/xhFpKQMRBQYhHg4eASYmDkA0u4HcA=="
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stack": "h3-bun",
+      "scenario": "hello",
+      "round": 1,
+      "order": [
+        "keala-before-node",
+        "keala-node",
+        "hono-node",
+        "h3-node",
+        "keala-before-bun",
+        "keala-bun",
+        "hono-bun",
+        "h3-bun"
+      ],
+      "at": "2026-11-01T07:20:03.463Z",
+      "pid": 135849,
+      "hostLoadBefore": [1.63, 1.01, 0.63],
+      "hostLoadAfter": [1.63, 1.01, 0.63],
+      "beforeMetrics": {
+        "pid": 135849,
+        "cpu": {
+          "user": 535145,
+          "system": 335836
+        },
+        "monotonicUs": 1104613,
+        "memory": {
+          "rss": 47157248,
+          "heapTotal": 4610048,
+          "heapUsed": 8631194,
+          "external": 8544586,
+          "arrayBuffers": 0
+        }
+      },
+      "afterMetrics": {
+        "pid": 135849,
+        "cpu": {
+          "user": 897715,
+          "system": 716893
+        },
+        "monotonicUs": 2122716,
+        "memory": {
+          "rss": 47943680,
+          "heapTotal": 5117952,
+          "heapUsed": 1410921,
+          "external": 1224937,
+          "arrayBuffers": 0
+        }
+      },
+      "serverCpu": {
+        "user": 362570,
+        "system": 381057,
+        "elapsedUs": 1018103,
+        "cores": 0.7304044875616711,
+        "percentOfOneCore": 73.04044875616711,
+        "nsPerRequest": 41587.55103182149
+      },
+      "beforeHealth": {
+        "at": "2026-11-01T07:20:02.442Z",
+        "availableBytes": 1498337280,
+        "cgroupBytes": 77426688,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 24662951,
+          "user_usec": 13950670,
+          "system_usec": 10712281,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 1990,
+          "nr_throttled": 1017,
+          "throttled_usec": 2094086,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 22,
+        "load": [1.63, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "afterHealth": {
+        "at": "2026-11-01T07:20:03.463Z",
+        "availableBytes": 1502007296,
+        "cgroupBytes": 76046336,
+        "peakBytes": 101543936,
+        "cpu": {
+          "usage_usec": 26059944,
+          "user_usec": 14523698,
+          "system_usec": 11536246,
+          "core_sched.force_idle_usec": 0,
+          "nr_periods": 2092,
+          "nr_throttled": 1108,
+          "throttled_usec": 2324308,
+          "nr_bursts": 0,
+          "burst_usec": 0
+        },
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0
+        },
+        "pids": 17,
+        "load": [1.63, 1.01, 0.63],
+        "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+      },
+      "cgroupThrottledUs": 230222,
+      "load": {
+        "rps": 17881,
+        "total": 17881,
+        "duration": 1,
+        "startedAt": 1793517602444,
+        "finishedAt": 1793517603444,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 0.18332308036463285,
+          "p50": 0,
+          "p90": 0,
+          "p99": 4,
+          "p99_9": 12,
+          "max": 15,
+          "totalCount": 17881
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "driver": "native-go",
+            "pid": 135856,
+            "env": "production",
+            "runtimeVersion": "go1.27.0",
+            "connections": 10,
+            "startedAt": 1793517602444,
+            "finishedAt": 1793517603444,
+            "cpu": {
+              "elapsedUs": 1000351.89,
+              "system": 444086,
+              "user": 193159,
+              "percentOfOneCore": 63.70208387370568
+            },
+            "result": {
+              "totalCompletedRequests": 17881,
+              "errors": 0,
+              "timeouts": 0,
+              "non2xx": 0,
+              "mismatches": 0,
+              "latencies": "HISTFAAAADd4nJNpmSzMwMAgxsDAwMjAwMDKAAGMEEpdAMbf1sB0hmsa6xaWPYxGUjxcTHwCIgw8HACoAwZk"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "rejectedTimingSamples": [],
+  "health": [
+    {
+      "at": "2026-11-01T07:19:39.770Z",
+      "availableBytes": 1334374400,
+      "cgroupBytes": 36708352,
+      "peakBytes": 41721856,
+      "cpu": {
+        "usage_usec": 523772,
+        "user_usec": 411790,
+        "system_usec": 111981,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 57,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.3, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:40.775Z",
+      "availableBytes": 1318014976,
+      "cgroupBytes": 70545408,
+      "peakBytes": 71147520,
+      "cpu": {
+        "usage_usec": 1429504,
+        "user_usec": 1186291,
+        "system_usec": 243212,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 156,
+        "nr_throttled": 6,
+        "throttled_usec": 11554,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 16,
+      "load": [1.3, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:41.778Z",
+      "availableBytes": 1333288960,
+      "cgroupBytes": 55328768,
+      "peakBytes": 71147520,
+      "cpu": {
+        "usage_usec": 2259747,
+        "user_usec": 1857101,
+        "system_usec": 402645,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 255,
+        "nr_throttled": 6,
+        "throttled_usec": 11554,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 14,
+      "load": [1.3, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:42.089Z",
+      "availableBytes": 1306353664,
+      "cgroupBytes": 49639424,
+      "peakBytes": 71147520,
+      "cpu": {
+        "usage_usec": 2498868,
+        "user_usec": 2039487,
+        "system_usec": 459381,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 286,
+        "nr_throttled": 6,
+        "throttled_usec": 11554,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.3, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:42.777Z",
+      "availableBytes": 1495326720,
+      "cgroupBytes": 78311424,
+      "peakBytes": 78311424,
+      "cpu": {
+        "usage_usec": 3136567,
+        "user_usec": 2546479,
+        "system_usec": 590088,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 355,
+        "nr_throttled": 7,
+        "throttled_usec": 13043,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 19,
+      "load": [1.3, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:43.462Z",
+      "availableBytes": 1494736896,
+      "cgroupBytes": 88309760,
+      "peakBytes": 88309760,
+      "cpu": {
+        "usage_usec": 4005445,
+        "user_usec": 3085402,
+        "system_usec": 920043,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 424,
+        "nr_throttled": 33,
+        "throttled_usec": 53605,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.3, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:43.779Z",
+      "availableBytes": 1495818240,
+      "cgroupBytes": 88764416,
+      "peakBytes": 88764416,
+      "cpu": {
+        "usage_usec": 4422435,
+        "user_usec": 3332559,
+        "system_usec": 1089876,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 455,
+        "nr_throttled": 48,
+        "throttled_usec": 71139,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:44.493Z",
+      "availableBytes": 1494892544,
+      "cgroupBytes": 89305088,
+      "peakBytes": 89305088,
+      "cpu": {
+        "usage_usec": 5390166,
+        "user_usec": 3891337,
+        "system_usec": 1498829,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 527,
+        "nr_throttled": 96,
+        "throttled_usec": 146781,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 16,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:44.781Z",
+      "availableBytes": 1531613184,
+      "cgroupBytes": 52613120,
+      "peakBytes": 89305088,
+      "cpu": {
+        "usage_usec": 5403252,
+        "user_usec": 3893035,
+        "system_usec": 1510216,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 530,
+        "nr_throttled": 96,
+        "throttled_usec": 146781,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:45.010Z",
+      "availableBytes": 1531613184,
+      "cgroupBytes": 52674560,
+      "peakBytes": 89305088,
+      "cpu": {
+        "usage_usec": 5406259,
+        "user_usec": 3896043,
+        "system_usec": 1510216,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 532,
+        "nr_throttled": 96,
+        "throttled_usec": 146781,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:45.782Z",
+      "availableBytes": 1487020032,
+      "cgroupBytes": 91607040,
+      "peakBytes": 91607040,
+      "cpu": {
+        "usage_usec": 6290258,
+        "user_usec": 4537538,
+        "system_usec": 1752720,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 610,
+        "nr_throttled": 106,
+        "throttled_usec": 163574,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 19,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:46.368Z",
+      "availableBytes": 1486245888,
+      "cgroupBytes": 92434432,
+      "peakBytes": 92434432,
+      "cpu": {
+        "usage_usec": 7091557,
+        "user_usec": 5015642,
+        "system_usec": 2075914,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 668,
+        "nr_throttled": 152,
+        "throttled_usec": 261890,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 19,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:46.783Z",
+      "availableBytes": 1486245888,
+      "cgroupBytes": 92725248,
+      "peakBytes": 93130752,
+      "cpu": {
+        "usage_usec": 7660349,
+        "user_usec": 5357811,
+        "system_usec": 2302537,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 710,
+        "nr_throttled": 176,
+        "throttled_usec": 303715,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:47.385Z",
+      "availableBytes": 1485303808,
+      "cgroupBytes": 93827072,
+      "peakBytes": 93827072,
+      "cpu": {
+        "usage_usec": 8474591,
+        "user_usec": 5820647,
+        "system_usec": 2653943,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 770,
+        "nr_throttled": 216,
+        "throttled_usec": 374658,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 16,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:47.785Z",
+      "availableBytes": 1501114368,
+      "cgroupBytes": 56741888,
+      "peakBytes": 93827072,
+      "cpu": {
+        "usage_usec": 8484594,
+        "user_usec": 5822261,
+        "system_usec": 2662333,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 773,
+        "nr_throttled": 216,
+        "throttled_usec": 374658,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:47.895Z",
+      "availableBytes": 1501114368,
+      "cgroupBytes": 56741888,
+      "peakBytes": 93827072,
+      "cpu": {
+        "usage_usec": 8485943,
+        "user_usec": 5822445,
+        "system_usec": 2663497,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 775,
+        "nr_throttled": 216,
+        "throttled_usec": 374658,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.27, 0.91, 0.59],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:48.787Z",
+      "availableBytes": 1482551296,
+      "cgroupBytes": 95199232,
+      "peakBytes": 95199232,
+      "cpu": {
+        "usage_usec": 9574188,
+        "user_usec": 6573145,
+        "system_usec": 3001043,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 864,
+        "nr_throttled": 239,
+        "throttled_usec": 406402,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 19,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:49.185Z",
+      "availableBytes": 1481777152,
+      "cgroupBytes": 96243712,
+      "peakBytes": 96243712,
+      "cpu": {
+        "usage_usec": 10113959,
+        "user_usec": 6886443,
+        "system_usec": 3227516,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 904,
+        "nr_throttled": 260,
+        "throttled_usec": 438385,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:49.788Z",
+      "availableBytes": 1480228864,
+      "cgroupBytes": 96911360,
+      "peakBytes": 97230848,
+      "cpu": {
+        "usage_usec": 10938917,
+        "user_usec": 7395871,
+        "system_usec": 3543046,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 964,
+        "nr_throttled": 293,
+        "throttled_usec": 492938,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:50.213Z",
+      "availableBytes": 1480151040,
+      "cgroupBytes": 96333824,
+      "peakBytes": 97230848,
+      "cpu": {
+        "usage_usec": 11529143,
+        "user_usec": 7719100,
+        "system_usec": 3810043,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1007,
+        "nr_throttled": 328,
+        "throttled_usec": 549196,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 16,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:50.737Z",
+      "availableBytes": 1523306496,
+      "cgroupBytes": 59547648,
+      "peakBytes": 97230848,
+      "cpu": {
+        "usage_usec": 11549694,
+        "user_usec": 7719675,
+        "system_usec": 3830019,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1011,
+        "nr_throttled": 328,
+        "throttled_usec": 549196,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:50.788Z",
+      "availableBytes": 1505845248,
+      "cgroupBytes": 68313088,
+      "peakBytes": 97230848,
+      "cpu": {
+        "usage_usec": 11601688,
+        "user_usec": 7745952,
+        "system_usec": 3855736,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1016,
+        "nr_throttled": 328,
+        "throttled_usec": 549196,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 15,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:51.794Z",
+      "availableBytes": 1475166208,
+      "cgroupBytes": 99995648,
+      "peakBytes": 100106240,
+      "cpu": {
+        "usage_usec": 12904494,
+        "user_usec": 8604309,
+        "system_usec": 4300184,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1117,
+        "nr_throttled": 348,
+        "throttled_usec": 571587,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:51.952Z",
+      "availableBytes": 1474908160,
+      "cgroupBytes": 100630528,
+      "peakBytes": 100630528,
+      "cpu": {
+        "usage_usec": 13109110,
+        "user_usec": 8715990,
+        "system_usec": 4393119,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1133,
+        "nr_throttled": 359,
+        "throttled_usec": 597740,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:52.795Z",
+      "availableBytes": 1474908160,
+      "cgroupBytes": 101539840,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 14256773,
+        "user_usec": 9406039,
+        "system_usec": 4850733,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1217,
+        "nr_throttled": 413,
+        "throttled_usec": 688007,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:52.964Z",
+      "availableBytes": 1473826816,
+      "cgroupBytes": 101449728,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 14496260,
+        "user_usec": 9554442,
+        "system_usec": 4941818,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1234,
+        "nr_throttled": 424,
+        "throttled_usec": 704783,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 16,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:53.475Z",
+      "availableBytes": 1514663936,
+      "cgroupBytes": 61833216,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 14505632,
+        "user_usec": 9556683,
+        "system_usec": 4948949,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1237,
+        "nr_throttled": 424,
+        "throttled_usec": 704783,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.65, 1, 0.62],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:53.798Z",
+      "availableBytes": 1504350208,
+      "cgroupBytes": 76005376,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 14921809,
+        "user_usec": 9795596,
+        "system_usec": 5126212,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1269,
+        "nr_throttled": 438,
+        "throttled_usec": 727990,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:54.593Z",
+      "availableBytes": 1500020736,
+      "cgroupBytes": 76648448,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 16036470,
+        "user_usec": 10277561,
+        "system_usec": 5758908,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1349,
+        "nr_throttled": 507,
+        "throttled_usec": 876960,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 21,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:54.797Z",
+      "availableBytes": 1500020736,
+      "cgroupBytes": 77000704,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 16325723,
+        "user_usec": 10387238,
+        "system_usec": 5938484,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1369,
+        "nr_throttled": 526,
+        "throttled_usec": 918244,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 21,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:55.603Z",
+      "availableBytes": 1505841152,
+      "cgroupBytes": 75669504,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 17447477,
+        "user_usec": 10819366,
+        "system_usec": 6628110,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1450,
+        "nr_throttled": 605,
+        "throttled_usec": 1132561,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 17,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:55.797Z",
+      "availableBytes": 1505853440,
+      "cgroupBytes": 58769408,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 17454330,
+        "user_usec": 10821774,
+        "system_usec": 6632556,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1452,
+        "nr_throttled": 605,
+        "throttled_usec": 1132561,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:56.112Z",
+      "availableBytes": 1505853440,
+      "cgroupBytes": 58769408,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 17455318,
+        "user_usec": 10822387,
+        "system_usec": 6632931,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1453,
+        "nr_throttled": 605,
+        "throttled_usec": 1132561,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:56.800Z",
+      "availableBytes": 1503621120,
+      "cgroupBytes": 77058048,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 18375462,
+        "user_usec": 11265395,
+        "system_usec": 7110067,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1521,
+        "nr_throttled": 650,
+        "throttled_usec": 1227981,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 21,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:57.218Z",
+      "availableBytes": 1500524544,
+      "cgroupBytes": 74788864,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 18944513,
+        "user_usec": 11511583,
+        "system_usec": 7432930,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1563,
+        "nr_throttled": 679,
+        "throttled_usec": 1277312,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 21,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:57.803Z",
+      "availableBytes": 1500524544,
+      "cgroupBytes": 77168640,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 19730397,
+        "user_usec": 11837015,
+        "system_usec": 7893381,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1622,
+        "nr_throttled": 731,
+        "throttled_usec": 1402049,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 21,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:58.227Z",
+      "availableBytes": 1501528064,
+      "cgroupBytes": 75968512,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 20324058,
+        "user_usec": 12078037,
+        "system_usec": 8246021,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1664,
+        "nr_throttled": 769,
+        "throttled_usec": 1486400,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 17,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:58.737Z",
+      "availableBytes": 1501536256,
+      "cgroupBytes": 59707392,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 20330793,
+        "user_usec": 12080345,
+        "system_usec": 8250448,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1667,
+        "nr_throttled": 769,
+        "throttled_usec": 1486400,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.68, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:58.802Z",
+      "availableBytes": 1500020736,
+      "cgroupBytes": 66789376,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 20397755,
+        "user_usec": 12118314,
+        "system_usec": 8279441,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1674,
+        "nr_throttled": 770,
+        "throttled_usec": 1488019,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 16,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:59.805Z",
+      "availableBytes": 1499246592,
+      "cgroupBytes": 73830400,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 21771078,
+        "user_usec": 12669484,
+        "system_usec": 9101593,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1774,
+        "nr_throttled": 855,
+        "throttled_usec": 1706629,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:19:59.805Z",
+      "availableBytes": 1499246592,
+      "cgroupBytes": 73830400,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 21771278,
+        "user_usec": 12669600,
+        "system_usec": 9101677,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1774,
+        "nr_throttled": 855,
+        "throttled_usec": 1706629,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:00.810Z",
+      "availableBytes": 1498783744,
+      "cgroupBytes": 74760192,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 23170777,
+        "user_usec": 13218801,
+        "system_usec": 9951975,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1874,
+        "nr_throttled": 938,
+        "throttled_usec": 1896780,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 20,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:00.815Z",
+      "availableBytes": 1498783744,
+      "cgroupBytes": 72486912,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 23178124,
+        "user_usec": 13225167,
+        "system_usec": 9952957,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1875,
+        "nr_throttled": 938,
+        "throttled_usec": 1896780,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 16,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:01.325Z",
+      "availableBytes": 1498558464,
+      "cgroupBytes": 59736064,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 23185962,
+        "user_usec": 13226860,
+        "system_usec": 9959101,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1878,
+        "nr_throttled": 938,
+        "throttled_usec": 1896780,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:01.817Z",
+      "availableBytes": 1498566656,
+      "cgroupBytes": 77312000,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 23817070,
+        "user_usec": 13547467,
+        "system_usec": 10269602,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1927,
+        "nr_throttled": 970,
+        "throttled_usec": 1979271,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 22,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:02.442Z",
+      "availableBytes": 1498337280,
+      "cgroupBytes": 77426688,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 24662951,
+        "user_usec": 13950670,
+        "system_usec": 10712281,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 1990,
+        "nr_throttled": 1017,
+        "throttled_usec": 2094086,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 22,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:02.817Z",
+      "availableBytes": 1498337280,
+      "cgroupBytes": 76845056,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 25195843,
+        "user_usec": 14183801,
+        "system_usec": 11012041,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 2027,
+        "nr_throttled": 1052,
+        "throttled_usec": 2178814,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 22,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:03.463Z",
+      "availableBytes": 1502007296,
+      "cgroupBytes": 76046336,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 26059944,
+        "user_usec": 14523698,
+        "system_usec": 11536246,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 2092,
+        "nr_throttled": 1108,
+        "throttled_usec": 2324308,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 17,
+      "load": [1.63, 1.01, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:03.818Z",
+      "availableBytes": 1509892096,
+      "cgroupBytes": 59813888,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 26072591,
+        "user_usec": 14529397,
+        "system_usec": 11543193,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 2094,
+        "nr_throttled": 1108,
+        "throttled_usec": 2324308,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.5, 1, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    },
+    {
+      "at": "2026-11-01T07:20:03.975Z",
+      "availableBytes": 1509818368,
+      "cgroupBytes": 59797504,
+      "peakBytes": 101543936,
+      "cpu": {
+        "usage_usec": 26074717,
+        "user_usec": 14531523,
+        "system_usec": 11543193,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 2094,
+        "nr_throttled": 1108,
+        "throttled_usec": 2324308,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "events": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "pids": 9,
+      "load": [1.5, 1, 0.63],
+      "memoryPressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=4830619\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=4299513"
+    }
+  ],
+  "summary": [
+    {
+      "stack": "keala-before-node",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 7670,
+      "min": 7670,
+      "max": 7670,
+      "p50": 0,
+      "p99": 6,
+      "clientCapacityConstrained": false
+    },
+    {
+      "stack": "keala-node",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 7986.013986013987,
+      "min": 7986.013986013987,
+      "max": 7986.013986013987,
+      "p50": 0,
+      "p99": 5,
+      "clientCapacityConstrained": false
+    },
+    {
+      "stack": "hono-node",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 7227.772227772229,
+      "min": 7227.772227772229,
+      "max": 7227.772227772229,
+      "p50": 0,
+      "p99": 8,
+      "clientCapacityConstrained": false
+    },
+    {
+      "stack": "h3-node",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 7297.702297702299,
+      "min": 7297.702297702299,
+      "max": 7297.702297702299,
+      "p50": 1,
+      "p99": 7,
+      "clientCapacityConstrained": false
+    },
+    {
+      "stack": "keala-before-bun",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 21203,
+      "min": 21203,
+      "max": 21203,
+      "p50": 0,
+      "p99": 3,
+      "clientCapacityConstrained": false
+    },
+    {
+      "stack": "keala-bun",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 19664.335664335667,
+      "min": 19664.335664335667,
+      "max": 19664.335664335667,
+      "p50": 0,
+      "p99": 3,
+      "clientCapacityConstrained": false
+    },
+    {
+      "stack": "hono-bun",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 19218,
+      "min": 19218,
+      "max": 19218,
+      "p50": 0,
+      "p99": 4,
+      "clientCapacityConstrained": false
+    },
+    {
+      "stack": "h3-bun",
+      "scenario": "hello",
+      "rounds": 1,
+      "rps": 17881,
+      "min": 17881,
+      "max": 17881,
+      "p50": 0,
+      "p99": 4,
+      "clientCapacityConstrained": false
+    }
+  ],
+  "finishedAt": "2026-11-01T07:20:03.973Z",
+  "cleanup": {
+    "ownedPids": [
+      135679, 135692, 135707, 135719, 135734, 135745, 135752, 135757, 135764, 135772, 135778,
+      135786, 135790, 135798, 135802, 135810, 135814, 135821, 135826, 135833, 135838, 135842,
+      135849, 135856
+    ],
+    "livePids": []
+  }
+}

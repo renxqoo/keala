@@ -3,8 +3,8 @@
  *
  * Request-side and response-side APIs live on a single shared prototype
  * (merged from `requestApi` / `responseApi` plus the core members below), so a
- * request costs exactly one allocation with a fixed hidden class. Lazy
- * facades (`state`, `cookies`) materialize on first touch.
+ * app-bound constructor lets the engine reserve the hot instance slots.
+ * Lazy facades (`state`, `cookies`) materialize on first touch.
  */
 
 import type { Application } from "../app.ts";
@@ -210,7 +210,22 @@ export const createContext = (
   return c;
 };
 
-/** Hot internal constructor for an app-bound prototype. */
+export type ContextConstructor = new (
+  raw: RequestSource,
+  runtime: ContextState["runtimeValue"],
+) => Context;
+
+/** Keep the exact app prototype while allowing instance-layout tracking. */
+export const createContextConstructor = (proto: object): ContextConstructor => {
+  function BoundContext(this: Context, raw: RequestSource, runtime: ContextState["runtimeValue"]) {
+    this.rawRequest = raw;
+    if (runtime !== undefined) this.runtimeValue = runtime;
+  }
+  BoundContext.prototype = proto;
+  return BoundContext as unknown as ContextConstructor;
+};
+
+/** Internal compatibility helper for callers that supply a prototype. */
 export const createBoundContext = (
   proto: object,
   raw: RequestSource,

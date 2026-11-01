@@ -1,0 +1,7 @@
+ExecStart={ path=/usr/bin/env ; argv[]=/usr/bin/env NODE_OPTIONS=--max-old-space-size=128 UV_THREADPOOL_SIZE=2 LD_LIBRARY_PATH=/tmp/keala-bench-opt.JhAsdh/bundle/runtime BENCH_RUNTIMES=node BENCH_BEFORE=/tmp/keala-bench-opt.JhAsdh/final-bundle/before BENCH_OUTPUT=/tmp/keala-bench-opt.JhAsdh/node-final BENCH_BUN=/usr/local/bin/bun /tmp/keala-bench-opt.JhAsdh/bundle/runtime/node /tmp/keala-bench-opt.JhAsdh/final-bundle/bench/framework-compare/remote-run.mjs ; ignore_errors=no ; start_time=[Sun 2026-11-01 05:40:34 UTC] ; stop_time=[n/a] ; pid=120462 ; code=(null) ; status=0/0 }
+CPUWeight=1
+CPUQuotaPerSecUSec=1.500000s
+MemoryHigh=536870912
+MemoryMax=671088640
+TasksMax=128
+Nice=15

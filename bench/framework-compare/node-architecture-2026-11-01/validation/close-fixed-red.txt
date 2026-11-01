@@ -1,0 +1,85 @@
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+stderr | test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: fixed)
+
+  keala: stopGraceful rejected — forcing close
+ TypeError: Cannot redefine property: closeIdleConnections
+    at Object.defineProperty (<anonymous>)
+    at /Users/wrr/work/bun-koa/src/adapters/node.ts:193:18
+    at new Promise (<anonymous>)
+    at Object.stopGraceful (/Users/wrr/work/bun-koa/src/adapters/node.ts:179:14)
+    at /Users/wrr/work/bun-koa/src/core/lifecycle.ts:323:10
+    at new Promise (<anonymous>)
+    at closeApp (/Users/wrr/work/bun-koa/src/core/lifecycle.ts:295:19)
+    at Keala.close (/Users/wrr/work/bun-koa/src/core/app.ts:403:12)
+    at /Users/wrr/work/bun-koa/test/integration/node-connection-lifecycle.test.ts:66:24
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+stderr | test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: fixed accessor)
+
+  keala: stopGraceful rejected — forcing close
+ TypeError: Cannot redefine property: closeIdleConnections
+    at Object.defineProperty (<anonymous>)
+    at /Users/wrr/work/bun-koa/src/adapters/node.ts:193:18
+    at new Promise (<anonymous>)
+    at Object.stopGraceful (/Users/wrr/work/bun-koa/src/adapters/node.ts:179:14)
+    at /Users/wrr/work/bun-koa/src/core/lifecycle.ts:323:10
+    at new Promise (<anonymous>)
+    at closeApp (/Users/wrr/work/bun-koa/src/core/lifecycle.ts:295:19)
+    at Keala.close (/Users/wrr/work/bun-koa/src/core/app.ts:403:12)
+    at /Users/wrr/work/bun-koa/test/integration/node-connection-lifecycle.test.ts:66:24
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+stderr | test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: sealed)
+
+  keala: stopGraceful rejected — forcing close
+ TypeError: Cannot define property closeIdleConnections, object is not extensible
+    at Object.defineProperty (<anonymous>)
+    at /Users/wrr/work/bun-koa/src/adapters/node.ts:193:18
+    at new Promise (<anonymous>)
+    at Object.stopGraceful (/Users/wrr/work/bun-koa/src/adapters/node.ts:179:14)
+    at /Users/wrr/work/bun-koa/src/core/lifecycle.ts:323:10
+    at new Promise (<anonymous>)
+    at closeApp (/Users/wrr/work/bun-koa/src/core/lifecycle.ts:295:19)
+    at Keala.close (/Users/wrr/work/bun-koa/src/core/app.ts:403:12)
+    at /Users/wrr/work/bun-koa/test/integration/node-connection-lifecycle.test.ts:66:24
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+ ❯ test/integration/node-connection-lifecycle.test.ts (12 tests | 3 failed) 325ms
+     × emits one native close and restores closeIdleConnections (own method: fixed) 5ms
+     × emits one native close and restores closeIdleConnections (own method: fixed accessor) 1ms
+     × emits one native close and restores closeIdleConnections (own method: sealed) 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: fixed)
+ FAIL  test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: fixed accessor)
+ FAIL  test/integration/node-connection-lifecycle.test.ts > Node connection completion and lazy cancellation > emits one native close and restores closeIdleConnections (own method: sealed)
+AssertionError: expected { timedOut: true, inFlight: +0 } to match object { timedOut: false }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "timedOut": false,
++   "timedOut": true,
+  }
+
+ ❯ test/integration/node-connection-lifecycle.test.ts:66:46
+     64|       const server = await start(app);
+     65|       expect(await (await fetch(`http://127.0.0.1:${server.port}/`)).t…
+     66|       await expect(app.close({ drain: 500 })).resolves.toMatchObject({…
+       |                                              ^
+     67|       await new Promise<void>((resolve) => setImmediate(resolve));
+     68|       expect(closeEvents).toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 9 passed (12)
+   Start at  13:35:06
+   Duration  570ms (transform 126ms, setup 0ms, import 163ms, tests 325ms, environment 0ms)
+

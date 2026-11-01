@@ -1,0 +1,30 @@
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+ ❯ test/integration/bun-static-dispatch.test.ts (6 tests | 1 failed) 24ms
+     × supports late first URL observation after response completion 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/integration/bun-static-dispatch.test.ts > Bun transparent static dispatch > supports late first URL observation after response completion
+AssertionError: expected '/' to be '/user?q=late' // Object.is equality
+
+Expected: "/user?q=late"
+Received: "/"
+
+ ❯ test/integration/bun-static-dispatch.test.ts:220:26
+    218|         "/user",
+    219|       );
+    220|       expect(saved!.url).toBe("/user?q=late");
+       |                          ^
+    221|       expect(saved!.query("q")).toBe("late");
+    222|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 13 passed (14)
+   Start at  16:36:50
+   Duration  335ms (transform 105ms, setup 0ms, import 151ms, tests 116ms, environment 0ms)
+

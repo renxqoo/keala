@@ -1,0 +1,26 @@
+{
+  "profile": "/tmp/keala-bench-opt.JhAsdh/profiles/hono.cpuprofile",
+  "framework": "hono",
+  "suite": "hello",
+  "path": "/",
+  "config": { "connections": 50, "duration": 8, "processes": 1 },
+  "diagnosticOnly": true,
+  "rps": 7926.659195616983,
+  "cpu": {
+    "user": 4584639,
+    "system": 1982855,
+    "elapsedUs": 8190922,
+    "cores": 0.8018015554292911,
+    "percentOfOneCore": 80.18015554292911,
+    "nsPerRequest": 103166.77924566832
+  },
+  "latency": {
+    "average": 5.775491289527011,
+    "p50": 4,
+    "p90": 10,
+    "p99": 30,
+    "p99_9": 42,
+    "max": 167,
+    "totalCount": 63659
+  }
+}

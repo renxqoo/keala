@@ -1,0 +1,32 @@
+keala-before {
+  user: 4795173,
+  system: 1954302,
+  elapsedUs: 8170405,
+  cores: 0.8260881804512751,
+  percentOfOneCore: 82.6088180451275,
+  nsPerRequest: 119948.01848231739
+}
+keala {
+  user: 4474762,
+  system: 2108673,
+  elapsedUs: 8160716,
+  cores: 0.8067227189378972,
+  percentOfOneCore: 80.67227189378971,
+  nsPerRequest: 100027.88075847818
+}
+hono {
+  user: 4584639,
+  system: 1982855,
+  elapsedUs: 8190922,
+  cores: 0.8018015554292911,
+  percentOfOneCore: 80.18015554292911,
+  nsPerRequest: 103166.77924566832
+}
+h3 {
+  user: 4714119,
+  system: 1968862,
+  elapsedUs: 8162847,
+  cores: 0.8187071250998579,
+  percentOfOneCore: 81.8707125099858,
+  nsPerRequest: 102539.02570003836
+}

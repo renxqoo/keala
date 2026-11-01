@@ -1,0 +1,162 @@
+{
+  "rows": [
+    {
+      "stack": "kernel-bun-native-bun",
+      "framework": "kernel-bun-native",
+      "runtime": "bun",
+      "scenario": "hello",
+      "rounds": 4,
+      "rps": 22784.046953046953,
+      "cpuUs": 32.48073564829207,
+      "meanMs": 1.6974367998970215,
+      "p50Ms": 1,
+      "p99Ms": 11,
+      "rpsRange": [21202.797202797203, 23752.749083638788],
+      "cpuRange": [31.38692797620718, 35.343683251664785],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-bun-native-bun",
+      "framework": "kernel-bun-native",
+      "runtime": "bun",
+      "scenario": "route-4",
+      "rounds": 4,
+      "rps": 20179.81421174166,
+      "cpuUs": 38.39528271699075,
+      "meanMs": 1.9742321613064393,
+      "p50Ms": 1,
+      "p99Ms": 10,
+      "rpsRange": [19410.39307128581, 20579.47350883039],
+      "cpuRange": [37.797956573131046, 38.92941479320405],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-bun-native-bun",
+      "framework": "kernel-bun-native",
+      "runtime": "bun",
+      "scenario": "route-12",
+      "rounds": 4,
+      "rps": 20552.64983798122,
+      "cpuUs": 37.08470622059152,
+      "meanMs": 1.9352353014784185,
+      "p50Ms": 1,
+      "p99Ms": 11,
+      "rpsRange": [20120.29323558814, 21973.34221926025],
+      "cpuRange": [35.13704467562403, 38.363707126413935],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-bun",
+      "framework": "kernel-regexp",
+      "runtime": "bun",
+      "scenario": "hello",
+      "rounds": 4,
+      "rps": 23864.414171514225,
+      "cpuUs": 31.701057591511173,
+      "meanMs": 1.5968172099205706,
+      "p50Ms": 1,
+      "p99Ms": 9,
+      "rpsRange": [22229.590136621126, 24810.98169717138],
+      "cpuRange": [30.321606287806645, 33.1631664942813],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-bun",
+      "framework": "kernel-regexp",
+      "runtime": "bun",
+      "scenario": "route-4",
+      "rounds": 4,
+      "rps": 21248.727706899117,
+      "cpuUs": 36.29697612161671,
+      "meanMs": 1.8584875939288854,
+      "p50Ms": 1,
+      "p99Ms": 9.5,
+      "rpsRange": [19926.71552298468, 22108.29723425525],
+      "cpuRange": [34.675147331454326, 38.88699431628218],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-bun",
+      "framework": "kernel-regexp",
+      "runtime": "bun",
+      "scenario": "route-12",
+      "rounds": 4,
+      "rps": 20676.17138480436,
+      "cpuUs": 37.12406973383432,
+      "meanMs": 1.9206946898364676,
+      "p50Ms": 1,
+      "p99Ms": 10,
+      "rpsRange": [20483.344437041975, 22170.049916805325],
+      "cpuRange": [35.135843052490955, 37.92124050674082],
+      "clientLimited": false
+    }
+  ],
+  "comparisons": [
+    {
+      "candidate": "kernel-bun-native-bun",
+      "peer": "kernel-regexp-bun",
+      "helloRpsPercent": -4.527105550141064,
+      "helloCpuPercent": 2.459470175498746,
+      "routesRpsPercent": null,
+      "routesCpuPercent": null,
+      "rpsWins": 0,
+      "cpuWins": 1,
+      "p99Wins": 0,
+      "p99NotWorse": 0,
+      "total": 3,
+      "details": [
+        {
+          "scenario": "hello",
+          "rpsPercent": -4.527105550141064,
+          "cpuPercent": 2.459470175498746,
+          "p99Ms": [11, 9]
+        },
+        {
+          "scenario": "route-4",
+          "rpsPercent": -5.030482341822273,
+          "cpuPercent": 5.780940506844012,
+          "p99Ms": [10, 9.5]
+        },
+        {
+          "scenario": "route-12",
+          "rpsPercent": -0.5974101516391994,
+          "cpuPercent": -0.10603232222388126,
+          "p99Ms": [11, 10]
+        }
+      ]
+    },
+    {
+      "candidate": "kernel-regexp-bun",
+      "peer": "kernel-bun-native-bun",
+      "helloRpsPercent": 4.741770505888088,
+      "helloCpuPercent": -2.4004322599814443,
+      "routesRpsPercent": null,
+      "routesCpuPercent": null,
+      "rpsWins": 3,
+      "cpuWins": 2,
+      "p99Wins": 3,
+      "p99NotWorse": 3,
+      "total": 3,
+      "details": [
+        {
+          "scenario": "hello",
+          "rpsPercent": 4.741770505888088,
+          "cpuPercent": -2.4004322599814443,
+          "p99Ms": [9, 11]
+        },
+        {
+          "scenario": "route-4",
+          "rpsPercent": 5.296944183636265,
+          "cpuPercent": -5.4650114464334765,
+          "p99Ms": [9.5, 10]
+        },
+        {
+          "scenario": "route-12",
+          "rpsPercent": 0.6010005901763149,
+          "cpuPercent": 0.10614487009457108,
+          "p99Ms": [10, 11]
+        }
+      ]
+    }
+  ]
+}

@@ -4,13 +4,14 @@
  * Extracted from node.ts for the 500-line budget.
  */
 
-import type { IncomingMessage } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { limitBodyStream } from "srvx/body-limit";
 import { NATIVE_REQUEST_SOURCE, type NativeRequestSource } from "../core/request-source.ts";
 import { createError } from "../http/errors.ts";
 import { readAllLimited } from "../utils/streams.ts";
 import type { NodeServerHandle } from "./node.ts";
+import { watchNodeDisconnect } from "./node-socket-fanout.ts";
 
 export class InvalidRequestTargetError extends Error {}
 
@@ -28,7 +29,7 @@ export class NodeRequestSource implements NativeRequestSource {
   readonly incoming: IncomingMessage;
   readonly server: NodeServerHandle;
   // Cold transport state is added only when an API consumes it. `declare`
-  // emits no class fields, keeping GET/probe sources at four own slots.
+  // emits no class fields; body, Request and disconnect observation stay lazy.
   declare _body?: ReadableStream<Uint8Array> | null;
   declare _bodySet?: true;
   declare _request?: Request;
@@ -48,6 +49,7 @@ export class NodeRequestSource implements NativeRequestSource {
   // anyone subscribed is remembered and replayed on first materialization.
   declare _abort?: AbortController;
   declare _disconnected?: unknown;
+  declare _response?: ServerResponse;
   /** Transport-level body ceiling (listen({ maxRequestBodySize })), a hard cap. */
   #bodyCap: number;
 
@@ -59,10 +61,12 @@ export class NodeRequestSource implements NativeRequestSource {
     incoming: IncomingMessage,
     server: NodeServerHandle,
     bodyCap = Number.MAX_SAFE_INTEGER,
+    response?: ServerResponse,
   ) {
     this.#bodyCap = bodyCap;
     this.incoming = incoming;
     this.server = server;
+    if (response !== undefined) this._response = response;
     this.method = incoming.method ?? "GET";
     // Origin-form is prefixed with the request Host (or bound address), while
     // proxy absolute-form stays verbatim. OPTIONS * addresses the server root.
@@ -95,6 +99,9 @@ export class NodeRequestSource implements NativeRequestSource {
       const controller = new AbortController();
       this._abort = controller;
       if (this._disconnected !== undefined) controller.abort(this._disconnected);
+      else if (this._response !== undefined) {
+        watchNodeDisconnect(this.incoming, this._response, (reason) => this.disconnect(reason));
+      }
     }
     return this._abort;
   }

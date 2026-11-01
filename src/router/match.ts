@@ -90,10 +90,10 @@ const fastIndexOf = (state: RouterState): { matchers: FastMatcher[]; table: Tabl
   return fast;
 };
 
-export const matchRoute = (state: RouterState, path: string): RouteMatch | null => {
+const matchDynamic = (state: RouterState, path: string): RouteMatch | null => {
   // Static candidates mirror the trie exactly: raw, trailing-slash-stripped,
   // then the decoded variants of both (%2F stays one segment per decode).
-  let target = state.staticMap.get(path);
+  let target: RouteTarget | undefined;
   const stripped = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
   if (target === undefined && stripped !== path) {
     target = state.staticMap.get(stripped);
@@ -125,4 +125,9 @@ export const matchRoute = (state: RouterState, path: string): RouteMatch | null 
     }
   }
   return matchPattern(state.trieRoot, path);
+};
+
+export const matchRoute = (state: RouterState, path: string): RouteMatch | null => {
+  const target = state.staticMap.get(path);
+  return target === undefined ? matchDynamic(state, path) : (target.staticMatch as RouteMatch);
 };

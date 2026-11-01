@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /private/tmp/keala-causal.b3zSjE/split
+
+
+ Test Files  3 passed (3)
+      Tests  17 passed (17)
+   Start at  22:16:13
+   Duration  393ms (transform 105ms, setup 0ms, import 167ms, tests 129ms, environment 0ms)
+

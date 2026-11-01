@@ -1,0 +1,9 @@
+Sun Nov  1 14:28:39 UTC 2026
+               total        used        free      shared  buff/cache   available
+Mem:            1967         474         335           2        1352        1493
+Swap:              0           0           0
+oom_kill 0
+    PID COMMAND
+  26761 xray
+  26769 hysteria
+  71250 fail2ban-server

@@ -5,6 +5,7 @@
  */
 
 import type { Socket } from "node:net";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 interface SocketCloseFanout {
   pending: Set<() => void>;
@@ -46,4 +47,30 @@ export const unregisterSocketClose = (reg: SocketCloseRegistration): void => {
     reg.socket.removeListener("close", reg.entry.handler);
     socketCloses.delete(reg.socket);
   }
+};
+
+/** Client cancellation is observed only when a consumer asks for c.signal. */
+export const watchNodeDisconnect = (
+  incoming: IncomingMessage,
+  out: ServerResponse,
+  disconnect: (reason: DOMException) => void,
+): void => {
+  if (out.writableEnded) return;
+  const socket = incoming.socket;
+  const reason = (): DOMException => new DOMException("client disconnected", "AbortError");
+  if (out.destroyed || socket === null || socket.destroyed) {
+    disconnect(reason());
+    return;
+  }
+  let done = false;
+  let registration: SocketCloseRegistration | undefined;
+  const closed = (): void => {
+    if (done) return;
+    done = true;
+    out.off("close", closed);
+    if (registration !== undefined) unregisterSocketClose(registration);
+    if (!out.writableEnded) disconnect(reason());
+  };
+  out.once("close", closed);
+  registration = registerSocketClose(socket, closed);
 };

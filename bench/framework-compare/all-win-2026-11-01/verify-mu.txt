@@ -1,0 +1,111 @@
+
+> keala@0.7.3 verify
+> oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage && bun scripts/smoke.ts && bun scripts/example-check.ts
+
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 915ms on 489 files using 10 threads.
+test/integration/refactor-node-cancellation.test.ts:62:34: warning eslint(no-unmodified-loop-condition): 'finished' is not modified in this loop.
+test/integration/refactor-bun-transport.test.ts:214:14: warning unicorn(prefer-add-event-listener): Prefer `addEventListener()` over their `on`-function counterparts. help: `addEventListener()` can register multiple handlers and accepts options such as `{ once: true }`; assigning to `on<event>` replaces any previously registered handler.
+test/integration/refactor-bun-transport.test.ts:215:14: warning unicorn(prefer-add-event-listener): Prefer `addEventListener()` over their `on`-function counterparts. help: `addEventListener()` can register multiple handlers and accepts options such as `{ once: true }`; assigning to `on<event>` replaces any previously registered handler.
+src/core/context/context.ts:228:14: warning unicorn(consistent-function-scoping): Function `BoundContext` does not capture any variables from its parent scope help: Move `BoundContext` to the outer scope to avoid recreating it on every call.
+bench/route-shootout/diag/recheck-dynamic.mjs:25:30: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+bench/route-shootout/diag/recheck-dynamic.mjs:45:58: warning unicorn(no-array-reverse): Use `Array#toReversed()` instead of `Array#reverse()`. help: `Array#reverse()` mutates the original array. Use `Array#toReversed()` to return a new reversed array without modifying the original.
+bench/route-shootout/diag/recheck-dynamic.mjs:54:11: warning unicorn(consistent-function-scoping): Function `fmt` does not capture any variables from its parent scope help: Move `fmt` to the outer scope to avoid recreating it on every call.
+bench/route-shootout/diag/serve-option-cost.mjs:58:21: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+bench/route-shootout/diag/serve-option-cost.mjs:102:28: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/integration/pipeline-regressions.test.ts:96:39: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/integration/takeover-boundaries.test.ts:438:11: warning eslint(preserve-caught-error): There is no cause error attached to this new thrown error. help: Preserve the original error by using the `cause` property when re-throwing errors.
+src/adapters/node-socket-fanout.ts:53:14: warning unicorn(consistent-function-scoping): Function `reason` does not capture any variables from its parent scope help: Move `reason` to the outer scope to avoid recreating it on every call.
+src/adapters/node.ts:103:14: warning unicorn(consistent-function-scoping): Function `envelope` does not capture any variables from its parent scope help: Move `envelope` to the outer scope to avoid recreating it on every call.
+bench/route-shootout/diag/router-micro.ts:32:9: warning unicorn(consistent-function-scoping): Function `kealaHandler` does not capture any variables from its parent scope help: Move `kealaHandler` to the outer scope to avoid recreating it on every call.
+bench/route-shootout/diag/router-micro.ts:33:9: warning unicorn(consistent-function-scoping): Function `honoHandler` does not capture any variables from its parent scope help: Move `honoHandler` to the outer scope to avoid recreating it on every call.
+bench/route-shootout/diag/router-micro.ts:59:30: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/unit/router-registration-locks.test.ts:205:9: warning unicorn(consistent-function-scoping): Function `innerRouter` does not capture any variables from its parent scope help: Move `innerRouter` to the outer scope to avoid recreating it on every call.
+test/integration/native-sink-parity.test.ts:212:67: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/integration/context-lifecycle.test.ts:152:9: warning unicorn(consistent-function-scoping): Function `detonate` does not capture any variables from its parent scope help: Move `detonate` to the outer scope to avoid recreating it on every call.
+test/unit/router-trie-differential.test.ts:135:9: warning unicorn(consistent-function-scoping): Function `norm` does not capture any variables from its parent scope help: Move `norm` to the outer scope to avoid recreating it on every call.
+test/middleware/body-parser-locks.test.ts:275:9: warning unicorn(consistent-function-scoping): Function `schemaOf` does not capture any variables from its parent scope help: Move `schemaOf` to the outer scope to avoid recreating it on every call.
+test/middleware/body-parser-locks.test.ts:394:11: warning unicorn(consistent-function-scoping): Function `validOf` does not capture any variables from its parent scope help: Move `validOf` to the outer scope to avoid recreating it on every call.
+src/middleware/serve-static.ts:151:14: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/property/agent-r6-prop-rig.mts:284:3: warning eslint(no-useless-concat): Unexpected string concatenation of literals. help: Rewrite into one string literal.
+test/integration/node-adapter.test.ts:110:39: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/integration/commit-contract.test.ts:191:7: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/integration/commit-contract.test.ts:194:8: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/middleware/coverage-topups.test.ts:310:11: warning unicorn(consistent-function-scoping): Function `growing` does not capture any variables from its parent scope help: Move `growing` to the outer scope to avoid recreating it on every call.
+test/property/invariants-routing.test.ts:48:64: warning unicorn(no-array-reverse): Use `Array#toReversed()` instead of `Array#reverse()`. help: `Array#reverse()` mutates the original array. Use `Array#toReversed()` to return a new reversed array without modifying the original.
+test/property/invariants-routing.test.ts:124:68: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/property/invariants-routing.test.ts:125:63: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/property/invariants-routing.test.ts:169:59: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/property/invariants-routing.test.ts:170:53: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/middleware/server-parsers.test.ts:28:9: warning unicorn(consistent-function-scoping): Function `raw` does not capture any variables from its parent scope help: Move `raw` to the outer scope to avoid recreating it on every call.
+test/middleware/server-parsers.test.ts:42:9: warning unicorn(consistent-function-scoping): Function `bodyOf` does not capture any variables from its parent scope help: Move `bodyOf` to the outer scope to avoid recreating it on every call.
+bench/framework-compare/remote-run.mjs:365:13: warning eslint(no-shadow): 'version' is already declared in the upper scope. help: Consider renaming 'version' to avoid shadowing the variable from the outer scope.
+test/security/router-abuse.test.ts:151:39: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/integration/commit-fixes.test.ts:80:9: warning unicorn(consistent-function-scoping): Function `upgradeServer` does not capture any variables from its parent scope help: Move `upgradeServer` to the outer scope to avoid recreating it on every call.
+test/integration/commit-fixes.test.ts:86:9: warning unicorn(consistent-function-scoping): Function `req` does not capture any variables from its parent scope help: Move `req` to the outer scope to avoid recreating it on every call.
+test/middleware/body-parser.test.ts:192:9: warning unicorn(consistent-function-scoping): Function `schemaOk` does not capture any variables from its parent scope help: Move `schemaOk` to the outer scope to avoid recreating it on every call.
+test/integration/error-policy.test.ts:31:11: warning unicorn(consistent-function-scoping): Function `scenarios` does not capture any variables from its parent scope help: Move `scenarios` to the outer scope to avoid recreating it on every call.
+test/unit/request-observation.test.ts:89:9: warning unicorn(consistent-function-scoping): Function `waitUntil` does not capture any variables from its parent scope help: Move `waitUntil` to the outer scope to avoid recreating it on every call.
+test/security/post-fix-locks.test.ts:34:11: warning eslint(no-shadow): 'readJson' is already declared in the upper scope. help: Consider renaming 'readJson' to avoid shadowing the variable from the outer scope.
+test/security/post-fix-locks.test.ts:34:11: warning unicorn(consistent-function-scoping): Function `readJson` does not capture any variables from its parent scope help: Move `readJson` to the outer scope to avoid recreating it on every call.
+test/security/post-fix-locks.test.ts:102:9: warning unicorn(consistent-function-scoping): Function `fakeServe` does not capture any variables from its parent scope help: Move `fakeServe` to the outer scope to avoid recreating it on every call.
+test/integration/native-sink.test.ts:214:11: warning unicorn(consistent-function-scoping): Function `fn` does not capture any variables from its parent scope help: Move `fn` to the outer scope to avoid recreating it on every call.
+test/integration/native-sink.test.ts:289:9: warning unicorn(consistent-function-scoping): Function `fakeServe` does not capture any variables from its parent scope help: Move `fakeServe` to the outer scope to avoid recreating it on every call.
+test/integration/native-sink.test.ts:423:11: warning unicorn(consistent-function-scoping): Function `requestFor` does not capture any variables from its parent scope help: Move `requestFor` to the outer scope to avoid recreating it on every call.
+test/property/rtc-fuzz-locks.test.ts:39:9: warning unicorn(consistent-function-scoping): Function `host` does not capture any variables from its parent scope help: Move `host` to the outer scope to avoid recreating it on every call.
+test/unit/app-surface.test.ts:47:11: warning unicorn(consistent-function-scoping): Function `onListen` does not capture any variables from its parent scope help: Move `onListen` to the outer scope to avoid recreating it on every call.
+test/unit/app-surface.test.ts:123:9: warning unicorn(consistent-function-scoping): Function `serveImpl` does not capture any variables from its parent scope help: Move `serveImpl` to the outer scope to avoid recreating it on every call.
+test/unit/entry-surface.test.ts:91:37: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/unit/entry-surface.test.ts:92:45: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/unit/matcher-fuzz.test.ts:18:9: warning unicorn(consistent-function-scoping): Function `noop` does not capture any variables from its parent scope help: Move `noop` to the outer scope to avoid recreating it on every call.
+test/unit/matcher-fuzz.test.ts:71:15: warning unicorn(consistent-function-scoping): Function `norm` does not capture any variables from its parent scope help: Move `norm` to the outer scope to avoid recreating it on every call.
+test/unit/matcher-fuzz.test.ts:214:14: warning unicorn(consistent-function-scoping): Function `c0Host` does not capture any variables from its parent scope help: Move `c0Host` to the outer scope to avoid recreating it on every call.
+test/unit/matcher-fuzz.test.ts:286:18: warning unicorn(consistent-function-scoping): Function `hitQ` does not capture any variables from its parent scope help: Move `hitQ` to the outer scope to avoid recreating it on every call.
+test/perf/hotpath-fences.test.ts:169:13: warning unicorn(consistent-function-scoping): Function `reference` does not capture any variables from its parent scope help: Move `reference` to the outer scope to avoid recreating it on every call.
+bench/verify-baseline.ts:83:54: warning unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`. help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+test/unit/errors.test.ts:117:13: warning eslint(no-shadow): 'createError' is already declared in the upper scope. help: Consider renaming 'createError' to avoid shadowing the variable from the outer scope.
+test/middleware/csrf.test.ts:102:11: warning unicorn(consistent-function-scoping): Function `sign` does not capture any variables from its parent scope help: Move `sign` to the outer scope to avoid recreating it on every call.
+test/middleware/csrf.test.ts:221:11: warning unicorn(consistent-function-scoping): Function `cookieOf` does not capture any variables from its parent scope help: Move `cookieOf` to the outer scope to avoid recreating it on every call.
+test/unit/dogfood.test.ts:265:9: warning unicorn(consistent-function-scoping): Function `warns` does not capture any variables from its parent scope help: Move `warns` to the outer scope to avoid recreating it on every call.
+test/unit/compose.test.ts:20:14: warning eslint(no-shadow): 'c' is already declared in the upper scope. help: Consider renaming 'c' to avoid shadowing the variable from the outer scope.
+test/unit/compose.test.ts:25:14: warning eslint(no-shadow): 'c' is already declared in the upper scope. help: Consider renaming 'c' to avoid shadowing the variable from the outer scope.
+test/unit/compose.test.ts:38:8: warning eslint(no-shadow): 'c' is already declared in the upper scope. help: Consider renaming 'c' to avoid shadowing the variable from the outer scope.
+test/unit/compose.test.ts:42:8: warning eslint(no-shadow): 'c' is already declared in the upper scope. help: Consider renaming 'c' to avoid shadowing the variable from the outer scope.
+bench/server-koa-scale.mjs:3:8: warning import(no-named-as-default): Module "@koa/router" has named export "Router" help: Using default import as "Router" can be confusing. Use another name for default import to avoid confusion.
+test/unit/streams.test.ts:333:9: warning unicorn(consistent-function-scoping): Function `tooLarge` does not capture any variables from its parent scope help: Move `tooLarge` to the outer scope to avoid recreating it on every call.
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+      Coverage enabled with v8
+
+ ❯ test/perf/evidence-budgets.test.ts (5 tests | 1 failed | 1 skipped) 384ms
+     × every fresh context carries the same uniform own-key order 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/perf/evidence-budgets.test.ts > perf evidence: structural fences > every fresh context carries the same uniform own-key order
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ test/perf/evidence-budgets.test.ts:140:88
+    138|       expect(shapes.size).toBe(1);
+    139|       const shape = shapes.values().next().value as string;
+    140|       expect(shape.startsWith("rawRequest,pathValue,urlValue,paramName…
+       |                                                                                        ^
+    141|       // Dispatch memoizes path+url eagerly (77-79ns recompute vs ~1ns…
+    142|       // slot write — hono hands the same string down for this reason)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 179 passed | 3 skipped (183)
+      Tests  1 failed | 2987 passed | 30 skipped (3018)
+   Start at  18:22:27
+   Duration  119.39s (transform 986ms, setup 0ms, import 7.40s, tests 94.70s, environment 7ms)
+

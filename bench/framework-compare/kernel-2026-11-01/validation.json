@@ -1,0 +1,31 @@
+{
+  "typecheck": "pass",
+  "build": "pass",
+  "lintExit": 0,
+  "lintGlobalWarnings": 67,
+  "lintGlobalErrors": 0,
+  "lintChangedFilesWarnings": 0,
+  "lintChangedFilesErrors": 0,
+  "formatProjectExceptUnownedAgents": "pass",
+  "fullVerify": "blocked by unowned AGENTS.md formatting",
+  "nodeTests": {
+    "passed": 3063,
+    "skipped": 29,
+    "total": 3092
+  },
+  "bunTargetTests": {
+    "passed": 49
+  },
+  "coverage": {
+    "scope": "src/**/*.ts excluding src/index.ts and src/types.ts; experimental is outside this coverage configuration",
+    "statements": 95.25,
+    "branches": 91.09,
+    "functions": 95.94,
+    "lines": 97.08,
+    "thresholds": 90,
+    "passed": true
+  },
+  "smoke": "pass",
+  "examples": "pass",
+  "commitPush": "not executed: full formatting and zero-warning repository gates not satisfied"
+}

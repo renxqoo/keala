@@ -1,0 +1,13 @@
+RuntimeMaxUSec=30min
+OOMPolicy=stop
+ExecStart={ path=/usr/bin/env ; argv[]=/usr/bin/env NODE_OPTIONS=--max-old-space-size=128 UV_THREADPOOL_SIZE=2 LD_LIBRARY_PATH=/tmp/keala-bench-wr.dcq9gl/bundle/runtime BENCH_OUTPUT=/tmp/keala-bench-wr.dcq9gl/results BENCH_BUN=/usr/local/bin/bun /tmp/keala-bench-wr.dcq9gl/bundle/runtime/node /tmp/keala-bench-wr.dcq9gl/bundle/bench/framework-compare/remote-run.mjs ; ignore_errors=no ; start_time=[Sun 2026-11-01 02:56:17 UTC] ; stop_time=[n/a] ; pid=105090 ; code=(null) ; status=0/0 }
+CPUWeight=1
+CPUQuotaPerSecUSec=1.500000s
+IOWeight=1
+MemoryHigh=536870912
+MemoryMax=671088640
+MemorySwapMax=0
+TasksMax=128
+Nice=15
+IOSchedulingClass=3
+KillMode=control-group

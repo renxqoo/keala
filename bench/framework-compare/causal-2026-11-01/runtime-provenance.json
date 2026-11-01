@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-11-01T14:36:00.385Z",
+  "node": "26.9.0",
+  "bun": "1.4.4",
+  "nodeLinuxArchiveSha256": "c6ecd8efc1c1d395265891675319da7a7b3785c6be174bd78933cf4f057624d1",
+  "libatomicDebSha512": "4631a023da29026cfd116ca479bbdb69eb3ca402e26912804201f3e53110e6f585012682637ed7372a7e5cebe71efdb401cb3966fff9d278ff202b1a3f5f6f41",
+  "libatomicSource": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/libatomic1_14.2.0-4ubuntu2%7e24.04.1_amd64.deb",
+  "officialNodeSource": "https://nodejs.org/dist/v26.9.0/SHASUMS256.txt",
+  "remoteAlias": "wr",
+  "remoteRoot": "/tmp/keala-causal.aTIQdg",
+  "localRoot": "/tmp/keala-causal.b3zSjE/",
+  "sourceSha256": "33f23a18be16853fdaa06371aee662a1138723e229b0e9fac06d02c0b82b2067",
+  "productCodeChanged": false
+}

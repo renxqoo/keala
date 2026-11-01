@@ -1,0 +1,24 @@
+{
+  "at": "2026-11-01T06:08:39.106Z",
+  "diagnosticSamples": 18,
+  "rawDiagnosticSha256": "c61a5f15589ec1410d06a5f6c1bc1849a35338a83ded4b4c0e9f0c1053381790",
+  "remainingDiagnosticRootPids": [],
+  "remainingOwnedCgroups": [],
+  "originalServices": [
+    {
+      "pid": 26761,
+      "name": "xray"
+    },
+    {
+      "pid": 26769,
+      "name": "hysteria"
+    },
+    {
+      "pid": 71250,
+      "name": "fail2ban-server"
+    }
+  ],
+  "oomKill": 0,
+  "minAvailableMiB": 1338.4765625,
+  "maxDiagnosticMemoryMiB": 140.20703125
+}

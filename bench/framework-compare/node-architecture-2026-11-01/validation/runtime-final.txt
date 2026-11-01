@@ -1,0 +1,5 @@
+
+> keala@0.7.3 runtime:check
+> node scripts/runtime-contracts.mjs
+
+runtime contracts passed on v26.9.0

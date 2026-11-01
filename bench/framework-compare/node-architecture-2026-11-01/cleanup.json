@@ -1,0 +1,25 @@
+{
+  "at": "2026-11-01T06:10:58.778Z",
+  "remoteDirectory": "/tmp/keala-bench-opt.JhAsdh",
+  "remoteRemoved": true,
+  "localDirectory": "/tmp/keala-node-rewrite.LELUty",
+  "localRemoved": true,
+  "additionalOwnedSnapshotDirectoriesRemoved": 5,
+  "remainingOwnedCgroups": [],
+  "originalServices": [
+    {
+      "pid": 26761,
+      "name": "xray"
+    },
+    {
+      "pid": 26769,
+      "name": "hysteria"
+    },
+    {
+      "pid": 71250,
+      "name": "fail2ban-server"
+    }
+  ],
+  "oomKill": 0,
+  "evidence": "remote-cleanup.txt and final-verification.json"
+}

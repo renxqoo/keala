@@ -1,0 +1,8 @@
+OWNED_REMOTE_DIRECTORY_REMOVED
+  26761 xray
+  26769 hysteria
+  71250 fail2ban-server
+               total        used        free      shared  buff/cache   available
+Mem:            1967         473         424           2        1264        1494
+Swap:              0           0           0
+ 06:09:46 up 4 days,  3:55,  3 users,  load average: 0.02, 0.37, 0.76

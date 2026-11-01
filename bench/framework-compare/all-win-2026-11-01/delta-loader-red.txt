@@ -1,0 +1,31 @@
+
+ RUN  v4.1.11 /Users/wrr/work/bun-koa
+
+ ❯ test/integration/refactor-bun-transport.test.ts (8 tests | 1 failed) 95ms
+     × leaves startup ownership with a loader-provided handle without a URL 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/integration/refactor-bun-transport.test.ts > srvx Bun transport and policy parity > leaves startup ownership with a loader-provided handle without a URL
+TypeError: undefined is not an object (evaluating 'server.url.href')
+ ❯ url node_modules/srvx/dist/adapters/bun.mjs:81:17
+ ❯ serve node_modules/srvx/dist/adapters/bun.mjs:73:32
+ ❯ src/adapters/bun.ts:87:24
+     85|           };
+     86|         }
+     87|         void transport.serve();
+       |                        ^
+     88|         const server = transport.bun!.server as unknown as ServerHandl…
+     89|         transportClosers.set(server, (force) => transport.close(force)…
+ ❯ startBunServer src/adapters/bun.ts:261:18
+ ❯ listen src/core/app.ts:389:26
+ ❯ test/integration/refactor-bun-transport.test.ts:21:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  15:34:42
+   Duration  296ms (transform 133ms, setup 0ms, import 163ms, tests 95ms, environment 0ms)
+

@@ -183,7 +183,7 @@ const sugarHead = (
 const payloadLength = (body: string | Uint8Array): number =>
   typeof body === "string" ? byteLengthOf(body) : body.byteLength;
 
-export const sugarText = (
+const sugarTextWithOptions = (
   c: ContextState,
   body: string,
   status?: number,
@@ -219,6 +219,32 @@ export const sugarText = (
     );
   }
   if (live) clearStagedInPlace(c);
+  return response;
+};
+
+const bareHeadText = (c: ContextState, body: string): Response =>
+  sugarHead(
+    c,
+    undefined,
+    TEXT_PLAIN,
+    payloadLength(body as string | Uint8Array),
+    undefined,
+    typeof body === "string" ? body : undefined,
+  );
+
+/** Keep the ordinary text response small enough to inline into a handler. */
+export const sugarText = (
+  c: ContextState,
+  body: string,
+  status?: number,
+  headers?: Record<string, HeaderValue>,
+): Response => {
+  if (status !== undefined || headers !== undefined || c.headersRecord !== null) {
+    return sugarTextWithOptions(c, body, status, headers);
+  }
+  const response =
+    sourceMethod(c.rawRequest) === "HEAD" ? bareHeadText(c, body) : textResponse(c, body);
+  clearStagedInPlace(c);
   return response;
 };
 
