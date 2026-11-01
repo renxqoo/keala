@@ -7,6 +7,7 @@
  * streams pass through untouched.
  */
 
+import { serializedTextOf, rememberSerializedText } from "../core/response-snapshot.ts";
 import type { RouteHandler } from "../router/router.ts";
 import type { Context } from "../core/context/context.ts";
 import { nodeZlib } from "../utils/node-lazy.ts";
@@ -88,7 +89,7 @@ export const etag = (): RouteHandler => {
     // middleware's primary value): if the response already carries an etag,
     // use IT for the If-None-Match check instead of computing our own.
     const presetTag = committed.headers.get("etag");
-    const tag = presetTag !== null ? presetTag : await tagOfResponse(c, committed);
+    const tag = presetTag !== null ? presetTag : await tagOfResponse(committed);
     if (tag === null) return;
     const noneMatch = c.header("if-none-match");
     if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {
@@ -111,12 +112,12 @@ export const etag = (): RouteHandler => {
 
 /**
  * Hash the snapshot body of a sugar-built Response. The JSON lane reuses the
- * request's serialization memo (R4.10: one stringify per request); the text
+ * response's serialization snapshot (R4.10: one stringify per request); the text
  * lane reads a CLONE — the committed body itself must stay unconsumed for
  * the wire. Byte bodies never reach here (the sugar surface is text/json).
  */
-const tagOfResponse = async (c: Context, res: Response): Promise<string | null> => {
-  const memo = c.bodySerializedValue;
+const tagOfResponse = async (res: Response): Promise<string | null> => {
+  const memo = serializedTextOf(res);
   if (memo !== undefined) return textTagOf(memo);
   const text = await res.clone().text();
   return textTagOf(text);
@@ -228,14 +229,14 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
     if (committed.body === null) return;
     const contentType = committed.headers.get("content-type") ?? "";
     if (COMPRESSED_TYPE.test(contentType.toLowerCase())) return;
-    // Snapshot bytes: the JSON lane reuses the request's serialization memo
+    // Snapshot bytes: the JSON lane reuses the response's serialization snapshot
     // (R4.10); the text lane reads a CLONE so the wire body stays unconsumed
     // — and memoizes the ORIGINAL text it read: an outer etag() then hashes
     // the pre-compression representation (what clients compare If-None-Match
     // against), never the packed bytes (adversarial review).
-    const memo = c.bodySerializedValue;
+    const memo = serializedTextOf(committed);
     const text = memo !== undefined ? memo : await committed.clone().text();
-    if (memo === undefined) c.bodySerializedValue = text;
+    if (memo === undefined) rememberSerializedText(committed, text);
     const bytes = encoder.encode(text);
     if (bytes.byteLength < 200) return; // tiny bodies grow
     const packed = await gzip(bytes);
@@ -258,9 +259,10 @@ export const compress = (options: CompressOptions = {}): RouteHandler => {
     // Re-brand the replacement (adversarial review): packed bytes are as
     // context-independent a snapshot as the original, and an OUTER etag()
     // (app.use(etag()); app.use(compress())) must still see a branded body to
-    // negotiate — bodySerializedValue still carries the ORIGINAL text, so the
+    // negotiate — the replacement snapshot still carries the ORIGINAL text, so the
     // validator hashes the pre-compression representation, which is what
     // clients compare If-None-Match against.
+    rememberSerializedText(replacement, text);
     c.directBodyResponseValue = replacement;
     return replacement;
   };

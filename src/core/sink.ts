@@ -61,6 +61,7 @@ import {
   type RouteHandler,
   type RouterState,
 } from "../router/router.ts";
+import type { Context } from "./context/context.ts";
 import { compilePattern, patternsOverlap } from "../router/pattern.ts";
 import { isNativeRequestSource, sourceRequest } from "../core/request-source.ts";
 import { createPlannedResponse } from "../core/response-plan.ts";
@@ -70,85 +71,8 @@ import {
   type MiddlewareStack,
   type SinkGuardSpec,
 } from "./middleware-stack.ts";
-import { nodePath } from "../utils/node-lazy.ts";
-import { nodeFsSync } from "../utils/path-safety.ts";
-
-/** Scan budgets (per sink): bound the pre-listen walk itself — an unbounded
- *  scan of a huge tree would be a startup stall (and a DoS lever on shared
- *  mounts). Trees past either budget refuse to go native, loudly. */
-const MAX_SCAN_ENTRIES = 10_000;
-const MAX_SCAN_DEPTH = 64;
-
-/**
- * Refuse to hand a `{dir}` sink to Bun's native routes table unless the
- * whole tree is provably servable WITHOUT per-request checks: any dotfile
- * (the mirror's default policy declines it; `.well-known` is exempt per RFC
- * 8615) or ANY symlink component (the mirror answers 403) would be a plain
- * 200 on the native leg — the R4.11 audit served `.env` and followed a
- * symlink out of the root that way. Throws a TypeError listing the
- * violating paths and the two remedies.
- *
- * Sync by design (the table feeds Bun.serve synchronously — see the inline
- * note below); runs at EVERY native-table build — listen(), sink()-after-
- * listen and reloadNativeRoutes() all rebuild through buildNativeRoutes, so
- * a tree dirtied between builds is caught at the next one. What appears
- * INSIDE the window between two scans is the deployer's responsibility
- * (documented in PARITY.md's divergence ledger).
- */
-export const assertSunkDirSafe = (sinkPath: string, dir: string): void => {
-  // Sync fs by necessity: this runs inside buildNativeRoutes, which feeds
-  // Bun.serve({routes}) and server.reload({routes}) synchronously.
-  const fs = nodeFsSync();
-  const { resolve, sep } = nodePath();
-  const root = resolve(dir);
-  const violations: string[] = [];
-  let scanned = 0;
-  let overBudget = false;
-  const walk = (current: string, depth: number): void => {
-    if (depth > MAX_SCAN_DEPTH) {
-      violations.push(`${current}${sep}… (deeper than ${MAX_SCAN_DEPTH})`);
-      return;
-    }
-    let entries: readonly import("node:fs").Dirent[];
-    try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code ?? String(error);
-      throw new TypeError(
-        `sink ${sinkPath}: cannot scan ${current} (${code}) — the native {dir} route refuses to serve a tree it cannot verify. ` +
-          `Create the directory (or fix its permissions) and retry, or serve explicit content with a Response/handler sink instead.`,
-        { cause: error },
-      );
-    }
-    for (const entry of entries) {
-      if (++scanned > MAX_SCAN_ENTRIES) {
-        overBudget = true;
-        return;
-      }
-      const full = `${current}${sep}${entry.name}`;
-      if (entry.isSymbolicLink()) violations.push(`${full} (symlink)`);
-      else if (entry.name.startsWith(".") && entry.name !== ".well-known")
-        violations.push(`${full} (dotfile)`);
-      else if (entry.isDirectory()) walk(full, depth + 1);
-    }
-  };
-  walk(root, 0);
-  if (overBudget) {
-    throw new TypeError(
-      `sink ${sinkPath}: directory ${dir} exceeds the native-table scan budget (${MAX_SCAN_ENTRIES} entries) — ` +
-        `split the tree into smaller sinks, or serve explicit content with a Response/handler sink instead.`,
-    );
-  }
-  if (violations.length > 0) {
-    const shown = violations.slice(0, 5).join("; ");
-    const more = violations.length > 5 ? ` (+${violations.length - 5} more)` : "";
-    throw new TypeError(
-      `sink ${sinkPath}: the native {dir} route cannot serve this tree — ${shown}${more}. ` +
-        `The JS mirror declines dotfiles and symlinks, but Bun's native table would serve them as plain 200s. ` +
-        `Remove the offending entries and retry, or serve explicit content with a Response/handler sink instead.`,
-    );
-  }
-};
+import { assertSunkDirSafe } from "./sink-directory.ts";
+export { assertSunkDirSafe } from "./sink-directory.ts";
 
 /** A prebuilt static response (Bun reuses the instance natively). */
 export interface NativeStaticSink {
@@ -310,9 +234,11 @@ export const registerSink = (
     throw new TypeError(`sink ${path} overlaps an existing ${conflict}`);
   }
 
-  sinks.set(path, entry);
-  // After the mirror lands, record its NORMALIZED path so later JS
-  // registrations under this subtree throw instead of being shadowed.
+  // Registration FIRST, key claim LAST — the same transactional contract as
+  // registerWsRoute/mergeMountedWs: a throwing mirror registerDef must not
+  // strand the native entry (a phantom route would enter Bun's table with
+  // no JS mirror, and the empty sunkPaths set would silently defeat the
+  // app.use() ordering guard).
   const markSunk = (): void => {
     const mirrorDef = router.defs[router.defs.length - 1];
     if (mirrorDef !== undefined) router.sunkPaths.add(mirrorDef.path);
@@ -324,7 +250,22 @@ export const registerSink = (
     // Warm at registration: the promise resolves once for the app's lifetime;
     // the mirror awaits it per request (a resolved-promise await is a no-op
     // microtask — the sink's own Bun.file serving dominates any path it takes).
-    const handlerP = loadServeStatic().then((serveStatic) => serveStatic({ root: dir, prefix }));
+    // The prefix is derived from the MATCHED pattern at request time
+    // (c.routePath — re-keyed by mount()), never baked from the sub-app-local
+    // path: a mounted app serves "/m/assets/…" and the handler must strip
+    // the full "/m/assets", not the stale "/assets" (RED-2 review).
+    const localPrefix = prefix;
+    const handlerP = loadServeStatic().then((serveStatic) =>
+      serveStatic({
+        root: dir,
+        prefix: (c: Context) =>
+          c.routePath.length > 0
+            ? c.routePath.endsWith("/*")
+              ? c.routePath.slice(0, -2)
+              : c.routePath
+            : localPrefix,
+      }),
+    );
     const handler: RouteHandler = (c, next) => handlerP.then((h) => h(c, next));
     const firstDef = router.defs.length;
     // Wildcard mirror for the tree, plus a static twin: the native {dir}
@@ -334,6 +275,7 @@ export const registerSink = (
     registerDef(router, "GET", path, [handler], undefined, middleware);
     registerDef(router, "GET", prefix || "/", [handler], undefined, middleware);
     for (const def of router.defs.slice(firstDef)) router.sunkPaths.add(def.path);
+    sinks.set(path, entry);
     return;
   }
 
@@ -354,6 +296,7 @@ export const registerSink = (
       );
     registerDef(router, "GET", path, [mirror], undefined, middleware);
     markSunk();
+    sinks.set(path, entry);
     return;
   }
 
@@ -397,6 +340,7 @@ export const registerSink = (
   };
   registerDef(router, "GET", path, [mirror], undefined, middleware);
   markSunk();
+  sinks.set(path, entry);
 };
 
 /**

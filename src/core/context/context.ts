@@ -128,7 +128,6 @@ const CONTEXT_DEFAULTS = {
   cookiesValue: null,
   bodyCache: undefined,
   validValue: undefined,
-  bodySerializedValue: undefined,
   abortValue: undefined,
   deadlineAnswered: false,
 } satisfies Partial<ContextState>;

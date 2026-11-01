@@ -212,7 +212,7 @@ Restart=on-failure
 
 ## 7. 运行时选择
 
-- **Bun(首选)**:原生路由表下沉、WebSocket、sendfile、零依赖快路径。
+- **Bun(首选)**:原生路由表下沉、WebSocket、sendfile、原生快路径。
 - **Node**:`import { listen } from "keala/node"`——同语义;不要在
   Node 上对热路由启用 `app.sink()`(无原生表,镜像路径较慢)。
 
@@ -237,3 +237,7 @@ process.on("unhandledRejection", (reason) => {
   console.error("unhandled", reason);
 });
 ```
+
+## srvx 传输层保护
+
+当前 listener 使用 srvx 1.0.8，信号及 drain 策略由 Keala 统一管理，关闭 srvx 自带的信号桥，避免重复处理。Bun 排空会同时等待应用结算与原生 stop 完成；到期强停仍受 drain 窗口约束。Node 的 maxRequestBodySize 同时约束 raw、clone、流和框架 reader。trustedHosts、overload、requestTimeout 任一启用时，sink 使用 JS mirror 保持保护语义。静态目录应使用独立、可信的部署产物；路径包含解码后的 . 或 .. 段会被拒绝。

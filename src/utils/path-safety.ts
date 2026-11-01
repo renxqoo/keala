@@ -54,11 +54,9 @@ export const resolveRelativeSegments = (
     // Windows). Refuse instead of resolving. On POSIX a backslash is an
     // ordinary filename character and stays one.
     if (decoded.includes("/") || (windowsSeparators && decoded.includes("\\"))) return null;
-    if (decoded === ".") continue;
-    if (decoded === "..") {
-      segments.pop();
-      continue;
-    }
+    // Resolving a dot alias here would change the resource AFTER scoped
+    // authorization selected its chain. Refuse it rather than cross scopes.
+    if (decoded === "." || decoded === "..") return null;
     segments.push(decoded);
   }
   return segments;

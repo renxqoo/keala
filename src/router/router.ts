@@ -1,22 +1,7 @@
 /**
- * Hybrid router: exact static Map + per-bucket compiled fast matchers, with
- * the trie as the source of truth for every dynamic pattern.
- *
- * Matching order per request:
- *   1. staticMap — O(1) exact hit (plus the trailing-slash retry)
- *   2. slice fast-matchers — every bucket holding exactly ONE dynamic
- *      pattern of "simple shape" (static head + plain params), where the
- *      matcher is provably equivalent to the trie walk
- *   3. table regex (R413 bucket-regex, 0.7.4 whole-table) — every eligible
- *      pattern in the router compiled into ONE anchored alternation, one
- *      regex exec per request, no bucket lookup / slash-count dispatch
- *   4. trie — handles every other shape (optionals, custom patterns,
- *      wildcards, param-first routes, escaped paths); its O(segments)
- *      walk is what keeps 1000-route tables fast where regex scans collapse.
- *
- * Registration is incremental and validates eagerly (conflicting parameter
- * names throw at `register`, not at request time). Chains are recomposed via
- * `rebuildChains` whenever the app-level middleware stack changes.
+ * Hybrid router: static Map, compiled simple/regex matchers, and trie fallback.
+ * All layers consume PatternIR; the trie is the dynamic semantic reference.
+ * Registration validates eagerly and compiles route middleware chains.
  */
 
 import type { Handler } from "../core/compose.ts";
@@ -30,6 +15,7 @@ import type { CompiledSegment, PatternIR } from "./pattern.ts";
 import {
   compilePattern,
   decodeSegment,
+  fastComparable,
   normalizePath,
   paramNamesOf,
   patternsOverlap,
@@ -129,13 +115,17 @@ export interface RouterState {
   trieRoot: TrieNode;
   hasDynamic: boolean;
   prefix: string;
-  /**
-   * R413 fast layer: eligible patterns by path (maintained by bindDef) and
-   * the per-bucket compiled regexes memoized against `mutations`, which
-   * every bind/reset bumps — a late registration retires the epoch and the
-   * next touch of a bucket recompiles from regexIndex.
-   */
+  /** Patterns eligible for the compiled regex, invalidated by mutations. */
   regexIndex: Map<string, EligiblePattern>;
+  /**
+   * First segments of IMPURE buckets (maintained by bindDef): buckets
+   * holding a static-first dynamic pattern the fast layers cannot take
+   * (optional/constrained params, or a %2F static the raw comparison
+   * cannot represent). Such a sibling can be the trie's preferred answer
+   * on a co-matching path, so the whole bucket stays on the trie — see
+   * bucket-regex's purity rule.
+   */
+  impureFirst: Set<string>;
   mutations: number;
   /** Paths sunk into the native routing table — later JS registrations
    * overlapping them throw (the native table would silently shadow them). */
@@ -159,6 +149,7 @@ export const createRouterState = (prefix = ""): RouterState => ({
   hasDynamic: false,
   prefix: normalizePrefix(prefix),
   regexIndex: new Map(),
+  impureFirst: new Set(),
   mutations: 0,
   sunkPaths: new Set(),
   devTrace: false,
@@ -217,7 +208,7 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
   }
   bucket.count++;
   bucket.fast =
-    bucket.count === 1 && ir.isSimple
+    bucket.count === 1 && ir.isSimple && fastComparable(ir.segments)
       ? {
           // Full static head ("/v1/users"), not just the first segment — the
           // matcher must skip every leading static before captures begin.
@@ -239,9 +230,18 @@ const bindDef = (state: RouterState, def: RouteDef, middleware: MiddlewareStack)
   // R413: remember eligible patterns for the bucket-regex fast layer. An
   // eligible pattern owns exactly one terminal target (terminal sharing only
   // happens through optional variants, which eligibility excludes).
+  // fastComparable is part of eligibility: a %2F static cannot be compared
+  // in the raw path space (see pattern.ts).
   state.mutations++;
-  if (isRegexEligible(ir.segments)) {
+  if (isRegexEligible(ir.segments) && fastComparable(ir.segments)) {
     state.regexIndex.set(def.path, { segments: ir.segments, target: targets[0] as RouteTarget });
+  } else if (!ir.isStatic && (ir.segments[0] as CompiledSegment).kind === "static") {
+    // A static-first DYNAMIC pattern the fast layers cannot take still
+    // shares its bucket with every co-matchable sibling — and it can be
+    // the trie's preferred answer (static-over-param rank, first-
+    // registered variant). Its bucket keeps the whole vocabulary on the
+    // trie (impureFirst, consumed by compileTableRegex).
+    state.impureFirst.add((ir.segments[0] as CompiledSegment).value);
   }
   const appMiddleware = middlewareForRoute(middleware, def.path);
   // Koa order along the chain: the sub-router's use() middleware (if this
@@ -277,6 +277,7 @@ const resetIndex = (state: RouterState): void => {
   state.trieRoot = createNode();
   state.hasDynamic = false;
   state.regexIndex = new Map();
+  state.impureFirst = new Set();
   state.mutations++;
 };
 

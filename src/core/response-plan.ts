@@ -9,6 +9,8 @@
  * and therefore enter the single streaming path.
  */
 
+import { serializedTextOf, rememberSerializedText } from "./response-snapshot.ts";
+
 export type DirectResponseBody = string | Uint8Array;
 
 export interface ResponseFacts {
@@ -98,7 +100,10 @@ class PlannedResponse {
   }
 
   bytes(): Promise<Uint8Array> {
-    return (this.#materialize() as Response & { bytes(): Promise<Uint8Array> }).bytes();
+    const response = this.#materialize() as Response & { bytes?: () => Promise<Uint8Array> };
+    return typeof response.bytes === "function"
+      ? response.bytes()
+      : response.arrayBuffer().then((buffer) => new Uint8Array(buffer));
   }
 
   clone(): Response {
@@ -164,6 +169,8 @@ export const responseFactsOf = (response: Response): ResponseFacts | undefined =
 
 /** Preserve construction facts only when a rebuild keeps the same body. */
 export const inheritResponseFacts = (target: Response, source: Response): Response => {
+  const text = serializedTextOf(source);
+  if (text !== undefined) rememberSerializedText(target, text);
   const facts = responseFactsOf(source);
   if (facts !== undefined) {
     // A rebuilt native Response owns its new header set. Only carry the

@@ -124,6 +124,25 @@ export const paramNamesOf = (segments: readonly CompiledSegment[]): string[] =>
   segments.filter((s) => s.kind !== "static").map((s) => s.value);
 
 /**
+ * True when the fast layers may compare this pattern against RAW request
+ * paths: no static segment's DECODED value contains "/" (the only character
+ * decodeSegment can produce that is also a segment separator). A "%2F"
+ * registered static ("/a%2Fb" -> value "a/b") would turn a flat raw-string
+ * prefix/regex comparison into a boundary conflation — the raw request
+ * "/a/b/1" would match although its segment list [a,b,1] can never satisfy
+ * the pattern's two segments (the trie keys children by the decoded value
+ * and staticMap's canonicalKey re-escapes "/", so both refuse). Such
+ * patterns stay on the trie, which compares per segment in the canonical
+ * keyspace.
+ */
+export const fastComparable = (segments: readonly CompiledSegment[]): boolean => {
+  for (const segment of segments) {
+    if (segment.kind === "static" && segment.value.includes("/")) return false;
+  }
+  return true;
+};
+
+/**
  * Pattern-aware overlap: two patterns overlap when some request URL can
  * match both — a dynamic segment (`:param`) on EITHER side can consume what
  * the other spells literally (a sunk `/users/:id` shadows a JS

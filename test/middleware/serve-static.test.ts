@@ -191,9 +191,9 @@ describe("serveStatic: platform separators", () => {
     // an ordinary filename character.
     expect(resolveRelativeSegments("/a%5Cb", true)).toBeNull();
     expect(resolveRelativeSegments("/a%5Cb", false)).toEqual(["a\\b"]);
-    // Plain traversal collapses; trailing slash tolerated.
-    expect(resolveRelativeSegments("/a/../../secret", false)).toEqual(["secret"]);
-    expect(resolveRelativeSegments("/a/../b/./c/d", false)).toEqual(["b", "c", "d"]);
+    // Dot aliases are refused; trailing slash is tolerated.
+    expect(resolveRelativeSegments("/a/../../secret", false)).toBeNull();
+    expect(resolveRelativeSegments("/a/../b/./c/d", false)).toBeNull();
     expect(resolveRelativeSegments("/sub/", false)).toEqual(["sub"]);
     expect(resolveRelativeSegments("/", false)).toEqual([]);
   });
@@ -381,13 +381,13 @@ describe("serveStatic: onFound / onNotFound hooks", () => {
 });
 
 describe("resolveRelativeSegments: boundary inputs", () => {
-  it("empty and dot-only paths collapse to nothing on either platform", () => {
+  it("empty paths stay empty and dot aliases are refused on either platform", () => {
     for (const windows of [false, true]) {
       expect(resolveRelativeSegments("/", windows)).toEqual([]);
-      expect(resolveRelativeSegments("/.", windows)).toEqual([]);
-      expect(resolveRelativeSegments("/./.", windows)).toEqual([]);
-      expect(resolveRelativeSegments("/..", windows)).toEqual([]);
-      expect(resolveRelativeSegments("/a/..", windows)).toEqual([]);
+      expect(resolveRelativeSegments("/.", windows)).toBeNull();
+      expect(resolveRelativeSegments("/./.", windows)).toBeNull();
+      expect(resolveRelativeSegments("/..", windows)).toBeNull();
+      expect(resolveRelativeSegments("/a/..", windows)).toBeNull();
     }
   });
 });

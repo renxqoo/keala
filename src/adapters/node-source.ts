@@ -6,6 +6,7 @@
 
 import type { IncomingMessage } from "node:http";
 import { Readable } from "node:stream";
+import { limitBodyStream } from "srvx/body-limit";
 import { NATIVE_REQUEST_SOURCE, type NativeRequestSource } from "../core/request-source.ts";
 import { createError } from "../http/errors.ts";
 import { readAllLimited } from "../utils/streams.ts";
@@ -33,6 +34,7 @@ export class NodeRequestSource implements NativeRequestSource {
   declare _request?: Request;
   declare _bytes?: Promise<Uint8Array>;
   declare _bodyOwned?: true;
+  declare _remote?: string;
   /**
    * HA-2: live while an owned #readIncoming is parked on the socket — the
    * adapter's early-answer teardown fails it through disconnect() so its
@@ -50,7 +52,7 @@ export class NodeRequestSource implements NativeRequestSource {
   #bodyCap: number;
 
   get remote(): string | undefined {
-    return this.incoming.socket.remoteAddress;
+    return this._remote ?? this.incoming.socket?.remoteAddress;
   }
 
   constructor(
@@ -107,6 +109,12 @@ export class NodeRequestSource implements NativeRequestSource {
     // floated-branch containment and the deadline race both swallow it.
     this._pendingRead?.fail(reason instanceof Error ? reason : new Error("request body abandoned"));
     this._abort?.abort(reason);
+    // A finished HTTP response can detach its still-open IncomingMessage
+    // from Node's socket parser. Destroy the owned Web source explicitly,
+    // so raw/clone readers reject even after the response has flushed.
+    if (this._bodySet === true && this._body !== null && !this.incoming.readableEnded) {
+      this.incoming.destroy(reason instanceof Error ? reason : new Error("request body abandoned"));
+    }
   }
 
   /**
@@ -120,9 +128,8 @@ export class NodeRequestSource implements NativeRequestSource {
    * request on the same connection.
    */
   hasPendingOwnedRead(): boolean {
-    return (
-      this._pendingRead !== undefined && !this.incoming.readableEnded && !this.incoming.destroyed
-    );
+    const webRead = this._body?.locked === true || this._request?.bodyUsed === true;
+    return (this._pendingRead !== undefined || webRead) && !this.incoming.readableEnded;
   }
 
   absoluteUrl(): string {
@@ -154,7 +161,15 @@ export class NodeRequestSource implements NativeRequestSource {
       return (this._body = null);
     }
     this._bodyOwned = true;
-    return (this._body = Readable.toWeb(this.incoming) as ReadableStream<Uint8Array>);
+    // Web-stream cancellation can detach IncomingMessage.socket before error mapping.
+    this._remote ??= this.incoming.socket?.remoteAddress;
+    const stream = Readable.toWeb(this.incoming) as ReadableStream<Uint8Array>;
+    return (this._body =
+      this.#bodyCap === Number.MAX_SAFE_INTEGER
+        ? stream
+        : limitBodyStream(stream, this.#bodyCap, {
+            createError: () => this.#tooLarge(this.#bodyCap),
+          }));
   }
 
   request(): Request {

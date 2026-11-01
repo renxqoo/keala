@@ -6,15 +6,21 @@
  * backpressure/cancellation. Websockets remain Bun-only and answer 501.
  */
 
-import { createServer, type Server, type ServerOptions, type ServerResponse } from "node:http";
+import type { Server, ServerOptions, IncomingMessage, ServerResponse } from "node:http";
+import { serve as serveNode } from "srvx/node";
+import {
+  failNodeSend,
+  prepareNodeResponse,
+  sendPreparedNodeResponse,
+  tryWriteBareNodeResponse,
+} from "./node-response.ts";
 import type { Application } from "../core/app.ts";
-import { responseFactsOf } from "../core/response-plan.ts";
 import { consoleFallback } from "../core/error-response.ts";
 import { toHttpError } from "../http/errors.ts";
 import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
 import type { GracefulStopOptions } from "../core/lifecycle.ts";
 import { installSignalBridge } from "../core/lifecycle.ts";
-import { attachServer, serverOf } from "../core/server-slot.ts";
+import { attachServer, assertCanStart } from "../core/server-slot.ts";
 import { InvalidRequestTargetError, mayCarryBody, NodeRequestSource } from "./node-source.ts";
 import { registerSocketClose, unregisterSocketClose } from "./node-socket-fanout.ts";
 
@@ -75,142 +81,6 @@ export interface NodeListenOptions {
   onServeError?: (error: Error) => Response;
 }
 
-const writeHeaders = (headers: Headers, out: ServerResponse): void => {
-  const cookies = headers.getSetCookie();
-  for (const [name, value] of headers) {
-    if (name === "set-cookie") continue;
-    out.setHeader(name, value);
-  }
-  if (cookies.length > 0) out.setHeader("set-cookie", cookies);
-};
-
-const directBodyLength = (body: string | Uint8Array): number =>
-  typeof body === "string" ? Buffer.byteLength(body) : body.byteLength;
-
-const endDirectBody = (out: ServerResponse, body: string | Uint8Array): void => {
-  if (typeof body === "string") out.end(body);
-  else out.end(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
-};
-
-const waitForDrain = (out: ServerResponse): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const cleanup = (): void => {
-      out.off("drain", drained);
-      out.off("close", closed);
-      out.off("error", failed);
-    };
-    const drained = (): void => {
-      cleanup();
-      resolve();
-    };
-    const closed = (): void => {
-      cleanup();
-      reject(new Error("client disconnected while streaming response"));
-    };
-    const failed = (error: Error): void => {
-      cleanup();
-      reject(error);
-    };
-    out.once("drain", drained);
-    out.once("close", closed);
-    out.once("error", failed);
-  });
-
-const writeStream = async (
-  body: ReadableStream<Uint8Array>,
-  out: ServerResponse,
-): Promise<void> => {
-  const reader = body.getReader();
-  let completed = false;
-  const cancel = (): void => {
-    if (!completed) void reader.cancel("client disconnected").catch(() => undefined);
-  };
-  out.once("close", cancel);
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        completed = true;
-        out.end();
-        return;
-      }
-      if (!out.write(value)) await waitForDrain(out);
-    }
-  } finally {
-    out.off("close", cancel);
-    try {
-      reader.releaseLock();
-    } catch {
-      // A failed/cancelled reader can already be detached.
-    }
-  }
-};
-
-// A consumed or locked body is ALWAYS a loud adapter error (R4.5 B45-18):
-// arriving consumed, or consumed by an earlier send on this adapter (a
-// cached module-level Response reused across refusals). The old re-send
-// degrade branch answered an UNFRAMED bodiless response that killed the
-// keep-alive socket (R4.10 wire capture); failing loudly matches Bun.
-
-const writeResponse = (
-  res: Response,
-  out: ServerResponse,
-  closeAfter: boolean,
-): void | Promise<void> => {
-  const facts = responseFactsOf(res);
-  if (facts?.planned === true && facts.native === undefined && facts.headerSnapshot === undefined) {
-    const length = directBodyLength(facts.directBody);
-    const headers: Record<string, string | number> =
-      facts.implicitContentType === undefined
-        ? { "content-length": length }
-        : { "content-type": facts.implicitContentType, "content-length": length };
-    // An unmaterialized plan is by construction the default status pair, and
-    // the bare default plan needs no header collection or body stream.
-    // During drain every response orders its connection closed: keep-alive
-    // reuse would keep sockets warm past server.close() and stretch drains.
-    if (closeAfter) headers["connection"] = "close";
-    out.writeHead(200, headers);
-    endDirectBody(out, facts.directBody);
-    return;
-  }
-  if (facts === undefined && (res.bodyUsed || res.body?.locked === true)) {
-    throw new TypeError(
-      "cannot send a consumed or locked response body — build a fresh Response per call",
-    );
-  }
-  out.statusCode = res.status;
-  if (res.statusText.length > 0) out.statusMessage = res.statusText;
-  writeHeaders(facts?.headerSnapshot ?? res.headers, out);
-  if (closeAfter) out.setHeader("connection", "close");
-  // Never emit ambiguous framing, including for a foreign streaming Response.
-  const hasTransferEncoding = out.hasHeader("transfer-encoding");
-  if (hasTransferEncoding) out.removeHeader("content-length");
-  // A foreign Response we stream cannot have its declared content-length
-  // verified without consuming the body — an explicitly staged length that
-  // disagrees with the actual body desyncs keep-alive framing (the next
-  // response's bytes land inside this one's declared body). The runtime
-  // does not expose CL for string bodies, so a present header here was
-  // staged by user code; drop it and let Node frame the stream (chunked).
-  if (facts === undefined && res.body !== null && out.hasHeader("content-length")) {
-    out.removeHeader("content-length");
-  }
-  if (facts === undefined && res.body === null) {
-    out.end();
-    return;
-  }
-  if (facts !== undefined) {
-    // The byte-exact body is already known. A fixed length avoids chunk
-    // framing and also replaces an application-supplied stale length, which
-    // must never desynchronize a keep-alive connection.
-    if (!hasTransferEncoding) {
-      out.setHeader("content-length", directBodyLength(facts.directBody));
-    }
-    endDirectBody(out, facts.directBody);
-    return;
-  }
-  return writeStream(res.body as ReadableStream<Uint8Array>, out);
-};
-
 /**
  * Start a node:http server for the app. Mirrors `startBunServer`'s handle
  * shape (port/hostname/stop/fetch) so operational code stays runtime-agnostic.
@@ -222,9 +92,7 @@ export const startNodeServer = (
 ): NodeServerHandle => {
   // HA-3: double-start guard (app.listen() parity) — a second server used
   // to overwrite the slot, orphaning the first on a bound port, 503s forever.
-  if (serverOf(app) !== undefined) {
-    throw new TypeError("app.listen() called twice — stop()/close() the first server");
-  }
+  assertCanStart(app);
   for (const key of Object.keys(options)) {
     if (NODE_LISTEN_KEYS.has(key)) continue;
     // Known Bun-only keys get their migration story, not a bare "unknown
@@ -345,10 +213,37 @@ export const startNodeServer = (
   // An explicit http.keepAliveTimeout wins — the passthrough stays the
   // escape hatch for every other node:http knob.
   const httpOptions: ServerOptions = { ...options.http };
+  // Custom response classes may transform write() or flush headers in their
+  // constructor. Preserve their srvx write(body) + end() contract verbatim.
+  const directBufferedResponses = httpOptions.ServerResponse === undefined;
   if (options.idleTimeout !== undefined && httpOptions.keepAliveTimeout === undefined) {
     httpOptions.keepAliveTimeout = options.idleTimeout * 1000;
   }
-  const server: Server = createServer(httpOptions, (incoming, out) => {
+  const transport = serveNode({
+    port: options.port ?? 3000,
+    ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
+    // Explicit undefined preserves Node's native all-interface default over srvx HOST.
+    node: { ...httpOptions, host: options.hostname },
+    manual: true,
+    silent: true,
+    gracefulShutdown: false,
+    fetch: (request) => {
+      const { req, res } = request.runtime!.node!;
+      return dispatch(req as IncomingMessage, res as ServerResponse);
+    },
+  });
+  const server = transport.node!.server as Server;
+  function dispatch(incoming: IncomingMessage, out: ServerResponse): Response | Promise<Response>;
+  function dispatch(
+    incoming: IncomingMessage,
+    out: ServerResponse,
+    direct: true,
+  ): Response | void | Promise<Response | void>;
+  function dispatch(
+    incoming: IncomingMessage,
+    out: ServerResponse,
+    direct = false,
+  ): Response | void | Promise<Response | void> {
     wireInFlight++;
     // Wire truth + client-disconnect bridge, one handler registered twice.
     // res 'close' fires for every STARTED response — completed OR terminated
@@ -381,68 +276,79 @@ export const startNodeServer = (
     };
     out.on("close", onWireDone);
     fanout = registerSocketClose(socket, onWireDone);
-    const fail = (error: unknown): void => {
-      // app dispatch itself never rejects — failures here are native source
-      // validation, socket teardown or response writer failures.
-      if (!out.headersSent) {
-        // A failed writer may have staged another body's framing — none of it describes this envelope.
-        for (const name of out.getHeaderNames()) out.removeHeader(name);
-        if (!(error instanceof InvalidRequestTargetError)) {
-          // 500-class transport/writer failures surface through the app
-          // error hook's console fallback (silenced under env:"test") —
-          // Node used to fail silently where Bun logs.
-          consoleFallback(app, undefined, toHttpError(error));
-          if (options.onServeError !== undefined) {
-            try {
-              const mapped = options.onServeError(toHttpError(error));
-              const writing = writeResponse(mapped, out, draining);
-              if (writing instanceof Promise) void writing.catch(() => out.destroy());
-              return;
-            } catch {
-              // A failing mapper falls back to the plain envelope below.
-            }
-          }
+    const fail = (error: unknown): Response | Promise<Response> => {
+      consoleFallback(app, undefined, toHttpError(error));
+      if (!(error instanceof InvalidRequestTargetError) && options.onServeError !== undefined) {
+        try {
+          const mapped = prepareNodeResponse(
+            options.onServeError(toHttpError(error)),
+            out,
+            draining,
+          );
+          return mapped instanceof Promise ? mapped.catch(() => envelope(error)) : mapped;
+        } catch {
+          /* A hostile mapper must not break the transport envelope. */
         }
-        out.statusCode = error instanceof InvalidRequestTargetError ? 400 : 500;
-        out.statusMessage =
-          error instanceof InvalidRequestTargetError ? "Bad Request" : "Internal Server Error";
-        out.setHeader("content-type", "text/plain; charset=utf-8");
-        out.setHeader("content-length", Buffer.byteLength(out.statusMessage));
-        out.end(out.statusMessage);
-      } else {
-        out.destroy();
       }
+      return envelope(error);
     };
-    const answer = (response: Response): void => {
-      // HA-2: answering with an OWNED body read still pending must not leave
-      // that read absorbing/retaining the rest of the body — the slot is free
-      // (inFlight 0) and the connection is unreusable. Close it and kill the
-      // socket after the flush (disconnect fails #readIncoming out).
+    const envelope = (error: unknown): Response => {
+      const status = error instanceof InvalidRequestTargetError ? 400 : 500;
+      const message = status === 400 ? "Bad Request" : "Internal Server Error";
+      return new Response(message, {
+        status,
+        statusText: message,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "content-length": String(Buffer.byteLength(message)),
+        },
+      });
+    };
+    const answer = (response: Response): Response | void | Promise<Response> => {
       const abandonedRead = source !== null && source.hasPendingOwnedRead();
       if (source !== null && mayCarryBody(source.method)) source.cleanupUnread();
-      try {
-        const writing = writeResponse(response, out, draining || abandonedRead);
-        if (writing instanceof Promise) void writing.catch(fail);
-        if (abandonedRead) {
-          out.once("close", () => {
-            // Flushed or already dead; idempotent vs onWireDone's disconnect.
-            source?.disconnect(new DOMException("early answer abandoned the body", "AbortError"));
-            socket.destroy();
-          });
-        }
-      } catch (error) {
-        fail(error);
+      if (abandonedRead) {
+        out.once("close", () => {
+          source?.disconnect(new DOMException("early answer abandoned the body", "AbortError"));
+          socket.destroy();
+        });
       }
+      const closeAfter = draining || abandonedRead;
+      if (direct && directBufferedResponses && tryWriteBareNodeResponse(response, out, closeAfter))
+        return;
+      return prepareNodeResponse(response, out, closeAfter);
     };
     try {
       source = new NodeRequestSource(incoming, handle, options.maxRequestBodySize);
-      // The native source is also the Runtime view (`server` + `remote`), so
-      // the adapter does not allocate a second request-local carrier object.
       const result = (app as NativeApplication)[HANDLE_REQUEST_SOURCE](source);
-      if (result instanceof Promise) void result.then(answer, fail);
-      else answer(result);
+      if (result instanceof Promise) return result.then(answer).catch(fail);
+      const prepared = answer(result);
+      return prepared instanceof Promise ? prepared.catch(fail) : prepared;
     } catch (error) {
-      fail(error);
+      return fail(error);
+    }
+  }
+
+  // Keala already owns a lazy IncomingMessage source. Origin-form requests
+  // need neither a second srvx Request nor a second buffered Response. Keep
+  // srvx's full handler for every other target so its absolute-form/protocol
+  // validation and error envelopes remain authoritative and unchanged.
+  const nativeHandler = transport.node!.handler;
+  server.removeListener("request", nativeHandler);
+  server.on("request", (incoming: IncomingMessage, out: ServerResponse) => {
+    if (incoming.url?.charCodeAt(0) !== 47) return nativeHandler(incoming, out);
+    try {
+      const result = dispatch(incoming, out, true);
+      if (result instanceof Promise) {
+        void result.then(
+          (response) => {
+            if (response !== undefined) sendPreparedNodeResponse(out, response);
+          },
+          () => failNodeSend(out),
+        );
+      } else if (result !== undefined) sendPreparedNodeResponse(out, result);
+    } catch {
+      failNodeSend(out);
     }
   });
 
@@ -476,7 +382,9 @@ export const startNodeServer = (
     socket.end("HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n");
   });
 
-  server.listen(options.port ?? 3000, options.hostname);
+  void Promise.resolve(transport.serve()).catch((error: unknown) => {
+    failed?.(error instanceof Error ? error : new Error(String(error)));
+  });
   // Register on the app's server slot so app.close() reaches this server no
   // matter how it was started (listen() or a direct startNodeServer).
   attachServer(app, handle);

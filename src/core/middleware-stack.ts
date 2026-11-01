@@ -10,7 +10,7 @@
 
 import { compose, type Composed, type Handler } from "./compose.ts";
 import type { Application } from "./application.ts";
-import { normalizePath } from "../router/pattern.ts";
+import { normalizePath, patternsOverlap } from "../router/pattern.ts";
 import { startsWithSegments } from "../router/router.ts";
 import type { Context } from "./context/context.ts";
 import { compilePattern, decodeSegment, type CompiledSegment } from "../router/pattern.ts";
@@ -426,25 +426,7 @@ export const hasMiddlewareForPath = (stack: MiddlewareStack, path: string): bool
  * with everything and optional segments may collapse (conservative: overlap).
  */
 export const scopeOverlapsPath = (scope: MiddlewareScope, pattern: string): boolean => {
-  const route = compilePattern(pattern).segments;
-  const collapsible = route.some((segment) => segment.optional);
-  if (!scope.prefix) {
-    if (route.length !== scope.segments.length) {
-      return collapsible && route.length > scope.segments.length;
-    }
-    return scope.segments.every(
-      (segment, index) =>
-        (route[index] as CompiledSegment).kind !== "static" ||
-        (route[index] as CompiledSegment).value === segment,
-    );
-  }
-  for (let index = 0; index < scope.segments.length; index++) {
-    const segment = route[index];
-    if (segment === undefined) return collapsible;
-    if (segment.kind !== "static") continue;
-    if (segment.value !== scope.segments[index]) return false;
-  }
-  return true;
+  return patternsOverlap(scope.pattern, pattern);
 };
 
 /**

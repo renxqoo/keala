@@ -1,15 +1,10 @@
-/**
- * nativeSink tests: sink guards (loud refusals), the JS mirror semantics
- * (portable across runtimes), and the adapter's native routes table.
- */
+/** Native sink guards, portable JS mirrors and native route tables. */
 
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-// globalThis.Bun is non-writable AND non-configurable on the real Bun
-// runtime — these suites stub it, so they run on the Node gate only (the
-// real-runtime equivalents live in scripts/smoke.ts).
+// Bun is non-configurable: stubbed runtime tests run on Node; smoke.ts uses real Bun.
 const REAL_BUN = typeof Bun !== "undefined";
 
 import {
@@ -168,7 +163,6 @@ describe("sink: guard matrix (every refusal is loud)", () => {
     expect(() => routeFirst.sink("/users/:id", () => new Response("sunk"))).toThrow(
       /overlaps an existing/,
     );
-    // Param-vs-param shapes are equally a shadow risk.
     const paramFirst = new Keala(quiet);
     paramFirst.get("/users/:uid", (c) => c.text("js"));
     expect(() => paramFirst.sink("/users/:id", () => new Response("sunk"))).toThrow(
@@ -298,6 +292,7 @@ describe("sink: native routes table (adapter)", () => {
       return {
         port: 0,
         hostname: "localhost",
+        url: new URL("http://localhost:3000"),
         stop: () => undefined,
         fetch: async () => new Response("fake"),
         reload: () => undefined,
@@ -311,8 +306,7 @@ describe("sink: native routes table (adapter)", () => {
     app.sink("/health", health);
     app.sink("/assets/*", { dir: root });
     const routes = buildNativeRoutes(app.nativeSinks);
-    // Method-scoped: a bare key would answer POST with the sunk response
-    // (verified against Bun 1.4) while the JS mirror answers 405.
+    // Method scoping preserves the mirror's POST 405.
     expect(routes["/health"]).toEqual({ GET: health });
     expect(routes["/assets/*"]).toEqual({ GET: { dir: root } });
   });
@@ -326,7 +320,12 @@ describe("sink: native routes table (adapter)", () => {
     expect((withTable.options["routes"] as Record<string, unknown>)["/health"]).toBeDefined();
 
     const withoutTable: { options: Record<string, unknown> } = { options: {} };
-    startBunServer(app, { port: 0, nativeRoutes: false }, undefined, fakeServe(withoutTable));
+    expect(() => startBunServer(app, { port: 0 }, undefined, fakeServe(withoutTable))).toThrow(
+      /twice/,
+    );
+    const mirrorApp = new Keala(quiet);
+    mirrorApp.sink("/health", new Response("ok"));
+    startBunServer(mirrorApp, { port: 0, nativeRoutes: false }, undefined, fakeServe(withoutTable));
     expect(withoutTable.options["routes"]).toBeUndefined();
   });
 
@@ -353,6 +352,7 @@ describe("sink: native routes table (adapter)", () => {
         return {
           port: 0,
           hostname: "localhost",
+          url: new URL("http://localhost:3000"),
           stop: () => undefined,
           fetch: async () => new Response("fake"),
           reload: (next) => reloads.push(next),
@@ -370,8 +370,7 @@ describe("sink: native routes table (adapter)", () => {
         expect(reloads.length).toBe(2);
         server.stop();
 
-        // The opt-out is sticky: sinks after listen({nativeRoutes: false})
-        // must NOT silently install a native table later.
+        // Late sinks preserve the nativeRoutes:false opt-out.
         const optOut = new Keala(quiet);
         const optServer = optOut.listen({ port: 0, nativeRoutes: false });
         optOut.sink("/ping", new Response("pong"));

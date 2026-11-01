@@ -2,7 +2,7 @@
 
 [English](./README.md) | 简体中文
 
-**keala 自有的 API：洋葱模型中间件 + 零依赖 + Bun 原生快路径 —— 融于
+**keala 自有的 API：洋葱模型中间件 + srvx 传输层 + Bun 原生快路径 —— 融于
 单一扁平 context，在 [Bun 1.4+](https://bun.sh) 上达到 hono 级速度。**
 
 ```bash
@@ -57,7 +57,7 @@ listen(app, 3000);
   `return c.redirect(...)` 或手建 `new Response(...)` —— 链上最后返回的
   Response 获胜；全程无返回的链回答内置 404。每个请求只分配一个
   context 对象；`query`、`cookies`、`ip`、`state` 均为首次访问时才物化。
-- **零运行时依赖。** 一切内置：CORS、CSRF、认证、ETag、压缩、静态
+- **srvx 传输层。** Node/Bun listener 使用固定版本 srvx，Keala 负责路由和应用策略。内置组件包括：CORS、CSRF、认证、ETag、压缩、静态
   文件、SSE、body 解析、Standard Schema 校验、WebCrypto 密码哈希、
   支持密钥轮换的签名 Cookie。
 - **Bun 原生超车道。** `app.sink()` 将静态路由直接沉入 Bun 原生路由表
@@ -621,3 +621,7 @@ src/
 
 MIT 许可证。主运行时 Bun ≥ 1.4（也可通过 `keala/node` 在
 Node 下运行）。
+
+## srvx 传输层迁移
+
+Node/Bun listener 基于 srvx 1.0.8，保留 Keala API 与原生服务器句柄。Node 最低版本为 20.16.0。配置 trustedHosts、overload 或 requestTimeout 时，sink 自动通过 JS mirror 执行，保证应用级保护生效。静态文件拒绝点段路径别名；带 Cookie 的请求绕过响应缓存；限流 store 支持返回 Promise 的原子操作；Node 静态 GET/Range 按选定字节流式发送。行为映射和验证见 [迁移记录](docs/SRVX-MIGRATION.md)。历史性能表仅对应记录中的版本，容量规划需要重新测量 srvx 版本。

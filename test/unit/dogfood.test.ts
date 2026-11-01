@@ -220,7 +220,7 @@ describe("C2: findSymlink", () => {
 
 describe("C2: path-safety primitives re-exported from the root entry", () => {
   it("resolveRelativeSegments keeps its security semantics (regression after move)", () => {
-    expect(resolveRelativeSegments("/a/../b/./c", false)).toEqual(["b", "c"]);
+    expect(resolveRelativeSegments("/a/../b/./c", false)).toBeNull();
     expect(resolveRelativeSegments("/guarded%2Fsecret", false)).toBeNull();
     expect(resolveRelativeSegments("/", false)).toEqual([]);
   });

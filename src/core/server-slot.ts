@@ -13,3 +13,11 @@ export const attachServer = (app: object, handle: StoppableHandle): void => {
 };
 
 export const serverOf = (app: object): StoppableHandle | undefined => servers.get(app);
+
+/** Shared startup invariant for every runtime entry point. */
+export const assertCanStart = (app: object & { isDraining?: () => boolean }): void => {
+  if (app.isDraining?.())
+    throw new TypeError("listen() after app.close() — the app is shutting down");
+  if (servers.has(app))
+    throw new TypeError("app.listen() called twice — stop()/close() the first server");
+};

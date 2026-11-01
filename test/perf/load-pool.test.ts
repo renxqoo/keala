@@ -50,6 +50,7 @@ describe("R4.6 isolated load processes", () => {
           duration: 1,
           method: "POST",
           body: '{"ok":true}',
+          expectBody: '{"ok":true}',
           headers: { "content-type": "application/json" },
         },
         {
@@ -77,6 +78,24 @@ describe("R4.6 isolated load processes", () => {
       await server.close();
     }
   }, 20000);
+
+  it("rejects a wrong response body and reaps every worker", async () => {
+    const server = await fixture((_req, res) => {
+      res.end("wrong route");
+    });
+    const pids: number[] = [];
+    try {
+      await expect(
+        runLoad(
+          { url: server.url, connections: 2, processes: 2, duration: 1, expectBody: "expected" },
+          { onSpawn: (pid) => pids.push(pid) },
+        ),
+      ).rejects.toThrow(/failed|exited/);
+      assertExited(pids);
+    } finally {
+      await server.close();
+    }
+  }, 15000);
 
   it("fails non-2xx warmup and reaps every worker", async () => {
     const server = await fixture((_req, res) => {

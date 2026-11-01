@@ -17,6 +17,7 @@ import type { HeaderValue } from "../../types.ts";
 import { byteLengthOf } from "../../utils/url.ts";
 import { isEmptyStatus } from "../../http/status.ts";
 import type { ContextState } from "./state.ts";
+import { rememberSerializedText } from "../response-snapshot.ts";
 import { createPlannedResponse } from "../response-plan.ts";
 import { isNativeRequestSource, sourceMethod } from "../request-source.ts";
 
@@ -167,16 +168,15 @@ const sugarHead = (
     record["content-type"] = contentType;
   }
   record["content-length"] = String(bodyLength);
-  if (snapshot !== undefined && c.bodySerializedValue === undefined) {
-    c.bodySerializedValue = snapshot;
-  }
-  return directResponse(
+  const response = directResponse(
     c,
     new Response(null, {
       status: status ?? 200,
       headers: headersInitOf(record),
     }),
   );
+  if (snapshot !== undefined) rememberSerializedText(response, snapshot);
+  return response;
 };
 
 /** UTF-8 byte length of a sugar payload (string or raw bytes). */
@@ -243,16 +243,10 @@ export const sugarJson = (
     response = emptyStatusResponse(st, dropContentHeaders(merged));
   } else if (sourceMethod(c.rawRequest) === "HEAD") {
     // The HEAD view serializes once, here — Response.json would attach a body.
-    const jsonText =
-      typeof payload === "object" && payload !== null
-        ? (c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(payload) ?? "null"))
-        : (JSON.stringify(payload) ?? "null");
+    const jsonText = JSON.stringify(payload) ?? "null";
     response = sugarHead(c, merged, "application/json", byteLengthOf(jsonText), st, jsonText);
   } else if (isNativeRequestSource(c.rawRequest)) {
-    const bodyText =
-      typeof payload === "object" && payload !== null
-        ? (c.bodySerializedValue ?? (c.bodySerializedValue = JSON.stringify(payload) ?? "null"))
-        : (JSON.stringify(payload) ?? "null");
+    const bodyText = JSON.stringify(payload) ?? "null";
     if (merged === undefined) {
       response = directResponse(
         c,
@@ -270,6 +264,7 @@ export const sugarJson = (
         }),
       );
     }
+    rememberSerializedText(response, bodyText);
   } else if (merged === undefined && status === undefined) {
     response = directResponse(c, Response.json(payload));
   } else {

@@ -26,6 +26,7 @@ const fakeServe = (): {
     return {
       port: (options["port"] as number) ?? 0,
       hostname: (options["hostname"] as string) ?? "localhost",
+      url: new URL("http://localhost:3000"),
       stop: () => {
         isStopped = true;
       },

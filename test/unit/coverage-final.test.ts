@@ -26,6 +26,7 @@ describe("branch coverage: final round", () => {
         return {
           port: options["port"],
           hostname: "x",
+          url: new URL("http://localhost:3000"),
           stop() {},
           fetch: async () => new Response(),
           reload() {},

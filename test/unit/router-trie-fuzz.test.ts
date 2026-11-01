@@ -288,6 +288,7 @@ describe("branch coverage: round 3", () => {
         return {
           port: options["port"],
           hostname: "localhost",
+          url: new URL("http://localhost:3000"),
           stop() {},
           fetch: async () => new Response(),
           reload() {},

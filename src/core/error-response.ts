@@ -11,6 +11,7 @@ import type { Context } from "./context/context.ts";
 import { finishCommitted, flattenHeaders, sanitizeEmptyStatus, stripBody } from "./respond.ts";
 import { normalizeError, toHttpError, type HttpError } from "../http/errors.ts";
 import { isEmptyStatus, statusMessage } from "../http/status.ts";
+import { discardBody } from "../utils/streams.ts";
 import type { HeaderMap, HeaderValue } from "../types.ts";
 
 /**
@@ -449,13 +450,24 @@ export const errorResponse = (
   c: Context,
   err: unknown,
 ): Response | Promise<Response> => {
+  const previous = c._res;
+  const finish = (response: Response): Response => {
+    if (previous !== undefined && previous !== response) {
+      try {
+        if (previous.body !== response.body) discardBody(previous);
+      } catch {
+        discardBody(previous);
+      }
+    }
+    return response;
+  };
   try {
     const out = buildErrorResponse(app, c, err);
     if (out instanceof Promise) {
-      return out.catch(() => staticServerError(c.method));
+      return out.then(finish, () => finish(staticServerError(c.method)));
     }
-    return out;
+    return finish(out);
   } catch {
-    return staticServerError(c.method);
+    return finish(staticServerError(c.method));
   }
 };

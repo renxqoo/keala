@@ -9,6 +9,7 @@
  * in per-request release closures (r4-4's settleOnce/releaseOnce pair).
  */
 
+import { promiseResolvers } from "../utils/promise.ts";
 import type { Application } from "./app.ts";
 import type { Context } from "./context/context.ts";
 import { DEADLINE_REASON, FLAG_DEADLINE_FIRED } from "./context/state.ts";
@@ -29,7 +30,7 @@ export const raceDeadline = (
   timeoutMs: number,
 ): Promise<Response> => {
   // withResolvers: the race promise without an executor closure (U2).
-  const { promise, resolve } = Promise.withResolvers<Response>();
+  const { promise, resolve } = promiseResolvers<Response>();
   // The once state object (U2): `done` ends the race for both sides; the
   // settle side only resolves, the deadline side answers 504 and frees the
   // slot. Context slots carry the zombie verdict (`deadlineAnswered` —

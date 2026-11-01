@@ -38,6 +38,7 @@ import {
 } from "./lifecycle.ts";
 import { raceDeadline } from "./lifecycle-deadline.ts";
 import { admitRequest } from "./lifecycle-admission.ts";
+import { nativeRoutesAllowed, requireRequestKernel } from "./native-policy.ts";
 import { serverOf } from "./server-slot.ts";
 import type { CloseOptions, CloseStatus } from "../types.ts";
 import {
@@ -148,6 +149,9 @@ export class Keala implements NativeApplication {
     this.#settle = (value: Response): Response => settleRequest(this.#lifecycle, value);
     this.#requestTimeout = normalizeRequestTimeout(options.requestTimeout);
     this.#trustedHosts = compileTrustedHosts(options.trustedHosts);
+    if (this.#trustedHosts !== null || options.overload !== undefined || this.#requestTimeout > 0) {
+      requireRequestKernel(this);
+    }
     this.unknownMethodAs404 = options.unknownMethodAs404 === true;
     // Dev-only route tracing (DOGFOOD-R1 C4): chains embed a reached-marker
     // so dispatch can warn when global middleware swallows a matched route.
@@ -378,7 +382,7 @@ export class Keala implements NativeApplication {
       throw new TypeError("app.listen() called twice — stop()/close() the first server");
     }
     const { listen, hostname, onListen } = parseListenArgs(args);
-    this.#nativeRoutesEnabled = listen.nativeRoutes !== false;
+    this.#nativeRoutesEnabled = listen.nativeRoutes !== false && nativeRoutesAllowed(this);
     this.#serverHandle = startBunServer(
       this,
       { ...listen, ...(hostname !== undefined ? { hostname } : {}) },

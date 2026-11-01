@@ -154,6 +154,7 @@ describe.skipIf(REAL_BUN)("sink dir scan: the reload paths rescan", () => {
     const impl: ServeImplementation = () => ({
       port: 0,
       hostname: "localhost",
+      url: new URL("http://localhost:3000"),
       stop: () => undefined,
       fetch: async () => new Response("fake"),
       reload: (next) => reloads.push(next),

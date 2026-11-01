@@ -221,7 +221,7 @@ class BodyReaderState implements RequestBodyFacade {
     if (declared !== undefined) {
       // The common path: the native promise stays internal. Every public
       // reader validates its actual byteLength before exposing/decoding it.
-      return (this.rawBytes = (source as Request & { bytes(): Promise<Uint8Array> }).bytes());
+      return (this.rawBytes = sourceBytes(source, limit));
     }
     const body = sourceBody(source);
     if (body === null) return (this.rawBytes = Promise.resolve(new Uint8Array(0)));

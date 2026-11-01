@@ -9,6 +9,7 @@
  * (default) and queue (implicit when maxQueue > 0, byte-equal to r4-4).
  */
 
+import { promiseResolvers } from "../utils/promise.ts";
 import type { AdmissionStrategy, OverloadOptions, OverloadReason } from "../types.ts";
 import type { LifecycleState, QueueWaiter } from "./lifecycle.ts";
 import { releaseInFlight } from "./lifecycle.ts";
@@ -186,7 +187,7 @@ const enqueueRequest = (
 ): Promise<Response | null> => {
   const waiter = lc.waiterPool.pop() ?? new WaiterSlot();
   // withResolvers: the promise pair without an executor closure.
-  const { promise, resolve } = Promise.withResolvers<Response | null>();
+  const { promise, resolve } = promiseResolvers<Response | null>();
   waiter.arm(lc, source, resolve, timeoutMs, transfer);
   if (!waiter.isSettled) lc.queue.push(waiter);
   return promise;

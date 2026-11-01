@@ -26,7 +26,8 @@
 import { createError } from "../http/errors.ts";
 import { isNotModified, weakEtag } from "../http/conditional.ts";
 import type { RouteHandler } from "../router/router.ts";
-import { nodeFsPromises, nodePath } from "../utils/node-lazy.ts";
+import type { Context } from "../core/context/context.ts";
+import { nodeFsPromises, nodePath, nodeStream } from "../utils/node-lazy.ts";
 import {
   findSymlink,
   findSymlinkSync,
@@ -51,8 +52,12 @@ export interface ServeStaticOptions {
   /** Directory requests serve this file instead. Default "index.html";
    *  `false` disables directory responses entirely. */
   index?: string | false;
-  /** Strip this prefix before resolving (mounted usage). */
-  prefix?: string;
+  /** Strip this prefix before resolving (mounted usage). The function form
+   *  resolves the prefix PER REQUEST from the context — the {dir} sink
+   *  mirror uses it to derive the prefix from `c.routePath`, which mount()
+   *  re-keys, so the mirror keeps stripping the FULL effective prefix under
+   *  a mount instead of a stale sub-app-local one. */
+  prefix?: string | ((c: Context) => string);
   /**
    * Dotfile policy. Default "ignore": leading-dot segments decline
    * (next()) — `/.env` and `/.git/config` used to be plain 200s (R4.10).
@@ -151,7 +156,11 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     throw new TypeError("serveStatic({ root }) requires a directory path");
   }
   const indexName = options.index === undefined ? "index.html" : options.index;
-  const prefix = stripPrefixOf(options.prefix);
+  const prefixResolver =
+    typeof options.prefix === "function" ? (options.prefix as (c: Context) => string) : null;
+  const staticPrefix = stripPrefixOf(
+    prefixResolver === null ? (options.prefix as string | undefined) : undefined,
+  );
   const dotfiles = options.dotfiles ?? "ignore";
   const precompressed = options.precompressed === true;
   const onFound = options.onFound;
@@ -169,6 +178,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
     // A prefix owns its URL SUBTREE only — matching on a bare startsWith
     // would strip "/assets" off "/assetsfoo" too and serve mounted files
     // under URLs that belong to other routes. "/" or "" is the root mount.
+    const prefix = prefixResolver === null ? staticPrefix : stripPrefixOf(prefixResolver(c));
     let relative: string | null;
     if (prefix === undefined || prefix === "" || prefix === "/") relative = c.path;
     else if (c.path === prefix) relative = "/";
@@ -285,7 +295,7 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
       }
     }
 
-    const { stat, readFile } = nodeFsPromises();
+    const { stat } = nodeFsPromises();
     let info;
     try {
       info = await stat(absolute);
@@ -390,12 +400,21 @@ export const serveStatic = (options: ServeStaticOptions): RouteHandler => {
         headers: { ...headers, "content-range": `bytes */${info.size}` },
       });
     }
-    const bytes = await readFile(filePath).catch(() => null);
-    if (bytes === null) throw createError(404);
-    const body = new Uint8Array(bytes);
+    // Seek and stream the selected representation; a one-byte Range must
+    // not read/copy the whole file into the process heap.
+    const file = nodeFsSync().createReadStream(
+      filePath,
+      range === null
+        ? {}
+        : {
+            start: range.start,
+            end: range.end,
+          },
+    );
+    const body = nodeStream().Readable.toWeb(file) as ReadableStream<Uint8Array>;
     if (range !== null) {
       const length = range.end - range.start + 1;
-      return new Response(body.subarray(range.start, range.end + 1), {
+      return new Response(body, {
         status: 206,
         headers: {
           ...headers,

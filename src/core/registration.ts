@@ -66,16 +66,18 @@ export const registerRedirect = (
     // EVERY request (the c.status setter throws).
     throw new TypeError(`redirect() code must be a 3xx integer, got ${code}`);
   }
-  const destSegments = redirectTargetSegments(destination);
-  if (destSegments !== null) assertRedirectCaptures(source, destSegments);
+  const dest = redirectTargetSegments(destination);
+  if (dest !== null) assertRedirectCaptures(source, dest.segments);
   registerDef(
     router,
     "GET",
     source,
     [
       (c) => {
+        // Param substitution runs on the PATH segments; the query/fragment
+        // suffix is appended verbatim (see redirectTargetSegments).
         const target =
-          destSegments === null ? destination : buildURL(destSegments, (n) => c.params(n));
+          dest === null ? destination : buildURL(dest.segments, (n) => c.params(n)) + dest.suffix;
         // BUG-1 (0.6.2 review): the code rides through c.redirect's EXPLICIT
         // branch, not the staged-status branch. The registered intent is a
         // validated 3xx integer — 304/306/309+ are not in isRedirectStatus,

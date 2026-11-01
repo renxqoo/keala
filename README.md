@@ -2,7 +2,7 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-**keala's own API: onion-model middleware, zero dependencies, Bun-native
+**keala's own API: onion-model middleware, srvx transports, Bun-native
 fast paths — hono-class speed in one flat context, on [Bun 1.4+](https://bun.sh).**
 
 ```bash
@@ -61,7 +61,7 @@ listen(app, 3000);
   chain that returns nothing answers the built-in 404. Every request
   allocates exactly one context object; `query`, `cookies`, `ip`, `state`
   materialize on first touch.
-- **Zero runtime dependencies.** Everything is built in: CORS, CSRF, auth,
+- **srvx runtime transport.** Node/Bun listeners share the pinned srvx dependency; Keala owns routing and application policies. Built-in utilities include: CORS, CSRF, auth,
   ETag, compression, static files, SSE, body parsing, validation (Standard
   Schema), WebCrypto password hashing, signed cookies with key rotation.
 - **Bun-native superpaths.** `app.sink()` serves static routes straight from
@@ -667,3 +667,7 @@ src/
 
 MIT license. Primary runtime Bun ≥ 1.4 (also runs under Node via
 `keala/node`).
+
+## srvx transport migration
+
+Node and Bun listeners use srvx 1.0.8 while retaining Keala's public APIs and native handles. Node requires >=20.16.0. Application-level trustedHosts, overload or requestTimeout automatically keep sunk routes on their JS mirrors so those protections apply. Static file dot-segment aliases are rejected. Cookie-bearing requests bypass response-cache replay. Rate-limit stores may return promises for atomic shared-store operations. Node static GET/Range responses stream the selected file bytes. See [the migration record](docs/SRVX-MIGRATION.md) for behavior mapping and verification. Historical benchmark tables describe their recorded revisions; remeasure the srvx revision before using those numbers for capacity planning.

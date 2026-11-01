@@ -1,0 +1,94 @@
+{
+  "diagnosticOnly": true,
+  "samplingIntervalUs": 500,
+  "scope": "Inspector started after warmup; shares are sampled active wall time excluding idle, not measured CPU-per-request or causal cost fractions",
+  "profiles": [
+    {
+      "role": "premigration",
+      "sourceSha256": "ba68e9e83fb99bdbf6d197cb8b5468b71ba61ea3bfcbdc4c454514ac184835c9",
+      "file": "profiles/premigration.cpuprofile",
+      "sampleCount": 13758,
+      "activeSampledUs": 5939342,
+      "functions": {
+        "writeUtf8String": {
+          "sampledUs": 2462041,
+          "activeShare": 0.4145309362552283
+        },
+        "writev": {
+          "sampledUs": 0,
+          "activeShare": 0
+        },
+        "writevGeneric": {
+          "sampledUs": 0,
+          "activeShare": 0
+        },
+        "_toNodeResponse": {
+          "sampledUs": 0,
+          "activeShare": 0
+        },
+        "(garbage collector)": {
+          "sampledUs": 40067,
+          "activeShare": 0.006746033483170358
+        }
+      }
+    },
+    {
+      "role": "unoptimized",
+      "sourceSha256": "a18ed34c29109dd84ac264b614bac61d1419ff9bd0b7cff575295d9dc641c1fe",
+      "file": "profiles/unoptimized.cpuprofile",
+      "sampleCount": 12582,
+      "activeSampledUs": 6089626,
+      "functions": {
+        "writeUtf8String": {
+          "sampledUs": 0,
+          "activeShare": 0
+        },
+        "writev": {
+          "sampledUs": 2737692,
+          "activeShare": 0.4495665251035121
+        },
+        "writevGeneric": {
+          "sampledUs": 161650,
+          "activeShare": 0.02654514415170981
+        },
+        "_toNodeResponse": {
+          "sampledUs": 108524,
+          "activeShare": 0.017821127274482866
+        },
+        "(garbage collector)": {
+          "sampledUs": 136050,
+          "activeShare": 0.022341273503495945
+        }
+      }
+    },
+    {
+      "role": "optimized",
+      "sourceSha256": "05df8d2775e7fe59d944cde7cac74f7462db566292d262d413621b0319a2ba4a",
+      "file": "profiles/optimized.cpuprofile",
+      "sampleCount": 11541,
+      "activeSampledUs": 5442845,
+      "functions": {
+        "writeUtf8String": {
+          "sampledUs": 2584783,
+          "activeShare": 0.47489557391401005
+        },
+        "writev": {
+          "sampledUs": 0,
+          "activeShare": 0
+        },
+        "writevGeneric": {
+          "sampledUs": 0,
+          "activeShare": 0
+        },
+        "_toNodeResponse": {
+          "sampledUs": 0,
+          "activeShare": 0
+        },
+        "(garbage collector)": {
+          "sampledUs": 52202,
+          "activeShare": 0.009590940032280912
+        }
+      }
+    }
+  ]
+}

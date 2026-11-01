@@ -123,6 +123,7 @@ describe("coverage: listen argument parsing", () => {
   const serveImpl = (options: Record<string, unknown>): ServerHandle => ({
     port: options["port"] as number,
     hostname: "127.0.0.1",
+    url: new URL("http://localhost:3000"),
     stop: () => undefined,
     fetch: async () => new Response("x"),
     reload: () => undefined,
@@ -190,6 +191,7 @@ describe("coverage: startBunServer error listener", () => {
     startBunServer(app, { port: 0 }, heard, () => ({
       port: 0,
       hostname: "x",
+      url: new URL("http://localhost:3000"),
       stop: () => undefined,
       fetch: async () => new Response("x"),
       reload: () => undefined,

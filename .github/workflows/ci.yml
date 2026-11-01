@@ -36,3 +36,17 @@ jobs:
       - run: bun scripts/example-check.ts
       - run: bun scripts/soak.ts
       - run: node scripts/process-check.mjs
+
+  minimum-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.16.0"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: node scripts/runtime-contracts.mjs

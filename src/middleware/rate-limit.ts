@@ -33,9 +33,9 @@ export interface RateLimitStore {
    * window's request limit — adapters MAY use it (e.g. to cap counters); the
    * memory store does not need it.
    */
-  hit(key: string, windowMs: number, max: number): RateLimitBucket;
+  hit(key: string, windowMs: number, max: number): RateLimitBucket | Promise<RateLimitBucket>;
   /** Read-only bucket lookup (Retry-After math, observability). */
-  get(key: string): RateLimitBucket | undefined;
+  get(key: string): RateLimitBucket | undefined | Promise<RateLimitBucket | undefined>;
 }
 
 /**
@@ -47,7 +47,12 @@ export interface RateLimitStore {
  * bucket is simply re-created on its next touch). A key flood cannot buy
  * more than `maxKeys` entries.
  */
-export const memoryRateLimitStore = (maxKeys = 10_000): RateLimitStore => {
+export interface MemoryRateLimitStore extends RateLimitStore {
+  hit(key: string, windowMs: number, max: number): RateLimitBucket;
+  get(key: string): RateLimitBucket | undefined;
+}
+
+export const memoryRateLimitStore = (maxKeys = 10_000): MemoryRateLimitStore => {
   const buckets = new Map<string, RateLimitBucket>();
   return {
     hit(key: string, windowMs: number): RateLimitBucket {
@@ -128,13 +133,12 @@ export const rateLimit = (options: RateLimitOptions = {}): RouteHandler => {
       "rateLimit({ store }) requires the 0.8 { hit, get } interface — a bare Map is no longer accepted (get/set read-modify-write races across workers); wrap one with memoryRateLimitStore(maxKeys), or adapt Redis via INCR + EXPIRE",
     );
   }
-  return (c, next) => {
-    const now = Date.now();
-    const key = keyOf(c);
-    // The single atomic admission call: hit() increments AND lapses expired
-    // windows, so the count this request is judged on is the store's own
-    // post-increment truth.
-    const bucket = store.hit(key, windowMs, limit);
+  const check = (
+    c: Context,
+    next: Parameters<RouteHandler>[1],
+    bucket: RateLimitBucket,
+    now: number,
+  ) => {
     if (bucket.count > limit) {
       const retrySeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
       throw createError(429, "Too Many Requests", {
@@ -158,5 +162,12 @@ export const rateLimit = (options: RateLimitOptions = {}): RouteHandler => {
       c.setHeader("RateLimit-Reset", String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
     }
     return next();
+  };
+  return (c, next) => {
+    const now = Date.now();
+    const bucket = store.hit(keyOf(c), windowMs, limit);
+    return bucket instanceof Promise
+      ? bucket.then((recorded) => check(c, next, recorded, now))
+      : check(c, next, bucket, now);
   };
 };

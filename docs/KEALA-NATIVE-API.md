@@ -1,6 +1,6 @@
 # keala 使用手册
 
-> 洋葱模型的 web 框架，零依赖，跑在 Bun 1.4+ 与 Node 上。
+> 洋葱模型的 web 框架，基于 srvx 传输层，跑在 Bun 1.4+ 与 Node 20.16+ 上。
 > 一个扁平 context、一种响应形态（`return`）、一条预编译中间件链。
 
 ```bash

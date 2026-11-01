@@ -53,10 +53,13 @@ export const sourceRequest = (source: RequestSource): Request =>
 export const sourceBody = (source: RequestSource): ReadableStream<Uint8Array> | null =>
   isNativeRequestSource(source) ? source.body() : source.body;
 
-export const sourceBytes = (source: RequestSource, limit?: number): Promise<Uint8Array> =>
-  isNativeRequestSource(source)
-    ? source.bytes(limit)
-    : (source as Request & { bytes(): Promise<Uint8Array> }).bytes();
+export const sourceBytes = (source: RequestSource, limit?: number): Promise<Uint8Array> => {
+  if (isNativeRequestSource(source)) return source.bytes(limit);
+  const request = source as Request & { bytes?: () => Promise<Uint8Array> };
+  return typeof request.bytes === "function"
+    ? request.bytes()
+    : request.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+};
 
 /**
  * The source's client-disconnect signal: a Fetch Request carries one

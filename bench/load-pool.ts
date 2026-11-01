@@ -11,6 +11,7 @@ export interface LoadOptions {
   method?: string;
   body?: string;
   headers?: Record<string, string>;
+  expectBody?: string;
 }
 
 interface Message {
@@ -151,6 +152,7 @@ export const runLoad = async (
           method: options.method,
           body: options.body,
           headers: options.headers,
+          expectBody: options.expectBody,
           connections: counts[index],
           pipelining: 1,
         },

@@ -293,3 +293,7 @@ hono's suite (196 cases in `hono.test.ts` alone) tests hono's own API surface
 The comparable semantics — routing capture, 404/405 behavior, middleware ordering,
 header/status handling — are cross-checked in `test/router.test.ts`, `test/compose.test.ts`,
 `scripts/smoke.ts`, and the equal-footing benchmarks in `bench/`.
+
+### srvx transport revision
+
+The Node/Bun listeners use srvx 1.0.8 with Keala's framing and lifecycle compatibility facade. Native sinking is disabled when trustedHosts, overload or requestTimeout needs the application kernel; the JS mirror remains active, including late sink registrations. Scoped middleware conflict checks share PatternIR overlap semantics. Static file dot-segment aliases now fail closed instead of being resolved after authorization. Node static files and byte ranges stream instead of buffering the entire file. Raw Request body limits cover clone/stream readers. Response serialization metadata is scoped to each response, and discarded HEAD bodies are cancelled.

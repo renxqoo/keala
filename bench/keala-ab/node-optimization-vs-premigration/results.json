@@ -1,0 +1,5037 @@
+{
+  "startedAt": "2026-11-01T01:57:14.860Z",
+  "config": {
+    "connections": 200,
+    "duration": 8,
+    "rounds": 10,
+    "processes": 4
+  },
+  "runtimes": ["node"],
+  "description": "Node 迁移前与优化后对照",
+  "snapshots": [
+    {
+      "name": "before",
+      "original": "/var/folders/dv/5c0y_g4j38sfrnzl5_r9vkvh0000gn/T/keala-hello-ab-sqJRs6/before",
+      "path": "/var/folders/dv/5c0y_g4j38sfrnzl5_r9vkvh0000gn/T/keala-hello-ab-zRxl4k/before",
+      "sourceSha256": "ba68e9e83fb99bdbf6d197cb8b5468b71ba61ea3bfcbdc4c454514ac184835c9",
+      "archive": "/Users/wrr/work/bun-koa/bench/keala-ab/node-optimization-vs-premigration/before-source.tar.gz",
+      "archiveSha256": "729397dc72bed4fea134e48eeb16845c46ed0564d3186a9ff511dc05f873e4c5"
+    },
+    {
+      "name": "after",
+      "original": "/Users/wrr/work/bun-koa",
+      "path": "/var/folders/dv/5c0y_g4j38sfrnzl5_r9vkvh0000gn/T/keala-hello-ab-zRxl4k/after",
+      "sourceSha256": "05df8d2775e7fe59d944cde7cac74f7462db566292d262d413621b0319a2ba4a",
+      "archive": "/Users/wrr/work/bun-koa/bench/keala-ab/node-optimization-vs-premigration/after-source.tar.gz",
+      "archiveSha256": "3ce77e739a074e90f84b31d141605f42fbb82b439bc4b4baeec7cbe7bc887fc5"
+    }
+  ],
+  "environment": {
+    "cpu": "Apple M4",
+    "cpus": 10,
+    "memory": 17179869184,
+    "platform": "darwin",
+    "arch": "arm64",
+    "loadAtStart": [7.35009765625, 7.22021484375, 6.498046875],
+    "loadAtEnd": [12.17333984375, 9.4775390625, 7.5859375]
+  },
+  "versions": {
+    "node": "26.9.0",
+    "bun": "1.4.4",
+    "typescript": "7.0.2",
+    "srvx": "1.0.8",
+    "autocannon": "8.0.0"
+  },
+  "source": {
+    "gitHead": "337b67c43e18cedbbb2d2a0f06b60d60d7e9979d",
+    "dirtyFiles": "M .github/workflows/ci.yml\n M README.md\n M README.zh-CN.md\n M bench/load-pool.ts\n M bun.lock\n M docs/DEPLOY.md\n M docs/KEALA-NATIVE-API.md\n M docs/PARITY.md\n M package.json\n M src/adapters/bun.ts\n M src/adapters/node-source.ts\n M src/adapters/node.ts\n M src/core/app.ts\n M src/core/compose.ts\n M src/core/context/context.ts\n M src/core/context/state.ts\n M src/core/context/sugar.ts\n M src/core/error-response.ts\n M src/core/lifecycle-admission.ts\n M src/core/lifecycle-deadline.ts\n M src/core/middleware-stack.ts\n M src/core/registration.ts\n M src/core/request-source.ts\n M src/core/respond.ts\n M src/core/response-plan.ts\n M src/core/server-slot.ts\n M src/core/sink.ts\n M src/middleware/cache.ts\n M src/middleware/etag.ts\n M src/middleware/rate-limit.ts\n M src/middleware/serve-static.ts\n M src/plugins/body-parser.ts\n M src/router/bucket-regex.ts\n M src/router/group.ts\n M src/router/match.ts\n M src/router/pattern.ts\n M src/router/router.ts\n M src/router/url.ts\n M src/utils/node-lazy.ts\n M src/utils/path-safety.ts\n M src/utils/streams.ts\n M test/integration/bun-adapter.test.ts\n M test/integration/native-sink.test.ts\n M test/integration/sink-dir-scan.test.ts\n M test/middleware/serve-static.test.ts\n M test/perf/load-pool.test.ts\n M test/unit/app-surface.test.ts\n M test/unit/coverage-final.test.ts\n M test/unit/dogfood.test.ts\n M test/unit/router-trie-fuzz.test.ts\n?? bench/framework-compare/\n?? bench/keala-ab/\n?? docs/SRVX-MIGRATION.md\n?? scripts/runtime-contracts.mjs\n?? src/adapters/node-response.ts\n?? src/core/native-policy.ts\n?? src/core/response-snapshot.ts\n?? src/core/sink-directory.ts\n?? src/utils/promise.ts\n?? test/integration/node-buffered-fastpath.test.ts\n?? test/integration/refactor-bun-transport.test.ts\n?? test/integration/refactor-contracts.test.ts\n?? test/integration/refactor-node-cancellation.test.ts\n?? test/middleware/refactor-stores.test.ts\n?? test/unit/router-fastlayer-regressions.test.ts\n?? test/unit/router-url-regressions.test.ts\n?? test/unit/sink-registration-regressions.test.ts",
+    "lockSha256": "3424519de52631d24c4b139526f0d1529f69525cc92a717931ba4b42786b2119",
+    "harness": {
+      "run.mjs": "19f4b2fb08f6735320854c78487d67d1086c1bd7fb71034ab654de07296f74c2",
+      "server.mjs": "3e0757b35940529179d894267df5afd2ce1a1f9f8af7b829b16c9df5c6912625",
+      "report.mjs": "a759f4c00a81355ac60551d18c32b3fa49737817c3022fa0808707641d9b1969",
+      "snapshots.mjs": "384aae6da125ba3b4167ffce1cab43162ceb2e8d7e49f05a285c429c51f4000c",
+      "../load-pool.ts": "7e393e0787c24d9d076e70442e403183f186218e8feb4b4b2685b611ba254320",
+      "../load-worker.mjs": "5908dfdad5bac547950eec54361f7ce5a9c6a062a01b6da5ecdc56f91510a0b7",
+      "../load-metrics.ts": "69b72ba9a71c9e39d57c1fdd1ddd0718703bcdd02d1a1e563607afc4ef4a8cee",
+      "../hotpath-metrics.ts": "1f7fcffa262ee4170c0ccdb791a58d8a4fe2491126bdbfaf00ea97d1c2ff1f42",
+      "../server-metrics.ts": "52cb328115fc863bc65e803c68095a5023f31bdcc475bcf2bc3846347e48793a",
+      "../node-runtime.ts": "1f4215d6f493b3feb05b6aa13d9b509927207be21f1c9af39e6d6420785c5641"
+    }
+  },
+  "samples": [
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 1,
+      "order": ["before", "after"],
+      "pid": 8228,
+      "at": "2026-11-01T01:57:15.428Z",
+      "hostLoadBefore": [7.35009765625, 7.22021484375, 6.498046875],
+      "hostLoadAfter": [9.04150390625, 7.59033203125, 6.6376953125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 8228,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 767832,
+          "system": 413657
+        },
+        "monotonicUs": 309333627565,
+        "rss": 102285312,
+        "heapTotal": 34488320,
+        "heapUsed": 21170888,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 8228,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5168796,
+          "system": 3716956
+        },
+        "monotonicUs": 309341745158,
+        "rss": 104710144,
+        "heapTotal": 51265536,
+        "heapUsed": 18943672,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4400964,
+        "system": 3303299,
+        "elapsedUs": 8117593,
+        "cores": 0.9490821971488347,
+        "percentOfOneCore": 94.90821971488347,
+        "nsPerRequest": 6804.575620596033
+      },
+      "load": {
+        "rps": 141368.21076289174,
+        "total": 1132218,
+        "duration": 8.009,
+        "startedAt": 1793498236730,
+        "finishedAt": 1793498244739,
+        "startSkewMs": 1,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.1303980328876595,
+          "p50": 1,
+          "p90": 1,
+          "p99": 4,
+          "p99_9": 9,
+          "max": 204,
+          "totalCount": 1132218
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 8230,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498236730,
+            "finishedAt": 1793498244737,
+            "cpu": {
+              "user": 1499810,
+              "system": 1371095,
+              "elapsedUs": 8006444.875,
+              "percentOfOneCore": 35.85742542191674
+            },
+            "result": {
+              "latencies": "HISTFAAAAFN4nJNpmSzMwMBgDsSMQMzKAAGMEEpdAMbvUdkzV+HeKcYlpmtEjvEsYP3F2Me8htGNg41FTYyFh43DxICDj4mPiYtNgEOPiYWJiQEIgQAAXz8MgA==",
+              "requests": "HISTFAAAADJ4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGXxrLtJ+R6SgjUy5TOyOTL5M4EAIAmF0F+g==",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGL/5CiNTIyPTckamqYxMuxmZspkUmeSZAM0gB68=",
+              "totalCompletedRequests": 285788,
+              "totalRequests": 285838,
+              "totalBytes": 50012900,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 285788
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:16.731Z",
+              "finish": "2026-11-01T01:57:24.737Z",
+              "1xx": 0,
+              "2xx": 285788,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8231,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498236730,
+            "finishedAt": 1793498244738,
+            "cpu": {
+              "user": 1532168,
+              "system": 1438981,
+              "elapsedUs": 8007530.25,
+              "percentOfOneCore": 37.10443678935837
+            },
+            "result": {
+              "latencies": "HISTFAAAAGB4nJNpmSzMwMCQCcSMQMzKAAGMEEpdAMbfxt9xSX7RQ8YFFrOE5/BcY7/GtIgpQo4jzIuBS8tKiomBiYlZTIKLQYSBSYBJnAnEhwIWOMkAFYXLMUAFmUEsBigXAN70DMQ=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcb/HsMUydTKyPSQiSmbyZiJgcmQCQCTYwXl",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/xZUYma6Zops9MTFMZmdyZGJhcmQDC6geS",
+              "totalCompletedRequests": 281338,
+              "totalRequests": 281388,
+              "totalBytes": 49234150,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 281338
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:16.731Z",
+              "finish": "2026-11-01T01:57:24.738Z",
+              "1xx": 0,
+              "2xx": 281338,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8232,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498236730,
+            "finishedAt": 1793498244736,
+            "cpu": {
+              "user": 1474601,
+              "system": 1360540,
+              "elapsedUs": 8006141.667,
+              "percentOfOneCore": 35.412076352408114
+            },
+            "result": {
+              "latencies": "HISTFAAAAEp4nJNpmSzMwMCgDcSMQMzKAAGMEEpdAMa/ZHnslXzTbcZdlrvEz3E9YT/D9IbRxY+Jg41BzoRHjYnBiIdFQ4RBQEGEgQkA5DYNFw==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcbfG810nIXJmWkhI5M+kzETJ5MhEwCNqwVl",
+              "throughput": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/xJUamqcxM0Uz3GZkcmdyZuIEYAMNbB5E=",
+              "totalCompletedRequests": 285362,
+              "totalRequests": 285412,
+              "totalBytes": 49938350,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 285362
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:16.731Z",
+              "finish": "2026-11-01T01:57:24.736Z",
+              "1xx": 0,
+              "2xx": 285362,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8233,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498236731,
+            "finishedAt": 1793498244739,
+            "cpu": {
+              "user": 1504610,
+              "system": 1371800,
+              "elapsedUs": 8008282.125,
+              "percentOfOneCore": 35.917940390992406
+            },
+            "result": {
+              "latencies": "HISTFAAAAG14nJNpmSzMwMBQA8SMQMzKAAGMEEpdAMbfJdxyXn7eCcY75qdEm3h+sZ5jesYop8AhIiHDwcNg56bFIsEsxqfCIMHANJORiQEMgYiZiZWJHUiCIIjHDuRDZBgQiqA0CxMTlAdWDJMEAgAuMg3X",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHG/xvF9JWR6T0TUycTkymTOpM4CwCVKgY8",
+              "throughput": "HISTFAAAADN4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYYf/slRqbljEy/GZluMjF5M5kzKbIAAL8HB9k=",
+              "totalCompletedRequests": 279730,
+              "totalRequests": 279780,
+              "totalBytes": 48952750,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 279730
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:16.731Z",
+              "finish": "2026-11-01T01:57:24.739Z",
+              "1xx": 0,
+              "2xx": 279730,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 1,
+      "order": ["before", "after"],
+      "pid": 8470,
+      "at": "2026-11-01T01:57:24.857Z",
+      "hostLoadBefore": [9.04150390625, 7.59033203125, 6.6376953125],
+      "hostLoadAfter": [10.357421875, 7.91650390625, 6.76416015625],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 8470,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 584660,
+          "system": 246501
+        },
+        "monotonicUs": 309343528856,
+        "rss": 87588864,
+        "heapTotal": 34226176,
+        "heapUsed": 21353184,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 8470,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4981771,
+          "system": 3608789
+        },
+        "monotonicUs": 309351642379,
+        "rss": 102383616,
+        "heapTotal": 49168384,
+        "heapUsed": 21646912,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 4397111,
+        "system": 3362288,
+        "elapsedUs": 8113523,
+        "cores": 0.9563538551625478,
+        "percentOfOneCore": 95.63538551625477,
+        "nsPerRequest": 6908.056967395185
+      },
+      "load": {
+        "rps": 140247.09701585714,
+        "total": 1123239,
+        "duration": 8.009,
+        "startedAt": 1793498246631,
+        "finishedAt": 1793498254640,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.1208318087245903,
+          "p50": 1,
+          "p90": 1,
+          "p99": 3,
+          "p99_9": 9,
+          "max": 169,
+          "totalCount": 1123239
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 8471,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498246631,
+            "finishedAt": 1793498254634,
+            "cpu": {
+              "user": 1653189,
+              "system": 1568939,
+              "elapsedUs": 8002778.25,
+              "percentOfOneCore": 40.26261754784971
+            },
+            "result": {
+              "latencies": "HISTFAAAAEh4nJNpmSzMwMCgCcSMQMzKAAGMEEpdAMZ/Y/DurfyWx4yXjK8JnGP/wfSBcRtjEpvIM0Y2Ni4uThYmfiZOFj1mHjE+AOafDdA=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG/x7F1M3C9J6RSZupl5FJnEmdyZEJAJpEBgo=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGH/zJUamp0xMXxmZrJkOMzIpMpkyRTMBANDYCEI=",
+              "totalCompletedRequests": 284167,
+              "totalRequests": 284217,
+              "totalBytes": 49729225,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 284167
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:26.632Z",
+              "finish": "2026-11-01T01:57:34.634Z",
+              "1xx": 0,
+              "2xx": 284167,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8472,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498246631,
+            "finishedAt": 1793498254637,
+            "cpu": {
+              "user": 1658098,
+              "system": 1565300,
+              "elapsedUs": 8005369.875,
+              "percentOfOneCore": 40.265447447548446
+            },
+            "result": {
+              "latencies": "HISTFAAAAGp4nJNpmSzMwMCQDMSMQMzKAAGMEEpdAMZ/pvZoqXzTT8Zrxvv417E0MD9ibGIMyfAJqNPhE+FjYmBhZuJkYmZhYGICsjUEmBj4+JiYeBiYWJmYgZCJAUiwMEEAAxMCgMSBfHYwEwDeBA2l",
+              "requests": "HISTFAAAADJ4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGXxrDtJKJyZnpMyNTJyMTL5MvEAMAldMF1g==",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGH/1ZUamk4xMukztTEx7GZmEmTKBGADG9Ad7",
+              "totalCompletedRequests": 280115,
+              "totalRequests": 280165,
+              "totalBytes": 49020125,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 280115
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:26.632Z",
+              "finish": "2026-11-01T01:57:34.637Z",
+              "1xx": 0,
+              "2xx": 280115,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8473,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498246631,
+            "finishedAt": 1793498254635,
+            "cpu": {
+              "user": 1639809,
+              "system": 1588935,
+              "elapsedUs": 8004225.375,
+              "percentOfOneCore": 40.33799460575534
+            },
+            "result": {
+              "latencies": "HISTFAAAAGN4nJNpmSzMwMAQCMSMQMzKAAGMEEpdAMb/pb2oWWHOZcZ/hjv4Z7F+YuphmsX4g5GLiSHMS8KAmYmZhZmJiYkBiFmYwAwOHgY2NxZmFpAQiA+UZwUy6pk4mYyBXFYmAM5IDc4=",
+              "requests": "HISTFAAAADB4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcZfHc10mIVJmuk4I1MiEwOQ4c8EAIyRBXw=",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/6JUambmYmWaaJTEztjEwMTKpM+UwAw2YHMw==",
+              "totalCompletedRequests": 283931,
+              "totalRequests": 283981,
+              "totalBytes": 49687925,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 283931
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:26.632Z",
+              "finish": "2026-11-01T01:57:34.635Z",
+              "1xx": 0,
+              "2xx": 283931,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8474,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498246631,
+            "finishedAt": 1793498254640,
+            "cpu": {
+              "user": 1594464,
+              "system": 1475241,
+              "elapsedUs": 8008767.333,
+              "percentOfOneCore": 38.32930677548003
+            },
+            "result": {
+              "latencies": "HISTFAAAAGt4nJNpmSzMwMBQDMSMQMzKAAGMEEpdAMa/IL7jhNyxZqYvds+EpnB8YX7FuIgxp8zBQk2Eg4GJlYmdCUhKsLIwc8gwK0SDOEDMzMQEJBlABBMTCwMLiAKzoRiEWGAMuAQzmM3JxAQA1jEOBw==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHG/x/F5Mh0k4WpkimXiZ+Jm8mWCQCM7AW0",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGH/nJUYmXab1zExLGZmmMzKJM/EzhTIBAMTMB1M=",
+              "totalCompletedRequests": 275026,
+              "totalRequests": 275076,
+              "totalBytes": 48129550,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 275026
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:26.632Z",
+              "finish": "2026-11-01T01:57:34.640Z",
+              "1xx": 0,
+              "2xx": 275026,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 2,
+      "order": ["after", "before"],
+      "pid": 8828,
+      "at": "2026-11-01T01:57:34.737Z",
+      "hostLoadBefore": [10.357421875, 7.91650390625, 6.76416015625],
+      "hostLoadAfter": [10.25390625, 7.96923828125, 6.79541015625],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 8828,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 798507,
+          "system": 439281
+        },
+        "monotonicUs": 309352842931,
+        "rss": 117014528,
+        "heapTotal": 48906240,
+        "heapUsed": 15779400,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 8828,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5264475,
+          "system": 3785843
+        },
+        "monotonicUs": 309360956191,
+        "rss": 117571584,
+        "heapTotal": 49692672,
+        "heapUsed": 13501400,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 4465968,
+        "system": 3346562,
+        "elapsedUs": 8113260,
+        "cores": 0.962933518708879,
+        "percentOfOneCore": 96.2933518708879,
+        "nsPerRequest": 6937.675272755044
+      },
+      "load": {
+        "rps": 140692.40379810095,
+        "total": 1126102,
+        "duration": 8.004,
+        "startedAt": 1793498255946,
+        "finishedAt": 1793498263950,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.1168499833940442,
+          "p50": 1,
+          "p90": 1,
+          "p99": 4,
+          "p99_9": 8,
+          "max": 127,
+          "totalCount": 1126102
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 8829,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498255946,
+            "finishedAt": 1793498263949,
+            "cpu": {
+              "user": 1612955,
+              "system": 1546018,
+              "elapsedUs": 8002855.542,
+              "percentOfOneCore": 39.47307287281782
+            },
+            "result": {
+              "latencies": "HISTFAAAAEV4nJNpmSzMwMCgAcSMQMzKAAGMEEpdAMb/pfjtmvyNY4wNVh/EzvDOYN/AcoExJaaDUYGJT4HJiIOZiZmJiQEIAcguDPU=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGfx3FtJaViZWplkmZKZtJk8mXCQCHuwV9",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGH/1JUaml8xM7EyrGZkMmaYyMpkzZTMBAMdOB7U=",
+              "totalCompletedRequests": 281533,
+              "totalRequests": 281583,
+              "totalBytes": 49268275,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 281533
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:35.947Z",
+              "finish": "2026-11-01T01:57:43.949Z",
+              "1xx": 0,
+              "2xx": 281533,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8830,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498255946,
+            "finishedAt": 1793498263950,
+            "cpu": {
+              "user": 1573818,
+              "system": 1558349,
+              "elapsedUs": 8003437.5,
+              "percentOfOneCore": 39.13527156300027
+            },
+            "result": {
+              "latencies": "HISTFAAAAGF4nJNpmSzMwMCQBMSMQMzKAAGMEEpdAMbfIHZnnfyhB4wXzHcJHeC7xdLGOocxI0uOgYNBS4SJhZ2JFQiZGJiYwZAdiBmAAiA2KxM3WBzMYYAwWaFMBog2JiaQfgCBygyQ",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcZvjWHqZWEKZdJmYmAyZBJn2szIBACCgATv",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGH/qZUamr0xMpUy2TMxMrkyyTD8ZmQC+sQef",
+              "totalCompletedRequests": 279309,
+              "totalRequests": 279359,
+              "totalBytes": 48879075,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 279309
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:35.947Z",
+              "finish": "2026-11-01T01:57:43.950Z",
+              "1xx": 0,
+              "2xx": 279309,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8831,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498255946,
+            "finishedAt": 1793498263950,
+            "cpu": {
+              "user": 1573377,
+              "system": 1511154,
+              "elapsedUs": 8003629.75,
+              "percentOfOneCore": 38.539151564326176
+            },
+            "result": {
+              "latencies": "HISTFAAAAEJ4nJNpmSzMwMCgCsSMQMzKAAGMEEpdAMbv0Xy0X+HMMsYJ5osEP/HeYN3CVJFTUMLEpMKkx8TAxMQMJJiZAIMKC9I=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGPx3DdJ6ZKZ7JmEmfSZsplcmXCQCIowWX",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/oZUam80xMrYxMrkzOTNZM3YxM2UwAyZgH2Q==",
+              "totalCompletedRequests": 285835,
+              "totalRequests": 285885,
+              "totalBytes": 50021125,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 285835
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:35.947Z",
+              "finish": "2026-11-01T01:57:43.950Z",
+              "1xx": 0,
+              "2xx": 285835,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 8832,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498255946,
+            "finishedAt": 1793498263949,
+            "cpu": {
+              "user": 1530209,
+              "system": 1457789,
+              "elapsedUs": 8003035.625,
+              "percentOfOneCore": 37.335807811051694
+            },
+            "result": {
+              "latencies": "HISTFAAAAGJ4nJNpmSzMwMCQA8SMQMzKAAGMEEpdAMbfI/Jmr/yrm4xfzJYJ/eG+xbyPOcfCZQOjjxiDFIMdG5skEwMQsgAxBAEJMAsuAEIsYD4zEDJAITMTKxOYywqEzEzcEA4Ad1EN3Q==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAca/GM30k5lpPiMTK5MiUyUTL1MxEwCR8wXo",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGP/jJUamm0xM2xmZOJn0mZYzMgkyzWdkAgDWdAgY",
+              "totalCompletedRequests": 279425,
+              "totalRequests": 279475,
+              "totalBytes": 48899375,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 279425
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:35.947Z",
+              "finish": "2026-11-01T01:57:43.949Z",
+              "1xx": 0,
+              "2xx": 279425,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 2,
+      "order": ["after", "before"],
+      "pid": 9253,
+      "at": "2026-11-01T01:57:44.180Z",
+      "hostLoadBefore": [10.25390625, 7.96923828125, 6.79541015625],
+      "hostLoadAfter": [9.75341796875, 7.93701171875, 6.79736328125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 9253,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 784286,
+          "system": 444315
+        },
+        "monotonicUs": 309362302067,
+        "rss": 100483072,
+        "heapTotal": 33439744,
+        "heapUsed": 20984384,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 9253,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5188504,
+          "system": 3759630
+        },
+        "monotonicUs": 309370417566,
+        "rss": 117833728,
+        "heapTotal": 49954816,
+        "heapUsed": 13891256,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4404218,
+        "system": 3315315,
+        "elapsedUs": 8115499,
+        "cores": 0.9512086687460624,
+        "percentOfOneCore": 95.12086687460624,
+        "nsPerRequest": 6881.092519746454
+      },
+      "load": {
+        "rps": 140090.78421578422,
+        "total": 1121847,
+        "duration": 8.008,
+        "startedAt": 1793498265405,
+        "finishedAt": 1793498273413,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.1146502152254274,
+          "p50": 1,
+          "p90": 1,
+          "p99": 3,
+          "p99_9": 16,
+          "max": 116,
+          "totalCount": 1121847
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 9279,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498265405,
+            "finishedAt": 1793498273412,
+            "cpu": {
+              "user": 1438704,
+              "system": 1345840,
+              "elapsedUs": 8006723.292,
+              "percentOfOneCore": 34.777572528105296
+            },
+            "result": {
+              "latencies": "HISTFAAAAF94nJNpmSzMwMDgA8SMQMzKAAGMEEpdAMZfotjUp7BgNeMcjW98J1iOMZXcYKySmsY0g5GByaROiUnHiolJhImBiYODzcNPSciHmY0ByAMiZigGcpiYhJhAQkwApikOSg==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcafG810nJmJn2k2MxMnkyCTPJMyEwCGqgTM",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/sJUam7UxMnEw3mZl4mSSZtJkMmQC8/Abu",
+              "totalCompletedRequests": 280922,
+              "totalRequests": 280972,
+              "totalBytes": 49161350,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 280922
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:45.406Z",
+              "finish": "2026-11-01T01:57:53.412Z",
+              "1xx": 0,
+              "2xx": 280922,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9280,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498265405,
+            "finishedAt": 1793498273413,
+            "cpu": {
+              "user": 1517785,
+              "system": 1405188,
+              "elapsedUs": 8007864.916,
+              "percentOfOneCore": 36.50127756475756
+            },
+            "result": {
+              "latencies": "HISTFAAAAGx4nJNpmSzMwMCQBsSMQMzKAAGMEEpdAMa/JHBskcKtZYyHlGdwL2M9wFi3jTHJKEVIR6CNMYbJhYlViMuMmYfLhE1AI4+PiZWJi5mDTZqFhZ2JgQkFsAAxAxtQEI6YmJiZmNi5GMBSACuyDoM=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGb45hmszMNJWRiZdpNiNTLpMsEzcTAI2KBUs=",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGH/yZUamyUxM7YxMokxA5nRGJk0mQSYAyy4Hbw==",
+              "totalCompletedRequests": 280214,
+              "totalRequests": 280264,
+              "totalBytes": 49037450,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 280214
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:45.406Z",
+              "finish": "2026-11-01T01:57:53.413Z",
+              "1xx": 0,
+              "2xx": 280214,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9281,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498265405,
+            "finishedAt": 1793498273413,
+            "cpu": {
+              "user": 1585774,
+              "system": 1569151,
+              "elapsedUs": 8007114.25,
+              "percentOfOneCore": 39.401523463962064
+            },
+            "result": {
+              "latencies": "HISTFAAAAFp4nJNpmSzMwMDgBMSMQMzKAAGMEEpdAMY/oPjmsPyOi4zXDFbwfmBtYal5xPiHMaqKhcmFS4yJOYdBgYGJiY2JQ4FJS0wuiAXIYWIAQQ5mIAnELJwKAEEwDpk=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcZfHc20nJnJkOkhE5M+EzuTJJMgEwCLHgUl",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/6JUamhUxMikyTmZkcmbiZVJnEmQC7mga6",
+              "totalCompletedRequests": 279121,
+              "totalRequests": 279171,
+              "totalBytes": 48846175,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 279121
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:45.406Z",
+              "finish": "2026-11-01T01:57:53.412Z",
+              "1xx": 0,
+              "2xx": 279121,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9282,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498265405,
+            "finishedAt": 1793498273412,
+            "cpu": {
+              "user": 1543261,
+              "system": 1440358,
+              "elapsedUs": 8006779.541,
+              "percentOfOneCore": 37.26365868726496
+            },
+            "result": {
+              "latencies": "HISTFAAAAFF4nJNpmSzMwMBgAsSMQMzKAAGMEEpdAMZvUb/Ro9CzlXGVyh3uPextLKcYLzFOY2RKk2DS28JoJRXAwsTAw8HEAIQcPh4RZjoMLKYcAENMDiI=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGfxnFtJyFqZ+R6SAjky0TM5MmkygTAJhlBcA=",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGH/1JUam70xM1UydTEyhTKxMlkyyTADCfAdb",
+              "totalCompletedRequests": 281590,
+              "totalRequests": 281640,
+              "totalBytes": 49278250,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 281590
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:45.406Z",
+              "finish": "2026-11-01T01:57:53.412Z",
+              "1xx": 0,
+              "2xx": 281590,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 3,
+      "order": ["before", "after"],
+      "pid": 9590,
+      "at": "2026-11-01T01:57:53.519Z",
+      "hostLoadBefore": [9.75341796875, 7.93701171875, 6.79736328125],
+      "hostLoadAfter": [9.611328125, 7.970703125, 6.822265625],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 9590,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 775791,
+          "system": 451149
+        },
+        "monotonicUs": 309371632248,
+        "rss": 102383616,
+        "heapTotal": 35274752,
+        "heapUsed": 16578808,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 9590,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5269262,
+          "system": 3738773
+        },
+        "monotonicUs": 309379742391,
+        "rss": 119046144,
+        "heapTotal": 50216960,
+        "heapUsed": 21431048,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4493471,
+        "system": 3287624,
+        "elapsedUs": 8110143,
+        "cores": 0.959427595789618,
+        "percentOfOneCore": 95.9427595789618,
+        "nsPerRequest": 6541.995296815976
+      },
+      "load": {
+        "rps": 148583.0106183635,
+        "total": 1189407,
+        "duration": 8.005,
+        "startedAt": 1793498274735,
+        "finishedAt": 1793498282740,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.1169170855728947,
+          "p50": 1,
+          "p90": 1,
+          "p99": 4,
+          "p99_9": 11,
+          "max": 121,
+          "totalCount": 1189407
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 9592,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498274735,
+            "finishedAt": 1793498282737,
+            "cpu": {
+              "user": 1447108,
+              "system": 1278302,
+              "elapsedUs": 8002558.083,
+              "percentOfOneCore": 34.05673500564332
+            },
+            "result": {
+              "latencies": "HISTFAAAAF14nJNpmSzMwMBgD8SMQMzKAAGMEEpdAMbfw3fmp+KsRYwtmt9EX/Dc4HzGvIMxZB8jB49VgpKDkAkbCwMXFxMDEzMQcrIxMElpSfMwcYgxybCJM3EysfAAAAdKDmo=",
+              "requests": "HISTFAAAAC94nJNpmSzMwMAgAMSMQMzMAAGMYJLfyQHGvxnAtFaQqZDJmYmdSZJFlgkAe6EE1g==",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAgBMSMQMzMAAEgtrhH2QsGGP/1MUamt4JMsxmZYpm4mVRZ1JkAtWIHLA==",
+              "totalCompletedRequests": 295644,
+              "totalRequests": 295694,
+              "totalBytes": 51737700,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 295644
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:54.735Z",
+              "finish": "2026-11-01T01:58:02.737Z",
+              "1xx": 0,
+              "2xx": 295644,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9593,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498274735,
+            "finishedAt": 1793498282740,
+            "cpu": {
+              "user": 1466526,
+              "system": 1365654,
+              "elapsedUs": 8005163.875,
+              "percentOfOneCore": 35.37941314162041
+            },
+            "result": {
+              "latencies": "HISTFAAAAGx4nJNpmSzMwMAQC8SMQMzKAAGMEEpdAMa/wTNvj9KMsgbldRL3eE9xNrFsYoy6wSjGYVKgpcYgwaHGw+HCwcrCwMTAxMzEwsDGwMTDDGSxgvkcTFxMQAYTSARI8QtoSEgDpVghIkAaAGhrDac=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAca/6cu0WYRpLiMTK5MtEzOTLBM/EwCLqAT9",
+              "throughput": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGH/pEUamvSJMVxmZ2JlCgViTSZQJAL0PBuA=",
+              "totalCompletedRequests": 296857,
+              "totalRequests": 296907,
+              "totalBytes": 51949975,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 296857
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:57:54.735Z",
+              "finish": "2026-11-01T01:58:02.740Z",
+              "1xx": 0,
+              "2xx": 296857,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9594,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498274735,
+            "finishedAt": 1793498282739,
+            "cpu": {
+              "user": 1447687,
+              "system": 1343376,
+              "elapsedUs": 8004516.083,
+              "percentOfOneCore": 34.86860381138671
+            },
+            "result": {
+              "latencies": "HISTFAAAAHJ4nJNpmSzMwMBQCMSMQMzKAAGMEEpdAMa/wndnpvIhuzb1LrEl3BN4zjA/YZSrkTHQ0lNSk5Di4jHg8WBmYWJgYmZiYAFiDgYuJiCbmYkVKMbAxsLBBpIBY1YmEGBgUlLhAVEQDFIFVs8O08MEAET+DRU=",
+              "requests": "HISTFAAAAC94nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGv+nN9FuMKZ9JFgh5mQSZ+JkAiPAFCw==",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/7IUams2JM0xmZtJnUmYSZJJlEmQDBSQb2",
+              "totalCompletedRequests": 299461,
+              "totalRequests": 299511,
+              "totalBytes": 52405675,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 299461
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:54.735Z",
+              "finish": "2026-11-01T01:58:02.739Z",
+              "1xx": 0,
+              "2xx": 299461,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9595,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498274735,
+            "finishedAt": 1793498282737,
+            "cpu": {
+              "user": 1480502,
+              "system": 1408154,
+              "elapsedUs": 8002147.875,
+              "percentOfOneCore": 36.09850811461042
+            },
+            "result": {
+              "latencies": "HISTFAAAAGN4nJNpmSzMwMDgCsSMQMzKAAGMEEpdAMY/w/PoqNK3kgeK74QfCd7iWcI6jdGsSEzGI0ZJgUmGwYSZhZNLiYOViVOGiYmZi4mZiYWZBUhyMTMxsUiwM7FzKXEyMTABAF2lDhM=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHG7/Rn2ijMFM6kzyTLxM8kzsTABAB+rgRl",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYYf+5RRqZGEaZKJkcmTSZRJmUmZiYArz8GQw==",
+              "totalCompletedRequests": 297445,
+              "totalRequests": 297495,
+              "totalBytes": 52052875,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 297445
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:57:54.735Z",
+              "finish": "2026-11-01T01:58:02.737Z",
+              "1xx": 0,
+              "2xx": 297445,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 3,
+      "order": ["before", "after"],
+      "pid": 9981,
+      "at": "2026-11-01T01:58:02.854Z",
+      "hostLoadBefore": [9.611328125, 7.970703125, 6.822265625],
+      "hostLoadAfter": [10.47119140625, 8.20263671875, 6.91748046875],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 9981,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 768748,
+          "system": 441840
+        },
+        "monotonicUs": 309380962737,
+        "rss": 100794368,
+        "heapTotal": 33701888,
+        "heapUsed": 21414456,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 9981,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5107922,
+          "system": 3675148
+        },
+        "monotonicUs": 309389076556,
+        "rss": 106479616,
+        "heapTotal": 49168384,
+        "heapUsed": 23730424,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 4339174,
+        "system": 3233308,
+        "elapsedUs": 8113819,
+        "cores": 0.9332820956444802,
+        "percentOfOneCore": 93.32820956444802,
+        "nsPerRequest": 6714.48496740951
+      },
+      "load": {
+        "rps": 140867.22458156382,
+        "total": 1127783,
+        "duration": 8.006,
+        "startedAt": 1793498284066,
+        "finishedAt": 1793498292072,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.1500022610732739,
+          "p50": 1,
+          "p90": 1,
+          "p99": 4,
+          "p99_9": 12,
+          "max": 153,
+          "totalCount": 1127783
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 9982,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498284066,
+            "finishedAt": 1793498292069,
+            "cpu": {
+              "user": 1414197,
+              "system": 1259989,
+              "elapsedUs": 8002943.291,
+              "percentOfOneCore": 33.41503122991453
+            },
+            "result": {
+              "latencies": "HISTFAAAAEt4nJNpmSzMwMCgA8SMQMzKAAGMEEpdAMZ/IL9mpsKzTYyn9NtkZvGvYG9gbWCqamJ8w5gSxx7Bw8PCzJXIxcnCzcTCbiEBAOsbDb0=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG/x3FtJGFKZdJneklIxM302xGJm0mAJwgBlw=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGH/7JUamv0xMiUymTAeZmPiZrjMyWTMBAM4ZCDM=",
+              "totalCompletedRequests": 284424,
+              "totalRequests": 284474,
+              "totalBytes": 49774200,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 284424
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:04.067Z",
+              "finish": "2026-11-01T01:58:12.069Z",
+              "1xx": 0,
+              "2xx": 284424,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9983,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498284066,
+            "finishedAt": 1793498292069,
+            "cpu": {
+              "user": 1446234,
+              "system": 1335221,
+              "elapsedUs": 8003212.625,
+              "percentOfOneCore": 34.75423096109483
+            },
+            "result": {
+              "latencies": "HISTFAAAAGd4nJNpmSzMwMAQBsSMQMzKAAGMEEpdAMa/JDHprnzHKcY2kw6pJ/y/OHuYXzDW1Om0MDYwMjEIsTjJMbAxMUiwsDIxibAwMDExMDEDMZAEiTBDuWARJk4tLhYmJiYWUSkhFgAwkQ4f",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGvx/NdJyZqZ5JkGkrIxMr03ZGJnUmAJmvBjA=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/3JUamrUxMpUySTD8ZmdiZfjMymTMBANFICHY=",
+              "totalCompletedRequests": 281826,
+              "totalRequests": 281876,
+              "totalBytes": 49319550,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 281826
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:04.067Z",
+              "finish": "2026-11-01T01:58:12.069Z",
+              "1xx": 0,
+              "2xx": 281826,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9984,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498284066,
+            "finishedAt": 1793498292069,
+            "cpu": {
+              "user": 1432407,
+              "system": 1326378,
+              "elapsedUs": 8003339.208,
+              "percentOfOneCore": 34.47042451033896
+            },
+            "result": {
+              "latencies": "HISTFAAAAGl4nJNpmSzMwMAQBcSMQMzKAAGMEEpdAMb/JzWnU2HXJsYPej0Ss/gmcP5gWcPUwqgSt49RQcyGiyODiYmPT0VIioEJCBUYmIAUMxMQMTCxAiEzhMsAoYAMDilOFm4mVg4+OVYOAHO1Dl4=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGPxjNdJiFxZFpNiOTIdNSRiZjJgCKRwXK",
+              "throughput": "HISTFAAAADN4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYY//klRqaJzCyRTFcZmZyZnjIyuTIBAL6KCBg=",
+              "totalCompletedRequests": 282870,
+              "totalRequests": 282920,
+              "totalBytes": 49502250,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 282870
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:04.067Z",
+              "finish": "2026-11-01T01:58:12.069Z",
+              "1xx": 0,
+              "2xx": 282870,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 9985,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498284066,
+            "finishedAt": 1793498292072,
+            "cpu": {
+              "user": 1390322,
+              "system": 1272146,
+              "elapsedUs": 8005716.542,
+              "percentOfOneCore": 33.257085559200405
+            },
+            "result": {
+              "latencies": "HISTFAAAAGR4nJNpmSzMwMCQBcSMQMzKAAGMEEpdAMZfxdF2SX7JdsYlel3SEwR62JewdjH9YawImsNox8BkoJYmxFXKw8bEAIRMbECSy0KICQgYmNghYgwsDEwQAQgF5zJA5ZngNABGUg4U",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAca/HM20n5kpk0mcyZDpNSNTMZMxEwCR5gY0",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/zJUamjUxMnkyKTM5Mh5mY5jMyuTIBAMt2B/8=",
+              "totalCompletedRequests": 278663,
+              "totalRequests": 278713,
+              "totalBytes": 48766025,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 278663
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:58:04.067Z",
+              "finish": "2026-11-01T01:58:12.072Z",
+              "1xx": 0,
+              "2xx": 278663,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 4,
+      "order": ["after", "before"],
+      "pid": 10115,
+      "at": "2026-11-01T01:58:12.184Z",
+      "hostLoadBefore": [10.47119140625, 8.20263671875, 6.91748046875],
+      "hostLoadAfter": [9.7705078125, 8.12939453125, 6.90576171875],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 10115,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 754076,
+          "system": 411006
+        },
+        "monotonicUs": 309390362695,
+        "rss": 99745792,
+        "heapTotal": 35012608,
+        "heapUsed": 16348432,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 10115,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5332165,
+          "system": 3846203
+        },
+        "monotonicUs": 309398474355,
+        "rss": 115900416,
+        "heapTotal": 51003392,
+        "heapUsed": 17366688,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 4578089,
+        "system": 3435197,
+        "elapsedUs": 8111660,
+        "cores": 0.9878725193117068,
+        "percentOfOneCore": 98.78725193117069,
+        "nsPerRequest": 6208.548012452293
+      },
+      "load": {
+        "rps": 161234.9781386633,
+        "total": 1290686,
+        "duration": 8.005,
+        "startedAt": 1793498293466,
+        "finishedAt": 1793498301471,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.0336549710773961,
+          "p50": 1,
+          "p90": 1,
+          "p99": 2,
+          "p99_9": 4,
+          "max": 142,
+          "totalCount": 1290686
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 10116,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498293466,
+            "finishedAt": 1793498301471,
+            "cpu": {
+              "user": 1603049,
+              "system": 1604044,
+              "elapsedUs": 8004659.208,
+              "percentOfOneCore": 40.065328412667135
+            },
+            "result": {
+              "latencies": "HISTFAAAAEt4nJNpmSzMwMDgAsSMQMzKAAGMEEpdAMZfofuiRe1I0hKxQxwFNkoszEwMTCDExMQMxmAmA5MmEIsyMbCAJRmYoCSEac0EADcJCHU=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHG/5zAdJuJiZNJk4mBiZVJlomfCQCD+QST",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYYv/c6I9NtZiZ+JksmZiZOJnUmUSYArR8GAA==",
+              "totalCompletedRequests": 322921,
+              "totalRequests": 322971,
+              "totalBytes": 56511175,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 322921
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:13.467Z",
+              "finish": "2026-11-01T01:58:21.471Z",
+              "1xx": 0,
+              "2xx": 322921,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10117,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498293466,
+            "finishedAt": 1793498301470,
+            "cpu": {
+              "user": 1564657,
+              "system": 1570143,
+              "elapsedUs": 8003636.416,
+              "percentOfOneCore": 39.167196472509026
+            },
+            "result": {
+              "latencies": "HISTFAAAAFh4nJNpmSzMwMCQBcSMQMzKAAGMEEpdAMZfJHLov+qd6HNiezgnMEmkMDEzcTIxMLECaWYgDcLIJDIfTEHVAQkmdiZJIGYG6gXymcBKGMA0WA07EwDC6QlO",
+              "requests": "HISTFAAAAC94nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGvxnH9JaFSZhJkYkTCC2ZBJkAhCkEuA==",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYY/+8VRqaHrEzSTPpM3Ez8TP5M4kwAtuMGrw==",
+              "totalCompletedRequests": 320734,
+              "totalRequests": 320784,
+              "totalBytes": 56128450,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 320734
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:13.467Z",
+              "finish": "2026-11-01T01:58:21.470Z",
+              "1xx": 0,
+              "2xx": 320734,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10118,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498293466,
+            "finishedAt": 1793498301470,
+            "cpu": {
+              "user": 1519188,
+              "system": 1481445,
+              "elapsedUs": 8004325.042,
+              "percentOfOneCore": 37.48764554481719
+            },
+            "result": {
+              "latencies": "HISTFAAAAFN4nJNpmSzMwMAQCcSMQMzKAAGMEEpdAMY/InHuteq11HOiHZw/mBQ09ASZ2JkYgJCJlwlEApksEIoJzGIGMaBYmYmTCQaYmaDKgUgVzAMAPeIJmw==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGvx7H1M7KxMwkysTKxM6kzyTMBAB8kQQn",
+              "throughput": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYY//cVRqZmNiZ2Jnkg5mRyZpJkAgCvSQYY",
+              "totalCompletedRequests": 320328,
+              "totalRequests": 320378,
+              "totalBytes": 56057400,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 320328
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:13.467Z",
+              "finish": "2026-11-01T01:58:21.470Z",
+              "1xx": 0,
+              "2xx": 320328,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10119,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498293466,
+            "finishedAt": 1793498301469,
+            "cpu": {
+              "user": 1639674,
+              "system": 1644913,
+              "elapsedUs": 8002710.125,
+              "percentOfOneCore": 41.043433395633585
+            },
+            "result": {
+              "latencies": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzKAAGMEEpdAMa/5vbiiNo/5xVimzhXMXLxsTIxMDEBALcQCBA=",
+              "requests": "HISTFAAAAC94nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGv5nI1M7ExMskyiTOxMwkCSQBfV4ELw==",
+              "throughput": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYYf+YNRqaXTEzCTPJAyMqkzKTIBACu1QYk",
+              "totalCompletedRequests": 326703,
+              "totalRequests": 326753,
+              "totalBytes": 57173025,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 326703
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:13.467Z",
+              "finish": "2026-11-01T01:58:21.469Z",
+              "1xx": 0,
+              "2xx": 326703,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 4,
+      "order": ["after", "before"],
+      "pid": 10498,
+      "at": "2026-11-01T01:58:21.564Z",
+      "hostLoadBefore": [9.7705078125, 8.12939453125, 6.90576171875],
+      "hostLoadAfter": [9.35693359375, 8.09228515625, 6.90673828125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 10498,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 811389,
+          "system": 442309
+        },
+        "monotonicUs": 309399676697,
+        "rss": 118210560,
+        "heapTotal": 49430528,
+        "heapUsed": 16771144,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 10498,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5163325,
+          "system": 3984062
+        },
+        "monotonicUs": 309407789150,
+        "rss": 119472128,
+        "heapTotal": 50479104,
+        "heapUsed": 25702864,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4351936,
+        "system": 3541753,
+        "elapsedUs": 8112453,
+        "cores": 0.9730335571743837,
+        "percentOfOneCore": 97.30335571743836,
+        "nsPerRequest": 6903.752959398841
+      },
+      "load": {
+        "rps": 142798.9259398027,
+        "total": 1143391,
+        "duration": 8.007,
+        "startedAt": 1793498302780,
+        "finishedAt": 1793498310787,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.0826777541540908,
+          "p50": 1,
+          "p90": 1,
+          "p99": 3,
+          "p99_9": 5,
+          "max": 144,
+          "totalCount": 1143391
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 10531,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498302780,
+            "finishedAt": 1793498310783,
+            "cpu": {
+              "user": 1985193,
+              "system": 2164183,
+              "elapsedUs": 8003067.042,
+              "percentOfOneCore": 51.84732276043827
+            },
+            "result": {
+              "latencies": "HISTFAAAAFR4nJNpmSzMwMDgD8SMQMzKAAGMEEpdAMafYbpptuKbg4yz5KewfWJkYBFgcuFjYGJi4OJiYOFjYmBisBIDkUxsTMxgmhmMmaEsVpAYC5IwAMrzCT0=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG741hOsrE9JSJyZCJlamSqZ2RSZgJAJVHBeM=",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGH/mZUam+4xM35mYnJk4mRYzMu1lZJJkAgDV7wg9",
+              "totalCompletedRequests": 290553,
+              "totalRequests": 290603,
+              "totalBytes": 50846775,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 290553
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:22.781Z",
+              "finish": "2026-11-01T01:58:30.783Z",
+              "1xx": 0,
+              "2xx": 290553,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10532,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498302780,
+            "finishedAt": 1793498310783,
+            "cpu": {
+              "user": 1853361,
+              "system": 1947980,
+              "elapsedUs": 8002772.916,
+              "percentOfOneCore": 47.50029820788682
+            },
+            "result": {
+              "latencies": "HISTFAAAAFZ4nJNpmSzMwMAQDMSMQMzKAAGMEEpdAMb/ZrbhtMKb64y7VKdxPGNSENFh4nFh4mFiYmASAREMTEpqICYzmM0ApJnBJIgNZTAzsTDAmcxMTEwAQ0cKWA==",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG3x7N1M7MNJuJaS0jEy8TA9N1RiYmAJM2Bc4=",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGP/+JUambiamZiamt4xMwkwMTMuZgAQA0dAHng==",
+              "totalCompletedRequests": 287582,
+              "totalRequests": 287632,
+              "totalBytes": 50326850,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 287582
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:22.781Z",
+              "finish": "2026-11-01T01:58:30.783Z",
+              "1xx": 0,
+              "2xx": 287582,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10533,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498302780,
+            "finishedAt": 1793498310787,
+            "cpu": {
+              "user": 1522301,
+              "system": 1441453,
+              "elapsedUs": 8006473.084,
+              "percentOfOneCore": 37.01697325283858
+            },
+            "result": {
+              "latencies": "HISTFAAAAFR4nJNpmSzMwMAQC8SMQMzKAAGMEEpdAMb/xTrpguyhZ0zrbFv4ZrBE8agICDErMHOoMYhJsAOZAsws6UzIgIWFiQFEgwkYkwGJzcQKlQNSAKATCmU=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGnxrFtJSJ6TUzkzETN5MjkzPTU0YmAJP7Bi4=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/jRUam44xMb5mY3JkEmSKZYpl2MzEBANHOCHQ=",
+              "totalCompletedRequests": 271341,
+              "totalRequests": 271391,
+              "totalBytes": 47484675,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 271341
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:58:22.781Z",
+              "finish": "2026-11-01T01:58:30.786Z",
+              "1xx": 0,
+              "2xx": 271341,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10534,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498302780,
+            "finishedAt": 1793498310783,
+            "cpu": {
+              "user": 1699887,
+              "system": 1724077,
+              "elapsedUs": 8002977.292,
+              "percentOfOneCore": 42.78362758098402
+            },
+            "result": {
+              "latencies": "HISTFAAAAE54nJNpmSzMwMDgD8SMQMzKAAGMEEpdAMZf4Hjho+KsmYwfpFew/GFkY2JiiABiJiYmPiYWHgYm5hAWEI8BDJnhGM4F0ywwYWYmAO5gCbM=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGnxrD1MnMtJCJKZ6JlcmfqZORSZEJAI89BYA=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGH/+ZUamXiam00xMrYxM7Ey5TLsZmfSZAM8uB+Q=",
+              "totalCompletedRequests": 293915,
+              "totalRequests": 293965,
+              "totalBytes": 51435125,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 293915
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:22.781Z",
+              "finish": "2026-11-01T01:58:30.783Z",
+              "1xx": 0,
+              "2xx": 293915,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 5,
+      "order": ["before", "after"],
+      "pid": 10573,
+      "at": "2026-11-01T01:58:30.882Z",
+      "hostLoadBefore": [9.35693359375, 8.09228515625, 6.90673828125],
+      "hostLoadAfter": [9.408203125, 8.12353515625, 6.9248046875],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 10573,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 801757,
+          "system": 448181
+        },
+        "monotonicUs": 309409022438,
+        "rss": 115589120,
+        "heapTotal": 48644096,
+        "heapUsed": 12586656,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 10573,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5177593,
+          "system": 4023423
+        },
+        "monotonicUs": 309417134537,
+        "rss": 116506624,
+        "heapTotal": 49692672,
+        "heapUsed": 21032872,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4375836,
+        "system": 3575242,
+        "elapsedUs": 8112099,
+        "cores": 0.9801505134491085,
+        "percentOfOneCore": 98.01505134491086,
+        "nsPerRequest": 6570.7858668749195
+      },
+      "load": {
+        "rps": 151182.53373313343,
+        "total": 1210065,
+        "duration": 8.004,
+        "startedAt": 1793498312126,
+        "finishedAt": 1793498320130,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.0446248755232157,
+          "p50": 1,
+          "p90": 1,
+          "p99": 2,
+          "p99_9": 4,
+          "max": 130,
+          "totalCount": 1210065
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 10575,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498312126,
+            "finishedAt": 1793498320130,
+            "cpu": {
+              "user": 1693740,
+              "system": 1731040,
+              "elapsedUs": 8004407.333,
+              "percentOfOneCore": 42.78617838300859
+            },
+            "result": {
+              "latencies": "HISTFAAAADp4nJNpmSzMwMDgBcSMQMzKAAGMEEpdAMafIHbqltKO9Yx3JLpY3OxYmhmZsAIGNBacZGCCYQB//QiW",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHG74xj2sjEtJKRaSIjEyeLJZM6EwCFrQU/",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/4FUam34xMzxmZjjMy8TIx+TKZMwEAynYIBw==",
+              "totalCompletedRequests": 298930,
+              "totalRequests": 298980,
+              "totalBytes": 52312750,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 298930
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:32.126Z",
+              "finish": "2026-11-01T01:58:40.130Z",
+              "1xx": 0,
+              "2xx": 298930,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10576,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498312126,
+            "finishedAt": 1793498320129,
+            "cpu": {
+              "user": 1774479,
+              "system": 1870092,
+              "elapsedUs": 8003392.375,
+              "percentOfOneCore": 45.537827326627855
+            },
+            "result": {
+              "latencies": "HISTFAAAAEF4nJNpmSzMwMDgDMSMQMzKAAGMEEpdAMZ/5LXmoUqPyz6edcxycsxMzEwMQAimWMFMmBCIzwwVYYDSUAAAEEQHjQ==",
+              "requests": "HISTFAAAAC54nJNpmSzMwMDAD8SMQMzMAAGMYJLfyQHGf5/IFM7EymTOIsikyKTLBABw+wQ/",
+              "throughput": "HISTFAAAADB4nJNpmSzMwMAgAMSMQMzMAAEgtrhH2QsGGH/7DUamSiZ2Jl8WSSZdJkcmAJrIBg4=",
+              "totalCompletedRequests": 311360,
+              "totalRequests": 311410,
+              "totalBytes": 54488000,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 311360
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:32.126Z",
+              "finish": "2026-11-01T01:58:40.129Z",
+              "1xx": 0,
+              "2xx": 311360,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10577,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498312126,
+            "finishedAt": 1793498320129,
+            "cpu": {
+              "user": 1656849,
+              "system": 1733890,
+              "elapsedUs": 8003380.541,
+              "percentOfOneCore": 42.36633485849889
+            },
+            "result": {
+              "latencies": "HISTFAAAAEN4nJNpmSzMwMBgBsSMQMzKAAGMEEpdAMbfZXZii9Kzi4wfRH+wuCnwMBiZMDEwMTEDCQYmViANgQxQPogE8QHyDAkg",
+              "requests": "HISTFAAAAC54nJNpmSzMwMDAD8SMQMzMAAGMYJLfyQHG/53AFMzkyaTKIsjEyWTPBABzTQRy",
+              "throughput": "HISTFAAAADB4nJNpmSzMwMAgAMSMQMzMAAEgtrhH2QsGGH/mdUamYqZkJlMWcSZ+plAmAJsNBiE=",
+              "totalCompletedRequests": 300647,
+              "totalRequests": 300697,
+              "totalBytes": 52613225,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 300647
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:32.126Z",
+              "finish": "2026-11-01T01:58:40.129Z",
+              "1xx": 0,
+              "2xx": 300647,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10578,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498312126,
+            "finishedAt": 1793498320128,
+            "cpu": {
+              "user": 1573997,
+              "system": 1574246,
+              "elapsedUs": 8002631.375,
+              "percentOfOneCore": 39.34009768130798
+            },
+            "result": {
+              "latencies": "HISTFAAAAD54nJNpmSzMwMBgBsSMQMzKAAGMEEpdAMZfYbSgSWneV8Y5Qm9YbPj4mJmYGICQGYxhkB9MQkTA0kwAsYoHvg==",
+              "requests": "HISTFAAAAC94nJNpmSzMwMAgAMSMQMzMAAGMYJLfyQHGv5zIxKTMxM6ky8TApMikygQAb5UDzw==",
+              "throughput": "HISTFAAAADB4nJNpmSzMwMAgCMSMQMzMAAEgtrhH2QsGGH/yDUYmJn0mXiZbJgYgbcoEAJjsBXQ=",
+              "totalCompletedRequests": 299128,
+              "totalRequests": 299178,
+              "totalBytes": 52347400,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 299128
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:32.126Z",
+              "finish": "2026-11-01T01:58:40.128Z",
+              "1xx": 0,
+              "2xx": 299128,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 5,
+      "order": ["before", "after"],
+      "pid": 10759,
+      "at": "2026-11-01T01:58:40.245Z",
+      "hostLoadBefore": [9.408203125, 8.12353515625, 6.9248046875],
+      "hostLoadAfter": [9.19775390625, 8.119140625, 6.9365234375],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 10759,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 812111,
+          "system": 448180
+        },
+        "monotonicUs": 309418385340,
+        "rss": 100057088,
+        "heapTotal": 34488320,
+        "heapUsed": 17041520,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 10759,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4978390,
+          "system": 3968063
+        },
+        "monotonicUs": 309426495963,
+        "rss": 104628224,
+        "heapTotal": 49692672,
+        "heapUsed": 24911064,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 4166279,
+        "system": 3519883,
+        "elapsedUs": 8110623,
+        "cores": 0.9476660424236215,
+        "percentOfOneCore": 94.76660424236215,
+        "nsPerRequest": 7643.822865149935
+      },
+      "load": {
+        "rps": 125613.86633354152,
+        "total": 1005539,
+        "duration": 8.005,
+        "startedAt": 1793498321488,
+        "finishedAt": 1793498329493,
+        "startSkewMs": 1,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.2275197680050203,
+          "p50": 1,
+          "p90": 2,
+          "p99": 5,
+          "p99_9": 9,
+          "max": 164,
+          "totalCount": 1005539
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 10761,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498321489,
+            "finishedAt": 1793498329492,
+            "cpu": {
+              "user": 1774051,
+              "system": 1750117,
+              "elapsedUs": 8003023.084,
+              "percentOfOneCore": 44.035459638316844
+            },
+            "result": {
+              "latencies": "HISTFAAAAFx4nJNpmSzMwMAQDsSMQMzKAAGMEEpdAMafZntlr9SFnUzrwidY3BNt4HzGNI3ZpoUxxMFAhIWBiYWdiZkJiBiAEMhgEABSDkxMAiwMYEFmMGRgYkViQWQAGzUNIg==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcafG8j0n5PJk+k8C1MskyKTKJMzEwCSIAXp",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/4cUamVm4mQ6b9zEz1TPpMskyxTAC+OAdo",
+              "totalCompletedRequests": 252743,
+              "totalRequests": 252793,
+              "totalBytes": 44230025,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 252743
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:41.489Z",
+              "finish": "2026-11-01T01:58:49.492Z",
+              "1xx": 0,
+              "2xx": 252743,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10762,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498321489,
+            "finishedAt": 1793498329492,
+            "cpu": {
+              "user": 1948428,
+              "system": 1903474,
+              "elapsedUs": 8003360.542,
+              "percentOfOneCore": 48.1285577450373
+            },
+            "result": {
+              "latencies": "HISTFAAAAGx4nJNpmSzMwMCQBMSMQMzKAAGMEEpdAMb/ozHhhtSCZUzrwrustojPYr/AvIexj3ECYw8jExszEwMTKxMzEzsQg2hmngBmFg52Jk4gZAeKgFjMTLxM7CxMTEClUAKEmcGQk0mYiZsJALxsDaM=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG3xvI1MjJ5Mj0koUpl6maSZqpmZEJAJcMBk8=",
+              "throughput": "HISTFAAAADh4nJNpmSzMwMAgDsSMQMzMAAEgtrhH2QsGGP/zcUammVxM2kxLmZl6GZlWMjKpM21lZAIA3S4Idw==",
+              "totalCompletedRequests": 251986,
+              "totalRequests": 252036,
+              "totalBytes": 44097550,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 251986
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:41.489Z",
+              "finish": "2026-11-01T01:58:49.492Z",
+              "1xx": 0,
+              "2xx": 251986,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10763,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498321489,
+            "finishedAt": 1793498329493,
+            "cpu": {
+              "user": 1826019,
+              "system": 1813667,
+              "elapsedUs": 8003850.542,
+              "percentOfOneCore": 45.47418746640559
+            },
+            "result": {
+              "latencies": "HISTFAAAAGR4nJNpmSzMwMAQCcSMQMzKAAGMEEpdAMY/o3FsluSE70w9ufssV0mtYzvAPIkpTC+KR0SLiYmZjZ2JFUiyMjEIsDKxBgA5IMjAxAyGTJxAAsQFqgGTTJZAgpOJnUkQiAEegg0h",
+              "requests": "HISTFAAAADJ4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGvx7INJ+DSZFpMSuTIxA+ZmQSZAIAlWQGEQ==",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGH/qCUamo5xM4kxnmZkMmSKZtjMxSTIBAMW1B54=",
+              "totalCompletedRequests": 246451,
+              "totalRequests": 246501,
+              "totalBytes": 43128925,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 246451
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:41.490Z",
+              "finish": "2026-11-01T01:58:49.493Z",
+              "1xx": 0,
+              "2xx": 246451,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10764,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498321488,
+            "finishedAt": 1793498329492,
+            "cpu": {
+              "user": 1847645,
+              "system": 1866760,
+              "elapsedUs": 8003789.25,
+              "percentOfOneCore": 46.408081022373246
+            },
+            "result": {
+              "latencies": "HISTFAAAAGB4nJNpmSzMwMDgB8SMQMzKAAGMEEpdAMbvs5n1UepeF9OvtA2O90RfsB9j3sJo1MHIwRTHwszCxMnEDISsTHwODBKsQBYnEzsUg9j8QKzOxACUZ2XiZRJmkmcCAMX5Dfk=",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHGXx/IdJmDaSkjUycz02RmJlcmeyZVJgCf2gZP",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/hcUamRi6mQqZuJqbFzEyxTJFMxkwAywQH8A==",
+              "totalCompletedRequests": 254359,
+              "totalRequests": 254409,
+              "totalBytes": 44512825,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 254359
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:41.489Z",
+              "finish": "2026-11-01T01:58:49.492Z",
+              "1xx": 0,
+              "2xx": 254359,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 6,
+      "order": ["after", "before"],
+      "pid": 10991,
+      "at": "2026-11-01T01:58:49.601Z",
+      "hostLoadBefore": [9.19775390625, 8.119140625, 6.9365234375],
+      "hostLoadAfter": [9.2470703125, 8.1640625, 6.9658203125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 10991,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 785753,
+          "system": 472990
+        },
+        "monotonicUs": 309427737285,
+        "rss": 117112832,
+        "heapTotal": 48381952,
+        "heapUsed": 22153664,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 10991,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4886864,
+          "system": 4223135
+        },
+        "monotonicUs": 309435849242,
+        "rss": 118292480,
+        "heapTotal": 49692672,
+        "heapUsed": 17266328,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 4101111,
+        "system": 3750145,
+        "elapsedUs": 8111957,
+        "cores": 0.9678621324052876,
+        "percentOfOneCore": 96.78621324052877,
+        "nsPerRequest": 7639.318389908762
+      },
+      "load": {
+        "rps": 128403.6731634183,
+        "total": 1027743,
+        "duration": 8.004,
+        "startedAt": 1793498330840,
+        "finishedAt": 1793498338844,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.128676137906072,
+          "p50": 1,
+          "p90": 2,
+          "p99": 3,
+          "p99_9": 5,
+          "max": 127,
+          "totalCount": 1027743
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 10992,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498330840,
+            "finishedAt": 1793498338843,
+            "cpu": {
+              "user": 2061469,
+              "system": 2121252,
+              "elapsedUs": 8003176.833,
+              "percentOfOneCore": 52.26325854444606
+            },
+            "result": {
+              "latencies": "HISTFAAAADh4nJNpmSzMwMAgDcSMQMzKAAGMEEpdAMa/4Pxmi8yyaUxXAk5wn2FpYeRhYgBCJmYmJiYA/GsJFw==",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGfx3F9JOR6TojkzJTIxOTLpM4EycTAJ46Bgw=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGH/tJUam5YxMkxmZxJl+MjLZMiky8TIBAMbmB2c=",
+              "totalCompletedRequests": 261172,
+              "totalRequests": 261222,
+              "totalBytes": 45705100,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 261172
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:50.840Z",
+              "finish": "2026-11-01T01:58:58.843Z",
+              "1xx": 0,
+              "2xx": 261172,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10993,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498330840,
+            "finishedAt": 1793498338844,
+            "cpu": {
+              "user": 2045269,
+              "system": 2102508,
+              "elapsedUs": 8004216.916,
+              "percentOfOneCore": 51.81989748064944
+            },
+            "result": {
+              "latencies": "HISTFAAAAEh4nJNpmSzMwMDgC8SMQMzKAAGMEEpdAMZfJ/TolVTbfaZ7YSf4n7EcYzRhq2RhYmJgY4IABiYmZBaMYGBhgPLgIiAEACMgCrM=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcZ/HsU0kZGpkqmQaT4TkzITKxMDEwCRLQWH",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYYf+UlRqZEpmAmb6bzjEyGTOxMzEwAs5QGsw==",
+              "totalCompletedRequests": 250499,
+              "totalRequests": 250549,
+              "totalBytes": 43837325,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 250499
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:50.840Z",
+              "finish": "2026-11-01T01:58:58.844Z",
+              "1xx": 0,
+              "2xx": 250499,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10994,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498330840,
+            "finishedAt": 1793498338843,
+            "cpu": {
+              "user": 2032066,
+              "system": 2095955,
+              "elapsedUs": 8002928.709,
+              "percentOfOneCore": 51.58137914383363
+            },
+            "result": {
+              "latencies": "HISTFAAAAEZ4nJNpmSzMwMBgD8SMQMzKAAGMEEpdAMbfoT2lS2rSVOYLCRN421hfMeoxMLEzMTAxAzGIZAWSrHCahQkEICQEAAAr2gjj",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG/xjFdJKR6TAjkzrTTEYmViZXJnYmAJsqBe0=",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGH/9JUamTkamVkYmSaZ0JmYmZyZOJgC38AaP",
+              "totalCompletedRequests": 249872,
+              "totalRequests": 249922,
+              "totalBytes": 43727600,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 249872
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:50.840Z",
+              "finish": "2026-11-01T01:58:58.843Z",
+              "1xx": 0,
+              "2xx": 249872,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 10995,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498330840,
+            "finishedAt": 1793498338844,
+            "cpu": {
+              "user": 2016275,
+              "system": 2034699,
+              "elapsedUs": 8003867.292,
+              "percentOfOneCore": 50.61270823479315
+            },
+            "result": {
+              "latencies": "HISTFAAAAEd4nJNpmSzMwMBgDsSMQMzKAAGMEEpdAMbfF/Zom+y9d4zfDI5xnWLZwCSlxsTAxMLAxMDCDCSBgJmJCUyDSAYmGAcAMGsKSw==",
+              "requests": "HISTFAAAAC94nJNpmSzMwMAgAMSMQMzMAAGMYJLfyQHG3xzNdJWZSZeJaSUjky8LAxMAe5kFCA==",
+              "throughput": "HISTFAAAADB4nJNpmSzMwMAgAMSMQMzMAAEgtrhH2QsGGP/uJUam/UxM8iy7GZmyWZiZAKOUBuQ=",
+              "totalCompletedRequests": 266200,
+              "totalRequests": 266250,
+              "totalBytes": 46585000,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 266200
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:58:50.840Z",
+              "finish": "2026-11-01T01:58:58.844Z",
+              "1xx": 0,
+              "2xx": 266200,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 6,
+      "order": ["after", "before"],
+      "pid": 11144,
+      "at": "2026-11-01T01:58:58.958Z",
+      "hostLoadBefore": [9.2470703125, 8.1640625, 6.9658203125],
+      "hostLoadAfter": [9.0546875, 8.158203125, 6.9775390625],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 11144,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 765641,
+          "system": 433155
+        },
+        "monotonicUs": 309437115551,
+        "rss": 101007360,
+        "heapTotal": 34226176,
+        "heapUsed": 19048408,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 11144,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4751074,
+          "system": 4173197
+        },
+        "monotonicUs": 309445227055,
+        "rss": 104480768,
+        "heapTotal": 49168384,
+        "heapUsed": 14170880,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 3985433,
+        "system": 3740042,
+        "elapsedUs": 8111504,
+        "cores": 0.9524096887580897,
+        "percentOfOneCore": 95.24096887580897,
+        "nsPerRequest": 8660.632809504697
+      },
+      "load": {
+        "rps": 111419.1856107919,
+        "total": 892022,
+        "duration": 8.006,
+        "startedAt": 1793498340219,
+        "finishedAt": 1793498348225,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.3268787092695022,
+          "p50": 1,
+          "p90": 2,
+          "p99": 4,
+          "p99_9": 8,
+          "max": 150,
+          "totalCount": 892022
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 11145,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498340219,
+            "finishedAt": 1793498348223,
+            "cpu": {
+              "user": 2243059,
+              "system": 2198265,
+              "elapsedUs": 8003734.25,
+              "percentOfOneCore": 55.490648005960466
+            },
+            "result": {
+              "latencies": "HISTFAAAAGZ4nJNpmSzMwMCQCsSMQMzKAAGMEEpdAMafp//lptiefuaOJsZfdlsEvrH9YN7DpCOhwMTELscgwMbNpMfCwcTCwMbAxMDExMQAhkzMTEysYATmsEBoIAoHSzNDlUFYrEASANrDDVw=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGfx7OdJiJSZPJlCmeqZ+RaTITkyATAJbIBfg=",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGH/hBUamu4xM0kzKTI5MiUw7GZm4mQC7Ugcj",
+              "totalCompletedRequests": 228975,
+              "totalRequests": 229025,
+              "totalBytes": 40070625,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 228975
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:00.219Z",
+              "finish": "2026-11-01T01:59:08.223Z",
+              "1xx": 0,
+              "2xx": 228975,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11146,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498340219,
+            "finishedAt": 1793498348222,
+            "cpu": {
+              "user": 2094007,
+              "system": 2010959,
+              "elapsedUs": 8002758,
+              "percentOfOneCore": 51.294391258613594
+            },
+            "result": {
+              "latencies": "HISTFAAAAER4nJNpmSzMwMCgCsSMQMzKAAGMEEpdAMafYPdig8irb8y/VjA+c/ogNo/jCvM9Jg8xBiYmPjYWBRYGIQluJg4ApesNEw==",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHGPx7GtJaRaTEjkzbTZ0amn4xMhUy6TACkwwcp",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/tOUamvYxM+UzSTEsZmVYzMvkyyTIBAM1bB+8=",
+              "totalCompletedRequests": 220714,
+              "totalRequests": 220764,
+              "totalBytes": 38624950,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 220714
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:00.219Z",
+              "finish": "2026-11-01T01:59:08.222Z",
+              "1xx": 0,
+              "2xx": 220714,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11147,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498340219,
+            "finishedAt": 1793498348222,
+            "cpu": {
+              "user": 2236826,
+              "system": 2114956,
+              "elapsedUs": 8002663.25,
+              "percentOfOneCore": 54.379171833826696
+            },
+            "result": {
+              "latencies": "HISTFAAAAFd4nJNpmSzMwMBgA8SMQMzKAAGMEEpdAMbvs1t1WfTSJeY3UxjvOB/gmcO2gfkfo4aEjIAAGxsTHw8TgwYHCxMDCxsTELAwMDExMLEzsQIhM5AGALW5DKQ=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGPxrB9J+RSZKJmYmVaSETkzzTdUYmAJIVBdo=",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/xBUamtYxMgkxMzExHGZlEmSYyMgEAu0EHEQ==",
+              "totalCompletedRequests": 226735,
+              "totalRequests": 226785,
+              "totalBytes": 39678625,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 226735
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:00.219Z",
+              "finish": "2026-11-01T01:59:08.222Z",
+              "1xx": 0,
+              "2xx": 226735,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11148,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498340219,
+            "finishedAt": 1793498348225,
+            "cpu": {
+              "user": 2132251,
+              "system": 2069381,
+              "elapsedUs": 8005486.125,
+              "percentOfOneCore": 52.48440799714708
+            },
+            "result": {
+              "latencies": "HISTFAAAAF94nJNpmSzMwMCQBcSMQMzKAAGMEEpdAMZfJ3KhW+TbK+ZlmxiPuK3gn8Jzi2kDi5kVKxOrmQoDGzeTJhMnEzsTKxMzFDIAIRSAGCwMIATlYSJuoA6gUUATmJkACuwNBw==",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG3xrGtJuRaS4jUypTMpMjUyLTUyYmAJkNBrg=",
+              "throughput": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/yOUamq4xM2UzOQKjN5Mj0mZEJAMMHB/c=",
+              "totalCompletedRequests": 215598,
+              "totalRequests": 215648,
+              "totalBytes": 37729650,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 215598
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:00.220Z",
+              "finish": "2026-11-01T01:59:08.225Z",
+              "1xx": 0,
+              "2xx": 215598,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 7,
+      "order": ["before", "after"],
+      "pid": 11523,
+      "at": "2026-11-01T01:59:08.327Z",
+      "hostLoadBefore": [9.0546875, 8.158203125, 6.9775390625],
+      "hostLoadAfter": [9.35986328125, 8.25146484375, 7.0244140625],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 11523,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 767009,
+          "system": 489672
+        },
+        "monotonicUs": 309446461769,
+        "rss": 99647488,
+        "heapTotal": 33701888,
+        "heapUsed": 16873936,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 11523,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4678359,
+          "system": 4496051
+        },
+        "monotonicUs": 309454571448,
+        "rss": 117227520,
+        "heapTotal": 50216960,
+        "heapUsed": 13791240,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 3911350,
+        "system": 4006379,
+        "elapsedUs": 8109679,
+        "cores": 0.9763307524255892,
+        "percentOfOneCore": 97.63307524255892,
+        "nsPerRequest": 7823.108502660323
+      },
+      "load": {
+        "rps": 126417.06220334748,
+        "total": 1012095,
+        "duration": 8.006,
+        "startedAt": 1793498349564,
+        "finishedAt": 1793498357570,
+        "startSkewMs": 1,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.1268438239493328,
+          "p50": 1,
+          "p90": 1,
+          "p99": 3,
+          "p99_9": 5,
+          "max": 116,
+          "totalCount": 1012095
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 11524,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498349564,
+            "finishedAt": 1793498357567,
+            "cpu": {
+              "user": 2576421,
+              "system": 2583940,
+              "elapsedUs": 8002634.833,
+              "percentOfOneCore": 64.48327466749475
+            },
+            "result": {
+              "latencies": "HISTFAAAADB4nJNpmSzMwMAgCMSMQMzKAAGMEEpdAMafpfbjsfSWJUxdXvt43zDlWUkBAJzQCPY=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGfxrD1MnIFM4kyKTPxMlUy+TLBACEIQU1",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAgBMSMQMzMAAEgtrhH2QsGGP/qZUameCZLJm4mRSZmpkymbCYAqBMGcA==",
+              "totalCompletedRequests": 254622,
+              "totalRequests": 254672,
+              "totalBytes": 44558850,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 254622
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:09.565Z",
+              "finish": "2026-11-01T01:59:17.567Z",
+              "1xx": 0,
+              "2xx": 254622,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11525,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498349564,
+            "finishedAt": 1793498357568,
+            "cpu": {
+              "user": 2677776,
+              "system": 2760423,
+              "elapsedUs": 8004240.125,
+              "percentOfOneCore": 67.94147745536307
+            },
+            "result": {
+              "latencies": "HISTFAAAAEd4nJNpmSzMwMDgAMSMQMzKAAGMEEpdAMafINE3T/rJbqaOwCe8X5gT5Hik2FiYmIAIBBjgBIgCQWYwZmcCU8xM6UwAQucJfw==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAAwoxAzMwAAYxgkt/JAcY/Hs30lpEpnYmTSZRJkuk6I5M8EwCOlQWm",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGP/lJUamxYxMrkysTLxMgky7GZl0mQC6mgbf",
+              "totalCompletedRequests": 251304,
+              "totalRequests": 251354,
+              "totalBytes": 43978200,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 251304
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:09.565Z",
+              "finish": "2026-11-01T01:59:17.568Z",
+              "1xx": 0,
+              "2xx": 251304,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11526,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498349564,
+            "finishedAt": 1793498357566,
+            "cpu": {
+              "user": 2656183,
+              "system": 2741314,
+              "elapsedUs": 8001971.166,
+              "percentOfOneCore": 67.45209259105695
+            },
+            "result": {
+              "latencies": "HISTFAAAADB4nJNpmSzMwMAgCMSMQMzKAAGMEEpdAMZvE513UfrTOqZzAdu41zBriLgAAJegCGw=",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGnx7D9JeRSZxJncmWSZAplkmTCQCDJQUD",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYYf+FlRqbVjEyCTJJMmkycTN5MlkwArEcGLg==",
+              "totalCompletedRequests": 253283,
+              "totalRequests": 253333,
+              "totalBytes": 44324525,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 253283
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:09.565Z",
+              "finish": "2026-11-01T01:59:17.566Z",
+              "1xx": 0,
+              "2xx": 253283,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11527,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498349565,
+            "finishedAt": 1793498357570,
+            "cpu": {
+              "user": 2631720,
+              "system": 2682477,
+              "elapsedUs": 8004555.458,
+              "percentOfOneCore": 66.38965808761844
+            },
+            "result": {
+              "latencies": "HISTFAAAAFJ4nJNpmSzMwMAQA8SMQMzKAAGMEEpdAMa/JfLhuXTDHKZVHse4LzDq8bAYMrEyMTAxgyGQwQDmMLCA2CAEFATTEAKCwVyoPANUgAFoDABZBAlg",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHG3xjLxM/Uz8jEy6TJJMvkysTMBAB7PwRI",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAgBMSMQMzMAAEgtrhH2QsGGL/7CiMTJ1MiEzuTNJMwkz4TAxMAnmYFWg==",
+              "totalCompletedRequests": 252886,
+              "totalRequests": 252936,
+              "totalBytes": 44255050,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 252886
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:09.566Z",
+              "finish": "2026-11-01T01:59:17.570Z",
+              "1xx": 0,
+              "2xx": 252886,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 7,
+      "order": ["before", "after"],
+      "pid": 11671,
+      "at": "2026-11-01T01:59:17.675Z",
+      "hostLoadBefore": [9.35986328125, 8.25146484375, 7.0244140625],
+      "hostLoadAfter": [9.5986328125, 8.3408203125, 7.0703125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 11671,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 766603,
+          "system": 469279
+        },
+        "monotonicUs": 309455820336,
+        "rss": 102793216,
+        "heapTotal": 34750464,
+        "heapUsed": 16646352,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 11671,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4743487,
+          "system": 4029844
+        },
+        "monotonicUs": 309463933957,
+        "rss": 119341056,
+        "heapTotal": 49954816,
+        "heapUsed": 18437880,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 3976884,
+        "system": 3560565,
+        "elapsedUs": 8113621,
+        "cores": 0.928987070014732,
+        "percentOfOneCore": 92.8987070014732,
+        "nsPerRequest": 10204.288876403734
+      },
+      "load": {
+        "rps": 92285.73213393304,
+        "total": 738655,
+        "duration": 8.004,
+        "startedAt": 1793498358924,
+        "finishedAt": 1793498366928,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.672988066147254,
+          "p50": 1,
+          "p90": 3,
+          "p99": 5,
+          "p99_9": 13,
+          "max": 80,
+          "totalCount": 738655
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 11672,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498358924,
+            "finishedAt": 1793498366928,
+            "cpu": {
+              "user": 1976642,
+              "system": 1893758,
+              "elapsedUs": 8004776.709,
+              "percentOfOneCore": 48.35113009021724
+            },
+            "result": {
+              "latencies": "HISTFAAAAFZ4nJNpmSzMwMBgAcSMQMzKAAGMEEpdAMZvUJ13m3fXRZZ5e5muTWT8JXWA5wTLNMZLjFo6DDFhzHxhTLxMfAwKzGwMfEzMYgw8rEycQBF2Dg4ArnQOdw==",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHGnx3MxMl0kZFpKiPTTkamRCZ+ppVMTACYMQY3",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGH/xKUYmXqb5TExnGZleMzLZM3EznWZkAgDOMQgc",
+              "totalCompletedRequests": 185553,
+              "totalRequests": 185603,
+              "totalBytes": 32471775,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 185553
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:18.924Z",
+              "finish": "2026-11-01T01:59:26.928Z",
+              "1xx": 0,
+              "2xx": 185553,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11673,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498358924,
+            "finishedAt": 1793498366927,
+            "cpu": {
+              "user": 1979398,
+              "system": 1873501,
+              "elapsedUs": 8003267.375,
+              "percentOfOneCore": 48.141575427498445
+            },
+            "result": {
+              "latencies": "HISTFAAAAGB4nJNpmSzMwMDgAsSMQMzKAAGMEEpdAMafo7TiOO+8vSxn9jPtmsh4THYJ/x+2LUxvGKVmMYp5pLAwaDExM7EzMTApsenwMLEwM3EC+axAyCvDwsEAZDMw8TMBAG0sDwY=",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHG/xnIxM00n4npLhOTLFM3IxM7018mJgCc8waH",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/oCUYmfqZuZqb7zEzqTKlMzEytTEwAwrcHUg==",
+              "totalCompletedRequests": 183581,
+              "totalRequests": 183631,
+              "totalBytes": 32126675,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 183581
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:18.924Z",
+              "finish": "2026-11-01T01:59:26.927Z",
+              "1xx": 0,
+              "2xx": 183581,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11674,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498358924,
+            "finishedAt": 1793498366928,
+            "cpu": {
+              "user": 2007179,
+              "system": 1893055,
+              "elapsedUs": 8004062.75,
+              "percentOfOneCore": 48.72817869899883
+            },
+            "result": {
+              "latencies": "HISTFAAAAF54nJNpmSzMwMDgCMSMQMzKAAGMEEpdAMZvk2tYzzvlJcu+Q0wN/YzbJI9xL2HdxNjDGBbHwpIll8bAxMrExKklI8bEzcbEy8TOxMnEwMfEwMTCycTMBKQZmAAGnQ3B",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHG/xnEtJaR6SojkyKTLFMyUzDTd0YmAJutBr0=",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGP/rSUamt4xMS5mY9Jk0mdoZmayZVjIyAQDX4ghJ",
+              "totalCompletedRequests": 183865,
+              "totalRequests": 183915,
+              "totalBytes": 32176375,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 183865
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:18.924Z",
+              "finish": "2026-11-01T01:59:26.928Z",
+              "1xx": 0,
+              "2xx": 183865,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11675,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498358924,
+            "finishedAt": 1793498366928,
+            "cpu": {
+              "user": 1987949,
+              "system": 1910524,
+              "elapsedUs": 8004398.625,
+              "percentOfOneCore": 48.70413359754431
+            },
+            "result": {
+              "latencies": "HISTFAAAAFh4nJNpmSzMwMBgCcSMQMzKAAGMEEpdAMafId93n3fVdZZ3B5hm9TB+k3nCeYJ5AdMmRr8kOwMBhhAhBiZmNgYmdjYHFmYZZhZWJnYmBiZuJk4mIQDImw6/",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGbw9mKme6yshkzmTNFM90l5HpKyMTAJZVBs4=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgDsSMQMzMAAEgtrhH2QsGGL/zFCPTYiBiYvJmCmVqZGSazsi0lJEJANW0CC4=",
+              "totalCompletedRequests": 185656,
+              "totalRequests": 185706,
+              "totalBytes": 32489800,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 185656
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:18.924Z",
+              "finish": "2026-11-01T01:59:26.928Z",
+              "1xx": 0,
+              "2xx": 185656,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 8,
+      "order": ["after", "before"],
+      "pid": 11806,
+      "at": "2026-11-01T01:59:27.079Z",
+      "hostLoadBefore": [9.5986328125, 8.3408203125, 7.0703125],
+      "hostLoadAfter": [13.85888671875, 9.27294921875, 7.41455078125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 11806,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 763106,
+          "system": 400858
+        },
+        "monotonicUs": 309465277304,
+        "rss": 99680256,
+        "heapTotal": 35012608,
+        "heapUsed": 18082928,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 11806,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4326262,
+          "system": 3287745
+        },
+        "monotonicUs": 309473399756,
+        "rss": 104054784,
+        "heapTotal": 50216960,
+        "heapUsed": 25877624,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 3563156,
+        "system": 2886887,
+        "elapsedUs": 8122452,
+        "cores": 0.7941004760631396,
+        "percentOfOneCore": 79.41004760631397,
+        "nsPerRequest": 12595.47698460433
+      },
+      "load": {
+        "rps": 63899.67556775643,
+        "total": 512092,
+        "duration": 8.014,
+        "startedAt": 1793498368380,
+        "finishedAt": 1793498376394,
+        "startSkewMs": 1,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 2.6365067214484896,
+          "p50": 2,
+          "p90": 5,
+          "p99": 12,
+          "p99_9": 74,
+          "max": 201,
+          "totalCount": 512092
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 11809,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498368381,
+            "finishedAt": 1793498376391,
+            "cpu": {
+              "user": 1282144,
+              "system": 1106676,
+              "elapsedUs": 8009774.459,
+              "percentOfOneCore": 29.8238110477113
+            },
+            "result": {
+              "latencies": "HISTFAAAAKJ4nJNpmSzMwMAwD4gZgZiVAQIYIZS6AIx/yPTZY9ZDO5lPzWd695Bxg/8d3U3SF3gPcfaw/2H6wrKKcRrjBMaaCUDKRilPJkimLq7CRkesSkmLSUzASErIgIFJmAkEGICQiZmFgQ9ICqnwKbHwCAEFeLiYmRjYZIByzAYsICXsQMjJxABkMzMxsQIhA0grVD8DDzOHAUiGHYw5mXiZANvmGtM=",
+              "requests": "HISTFAAAADZ4nJNpmSzMwMAgDsSMQMzMAAGMYJLfyQHG7zRj+izAtJyFqZZpKQtTJxPTXUamiYxMALLRB5M=",
+              "throughput": "HISTFAAAADl4nJNpmSzMwMAgAcSMQMzMAAEgtrhH2QsGGH/6Okam+YJMM5mZQpk2MjO9ZGJaz8R0kpEJAOUTCTM=",
+              "totalCompletedRequests": 125330,
+              "totalRequests": 125380,
+              "totalBytes": 21932750,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 125330
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:28.382Z",
+              "finish": "2026-11-01T01:59:36.391Z",
+              "1xx": 0,
+              "2xx": 125330,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11810,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498368381,
+            "finishedAt": 1793498376391,
+            "cpu": {
+              "user": 1326360,
+              "system": 1169589,
+              "elapsedUs": 8010412.625,
+              "percentOfOneCore": 31.15880687856576
+            },
+            "result": {
+              "latencies": "HISTFAAAAH94nJNpmSzMwMCQAsSMQMzKAAGMEEpdAMbv8fvSxbbrHPOb1UzzXjC2+Z7QXyWxjXsN+w7WY8yXmK4wngHiQ4wLGJMkTGYx2lmk+VWZmfAo6AkwsXAw2GkJ2ctYcbGwswhwMQiosAqZC5hyMbAYsbGycJkysTIxgCE7EwCeWBmn",
+              "requests": "HISTFAAAADV4nJNpmSzMwMAgBsSMQMzMAAGMYJLfyQHGP2/O1CzIlMi0kZ0pmOk/I9NBRqZmRiYAqZkHUA==",
+              "throughput": "HISTFAAAADh4nJNpmSzMwMAgDsSMQMzMAAEgtrhH2QsGGH/iBkammwJMjkwXWZlKme4yMXUyMW1mZAIA32MJBg==",
+              "totalCompletedRequests": 131234,
+              "totalRequests": 131284,
+              "totalBytes": 22965950,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 131234
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:28.382Z",
+              "finish": "2026-11-01T01:59:36.391Z",
+              "1xx": 0,
+              "2xx": 131234,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11811,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498368380,
+            "finishedAt": 1793498376394,
+            "cpu": {
+              "user": 1306737,
+              "system": 1111272,
+              "elapsedUs": 8013318.208,
+              "percentOfOneCore": 30.174878087157577
+            },
+            "result": {
+              "latencies": "HISTFAAAAIJ4nJNpmSzMwMCQBMSMQMzKAAGMEEpdAMZ/4LzrDuuvU8zLNjNdecR4wXeT7i+pE/y32F6wbWGexjyLOe0JU0YLY1RSG6MPj5RRyDVGHzE2CSmurDw2IQ4+dgkBMT02JhFOJkk2BjYGASU2LhkJBhYGPk4hB1UmfhYBZxYBNgCqURpf",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHGn27B1MnPdJSJqZWdqZpJnGkzE5MxEwCZ2QY3",
+              "throughput": "HISTFAAAADh4nJNpmSzMwMAgDsSMQMzMAAEgtrhH2QsGGP/wBkamxfxMLxmZtrMyLWdkUmRayszkzgQA4ToItQ==",
+              "totalCompletedRequests": 128004,
+              "totalRequests": 128054,
+              "totalBytes": 22400700,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 128004
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:28.381Z",
+              "finish": "2026-11-01T01:59:36.393Z",
+              "1xx": 0,
+              "2xx": 128004,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 11812,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498368380,
+            "finishedAt": 1793498376391,
+            "cpu": {
+              "user": 1299387,
+              "system": 1108961,
+              "elapsedUs": 8011460.917,
+              "percentOfOneCore": 30.061283765231654
+            },
+            "result": {
+              "latencies": "HISTFAAAAKJ4nJNpmSzMwMDQBsSMQMzKAAGMEEpdAMZvc+95zHroNPOGNUx37jN+8nigtUpmFf8Ljkmse5iOMc9hXMQ4jfEAYw+jg0dcjZCaVwtj2jJGPjEWMxUOAR4uExU+JmYmDiE2JiY1FjUtQSZmIwYmdj0JFjFWJi4OHTYGNgYeBiZOPmYmZTYJbSZWJhYmFhF2JhERcSZBIA8oxcQOJJmZAAdWGl4=",
+              "requests": "HISTFAAAADV4nJNpmSzMwMAgBsSMQMzMAAGMYJLfyQHGX2nONJWXaTIbUz8b02pGJnam+UxM4UwAoGYGXw==",
+              "throughput": "HISTFAAAADh4nJNpmSzMwMAgDsSMQMzMAAEgtrhH2QsGGP/jekamiTxMU9mYHrIwvWZk4mbqZGYqZwIA4r0I6Q==",
+              "totalCompletedRequests": 127524,
+              "totalRequests": 127574,
+              "totalBytes": 22316700,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 127524
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:28.381Z",
+              "finish": "2026-11-01T01:59:36.391Z",
+              "1xx": 0,
+              "2xx": 127524,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 8,
+      "order": ["after", "before"],
+      "pid": 12101,
+      "at": "2026-11-01T01:59:36.575Z",
+      "hostLoadBefore": [13.85888671875, 9.27294921875, 7.41455078125],
+      "hostLoadAfter": [13.681640625, 9.39306640625, 7.4794921875],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 12101,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 694507,
+          "system": 344766
+        },
+        "monotonicUs": 309474785522,
+        "rss": 102776832,
+        "heapTotal": 35012608,
+        "heapUsed": 22615824,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 12101,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4754563,
+          "system": 3684802
+        },
+        "monotonicUs": 309482896800,
+        "rss": 118882304,
+        "heapTotal": 49430528,
+        "heapUsed": 15880784,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4060056,
+        "system": 3340036,
+        "elapsedUs": 8111278,
+        "cores": 0.9123213382650674,
+        "percentOfOneCore": 91.23213382650674,
+        "nsPerRequest": 10659.854048245323
+      },
+      "load": {
+        "rps": 86721.0493441599,
+        "total": 694202,
+        "duration": 8.005,
+        "startedAt": 1793498377889,
+        "finishedAt": 1793498385894,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.8612867724379936,
+          "p50": 1,
+          "p90": 4,
+          "p99": 6,
+          "p99_9": 17,
+          "max": 220,
+          "totalCount": 694202
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 12103,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498377889,
+            "finishedAt": 1793498385894,
+            "cpu": {
+              "user": 1454823,
+              "system": 1244613,
+              "elapsedUs": 8005538.125,
+              "percentOfOneCore": 33.719607075133375
+            },
+            "result": {
+              "latencies": "HISTFAAAAH94nJNpmSzMwMDQDsSMQMzKAAGMEEpdAMb/FXJnOve1r8yXDjG1XWJ8ZfZK5h/PH9Y9TPsYY7haGBVc2AyYhJj5OMwY2NhZhDhZODisypmYGIAQCJiBEMxkZmJlAgsxgylWiCgDkMEKVgTmMwAZ7FBBCM3EwMIOVsHKBADyhBLb",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHGf+7HVMu0nZFJlSmSqZGJ6Toz010uJgCi2Qcv",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGL/9KCNTKNNrRiZjpmqmh0xM51mY5nIyAQDT2gjI",
+              "totalCompletedRequests": 170431,
+              "totalRequests": 170481,
+              "totalBytes": 29825425,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 170431
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:37.889Z",
+              "finish": "2026-11-01T01:59:45.894Z",
+              "1xx": 0,
+              "2xx": 170431,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12104,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498377889,
+            "finishedAt": 1793498385892,
+            "cpu": {
+              "user": 1536331,
+              "system": 1412624,
+              "elapsedUs": 8002952.875,
+              "percentOfOneCore": 36.848336433569216
+            },
+            "result": {
+              "latencies": "HISTFAAAAEh4nJNpmSzMwMCgCcSMQMzKAAGMEEpdAMb/VrjgHPeJNpZLR5ienWFss74mcYz/F/MMpgOMaWJ8YgVGPnwcaSFifBIyAAgiEL4=",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGvxvAlMv0l5FJkkmaiZ+pmZFpOS8TAJZsBhU=",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGP/9MUam6YxMN5mYVJnUmUSZtjIyreRhAgDTMAgl",
+              "totalCompletedRequests": 176672,
+              "totalRequests": 176722,
+              "totalBytes": 30917600,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 176672
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:37.890Z",
+              "finish": "2026-11-01T01:59:45.892Z",
+              "1xx": 0,
+              "2xx": 176672,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12105,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498377889,
+            "finishedAt": 1793498385892,
+            "cpu": {
+              "user": 1538292,
+              "system": 1368610,
+              "elapsedUs": 8002926.417,
+              "percentOfOneCore": 36.32298797381283
+            },
+            "result": {
+              "latencies": "HISTFAAAAGh4nJNpmSzMwMAQAcSMQMzKAAGMEEpdAMa/knhkAfeyNpYlZ5gW3WScYNMj+YrrC/M2pqoexiIzFi4GBxYmDhYWhiAZBh4OOTEGHiYpBiZmJk4mVjDkZWICcbmBAkAGCEIQAwsA2vwQEA==",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGfx3ApMykyTSdkSmYaSkTkz5TNw8TAJEXBeE=",
+              "throughput": "HISTFAAAADV4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGL/5OCOTIZM103lGpkKmicxMzkyXuZgAwcAH2w==",
+              "totalCompletedRequests": 173736,
+              "totalRequests": 173786,
+              "totalBytes": 30403800,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 173736
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:37.890Z",
+              "finish": "2026-11-01T01:59:45.892Z",
+              "1xx": 0,
+              "2xx": 173736,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12106,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498377889,
+            "finishedAt": 1793498385893,
+            "cpu": {
+              "user": 1540254,
+              "system": 1397796,
+              "elapsedUs": 8003885.208,
+              "percentOfOneCore": 36.7077978212803
+            },
+            "result": {
+              "latencies": "HISTFAAAAGh4nJNpmSzMwMAQCsSMQMzKAAGMEEpdAMbvSZ80gfvfJJZ5e5nO3WZcZfdD8g9PF+sRxkeMMSHMcixCDAIeDEJcWUxMDCxMLEzMLExMTMxMTKxMDEwgBOQzADlMrFwgDhCyguUBsHgQBw==",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgBsSMQMzMAAGMYJLfyQHGXxnAtJCRSZXJkqmTkakViJiYjnMzAQCc7AZm",
+              "throughput": "HISTFAAAADh4nJNpmSzMwMAgDsSMQMzMAAEgtrhH2QsGGH/5MUam+4xMpky+THsZmbYzMj1lYvrOyQQA3/QJXg==",
+              "totalCompletedRequests": 173363,
+              "totalRequests": 173413,
+              "totalBytes": 30338525,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 173363
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:37.890Z",
+              "finish": "2026-11-01T01:59:45.893Z",
+              "1xx": 0,
+              "2xx": 173363,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 9,
+      "order": ["before", "after"],
+      "pid": 12242,
+      "at": "2026-11-01T01:59:45.987Z",
+      "hostLoadBefore": [13.681640625, 9.39306640625, 7.4794921875],
+      "hostLoadAfter": [13.06640625, 9.33642578125, 7.470703125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 12242,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 776481,
+          "system": 449668
+        },
+        "monotonicUs": 309484104824,
+        "rss": 101662720,
+        "heapTotal": 35012608,
+        "heapUsed": 16777336,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 12242,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 5159326,
+          "system": 4018461
+        },
+        "monotonicUs": 309492214785,
+        "rss": 117227520,
+        "heapTotal": 48906240,
+        "heapUsed": 18015032,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4382845,
+        "system": 3568793,
+        "elapsedUs": 8109961,
+        "cores": 0.9804779579087988,
+        "percentOfOneCore": 98.04779579087987,
+        "nsPerRequest": 6606.062368321359
+      },
+      "load": {
+        "rps": 150367.0206121174,
+        "total": 1203688,
+        "duration": 8.005,
+        "startedAt": 1793498387208,
+        "finishedAt": 1793498395213,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.0380231422096091,
+          "p50": 1,
+          "p90": 1,
+          "p99": 2,
+          "p99_9": 3,
+          "max": 145,
+          "totalCount": 1203688
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 12243,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498387208,
+            "finishedAt": 1793498395210,
+            "cpu": {
+              "user": 1662798,
+              "system": 1706870,
+              "elapsedUs": 8002498.375,
+              "percentOfOneCore": 42.107699896908755
+            },
+            "result": {
+              "latencies": "HISTFAAAAEV4nJNpmSzMwMBgCcSMQMzKAAGMEEpdAMb/IfTorNKuDYy3hL6wyrAxM7EyCQMxMxM7EzOYZoWyWMEsBiawFIgDAPTmCKY=",
+              "requests": "HISTFAAAAC54nJNpmSzMwMDAD8SMQMzMAAGMYJLfyQHGb0xk8mVSZlJmYWAKZGJnAgBqqwPK",
+              "throughput": "HISTFAAAADB4nJNpmSzMwMAgAMSMQMzMAAEgtrhH2QsGGH/+dUamXCZDJkMWBqZCJm4mAJl7Bew=",
+              "totalCompletedRequests": 297624,
+              "totalRequests": 297674,
+              "totalBytes": 52084200,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 297624
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:47.208Z",
+              "finish": "2026-11-01T01:59:55.210Z",
+              "1xx": 0,
+              "2xx": 297624,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12244,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498387208,
+            "finishedAt": 1793498395211,
+            "cpu": {
+              "user": 1723960,
+              "system": 1880576,
+              "elapsedUs": 8002564.459,
+              "percentOfOneCore": 45.04226137093087
+            },
+            "result": {
+              "latencies": "HISTFAAAADV4nJNpmSzMwMAgDsSMQMzKAAGMEEpdAMY/J/Xhjso6h0OsfUwebkxMfAxMzExMDEwAxDsHZQ==",
+              "requests": "HISTFAAAAC54nJNpmSzMwMAgCMSMQMzMAAGMYJLfyQHGf5nIxMyUyiTPxM7EAISaTAB25wQA",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYYf/0NRiZWpl5GJm0mbiYGJmYmcyYAqLgFuA==",
+              "totalCompletedRequests": 307250,
+              "totalRequests": 307300,
+              "totalBytes": 53768750,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 307250
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:47.209Z",
+              "finish": "2026-11-01T01:59:55.211Z",
+              "1xx": 0,
+              "2xx": 307250,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12245,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498387208,
+            "finishedAt": 1793498395211,
+            "cpu": {
+              "user": 1755256,
+              "system": 1907135,
+              "elapsedUs": 8002487.958,
+              "percentOfOneCore": 45.765654621682344
+            },
+            "result": {
+              "latencies": "HISTFAAAAEd4nJNpmSzMwMDgAcSMQMzKAAGMEEpdAMbfIHTmuso++30sdxjZuNiYGJiYgRgEmViZmEAUCDBDGBCKGYYYwAoYIHIAK7sHcA==",
+              "requests": "HISTFAAAAC54nJNpmSzMwMDAD8SMQMzMAAGMYJLfyQHG/5nIxMBkyqTKJM7EzqLLBABugQP8",
+              "throughput": "HISTFAAAADB4nJNpmSzMwMAgAMSMQMzMAAEgtrhH2QsGGP/wDUYmViZPJmMmRSZuFnsmAJd4BbI=",
+              "totalCompletedRequests": 306205,
+              "totalRequests": 306255,
+              "totalBytes": 53585875,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 306205
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:47.209Z",
+              "finish": "2026-11-01T01:59:55.211Z",
+              "1xx": 0,
+              "2xx": 306205,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12246,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498387208,
+            "finishedAt": 1793498395213,
+            "cpu": {
+              "user": 1621378,
+              "system": 1713012,
+              "elapsedUs": 8004429.541,
+              "percentOfOneCore": 41.65680993155987
+            },
+            "result": {
+              "latencies": "HISTFAAAAEp4nJNpmSzMwMAQDsSMQMzKAAGMEEpdAMZvYlr3R3HFccZHAtuYlZLYFFiaGZmYmZgYQAhIAJkQBhNUDMpAEHAOA5QHFgAAAaAI4w==",
+              "requests": "HISTFAAAADF4nJNpmSzMwMAgBMSMQMzMAAGMYJLfyQHGfx3PtJiRyZjJkEmdSZSJgUmfCQCDrgS9",
+              "throughput": "HISTFAAAADJ4nJNpmSzMwMAAwoxAzMwAASC2uEfZCwYY/+FVRqbLjEyeTI5MlkyyTMxM9kwAt5cG2g==",
+              "totalCompletedRequests": 292609,
+              "totalRequests": 292659,
+              "totalBytes": 51206575,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 292609
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:47.209Z",
+              "finish": "2026-11-01T01:59:55.213Z",
+              "1xx": 0,
+              "2xx": 292609,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 9,
+      "order": ["before", "after"],
+      "pid": 12254,
+      "at": "2026-11-01T01:59:55.313Z",
+      "hostLoadBefore": [13.06640625, 9.33642578125, 7.470703125],
+      "hostLoadAfter": [12.45361328125, 9.3251953125, 7.48828125],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 12254,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 790839,
+          "system": 458243
+        },
+        "monotonicUs": 309493449287,
+        "rss": 116211712,
+        "heapTotal": 49692672,
+        "heapUsed": 16345328,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 12254,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4665810,
+          "system": 3671915
+        },
+        "monotonicUs": 309501562368,
+        "rss": 88489984,
+        "heapTotal": 51003392,
+        "heapUsed": 18636016,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 3874971,
+        "system": 3213672,
+        "elapsedUs": 8113081,
+        "cores": 0.873730090948186,
+        "percentOfOneCore": 87.3730090948186,
+        "nsPerRequest": 8652.505495820003
+      },
+      "load": {
+        "rps": 102330.62702972771,
+        "total": 819259,
+        "duration": 8.006,
+        "startedAt": 1793498396551,
+        "finishedAt": 1793498404557,
+        "startSkewMs": 1,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.521584749145264,
+          "p50": 1,
+          "p90": 2,
+          "p99": 7,
+          "p99_9": 30,
+          "max": 144,
+          "totalCount": 819259
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 12256,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498396551,
+            "finishedAt": 1793498404556,
+            "cpu": {
+              "user": 1541784,
+              "system": 1463899,
+              "elapsedUs": 8005519,
+              "percentOfOneCore": 37.54513604926801
+            },
+            "result": {
+              "latencies": "HISTFAAAAG54nJNpmSzMwMDgD8SMQMzKAAGMEEpdAMY/43lngfCnZ0zX+hnbvLp0v4hN4nrD+oGlh/kO0zGmpAmMHkYOci2MLgIyShIMbl2MXAJcTF46HkkswkzKfMwckhwMTDyGbAJsPEzcfAwi4kwADeIVNg==",
+              "requests": "HISTFAAAADh4nJNpmSzMwMAgAcSMQMzMAAGMYJLfyQHGP+rFtJCFaSYz02R2pseMTEcZmX6yMD1nZAIAvuQIfw==",
+              "throughput": "HISTFAAAADp4nJNpmSzMwMAgCcSMQMzMAAEgtrhH2QsGGH/iIUamr0xMJ5mZjnIwzWZkamVk2snCtJuJCQD4XAmz",
+              "totalCompletedRequests": 206287,
+              "totalRequests": 206337,
+              "totalBytes": 36100225,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 206287
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:56.551Z",
+              "finish": "2026-11-01T02:00:04.556Z",
+              "1xx": 0,
+              "2xx": 206287,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12257,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498396552,
+            "finishedAt": 1793498404556,
+            "cpu": {
+              "user": 1618196,
+              "system": 1561109,
+              "elapsedUs": 8004667.417,
+              "percentOfOneCore": 39.71813985985122
+            },
+            "result": {
+              "latencies": "HISTFAAAAHl4nJNpmSzMwMCQDsSMQMzKAAGMEEpdAMb/o9v1U+hKA/OtSYyXvE9pLRK/w7WA/QbzB5ZzzGVFdQETGOViolTsnMwclMRYmDj42BzEOBjkhNRsmJiYmJkYmCCIAciG0AxM7GAWky4bEycXGxc3EwsnH5scFwDzOhTK",
+              "requests": "HISTFAAAADh4nJNpmSzMwMAgAcSMQMzMAAGMYJLfyQHGn+7DNJWFaScT015WpueMTIsZmR6zMq1mZAIAvBoIHw==",
+              "throughput": "HISTFAAAADl4nJNpmSzMwMAgAcSMQMzMAAEgtrhH2QsGGH/hYUambmam9cxMb9mY5jIy5TK9ZGF6zcgEAOqrCa4=",
+              "totalCompletedRequests": 203912,
+              "totalRequests": 203962,
+              "totalBytes": 35684600,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 203912
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T01:59:56.552Z",
+              "finish": "2026-11-01T02:00:04.556Z",
+              "1xx": 0,
+              "2xx": 203912,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12258,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498396552,
+            "finishedAt": 1793498404557,
+            "cpu": {
+              "user": 1488996,
+              "system": 1353836,
+              "elapsedUs": 8005475.375,
+              "percentOfOneCore": 35.51109542948285
+            },
+            "result": {
+              "latencies": "HISTFAAAAHV4nJNpmSzMwMBQAcSMQMzKAAGMEEpdAMa/IHXorlDfDOZFDYwNPjO014js4/3Dso/1APMRpgbmU4w+MkkuPh4uZkZeKkosAjoqEmxiDGYSEgwczEyuTEiAAZ3NwcbDwQFksQAxF5OIFA9UCQMY8TMBAM/cE54=",
+              "requests": "HISTFAAAADV4nJNpmSzMwMAgBsSMQMzMAAGMYJLfyQHG7/dhOs/M9JGZ6SYr00Impnym6cxM5UwAr38Hpg==",
+              "throughput": "HISTFAAAADh4nJNpmSzMwMAgAcSMQMzMAAEgtrhH2QsGGH/2YUam3UxM01mZtrMxAdneTFOZmCYyMgEA5t4I3w==",
+              "totalCompletedRequests": 201213,
+              "totalRequests": 201263,
+              "totalBytes": 35212275,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 201213
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:56.552Z",
+              "finish": "2026-11-01T02:00:04.557Z",
+              "1xx": 0,
+              "2xx": 201213,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12259,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498396551,
+            "finishedAt": 1793498404557,
+            "cpu": {
+              "user": 1549268,
+              "system": 1463971,
+              "elapsedUs": 8005840.208,
+              "percentOfOneCore": 37.63801077354703
+            },
+            "result": {
+              "latencies": "HISTFAAAAIB4nJNpmSzMwMCQD8SMQMzKAAGMEEpdAMZvMP7zWXjFbaZPVVc89mleE5vDNYPtGss/5iNMVR3MAVolixi9fGJEhCSkxJR4ONg4RDQSmAx4mLTYGJiYGKAQRHAJsDAwMUPEQICXQ4lBgEmShY2DgYmFn42Dn4mBjU2Uhw0Amk4U0w==",
+              "requests": "HISTFAAAADZ4nJNpmSzMwMAgDsSMQMzMAAGMYJLfyQHG/+7JtJCV6T0L01pWpvlMTNFM3axMrYxMALm9B6I=",
+              "throughput": "HISTFAAAADl4nJNpmSzMwMAgAcSMQMzMAAEgtrhH2QsGGP/uQUam08xM/WxMX1mZDjMy2TKdZGHazsgEAPJWCbQ=",
+              "totalCompletedRequests": 207847,
+              "totalRequests": 207897,
+              "totalBytes": 36373225,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 207847
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T01:59:56.551Z",
+              "finish": "2026-11-01T02:00:04.556Z",
+              "1xx": 0,
+              "2xx": 207847,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "round": 10,
+      "order": ["after", "before"],
+      "pid": 12450,
+      "at": "2026-11-01T02:00:04.691Z",
+      "hostLoadBefore": [12.45361328125, 9.3251953125, 7.48828125],
+      "hostLoadAfter": [12.75830078125, 9.49462890625, 7.56982421875],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 12450,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 782413,
+          "system": 455662
+        },
+        "monotonicUs": 309502852290,
+        "rss": 101793792,
+        "heapTotal": 34226176,
+        "heapUsed": 16183392,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 12450,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4603630,
+          "system": 3678092
+        },
+        "monotonicUs": 309510983141,
+        "rss": 88244224,
+        "heapTotal": 49430528,
+        "heapUsed": 21566272,
+        "external": 4411938,
+        "arrayBuffers": 212272
+      },
+      "serverCpu": {
+        "user": 3821217,
+        "system": 3222430,
+        "elapsedUs": 8130851,
+        "cores": 0.8662865670518375,
+        "percentOfOneCore": 86.62865670518374,
+        "nsPerRequest": 10969.447840340126
+      },
+      "load": {
+        "rps": 80054.23263932177,
+        "total": 642115,
+        "duration": 8.021,
+        "startedAt": 1793498405955,
+        "finishedAt": 1793498413976,
+        "startSkewMs": 4,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.973031310590782,
+          "p50": 1,
+          "p90": 4,
+          "p99": 8,
+          "p99_9": 47,
+          "max": 215,
+          "totalCount": 642115
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 12451,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498405955,
+            "finishedAt": 1793498413962,
+            "cpu": {
+              "user": 1611455,
+              "system": 1431835,
+              "elapsedUs": 8006634.125,
+              "percentOfOneCore": 38.00960494120243
+            },
+            "result": {
+              "latencies": "HISTFAAAAIF4nJNpmSzMwMCQDMSMQMzKAAGMEEpdAMa/IHjuLOeXWSwbdjFdWcR4wvmG5DruV9wtbDOYJjHdYIpRWcZoJqXCpcMVJKXElKYiIsPGwcLEwMQkxcDGzMTExsDDxcDEwCbDxMDBxMLCysTKwg2UZWBJUeBS4WFlYmcCCjEBAFT8E9Y=",
+              "requests": "HISTFAAAADh4nJNpmSzMwMAgAcSMQMzMAAGMYJLfyQHGX+3CNJuV6Tor03RmpseMTM2MTLOZmOayMAEAupoHsQ==",
+              "throughput": "HISTFAAAADp4nJNpmSzMwMAgCcSMQMzMAAEgtrhH2QsGGP/5bkamy6xMH5mZ3jIzbWdi2srI9J2J6T0TEwAHjgrr",
+              "totalCompletedRequests": 153710,
+              "totalRequests": 153760,
+              "totalBytes": 26899250,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 153710
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T02:00:05.956Z",
+              "finish": "2026-11-01T02:00:13.962Z",
+              "1xx": 0,
+              "2xx": 153710,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12452,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498405959,
+            "finishedAt": 1793498413976,
+            "cpu": {
+              "user": 1619638,
+              "system": 1409427,
+              "elapsedUs": 8017572.375,
+              "percentOfOneCore": 37.78032624245565
+            },
+            "result": {
+              "latencies": "HISTFAAAAHt4nJNpmSzMwMAwBYgZgZiVAQIYIZS6AIw/i33FBK4981l2LWGaMo1xls0fsQu8HzgOMZ9gesI4iTnBzc5LosqAhcnHxohHgklNikeVSUVHl4dDSMBEysWRiYGJGY6ZgCQIATEEMkNJFgYWZC6YZGFAUwZjswIxACXJFAY=",
+              "requests": "HISTFAAAADd4nJNpmSzMwMAgDsSMQMzMAAGMYJLfyQHG/+7CdJ+ZaT8r03UWpvuMTPuZmE4zMrkyAQDCmQhz",
+              "throughput": "HISTFAAAADl4nJNpmSzMwMAgAcSMQMzMAAEgtrhH2QsGGP/iHkamuSxM95mZprMybWVi2szMNJuRSZ8JAOzjCRc=",
+              "totalCompletedRequests": 154593,
+              "totalRequests": 154643,
+              "totalBytes": 27053775,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 154593
+                }
+              },
+              "resets": 0,
+              "duration": 8.02,
+              "start": "2026-11-01T02:00:05.959Z",
+              "finish": "2026-11-01T02:00:13.976Z",
+              "1xx": 0,
+              "2xx": 154593,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12453,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498405956,
+            "finishedAt": 1793498413962,
+            "cpu": {
+              "user": 1758292,
+              "system": 1609491,
+              "elapsedUs": 8006601.083,
+              "percentOfOneCore": 42.06258017713208
+            },
+            "result": {
+              "latencies": "HISTFAAAAFx4nJNpmSzMwMBgA8SMQMzKAAGMEEpdAMafJLOjn+fHQpZTPxi3TWR8YnJE5BPnGs49rH1MFxgnMd5gzKsTYmGKyRMoMxFgUmHT1DNTZ2Nl4ggyY2BjUwEAbHQT3g==",
+              "requests": "HISTFAAAADd4nJNpmSzMwMAgDsSMQMzMAAGMYJLfyQHGv+zCdJ+VaS0b00FGpqOsTL8ZmUqZ1jMxAQC9wAhh",
+              "throughput": "HISTFAAAADl4nJNpmSzMwMAgAcSMQMzMAAEgtrhH2QsGGH/+Hkamp6xMH1mYOpmY5rMzrWZk8mc6z8gEAO3CCWk=",
+              "totalCompletedRequests": 168446,
+              "totalRequests": 168496,
+              "totalBytes": 29478050,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 168446
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T02:00:05.956Z",
+              "finish": "2026-11-01T02:00:13.962Z",
+              "1xx": 0,
+              "2xx": 168446,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12454,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498405956,
+            "finishedAt": 1793498413967,
+            "cpu": {
+              "user": 1740901,
+              "system": 1588750,
+              "elapsedUs": 8011023.208,
+              "percentOfOneCore": 41.563367294641345
+            },
+            "result": {
+              "latencies": "HISTFAAAAIV4nJNpmSzMwMBQBcSMQMzKAAGMEEpdAMZfxD/hPXfPMpZD3xgf9TLOMW0TesYxifMHyyXGSUz/GHcxhlgFWJlJFUn5lMgIaLAxsfAxGbAxsbMxMzEwsTGpMAGBFJMEAxMDGwcTMxMIMUFIIQcRDhkNPhZ2iDBQBVAQSLIAIROYAwBMZRSl",
+              "requests": "HISTFAAAADV4nJNpmSzMwMAgBsSMQMzMAAGMYJLfyQHGf+vCdJCV6SUbkzTTajamu4xM3YxMqkwAsAsHRQ==",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGP/wHkamvaxMh1mZVJnWczBNZ2SKZxJnAgDUyQgk",
+              "totalCompletedRequests": 165366,
+              "totalRequests": 165416,
+              "totalBytes": 28939050,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 165366
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T02:00:05.956Z",
+              "finish": "2026-11-01T02:00:13.965Z",
+              "1xx": 0,
+              "2xx": 165366,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "runtime": "node",
+      "version": "before",
+      "round": 10,
+      "order": ["after", "before"],
+      "pid": 12881,
+      "at": "2026-11-01T02:00:14.519Z",
+      "hostLoadBefore": [12.75830078125, 9.49462890625, 7.56982421875],
+      "hostLoadAfter": [12.17333984375, 9.4775390625, 7.5859375],
+      "beforeMetrics": {
+        "protocol": 2,
+        "pid": 12881,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 807088,
+          "system": 481857
+        },
+        "monotonicUs": 309512996761,
+        "rss": 98516992,
+        "heapTotal": 34750464,
+        "heapUsed": 22717088,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "afterMetrics": {
+        "protocol": 2,
+        "pid": 12881,
+        "env": "production",
+        "applicationEnv": "production",
+        "pooling": false,
+        "sink": false,
+        "runtime": "node",
+        "runtimeVersion": "v26.9.0",
+        "cpu": {
+          "user": 4901709,
+          "system": 4131803
+        },
+        "monotonicUs": 309521108174,
+        "rss": 104349696,
+        "heapTotal": 48644096,
+        "heapUsed": 24721328,
+        "external": 4467276,
+        "arrayBuffers": 277872
+      },
+      "serverCpu": {
+        "user": 4094621,
+        "system": 3649946,
+        "elapsedUs": 8111413,
+        "cores": 0.9547740942299449,
+        "percentOfOneCore": 95.47740942299448,
+        "nsPerRequest": 7974.824096127489
+      },
+      "load": {
+        "rps": 121299.90007494378,
+        "total": 971127,
+        "duration": 8.006,
+        "startedAt": 1793498416100,
+        "finishedAt": 1793498424106,
+        "startSkewMs": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "latency": {
+          "average": 1.2355809281381323,
+          "p50": 1,
+          "p90": 2,
+          "p99": 4,
+          "p99_9": 10,
+          "max": 148,
+          "totalCount": 971127
+        },
+        "clientCapacityConstrained": false,
+        "clients": [
+          {
+            "pid": 12883,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498416100,
+            "finishedAt": 1793498424106,
+            "cpu": {
+              "user": 1986072,
+              "system": 1969375,
+              "elapsedUs": 8005510.542,
+              "percentOfOneCore": 49.40905366682359
+            },
+            "result": {
+              "latencies": "HISTFAAAAGR4nJNpmSzMwMCQC8SMQMzKAAGMEEpdAMZ/IbtuotSdI0w/shtkmvjWsf5hvMLIFJYTI8XAx8YQFiLAz8TKwcHExMQAxMxACKHBTCCbGSoGItkh4gxMrFAuiMUK5QmDSQBzpA3y",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGvxjGdJSZyZLpPAuTNJMtkzrTTSYmAJgjBlc=",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgCsSMQMzMAAEgtrhH2QsGGP/nOUam70xM6kyTmZkEmfSZTJmuMzMBAMzuB/w=",
+              "totalCompletedRequests": 247275,
+              "totalRequests": 247325,
+              "totalBytes": 43273125,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 247275
+                }
+              },
+              "resets": 0,
+              "duration": 8.01,
+              "start": "2026-11-01T02:00:16.101Z",
+              "finish": "2026-11-01T02:00:24.106Z",
+              "1xx": 0,
+              "2xx": 247275,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12884,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498416100,
+            "finishedAt": 1793498424103,
+            "cpu": {
+              "user": 1882268,
+              "system": 1825366,
+              "elapsedUs": 8002764.333,
+              "percentOfOneCore": 46.32941625822083
+            },
+            "result": {
+              "latencies": "HISTFAAAAER4nJNpmSzMwMCgDsSMQMzKAAGMEEpdAMafJrehWeLCHuZXDYwXlCbw7uK0KOhi3MO4jTFOjomJR4HBSIyBCQgAnPwMmw==",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHGPx3O9JyRaSMTUzBTKhMn000mpqtMTAClagcz",
+              "throughput": "HISTFAAAADd4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGL//AiPTXEam84xMlkzOTKxMXxmZrjIzAQDPBAhN",
+              "totalCompletedRequests": 239581,
+              "totalRequests": 239631,
+              "totalBytes": 41926675,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 239581
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T02:00:16.101Z",
+              "finish": "2026-11-01T02:00:24.103Z",
+              "1xx": 0,
+              "2xx": 239581,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12885,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498416100,
+            "finishedAt": 1793498424103,
+            "cpu": {
+              "user": 1869144,
+              "system": 1825665,
+              "elapsedUs": 8002410.833,
+              "percentOfOneCore": 46.17119861884002
+            },
+            "result": {
+              "latencies": "HISTFAAAAEB4nJNpmSzMwMCgCMSMQMzKAAGMEEpdAMafYPuqXWrfCaYbpXMUt/FvYJnA2MBY4DCF0U1Pg4uPwciFAwBXcgyT",
+              "requests": "HISTFAAAADN4nJNpmSzMwMAgAsSMQMzMAAGMYJLfyQHGnxrJlMo0l5FpPzOTPlM/IxPTVyYmAJT9Bms=",
+              "throughput": "HISTFAAAADR4nJNpmSzMwMAgAsSMQMzMAAEgtrhH2QsGGH/mRUYmZ6Zspo1MTIpM5UwMTP+ZmQC7PgeU",
+              "totalCompletedRequests": 249804,
+              "totalRequests": 249854,
+              "totalBytes": 43715700,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 249804
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T02:00:16.101Z",
+              "finish": "2026-11-01T02:00:24.103Z",
+              "1xx": 0,
+              "2xx": 249804,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "pid": 12886,
+            "env": "production",
+            "runtimeVersion": "v26.9.0",
+            "connections": 50,
+            "startedAt": 1793498416100,
+            "finishedAt": 1793498424106,
+            "cpu": {
+              "user": 1844493,
+              "system": 1774401,
+              "elapsedUs": 8005174.25,
+              "percentOfOneCore": 45.20693600142433
+            },
+            "result": {
+              "latencies": "HISTFAAAAGB4nJNpmSzMwMCQDcSMQMzKAAGMEEpdAMa/xz9lm/ijbcwvJjIekn/G28Uxg+UC4zvGhBw+JmajMAYePU4mJlYmBillIMnKxAyFDGDIDhWD8CDizEjizExIUsxMAJeeDp8=",
+              "requests": "HISTFAAAADR4nJNpmSzMwMAgCsSMQMzMAAGMYJLfyQHGvx7K1M7CtJ+R6SAjEy+TJFM002MWJgCfYQak",
+              "throughput": "HISTFAAAADZ4nJNpmSzMwMAgBsSMQMzMAAEgtrhH2QsGGP/yWUam78xMjYxMrYxM7EyCTNZMvaxMANKWB7g=",
+              "totalCompletedRequests": 234467,
+              "totalRequests": 234517,
+              "totalBytes": 41031725,
+              "samples": 8,
+              "errors": 0,
+              "timeouts": 0,
+              "mismatches": 0,
+              "non2xx": 0,
+              "statusCodeStats": {
+                "200": {
+                  "count": 234467
+                }
+              },
+              "resets": 0,
+              "duration": 8,
+              "start": "2026-11-01T02:00:16.101Z",
+              "finish": "2026-11-01T02:00:24.105Z",
+              "1xx": 0,
+              "2xx": 234467,
+              "3xx": 0,
+              "4xx": 0,
+              "5xx": 0
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "rejectedPairs": [],
+  "verification": [
+    {
+      "runtime": "node",
+      "version": "before",
+      "pid": 8217,
+      "cases": 3
+    },
+    {
+      "runtime": "node",
+      "version": "after",
+      "pid": 8221,
+      "cases": 3
+    }
+  ],
+  "summary": [
+    {
+      "runtime": "node",
+      "groups": [
+        {
+          "version": "before",
+          "samples": 10,
+          "rps": 140729.49748933798,
+          "rpsRange": [86721.0493441599, 151182.53373313343],
+          "latencyAverage": 1.1218804547611136,
+          "p50": 1,
+          "p99": 3.5,
+          "p99Range": [2, 6],
+          "cpuNsPerRequest": 6892.4227395726475,
+          "cpuRange": [6541.995296815976, 10659.854048245323],
+          "serverCpuPercent": 95.71008450097814
+        },
+        {
+          "version": "after",
+          "samples": 10,
+          "rps": 127008.76974847991,
+          "rpsRange": [63899.67556775643, 161234.9781386633],
+          "latencyAverage": 1.1887610145391472,
+          "p50": 1,
+          "p99": 4.5,
+          "p99Range": [2, 12],
+          "cpuNsPerRequest": 7641.570627529349,
+          "cpuRange": [6208.548012452293, 12595.47698460433],
+          "serverCpuPercent": 94.04740690340509
+        }
+      ],
+      "throughput": {
+        "medianRatio": 0.8894731964821547,
+        "minRatio": 0.6599694854642185,
+        "maxRatio": 1.152437728381505,
+        "pairedRatios": [
+          0.9920695484438509, 1.0042944979263593, 0.9480708729437598, 1.1291049780488713,
+          0.8308755200205495, 1.152437728381505, 0.7300100993130763, 0.7368415863392647,
+          0.6805390345114103, 0.6599694854642185
+        ],
+        "independentMedianRatio": 0.9025028299991081
+      },
+      "cpu": {
+        "medianRatio": 1.0948353668306283,
+        "minRatio": 0.8820739266910053,
+        "maxRatio": 1.3755096925168298,
+        "pairedRatios": [
+          1.0152076121376232, 1.008222931583352, 1.0263665231733636, 0.8993004310792887,
+          1.1633042104878932, 0.8820739266910053, 1.3043777768049194, 1.181580622736352,
+          1.3097825926246376, 1.3755096925168298
+        ],
+        "independentMedianRatio": 1.1086915176655503
+      },
+      "throughputIncreasePairs": 3,
+      "cpuIncreasePairs": 8
+    }
+  ],
+  "finishedAt": "2026-11-01T02:00:24.147Z"
+}

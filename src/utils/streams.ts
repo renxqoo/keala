@@ -154,3 +154,12 @@ export const readAllLimited = async (
   }
   return out;
 };
+
+/** Release a response body that will never reach a consumer. */
+export const discardBody = (response: Response): void => {
+  try {
+    void response.body?.cancel().catch(() => undefined);
+  } catch {
+    /* A locked or already-retired body has another owner. */
+  }
+};

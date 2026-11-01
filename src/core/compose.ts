@@ -13,6 +13,7 @@
  * response after `await next()`" work without any runtime style detection.
  */
 
+import { discardBody } from "../utils/streams.ts";
 import type { Next } from "../types.ts";
 import { registerBranch } from "./branches.ts";
 import { FLAG_CHAIN_STALLED, FLAG_DEV_CHAIN } from "./context/state.ts";
@@ -74,6 +75,9 @@ const markStalled = (
 const commit = (c: MiddlewareContext, ret: HandlerResult): void => {
   if (ret === undefined || ret === null) return;
   if (ret instanceof Response) {
+    const previous = c._res;
+    if (previous !== undefined && previous !== ret && previous.body !== ret.body)
+      discardBody(previous);
     c._res = ret;
     return;
   }

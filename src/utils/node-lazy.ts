@@ -28,3 +28,6 @@ export const nodeFsPromises = lazyModule<typeof import("node:fs/promises")>("nod
 export const nodePath = lazyModule<typeof import("node:path")>("node:path");
 /** node:zlib — loaded by the first Node-side etag() hash (crc32). */
 export const nodeZlib = lazyModule<typeof import("node:zlib")>("node:zlib");
+
+/** node:stream — loaded for Node static-file streaming. */
+export const nodeStream = lazyModule<typeof import("node:stream")>("node:stream");

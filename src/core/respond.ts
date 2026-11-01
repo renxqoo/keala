@@ -21,7 +21,7 @@ import type { Context } from "./context/context.ts";
 import { isEmptyStatus } from "../http/status.ts";
 import type { HeaderMap } from "../types.ts";
 import { ALLOW_ORDER, KNOWN_METHODS } from "../router/router.ts";
-import { repumpStream } from "../utils/streams.ts";
+import { repumpStream, discardBody } from "../utils/streams.ts";
 
 type HeaderEntries = [string, string][];
 
@@ -160,8 +160,14 @@ const applyStagedHeaders = (res: Response, record: HeaderMap): Response => {
  * exposes only what its own headers say, and an open stream has no knowable
  * finite length.
  */
-export const stripBody = (res: Response): Response =>
-  new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
+export const stripBody = (res: Response): Response => {
+  discardBody(res);
+  return new Response(null, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+  });
+};
 
 /**
  * The void-notFound fallback (U3c): with the response setters gone, a
@@ -241,6 +247,7 @@ export const finishCommitted = (c: Context, committed: Response): Response => {
  * describing it. Shared by the committed path and the R4.3 takeover path.
  */
 export const sanitizeEmptyStatus = (res: Response): Response => {
+  discardBody(res);
   const headers = new Headers(res.headers);
   headers.delete("content-type");
   headers.delete("content-length");

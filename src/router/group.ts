@@ -172,17 +172,18 @@ export class Router {
     // A destination PATH carrying `:params` is rebuilt from the matched
     // route's captured values (koa-router behavior); absolute URLs and
     // scheme-relative targets are verbatim Locations.
-    const destSegments = redirectTargetSegments(destination);
-    if (destSegments !== null) assertRedirectCaptures(source, destSegments);
+    const dest = redirectTargetSegments(destination);
+    if (dest !== null) assertRedirectCaptures(source, dest.segments);
     this.#add("GET", source, [
       (c) => {
         // BUG-1 (0.6.2 review, mirrors registration.ts): pass the code
         // through c.redirect's EXPLICIT branch — the no-code call's
         // isRedirectStatus gate silently rewrote 304/306/309+ to 302.
         // c.params is the U2 functional reader; the arrow keeps `this` bound
-        // (a bare method reference would lose the context). Cold path.
+        // (a bare method reference would lose the context). Cold path. The
+        // query/fragment suffix rides verbatim (see redirectTargetSegments).
         const target =
-          destSegments === null ? destination : buildURL(destSegments, (n) => c.params(n));
+          dest === null ? destination : buildURL(dest.segments, (n) => c.params(n)) + dest.suffix;
         return c.redirect(target, code);
       },
     ]);

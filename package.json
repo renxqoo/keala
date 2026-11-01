@@ -1,7 +1,7 @@
 {
   "name": "keala",
   "version": "0.7.3",
-  "description": "keala — an onion-model web framework with its own native API: return-style responses, zero-copy route params, precompiled chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets. Zero dependencies; runs on Bun 1.4+ and Node.",
+  "description": "keala — an onion-model web framework with its own native API: return-style responses, zero-copy route params, precompiled chains, hybrid static/trie router, Bun-native route sinking, signed cookies, SSE, WebSockets. Built on srvx; runs on Bun 1.4+ and Node.",
   "keywords": [
     "bun",
     "fetch",
@@ -15,8 +15,7 @@
     "sse",
     "typescript",
     "web",
-    "websockets",
-    "zero-dependency"
+    "websockets"
   ],
   "homepage": "https://github.com/renxqoo/keala#readme",
   "bugs": {
@@ -73,13 +72,18 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "bench": "node bench/run.mjs",
+    "bench:compare": "npm run build && node bench/framework-compare/run.mjs",
     "smoke": "bun scripts/smoke.ts",
     "drain-verify": "npm run build && bun scripts/drain-verify.ts",
     "verify": "oxfmt --check && oxlint && tsc --noEmit && vitest run --coverage && bun scripts/smoke.ts && bun scripts/example-check.ts",
     "soak": "bun scripts/soak.ts",
     "example:check": "bun scripts/example-check.ts",
     "process:check": "node scripts/process-check.mjs",
-    "soak:node": "node --experimental-strip-types --expose-gc scripts/soak-node.ts"
+    "soak:node": "node --experimental-strip-types --expose-gc scripts/soak-node.ts",
+    "runtime:check": "node scripts/runtime-contracts.mjs"
+  },
+  "dependencies": {
+    "srvx": "1.0.8"
   },
   "devDependencies": {
     "@hono/node-server": "2.1.1",
@@ -89,6 +93,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "autocannon": "8.0.0",
     "fastify": "^5.12.1",
+    "h3": "2.0.8",
     "hono": "4.13.5",
     "koa": "3.2.1",
     "oxfmt": "0.65.0",
@@ -98,7 +103,7 @@
   },
   "engines": {
     "bun": ">=1.4.0",
-    "node": ">=20"
+    "node": ">=20.16.0"
   },
   "publint": {
     "run": true

@@ -84,7 +84,7 @@ const fastIndexOf = (state: RouterState): { matchers: FastMatcher[]; table: Tabl
       if (bucket.fast !== null) matchers.push(bucket.fast);
     }
   }
-  const table = compileTableRegex(state.regexIndex, state.buckets);
+  const table = compileTableRegex(state.regexIndex, state.impureFirst);
   const fast = { mutations: state.mutations, matchers, table };
   state.fastIndex = fast;
   return fast;

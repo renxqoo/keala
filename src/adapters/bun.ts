@@ -6,13 +6,16 @@
  * side-effect free. The serve implementation is injectable for unit tests.
  */
 
+import { serve as serveBun } from "srvx/bun";
+import type { ServerOptions as SrvxOptions, ServerRequest } from "srvx";
+import { nativeRoutesAllowed } from "../core/native-policy.ts";
 import { HANDLE_REQUEST_SOURCE, type NativeApplication } from "../core/application.ts";
 import type { Application, WebSocketHandlers } from "../core/app.ts";
 import type { Context } from "../core/context/context.ts";
 import { buildNativeRoutes } from "../core/sink.ts";
 import { consoleFallback } from "../core/error-response.ts";
 import type { GracefulStopOptions } from "../core/lifecycle.ts";
-import { attachServer } from "../core/server-slot.ts";
+import { attachServer, assertCanStart } from "../core/server-slot.ts";
 import { toHttpError } from "../http/errors.ts";
 import type { ListenOptions, Runtime } from "../types.ts";
 
@@ -20,6 +23,7 @@ import type { ListenOptions, Runtime } from "../types.ts";
 export interface ServerHandle {
   readonly port: number;
   readonly hostname: string;
+  readonly url?: URL;
   stop(closeActiveConnections?: boolean): void;
   fetch(request: Request): Promise<Response>;
   /** Hot-reload server options (Bun's actual API — `update` does not exist). */
@@ -34,9 +38,27 @@ interface RequestIPHost {
   requestIP(request: Request): { readonly address: string } | null;
 }
 
+const transportClosers = new WeakMap<ServerHandle, (force?: boolean) => Promise<void>>();
 const defaultServeImplementation = (): ServeImplementation | undefined =>
   typeof Bun !== "undefined" && typeof Bun.serve === "function"
-    ? (Bun.serve as unknown as ServeImplementation)
+    ? (options) => {
+        const fetch = options["fetch"] as (
+          request: Request,
+          server: unknown,
+        ) => Response | Promise<Response>;
+        const transport = serveBun({
+          port: options["port"] as number,
+          hostname: options["hostname"] as string | undefined,
+          // Preserve Bun's native default rather than inheriting process.env.HOST.
+          bun: { ...options, hostname: options["hostname"] } as SrvxOptions["bun"],
+          silent: true,
+          gracefulShutdown: false,
+          fetch: (request: ServerRequest) => fetch(request, request.runtime?.bun?.server),
+        });
+        const server = transport.bun!.server as unknown as ServerHandle;
+        transportClosers.set(server, (force) => transport.close(force));
+        return server;
+      }
     : undefined;
 
 /**
@@ -75,6 +97,7 @@ export const startBunServer = (
   onListen?: () => void,
   serveImpl?: ServeImplementation,
 ): ServerHandle => {
+  assertCanStart(app);
   const serve = serveImpl ?? defaultServeImplementation();
   if (serve === undefined) {
     throw new Error(
@@ -118,7 +141,7 @@ export const startBunServer = (
   };
   // Sunk routes ride the native routing table — matched before `fetch`,
   // with zero JS per request. `nativeRoutes: false` forces JS-only serving.
-  if (options.nativeRoutes !== false && app.nativeSinks.size > 0) {
+  if (options.nativeRoutes !== false && nativeRoutesAllowed(app) && app.nativeSinks.size > 0) {
     serveOptions["routes"] = buildNativeRoutes(app.nativeSinks);
   }
   // Websocket handlers install UNCONDITIONALLY: they dispatch through the
@@ -238,8 +261,10 @@ export const startBunServer = (
         openSockets.clear();
       };
       sweepLateSockets();
-      server.stop();
       let done = false;
+      let appSettled = false;
+      let transportSettled = true;
+      const stopping = transportClosers.get(server)?.() ?? server.stop();
       let timer: ReturnType<typeof setTimeout> | undefined;
       const finish = (timedOut: boolean): void => {
         if (done) return;
@@ -257,7 +282,28 @@ export const startBunServer = (
       if (grace.drain !== Number.POSITIVE_INFINITY) {
         timer = setTimeout(() => finish(true), grace.drain);
       }
-      if (grace.onSettled(() => finish(false))) finish(false);
+      const trySettle = (): void => {
+        if (appSettled && transportSettled) finish(false);
+      };
+      if (stopping !== undefined && typeof (stopping as PromiseLike<unknown>).then === "function") {
+        transportSettled = false;
+        void Promise.resolve(stopping).then(
+          () => {
+            transportSettled = true;
+            trySettle();
+          },
+          () => finish(true),
+        );
+      }
+      if (
+        grace.onSettled(() => {
+          appSettled = true;
+          sweepLateSockets();
+          trySettle();
+        })
+      )
+        appSettled = true;
+      trySettle();
     });
   try {
     server.stopGraceful = stopGraceful;

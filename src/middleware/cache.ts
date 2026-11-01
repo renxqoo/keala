@@ -17,6 +17,7 @@
  * count-only budget let a few dozen 4MB pages retain a process-sized heap.
  */
 
+import { rememberSerializedText } from "../core/response-snapshot.ts";
 import type { RouteHandler } from "../router/router.ts";
 import type { Context } from "../core/context/context.ts";
 
@@ -168,9 +169,9 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     // BUG-5 fix: brand the hit as a snapshot body — the stored string is
     // context-independent, so outer transforms (etag/compress) may treat it
     // exactly like a fresh sugar product. The memo saves the clone cost for
-    // text entries: etag/compress read bodySerializedValue instead of cloning.
-    if (typeof entry.body === "string") c.bodySerializedValue = entry.body;
+    // text entries: etag/compress read the response snapshot instead of cloning.
     const hit = new Response(entry.body, { status: 200, headers });
+    if (typeof entry.body === "string") rememberSerializedText(hit, entry.body);
     c.directBodyResponseValue = hit;
     return hit;
   };
@@ -198,7 +199,7 @@ export const cache = (options: ResponseCacheOptions = {}): RouteHandler => {
     // would later hit).
 
     // RFC 9111 §3.2: authenticated requests must not replay stored responses.
-    const authedRequest = c.header("authorization").length > 0;
+    const authedRequest = c.header("authorization").length > 0 || c.header("cookie").length > 0;
     const cached = authedRequest ? undefined : store.get(key);
     if (cached !== undefined) {
       if (cached.expires > now && !bypassStored) return storeHit(key, cached, c);
