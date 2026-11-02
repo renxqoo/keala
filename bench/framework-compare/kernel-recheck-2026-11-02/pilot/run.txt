@@ -1,0 +1,7 @@
+HTTP correctness: 12 checks passed.
+1 kernel-node-cfs10000us hello r1: 7810 req/s; CPU 115.13us/req; p99 8ms; client 52.0%
+2 kernel-regexp-node-cfs10000us hello r1: 8183 req/s; CPU 106.52us/req; p99 7ms; client 50.2%
+3 keala-node-cfs10000us hello r1: 7180 req/s; CPU 119.92us/req; p99 7ms; client 48.8%
+4 kernel-bun-cfs10000us hello r1: 20168 req/s; CPU 35.03us/req; p99 3ms; client 65.8%
+5 kernel-regexp-bun-cfs10000us hello r1: 15960 req/s; CPU 39.26us/req; p99 4ms; client 58.3%
+6 keala-bun-cfs10000us hello r1: 18352 req/s; CPU 39.12us/req; p99 4ms; client 63.7%

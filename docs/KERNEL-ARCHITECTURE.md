@@ -1,6 +1,8 @@
 # 独立 Kernel 原型：把成本放在需要能力的请求上
 
-这是一套新 API 的可运行实验，入口在 `experimental/kernel`，尚未加入发布包。旧 `src` 和 Keala 对外 API 保留。Hello World 与十二路由是第一阶段的性能验收；它们不能代替通用框架的功能验收。
+这是一套新 API 的可运行实验，入口在 `experimental/kernel`，尚未加入发布包。正式实现和 Keala 对外 API 仍在 `src`。Hello World 与十二路由只覆盖小路由表的同步文本性能，不能代替通用框架的功能验收。
+
+[当前源码的远端复测](../bench/framework-compare/kernel-recheck-2026-11-02/README.md)显示：默认 trie Kernel 的十二路由综合性能与 Keala 接近持平；显式 RegExp 方案在 Node/Bun 下分别提高约 3.82%/5.52% 吞吐，CPU/请求降低约 4.02%/5.89%。这些观测值限于报告中的共享主机、配额和文本场景，不能推导完整应用的迁移收益。
 
 ```ts
 import { Kernel, json } from "../experimental/kernel/kernel.ts";
@@ -21,7 +23,7 @@ const server = await listenNode(app, { port: 3000 });
 await server.close(5000);
 ```
 
-小表的另一种编译策略可显式选择 `new Kernel({ router: "regexp" })`。它保留同一 API 和 trie 降级路径；默认仍为 trie，不能把尚未测量的运行时收益当作默认结论。
+小表的另一种编译策略可显式选择 `new Kernel({ router: "regexp" })`。它保留同一 API 和 trie 降级路径；默认仍为 trie。RegExp 的文本场景收益已有上述复测数据，Fetch、中间件、JSON/body、异步任务与流处理的性能仍需分别测量。
 
 ## 选择的架构
 

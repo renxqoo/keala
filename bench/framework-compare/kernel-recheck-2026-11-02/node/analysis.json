@@ -1,0 +1,963 @@
+{
+  "rows": [
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "hello",
+      "rounds": 6,
+      "rps": 9403.867991750814,
+      "cpuUs": 98.41175391261993,
+      "meanMs": 4.813245555879693,
+      "p50Ms": 4,
+      "p99Ms": 24,
+      "rpsRange": [8990, 10556.666666666666],
+      "cpuRange": [87.33245974107989, 103.99117538005191],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-1",
+      "rounds": 6,
+      "rps": 8771.94814940076,
+      "cpuUs": 106.54598487960077,
+      "meanMs": 5.1919049949366585,
+      "p50Ms": 4,
+      "p99Ms": 29,
+      "rpsRange": [8055.241264559068, 9281.291611185086],
+      "cpuRange": [101.13005272407732, 113.79835577955879],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-2",
+      "rounds": 6,
+      "rps": 8639.81875030128,
+      "cpuUs": 106.52605978455017,
+      "meanMs": 5.282787270885966,
+      "p50Ms": 4,
+      "p99Ms": 30,
+      "rpsRange": [7976.031957390146, 9573.617588274485],
+      "cpuRange": [98.11242171189978, 113.9186978297162],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-3",
+      "rounds": 6,
+      "rps": 8646.71635510517,
+      "cpuUs": 106.17709023170889,
+      "meanMs": 5.2765432725217725,
+      "p50Ms": 4,
+      "p99Ms": 30,
+      "rpsRange": [3270.2523240371847, 9031.936127744511],
+      "cpuRange": [102.51171270718233, 123.63269035532996],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-4",
+      "rounds": 6,
+      "rps": 7269.877931275601,
+      "cpuUs": 124.01131629109418,
+      "meanMs": 6.377233901557203,
+      "p50Ms": 5,
+      "p99Ms": 36.5,
+      "rpsRange": [6363.273453093813, 8212.97836938436],
+      "cpuRange": [115.3469205834684, 141.7654746967796],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-5",
+      "rounds": 6,
+      "rps": 7619.268343029875,
+      "cpuUs": 124.07140710067702,
+      "meanMs": 6.055824429764579,
+      "p50Ms": 5,
+      "p99Ms": 31,
+      "rpsRange": [6382.695507487521, 8453.005645964795],
+      "cpuRange": [112.81526009743831, 144.63315954118875],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-6",
+      "rounds": 6,
+      "rps": 7882.117882117882,
+      "cpuUs": 118.46521254015065,
+      "meanMs": 5.841558453085941,
+      "p50Ms": 4.5,
+      "p99Ms": 30.5,
+      "rpsRange": [7686.502659574468, 8218.115218115217],
+      "cpuRange": [112.30758944851898, 120.13509928106814],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-7",
+      "rounds": 6,
+      "rps": 7901.302752521082,
+      "cpuUs": 118.80689572176198,
+      "meanMs": 5.8143340795516,
+      "p50Ms": 5,
+      "p99Ms": 31,
+      "rpsRange": [6169.440745672437, 8512.487512487513],
+      "cpuRange": [111.43206978836601, 146.7879997841688],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-8",
+      "rounds": 6,
+      "rps": 7648.11726368823,
+      "cpuUs": 123.7024852243093,
+      "meanMs": 6.02527699014964,
+      "p50Ms": 5,
+      "p99Ms": 31.5,
+      "rpsRange": [6837.774816788808, 7889.886892880905],
+      "cpuRange": [119.32967913311127, 134.90446728698788],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-9",
+      "rounds": 6,
+      "rps": 8015.432579373681,
+      "cpuUs": 117.56907106862508,
+      "meanMs": 5.7315578526967,
+      "p50Ms": 4,
+      "p99Ms": 29,
+      "rpsRange": [6446.404793608522, 8453.60824742268],
+      "cpuRange": [110.75220298977183, 142.90725535760393],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-10",
+      "rounds": 6,
+      "rps": 8888.629161758678,
+      "cpuUs": 105.42058421730069,
+      "meanMs": 5.122802045945125,
+      "p50Ms": 4,
+      "p99Ms": 28.5,
+      "rpsRange": [7192.013311148086, 9546.96868754164],
+      "cpuRange": [98.35523377529658, 127.233296316861],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-11",
+      "rounds": 6,
+      "rps": 8865.319380506,
+      "cpuUs": 105.99413387637236,
+      "meanMs": 5.1329612001309215,
+      "p50Ms": 4,
+      "p99Ms": 29.5,
+      "rpsRange": [8419.387075283144, 9566.056572379368],
+      "cpuRange": [99.23363250539207, 109.86611275964391],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-node-cfs10000us",
+      "framework": "kernel",
+      "runtime": "node",
+      "scenario": "route-12",
+      "rounds": 6,
+      "rps": 7562.192024575514,
+      "cpuUs": 123.92388081906103,
+      "meanMs": 6.108648986568954,
+      "p50Ms": 5,
+      "p99Ms": 30.5,
+      "rpsRange": [6936.502659574468, 8250.74925074925],
+      "cpuRange": [114.54603059288857, 134.7582554517134],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "hello",
+      "rounds": 6,
+      "rps": 9080.729580191102,
+      "cpuUs": 102.33750145510012,
+      "meanMs": 5.005527608146116,
+      "p50Ms": 4,
+      "p99Ms": 27.5,
+      "rpsRange": [8096.1090788160955, 10000.665557404327],
+      "cpuRange": [92.27768534540131, 113.14446498254262],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-1",
+      "rounds": 6,
+      "rps": 8549.567531603461,
+      "cpuUs": 109.23793603368699,
+      "meanMs": 5.338982724534865,
+      "p50Ms": 4,
+      "p99Ms": 31.5,
+      "rpsRange": [8232.02396804261, 10286.380286380287],
+      "cpuRange": [90.97128520556814, 112.10772776901612],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-2",
+      "rounds": 6,
+      "rps": 8446.23878617223,
+      "cpuUs": 109.52306728721979,
+      "meanMs": 5.415449412639795,
+      "p50Ms": 4,
+      "p99Ms": 29,
+      "rpsRange": [7793.677204658902, 9318.8937020993],
+      "cpuRange": [100.95884288064077, 117.4696413321947],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-3",
+      "rounds": 6,
+      "rps": 9275.192337574077,
+      "cpuUs": 100.54903308553884,
+      "meanMs": 4.879029448981404,
+      "p50Ms": 4,
+      "p99Ms": 24.5,
+      "rpsRange": [7756.324900133156, 9514.161946017994],
+      "cpuRange": [97.8616209022135, 118.76545064377683],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-4",
+      "rounds": 6,
+      "rps": 7963.909552369811,
+      "cpuUs": 117.1149555449627,
+      "meanMs": 5.773689661584719,
+      "p50Ms": 4.5,
+      "p99Ms": 28.5,
+      "rpsRange": [6993.3818663137, 8653.129161118508],
+      "cpuRange": [108.49626836962376, 127.75906122835242],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-5",
+      "rounds": 6,
+      "rps": 7835.209564071081,
+      "cpuUs": 118.24739321759799,
+      "meanMs": 5.878076579188578,
+      "p50Ms": 5,
+      "p99Ms": 32.5,
+      "rpsRange": [7379.8268974700395, 8347.638057218895],
+      "cpuRange": [111.28015781293588, 125.14231584645226],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-6",
+      "rounds": 6,
+      "rps": 7926.758116837125,
+      "cpuUs": 117.2520458588087,
+      "meanMs": 5.804498083691123,
+      "p50Ms": 4.5,
+      "p99Ms": 33.5,
+      "rpsRange": [6750.332005312085, 8434.420772303596],
+      "cpuRange": [111.45696017681652, 122.2883631713555],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-7",
+      "rounds": 6,
+      "rps": 8207.48704543864,
+      "cpuUs": 113.91910052828325,
+      "meanMs": 5.582440403615605,
+      "p50Ms": 4,
+      "p99Ms": 29,
+      "rpsRange": [7557.475083056479, 9590.273151232512],
+      "cpuRange": [98.96787078846822, 122.25936346052401],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-8",
+      "rounds": 6,
+      "rps": 7981.462408916652,
+      "cpuUs": 117.12299812059987,
+      "meanMs": 5.763539450131654,
+      "p50Ms": 4.5,
+      "p99Ms": 30,
+      "rpsRange": [7415.528157280906, 8817.243675099868],
+      "cpuRange": [106.26137350398308, 124.0583468395462],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-9",
+      "rounds": 6,
+      "rps": 8052.2629195784375,
+      "cpuUs": 113.82497591995511,
+      "meanMs": 5.70492744117728,
+      "p50Ms": 4,
+      "p99Ms": 30,
+      "rpsRange": [7534.0418465626035, 9099.500831946756],
+      "cpuRange": [102.67715038033938, 123.61617809124972],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-10",
+      "rounds": 6,
+      "rps": 8959.553928095873,
+      "cpuUs": 103.39578487298316,
+      "meanMs": 5.073411855640963,
+      "p50Ms": 4,
+      "p99Ms": 26,
+      "rpsRange": [8097.203728362184, 9614.257161892072],
+      "cpuRange": [97.67382717760377, 113.84118566025325],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-11",
+      "rounds": 6,
+      "rps": 8719.587013279255,
+      "cpuUs": 106.89647163224024,
+      "meanMs": 5.230168501171976,
+      "p50Ms": 4,
+      "p99Ms": 28,
+      "rpsRange": [8166.223404255319, 8948.172757475084],
+      "cpuRange": [103.48262419247048, 112.37469467513435],
+      "clientLimited": false
+    },
+    {
+      "stack": "kernel-regexp-node-cfs10000us",
+      "framework": "kernel-regexp",
+      "runtime": "node",
+      "scenario": "route-12",
+      "rounds": 6,
+      "rps": 8752.582472509164,
+      "cpuUs": 107.24494976373052,
+      "meanMs": 5.2092583339949226,
+      "p50Ms": 4,
+      "p99Ms": 29,
+      "rpsRange": [6919.773635153129, 9186.209193870753],
+      "cpuRange": [101.39366138448707, 130.37754365709338],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "hello",
+      "rounds": 6,
+      "rps": 8922.505834991498,
+      "cpuUs": 103.69912193519198,
+      "meanMs": 5.1053580755678425,
+      "p50Ms": 4,
+      "p99Ms": 27.5,
+      "rpsRange": [8137.346192218158, 9591.014975041599],
+      "cpuRange": [95.77134728149613, 115.10298745351261],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-1",
+      "rounds": 6,
+      "rps": 8576.646917585065,
+      "cpuUs": 107.27406023275583,
+      "meanMs": 5.319990708153947,
+      "p50Ms": 4,
+      "p99Ms": 30,
+      "rpsRange": [8231.358189081226, 9277.90736421193],
+      "cpuRange": [100.21136371799015, 113.077756223731],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-2",
+      "rounds": 6,
+      "rps": 8335.685849730793,
+      "cpuUs": 111.70606724537451,
+      "meanMs": 5.491168720307237,
+      "p50Ms": 4,
+      "p99Ms": 28,
+      "rpsRange": [7520.798668885192, 8910.20951114067],
+      "cpuRange": [105.91535906539916, 122.77070796460177],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-3",
+      "rounds": 6,
+      "rps": 8466.766803273691,
+      "cpuUs": 108.57689417190373,
+      "meanMs": 5.403487285270215,
+      "p50Ms": 4,
+      "p99Ms": 29,
+      "rpsRange": [7757.404326123128, 9086.247086247085],
+      "cpuRange": [104.88125778787658, 118.42447771438377],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-4",
+      "rounds": 6,
+      "rps": 7706.1767499178295,
+      "cpuUs": 121.7667181205276,
+      "meanMs": 5.981316921521613,
+      "p50Ms": 5,
+      "p99Ms": 30.5,
+      "rpsRange": [6729.208250166334, 8732.02396804261],
+      "cpuRange": [108.49666425222065, 138.02007118845165],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-5",
+      "rounds": 6,
+      "rps": 7811.825417075304,
+      "cpuUs": 119.30142856617101,
+      "meanMs": 5.891682559634679,
+      "p50Ms": 5,
+      "p99Ms": 29.5,
+      "rpsRange": [7547.05686730961, 8332.223701731025],
+      "cpuRange": [113.23635637235317, 122.26205164360624],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-6",
+      "rounds": 6,
+      "rps": 7945.451028060352,
+      "cpuUs": 117.26102582073379,
+      "meanMs": 5.781543787618871,
+      "p50Ms": 5,
+      "p99Ms": 30.5,
+      "rpsRange": [6930.093209054594, 9362.849533954726],
+      "cpuRange": [102.38331081561545, 133.40431357479105],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-7",
+      "rounds": 6,
+      "rps": 7854.409317803661,
+      "cpuUs": 119.24177360482712,
+      "meanMs": 5.862587388150546,
+      "p50Ms": 5,
+      "p99Ms": 32,
+      "rpsRange": [7146.511627906977, 8797.405189620758],
+      "cpuRange": [106.94775921506232, 131.03770164102087],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-8",
+      "rounds": 6,
+      "rps": 7150.981397652503,
+      "cpuUs": 129.74239602060953,
+      "meanMs": 6.482226104590772,
+      "p50Ms": 5,
+      "p99Ms": 33.5,
+      "rpsRange": [6989.36170212766, 8136.863136863137],
+      "cpuRange": [118.09703294454675, 133.39421613394217],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-9",
+      "rounds": 6,
+      "rps": 7794.134262853065,
+      "cpuUs": 121.30560987674707,
+      "meanMs": 5.911421239667938,
+      "p50Ms": 5,
+      "p99Ms": 30,
+      "rpsRange": [7094.810379241518, 8317.243675099868],
+      "cpuRange": [112.66263758254954, 131.52571857270127],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-10",
+      "rounds": 6,
+      "rps": 8598.34924125397,
+      "cpuUs": 109.08037899850888,
+      "meanMs": 5.310000405956936,
+      "p50Ms": 4,
+      "p99Ms": 29.5,
+      "rpsRange": [7940.392940392941, 8839.214380825566],
+      "cpuRange": [106.4504575754152, 117.5692178653806],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-11",
+      "rounds": 6,
+      "rps": 8644.47138632644,
+      "cpuUs": 108.66386048194524,
+      "meanMs": 5.2888543160098305,
+      "p50Ms": 4,
+      "p99Ms": 29.5,
+      "rpsRange": [7945.054945054945, 9302.727877578178],
+      "cpuRange": [100.76387498211987, 116.05943249926652],
+      "clientLimited": false
+    },
+    {
+      "stack": "keala-node-cfs10000us",
+      "framework": "keala",
+      "runtime": "node",
+      "scenario": "route-12",
+      "rounds": 6,
+      "rps": 8085.033784740913,
+      "cpuUs": 116.65125925111113,
+      "meanMs": 5.680592370788184,
+      "p50Ms": 4,
+      "p99Ms": 28,
+      "rpsRange": [7654.690618762475, 8915.056628914059],
+      "cpuRange": [105.7935956357658, 122.18956975228161],
+      "clientLimited": false
+    }
+  ],
+  "comparisons": [
+    {
+      "candidate": "kernel-node-cfs10000us",
+      "peer": "kernel-regexp-node-cfs10000us",
+      "helloRpsPercent": 3.55850715194308,
+      "helloCpuPercent": -3.836079136837822,
+      "routesRpsPercent": -3.031647829927897,
+      "routesCpuPercent": 3.405473931085634,
+      "rpsWins": 4,
+      "cpuWins": 4,
+      "p99Wins": 5,
+      "p99NotWorse": 5,
+      "total": 13,
+      "details": [
+        {
+          "scenario": "hello",
+          "rpsPercent": 3.55850715194308,
+          "cpuPercent": -3.836079136837822,
+          "p99Ms": [24, 27.5]
+        },
+        {
+          "scenario": "route-1",
+          "rpsPercent": 2.601074463418973,
+          "cpuPercent": -2.46430063751486,
+          "p99Ms": [29, 31.5]
+        },
+        {
+          "scenario": "route-2",
+          "rpsPercent": 2.2919073096295595,
+          "cpuPercent": -2.7364166991507677,
+          "p99Ms": [30, 29]
+        },
+        {
+          "scenario": "route-3",
+          "rpsPercent": -6.7758808614990285,
+          "cpuPercent": 5.597325974663692,
+          "p99Ms": [30, 24.5]
+        },
+        {
+          "scenario": "route-4",
+          "rpsPercent": -8.714709986726143,
+          "cpuPercent": 5.888539780458557,
+          "p99Ms": [36.5, 28.5]
+        },
+        {
+          "scenario": "route-5",
+          "rpsPercent": -2.756036316264221,
+          "cpuPercent": 4.925278878970074,
+          "p99Ms": [31, 32.5]
+        },
+        {
+          "scenario": "route-6",
+          "rpsPercent": -0.56315878523433,
+          "cpuPercent": 1.0346656831922596,
+          "p99Ms": [30.5, 33.5]
+        },
+        {
+          "scenario": "route-7",
+          "rpsPercent": -3.730548598157357,
+          "cpuPercent": 4.290584432998745,
+          "p99Ms": [31, 29]
+        },
+        {
+          "scenario": "route-8",
+          "rpsPercent": -4.176492078143701,
+          "cpuPercent": 5.617587672179147,
+          "p99Ms": [31.5, 30]
+        },
+        {
+          "scenario": "route-9",
+          "rpsPercent": -0.4573911777670192,
+          "cpuPercent": 3.28934411662245,
+          "p99Ms": [29, 30]
+        },
+        {
+          "scenario": "route-10",
+          "rpsPercent": -0.791610463047554,
+          "cpuPercent": 1.9582996993590118,
+          "p99Ms": [28.5, 26]
+        },
+        {
+          "scenario": "route-11",
+          "rpsPercent": 1.671321898672562,
+          "cpuPercent": -0.8441230492361118,
+          "p99Ms": [29.5, 28]
+        },
+        {
+          "scenario": "route-12",
+          "rpsPercent": -13.600448229679952,
+          "cpuPercent": 15.552183195642844,
+          "p99Ms": [30.5, 29]
+        }
+      ]
+    },
+    {
+      "candidate": "kernel-node-cfs10000us",
+      "peer": "keala-node-cfs10000us",
+      "helloRpsPercent": 5.394921176420553,
+      "helloCpuPercent": -5.098758720325957,
+      "routesRpsPercent": 0.6762304538068475,
+      "routesCpuPercent": -0.7479506761295052,
+      "rpsWins": 9,
+      "cpuWins": 9,
+      "p99Wins": 6,
+      "p99NotWorse": 8,
+      "total": 13,
+      "details": [
+        {
+          "scenario": "hello",
+          "rpsPercent": 5.394921176420553,
+          "cpuPercent": -5.098758720325957,
+          "p99Ms": [24, 27.5]
+        },
+        {
+          "scenario": "route-1",
+          "rpsPercent": 2.277128039575227,
+          "cpuPercent": -0.6787058787327882,
+          "p99Ms": [29, 30]
+        },
+        {
+          "scenario": "route-2",
+          "rpsPercent": 3.6485648098207646,
+          "cpuPercent": -4.637176465487669,
+          "p99Ms": [30, 28]
+        },
+        {
+          "scenario": "route-3",
+          "rpsPercent": 2.1253632704505643,
+          "cpuPercent": -2.2102344688505915,
+          "p99Ms": [30, 29]
+        },
+        {
+          "scenario": "route-4",
+          "rpsPercent": -5.661676766587009,
+          "cpuPercent": 1.8433593392447545,
+          "p99Ms": [36.5, 30.5]
+        },
+        {
+          "scenario": "route-5",
+          "rpsPercent": -2.46494338729758,
+          "cpuPercent": 3.9982576837798156,
+          "p99Ms": [31, 29.5]
+        },
+        {
+          "scenario": "route-6",
+          "rpsPercent": -0.7970994436791723,
+          "cpuPercent": 1.02692835150342,
+          "p99Ms": [30.5, 30.5]
+        },
+        {
+          "scenario": "route-7",
+          "rpsPercent": 0.5970332436218584,
+          "cpuPercent": -0.36470262888436134,
+          "p99Ms": [31, 32]
+        },
+        {
+          "scenario": "route-8",
+          "rpsPercent": 6.951994955530516,
+          "cpuPercent": -4.655310046332728,
+          "p99Ms": [31.5, 33.5]
+        },
+        {
+          "scenario": "route-9",
+          "rpsPercent": 2.839293102446616,
+          "cpuPercent": -3.0802687624410074,
+          "p99Ms": [29, 30]
+        },
+        {
+          "scenario": "route-10",
+          "rpsPercent": 3.3759959308465204,
+          "cpuPercent": -3.3551357400932957,
+          "p99Ms": [28.5, 29.5]
+        },
+        {
+          "scenario": "route-11",
+          "rpsPercent": 2.55478888540126,
+          "cpuPercent": -2.4568670703692286,
+          "p99Ms": [29.5, 29.5]
+        },
+        {
+          "scenario": "route-12",
+          "rpsPercent": -6.466785100541839,
+          "cpuPercent": 6.234498979813297,
+          "p99Ms": [30.5, 28]
+        }
+      ]
+    },
+    {
+      "candidate": "kernel-regexp-node-cfs10000us",
+      "peer": "kernel-node-cfs10000us",
+      "helloRpsPercent": -3.436228707625133,
+      "helloCpuPercent": 3.989104336018512,
+      "routesRpsPercent": 3.126430182716433,
+      "routesCpuPercent": -3.2933207514286855,
+      "rpsWins": 9,
+      "cpuWins": 9,
+      "p99Wins": 8,
+      "p99NotWorse": 8,
+      "total": 13,
+      "details": [
+        {
+          "scenario": "hello",
+          "rpsPercent": -3.436228707625133,
+          "cpuPercent": 3.989104336018512,
+          "p99Ms": [27.5, 24]
+        },
+        {
+          "scenario": "route-1",
+          "rpsPercent": -2.5351337469144752,
+          "cpuPercent": 2.5265627392042855,
+          "p99Ms": [31.5, 29]
+        },
+        {
+          "scenario": "route-2",
+          "rpsPercent": -2.2405558464093756,
+          "cpuPercent": 2.813403132276826,
+          "p99Ms": [29, 30]
+        },
+        {
+          "scenario": "route-3",
+          "rpsPercent": 7.268377458662023,
+          "cpuPercent": -5.300632305790276,
+          "p99Ms": [24.5, 30]
+        },
+        {
+          "scenario": "route-4",
+          "rpsPercent": 9.546675028867124,
+          "cpuPercent": -5.561073740999179,
+          "p99Ms": [28.5, 36.5]
+        },
+        {
+          "scenario": "route-5",
+          "rpsPercent": 2.8341464208797795,
+          "cpuPercent": -4.694082237943165,
+          "p99Ms": [32.5, 31]
+        },
+        {
+          "scenario": "route-6",
+          "rpsPercent": 0.5663482250185314,
+          "cpuPercent": -1.0240699825113442,
+          "p99Ms": [33.5, 30.5]
+        },
+        {
+          "scenario": "route-7",
+          "rpsPercent": 3.8751115165136962,
+          "cpuPercent": -4.114066918241532,
+          "p99Ms": [29, 31]
+        },
+        {
+          "scenario": "route-8",
+          "rpsPercent": 4.35852555257068,
+          "cpuPercent": -5.318799449969713,
+          "p99Ms": [30, 31.5]
+        },
+        {
+          "scenario": "route-9",
+          "rpsPercent": 0.45949285755997327,
+          "cpuPercent": -3.1845919293557623,
+          "p99Ms": [30, 29]
+        },
+        {
+          "scenario": "route-10",
+          "rpsPercent": 0.797926936161697,
+          "cpuPercent": -1.920686893694179,
+          "p99Ms": [26, 28.5]
+        },
+        {
+          "scenario": "route-11",
+          "rpsPercent": -1.6438479085953306,
+          "cpuPercent": 0.8513091459573907,
+          "p99Ms": [28, 29.5]
+        },
+        {
+          "scenario": "route-12",
+          "rpsPercent": 15.74134118870738,
+          "cpuPercent": -13.459012859420627,
+          "p99Ms": [29, 30.5]
+        }
+      ]
+    },
+    {
+      "candidate": "kernel-regexp-node-cfs10000us",
+      "peer": "keala-node-cfs10000us",
+      "helloRpsPercent": 1.77331063857753,
+      "helloCpuPercent": -1.3130491895030905,
+      "routesRpsPercent": 3.823802509535823,
+      "routesCpuPercent": -4.016639012730772,
+      "rpsWins": 11,
+      "cpuWins": 12,
+      "p99Wins": 6,
+      "p99NotWorse": 8,
+      "total": 13,
+      "details": [
+        {
+          "scenario": "hello",
+          "rpsPercent": 1.77331063857753,
+          "cpuPercent": -1.3130491895030905,
+          "p99Ms": [27.5, 27.5]
+        },
+        {
+          "scenario": "route-1",
+          "rpsPercent": -0.3157339487309674,
+          "cpuPercent": 1.8307089306306423,
+          "p99Ms": [31.5, 30]
+        },
+        {
+          "scenario": "route-2",
+          "rpsPercent": 1.3262608312549107,
+          "cpuPercent": -1.9542358011400807,
+          "p99Ms": [29, 28]
+        },
+        {
+          "scenario": "route-3",
+          "rpsPercent": 9.548220153976693,
+          "cpuPercent": -7.393710372351259,
+          "p99Ms": [24.5, 29]
+        },
+        {
+          "scenario": "route-4",
+          "rpsPercent": 3.344496380189166,
+          "cpuPercent": -3.8202249739214267,
+          "p99Ms": [28.5, 30.5]
+        },
+        {
+          "scenario": "route-5",
+          "rpsPercent": 0.2993429287943883,
+          "cpuPercent": -0.8835060579248655,
+          "p99Ms": [32.5, 29.5]
+        },
+        {
+          "scenario": "route-6",
+          "rpsPercent": -0.23526557721154084,
+          "cpuPercent": -0.007658095997575831,
+          "p99Ms": [33.5, 30.5]
+        },
+        {
+          "scenario": "route-7",
+          "rpsPercent": 4.495280464116558,
+          "cpuPercent": -4.463765436921008,
+          "p99Ms": [29, 32]
+        },
+        {
+          "scenario": "route-8",
+          "rpsPercent": 11.613524984651423,
+          "cpuPercent": -9.726502891163713,
+          "p99Ms": [30, 33.5]
+        },
+        {
+          "scenario": "route-9",
+          "rpsPercent": 3.311832309017526,
+          "cpuPercent": -6.1667667013856065,
+          "p99Ms": [30, 30]
+        },
+        {
+          "scenario": "route-10",
+          "rpsPercent": 4.200860847904164,
+          "cpuPercent": -5.211380981361858,
+          "p99Ms": [26, 29.5]
+        },
+        {
+          "scenario": "route-11",
+          "rpsPercent": 0.8689441331442227,
+          "cpuPercent": -1.6264734584859109,
+          "p99Ms": [28, 29.5]
+        },
+        {
+          "scenario": "route-12",
+          "rpsPercent": 8.256597381548758,
+          "cpuPercent": -8.063615899020837,
+          "p99Ms": [29, 28]
+        }
+      ]
+    }
+  ]
+}

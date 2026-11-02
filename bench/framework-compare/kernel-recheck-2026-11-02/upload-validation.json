@@ -1,0 +1,9 @@
+{
+  "removedAppleDoubleFiles": 2230,
+  "verified": {
+    "dist": "bd6dde48200229b1dda9181d6ae8584d20c3e65a5fbef992cdb480bf5143d6c8",
+    "kernel": "15c05b157a2fb4e415d6a7bf739e34f792eb1866f045ab6e152133464e9edf82",
+    "bench": "d77277f0e85a0ebf0a5922db1e3c1348012547df6d1aa6ec6dbbee5c33bd3f8e"
+  },
+  "allMatched": true
+}

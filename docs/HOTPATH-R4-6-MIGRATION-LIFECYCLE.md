@@ -73,7 +73,7 @@
 - [x] `drain-verify` 真实 SIGTERM 验收：Node 与 Bun 双运行时过（已入默认 verify 门）
 - [x] 双形态进程冒烟：drain-verify 的 Bun 子进程跑源码形态、Node 子进程跑 dist 构建产物形态，探针 + 全链请求 + 优雅停机退出码 0
 - [x] `lifecycle-overhead` 基准：未配置增量 +1ns（A/B 实测，预算 <5ns）；§7.2 三条预算（稳态噪声级 / waiter 池零构造 / 期限 timer 级）全过
-- [x] HTTP 级 R4.5↔R4.6 head-to-head（`bench/run-r45-r46.mjs`，8s 轮转，4 轮 + 6 轮高精度复测）：Bun 全 TIE（0.955–1.001x）；Node 首测 3–5% 回退 → wire 监听合并修复后收窄至 ~1–1.6%（6 轮读数 0.984–0.991x；wire 真相 + S4 断开桥的固有成本，详见 §8 第二波与 `bench/R45-R46.md`）
+- [x] HTTP 级 R4.5↔R4.6 head-to-head（8s 轮转，4 轮 + 6 轮高精度复测）：Bun 全 TIE（0.955–1.001x）；Node 首测 3–5% 回退 → wire 监听合并修复后收窄至 ~1–1.6%（6 轮读数 0.984–0.991x；wire 真相 + S4 断开桥的固有成本，详见 §8 第二波）
 - [x] 挂账项显式：per-route 差异化预算、熔断/重试、压力式准入、AIMD（DESIGN §3.2）
 
 ## 8. 实施记录
@@ -117,11 +117,11 @@
 
 ### 第二波（R4.5↔R4.6 head-to-head A/B，2026-09-03）
 
-**新增编排 `bench/run-r45-r46.mjs`**：自动 worktree 固定 R4.5 基线（`KEALA_R45_REF`，默认 3c4347f），同 bench 双树四进程（bun/node × R4.5/R4.6）ABAB 轮转打点（与 `run.mjs` 同方法论：200 连接、4 worker、预热 2s×8s×4 轮、响应契约先验）。`run.mjs` 同时开放 ROUNDS 为第三参数。
+**对比方法**：自动 worktree 固定 R4.5 基线 `3c4347f`，同 bench 双树四进程（bun/node × R4.5/R4.6）ABAB 轮转打点（与 `run.mjs` 同方法论：200 连接、4 worker、预热 2s×8s×4 轮、响应契约先验）。`run.mjs` 同时开放 ROUNDS 为第三参数。
 
 **基准结果（进程内，bun）**：plain **416→417ns（+1ns）**；overload 稳态 417ns（噪声级）；timeout 542ns（+126ns，opt-in）；排队全周期 1333ns（waiter 池零构造）；快速路径探针 1.81ns/op。
 
-**HTTP 级 head-to-head（8s 轮转，比值在双侧噪声带内判 TIE；产物 `bench/R45-R46.md`）**：
+**HTTP 级 head-to-head（8s 轮转，比值在双侧噪声带内判 TIE）**：
 
 | 运行时                      | Text       |       JSON |      Param |       3 mw |
 | --------------------------- | ---------- | ---------: | ---------: | ---------: |

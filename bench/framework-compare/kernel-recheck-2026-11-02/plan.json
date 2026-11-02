@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-02",
+  "baseline": "e8600d2bb7d377affea9adf6728e9404991a5e70",
+  "frameworks": ["kernel", "kernel-regexp", "keala"],
+  "runtimes": ["node", "bun"],
+  "scenarios": "Hello World and all twelve existing routes",
+  "roundsPerRuntime": 6,
+  "expectedSamplesPerRuntime": 234,
+  "connections": 50,
+  "warmupSeconds": 1,
+  "measurementSeconds": 3,
+  "cooldownMs": 500,
+  "cpuPeriodUs": 10000,
+  "cpuCores": 1.5,
+  "memoryMaxMiB": 640,
+  "serverCpu": 0,
+  "clientAndCoordinatorCpu": 1,
+  "client": "existing native Go client, preserved binary and source hashes verified",
+  "excluded": [
+    "kernel-uws",
+    "real application workloads with middleware, JSON, bodies, async work or file IO"
+  ],
+  "uploadArchiveSha256": "dee50f3158d97e28683106851f0a69f996da09736b6704d1a4d7d6a4fb7b89b8"
+}

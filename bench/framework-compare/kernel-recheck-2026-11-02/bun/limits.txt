@@ -1,0 +1,14 @@
+TimeoutStopUSec=5s
+RuntimeMaxUSec=30min
+OOMPolicy=stop
+CPUWeight=1
+CPUQuotaPerSecUSec=1.500000s
+CPUQuotaPeriodUSec=infinity
+IOWeight=1
+MemoryHigh=536870912
+MemoryMax=671088640
+MemorySwapMax=0
+TasksMax=128
+Nice=15
+IOSchedulingClass=3
+KillMode=control-group
