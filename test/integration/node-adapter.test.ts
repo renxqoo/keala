@@ -107,7 +107,7 @@ describe("node adapter: response bridging", () => {
       });
     });
     const res = await fetch(`${base}/cookies`);
-    expect(res.headers.getSetCookie().sort()).toEqual(["a=1; Path=/", "b=2; Path=/"]);
+    expect(res.headers.getSetCookie().toSorted()).toEqual(["a=1; Path=/", "b=2; Path=/"]);
   });
 
   it("streams response bodies chunk-by-chunk (no adapter buffering)", async () => {

@@ -18,8 +18,6 @@ import {
   resolveRelativeSegments,
   weakEtag,
   type FreshnessInput,
-  type QueryMap,
-  type QueryValue,
 } from "../../src/index.ts";
 
 const quiet = { env: "test" } as const;
@@ -29,6 +27,8 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 // C1 — app.handle() always settles through a Promise (the union type is gone;
 // consumers chain .then() directly — the top dogfood friction).
 // ---------------------------------------------------------------------------
+
+const warns = () => vi.spyOn(console, "warn").mockImplementation(() => {});
 
 describe("C1: app.handle() returns Promise<Response>", () => {
   it("returns a Promise for a fully-sync handler", async () => {
@@ -240,29 +240,11 @@ describe("C2: path-safety primitives re-exported from the root entry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// C3 — c.query shape is part of the public vocabulary.
-// ---------------------------------------------------------------------------
-
-describe("C3: c.query shape types are exported", () => {
-  it("QueryMap is a Record of string | string[]", async () => {
-    const app = new Keala(quiet);
-    app.get("/q", (c) => c.json({ single: c.query("single"), multi: c.queries("multi") }));
-    const res = await app.handle(req("/q?single=1&multi=a&multi=b"));
-    expect(await res.json()).toEqual({ single: "1", multi: ["a", "b"] });
-
-    const map: QueryMap = { single: "1", multi: ["a", "b"] };
-    const single: QueryValue = map["single"] as QueryValue;
-    expect(single).toBe("1");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // C4 — development-mode warning when global middleware swallows a matched
 // route (the "hono mental model" trap from the dogfood round).
 // ---------------------------------------------------------------------------
 
 describe("C4: dev warning for routes swallowed by global middleware", () => {
-  const warns = () => vi.spyOn(console, "warn").mockImplementation(() => {});
   afterEach(() => vi.restoreAllMocks());
 
   it("warns once (deduped) when global middleware returns without next()", async () => {

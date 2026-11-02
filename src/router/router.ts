@@ -92,8 +92,6 @@ export const paramsRecord = (
 };
 
 export interface Bucket {
-  /** The first-segment key this bucket is indexed under. */
-  first: string;
   fast: FastMatcher | null;
   /** Dynamic patterns in this bucket (always present in the trie as well);
    * feeds the table regex's wildcard purity rule. */
@@ -203,7 +201,7 @@ const indexPattern = (state: RouterState, ir: PatternIR, fullPath: string): Rout
   if (first.kind !== "static") return targets;
   let bucket = state.buckets.get(first.value);
   if (bucket === undefined) {
-    bucket = { first: first.value, fast: null, count: 0 };
+    bucket = { fast: null, count: 0 };
     state.buckets.set(first.value, bucket);
   }
   bucket.count++;

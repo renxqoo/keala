@@ -93,7 +93,7 @@ describe("agent3 — post-commit response rewrites", () => {
     });
     app.get("/x", () => new Response("ok", { headers: { "set-cookie": "inner=1; Path=/" } }));
     const res = await app.handle(req("/x"));
-    expect(res.headers.getSetCookie().sort()).toEqual(["inner=1; Path=/", "outer=1; Path=/"]);
+    expect(res.headers.getSetCookie().toSorted()).toEqual(["inner=1; Path=/", "outer=1; Path=/"]);
   });
 
   // Root cause: src/core/context/response.ts remove() only deletes from the

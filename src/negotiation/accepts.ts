@@ -152,16 +152,6 @@ const tokenScore = (pref: Preference, server: string): number => {
   return client === server ? 3 : 0;
 };
 
-/** Score a language range: exact > prefix > wildcard. */
-const languageScore = (pref: Preference, server: string): number => {
-  const client = pref.value;
-  if (client === "*") return 1;
-  if (client === server) return 3;
-  if (client.length < server.length && server.startsWith(`${client}-`)) return 2;
-  if (server.length < client.length && client.startsWith(`${server}-`)) return 2;
-  return 0;
-};
-
 interface PickOptions {
   header: string | null;
   provided: readonly string[];
@@ -356,28 +346,6 @@ export const acceptsGzip = (header: string): boolean => {
   if (gzipMemo.size < GZIP_MEMO_MAX) gzipMemo.set(header, verdict);
   return verdict;
 };
-
-/**
- * Charset negotiation over an `Accept-Charset` header. Standalone helper by
- * design: koa's `c.acceptsCharsets()` accessor left the 0.7 context surface
- * (docs/KEALA-NATIVE-API.md §10) — read `c.header("accept-charset")` and
- * call this with the list you serve.
- */
-export const acceptsCharset = (
-  header: string | null,
-  provided: readonly string[],
-): string | false => pickPreference({ header, provided, normalize: identity, score: tokenScore });
-
-/**
- * Language negotiation with prefix matching over an `Accept-Language`
- * header. Standalone helper, like acceptsCharset above: koa's
- * `c.acceptsLanguages()` is off the 0.7 context surface.
- */
-export const acceptsLanguage = (
-  header: string | null,
-  provided: readonly string[],
-): string | false =>
-  pickPreference({ header, provided, normalize: identity, score: languageScore });
 
 /** Expand `json`-style shorthands (including extensions) to media types. */
 const EXPAND_CACHE: Readonly<Record<string, string>> = {

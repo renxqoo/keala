@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { Keala, createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
 import { serializeCookie } from "../../src/plugins/cookies/cookies.ts";
-import { acceptsCharset, acceptsType, acceptsLanguage } from "../../src/negotiation/accepts.ts";
+import { acceptsType } from "../../src/negotiation/accepts.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -73,27 +73,7 @@ describe("negotiation matrix: Accept q-value table", () => {
   });
 });
 
-describe("negotiation matrix: language matching table", () => {
-  const rows: [string, string[], string | false][] = [
-    ["en", ["en", "zh"], "en"],
-    ["zh", ["en", "zh"], "zh"],
-    ["en-US", ["en", "zh"], "en"],
-    ["en-US,en;q=0.9", ["zh", "en"], "en"],
-    ["zh-CN;q=1,en;q=0.5", ["zh", "en"], "zh"],
-    ["fr", ["en", "zh"], false],
-    ["*", ["en"], "en"],
-    ["*;q=0", ["en"], false],
-    ["de-DE,de;q=0.8,en;q=0.5", ["de", "en", "de-CH"], "de"],
-    ["pt-BR", ["pt", "en"], "pt"],
-  ];
-  // 0.7: c.acceptsLanguages is gone; the matching matrix runs against the
-  // surviving acceptsLanguage helper directly (parse the header yourself).
-  it.each(rows)("acceptsLanguage(%j, %j) → %j", (header, provided, expected) => {
-    expect(acceptsLanguage(header, provided)).toBe(expected);
-  });
-});
-
-describe("negotiation matrix: encoding and charset tables", () => {
+describe("negotiation matrix: encoding tables", () => {
   it.each([
     ["gzip", ["gzip", "br", "identity"], "gzip"],
     ["br, gzip;q=0.5", ["gzip", "br"], "br"],
@@ -107,17 +87,6 @@ describe("negotiation matrix: encoding and charset tables", () => {
   ])("encodings %j → %j", async (header, provided, expected) => {
     const ctx = await probe({ "Accept-Encoding": header });
     expect(ctx.acceptsEncodings(...provided)).toBe(expected);
-  });
-
-  // 0.7: c.acceptsCharsets is gone; the charset matrix runs against the
-  // surviving acceptsCharset helper directly.
-  it.each([
-    ["utf-8", ["utf-8", "latin1"], "utf-8"],
-    ["utf-16;q=0.9, utf-8;q=0.1", ["utf-8", "utf-16"], "utf-16"],
-    ["shift-jis", ["utf-8"], false],
-    ["*", ["utf-8"], "utf-8"],
-  ])("charsets %j → %j", (header, provided, expected) => {
-    expect(acceptsCharset(header, provided)).toBe(expected);
   });
 });
 

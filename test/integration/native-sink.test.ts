@@ -1,10 +1,7 @@
-/** Native sink guards, portable JS mirrors and native route tables. */
-
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-// Bun is non-configurable: stubbed runtime tests run on Node; smoke.ts uses real Bun.
 const REAL_BUN = typeof Bun !== "undefined";
 
 import {
@@ -37,6 +34,30 @@ beforeAll(async () => {
 afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
+
+const fn: RouteHandler = (_c, next) => next();
+
+const fakeServe = (captured: { options: Record<string, unknown> }): ServeImplementation => {
+  return (_options) => {
+    captured.options = _options;
+    return {
+      port: 0,
+      hostname: "localhost",
+      url: new URL("http://localhost:3000"),
+      stop: () => undefined,
+      fetch: async () => new Response("fake"),
+      reload: () => undefined,
+    };
+  };
+};
+
+const requestFor = (path: string, params?: Record<string, string>): Request => {
+  const request = new Request(`http://localhost:3000${path}`);
+  if (params !== undefined) {
+    (request as Request & { params?: Record<string, string> }).params = params;
+  }
+  return request;
+};
 
 describe("sink: guard matrix (every refusal is loud)", () => {
   it("rejects non-absolute and empty paths", () => {
@@ -211,7 +232,6 @@ describe("sink: guard matrix (every refusal is loud)", () => {
   });
 
   it("noOpFor validates its declaration", () => {
-    const fn: RouteHandler = (_c, next) => next();
     expect(() => noOpFor(fn, {})).toThrow(/methods, bodyless, or both/);
     expect(() => noOpFor(fn, { methods: [] })).toThrow(/methods, bodyless, or both/);
     expect(() => noOpFor(fn, { methods: [""] })).toThrow(/non-empty strings/);
@@ -286,20 +306,6 @@ describe("sink: JS mirror (runtime-portable serving)", () => {
 });
 
 describe("sink: native routes table (adapter)", () => {
-  const fakeServe = (captured: { options: Record<string, unknown> }): ServeImplementation => {
-    return (_options) => {
-      captured.options = _options;
-      return {
-        port: 0,
-        hostname: "localhost",
-        url: new URL("http://localhost:3000"),
-        stop: () => undefined,
-        fetch: async () => new Response("fake"),
-        reload: () => undefined,
-      };
-    };
-  };
-
   it("builds the table with Response entries and {dir} entries", () => {
     const app = new Keala(quiet);
     const health = new Response("ok");
@@ -420,13 +426,7 @@ describe("sink: unit contracts for the native-only machinery", () => {
       string,
       { GET: (request: Request) => Response | Promise<Response> }
     >;
-    const requestFor = (path: string, params?: Record<string, string>): Request => {
-      const request = new Request(`http://localhost:3000${path}`);
-      if (params !== undefined) {
-        (request as Request & { params?: Record<string, string> }).params = params;
-      }
-      return request;
-    };
+
     const routeAt = (path: string): { GET: (request: Request) => Response | Promise<Response> } =>
       routes[path] as { GET: (request: Request) => Response | Promise<Response> };
     expect(routeAt("/ok").GET(requestFor("/ok/7", { id: "7" }))).toBeInstanceOf(Response);

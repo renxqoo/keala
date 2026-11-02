@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### 兼容窗口收口与资源清理
+
+- 删除 `ContextWithBody`、`ContextWithValid`、`QueryMap`、`QueryValue` 旧类型；正文与校验结果分别使用 `bodyOf(c)`、`validOf<T>(c)`，查询使用 `c.query(name)`、`c.queries(name)`。
+- 删除已退役响应 setter 的内部 MIME/文件名工具、整体查询解析器、字符集/语言协商入口、旧 Context 与响应元数据兼容接口、无效标记和临时二分脚本。
+- 基准指标协议要求 `pooling` 和 `sink` 字段，基线使用当前 fixtures 和指标工具。
+- 兼容窗口在本次变更直接结束，不新增别名；引用扫描、类型检查和行为测试验证调用方已迁移。无持久化数据变更，回滚可整体撤销本次提交。
+- shutdown hook 同步失败会清理其超时定时器；组合中间件取消被丢弃的响应流，并保留最终响应的正文所有权。Context 回池前持续等待新增的嵌套分支，避免迟到任务读取下一请求的状态。
+
 keala 原生 API 迁移(去 Koa 形态,docs/KEALA-NATIVE-API-MIGRATION.md);
 路由快速层整表化;测试目录按功能重组(详见下)。
 

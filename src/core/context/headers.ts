@@ -104,7 +104,6 @@ export const setResponseHeader = (
     throw new TypeError(`${field} is a singleton header and cannot be set to an array`);
   }
   for (const entry of value) validateHeaderValue(name, entry);
-  c.flags |= 4;
   const res = c._res;
   if (res !== undefined) {
     committedSet(res, name, [...value]);
@@ -144,7 +143,6 @@ export const appendResponseHeader = (c: ContextState, field: string, value: Head
     const record = c.headersRecord;
     const staged = record?.[name];
     if (staged !== undefined && name !== "set-cookie") {
-      c.flags |= 4;
       (record as HeaderMap)[name] = Array.isArray(staged)
         ? [...staged, ...next]
         : [staged, ...next];
@@ -160,11 +158,9 @@ export const appendResponseHeader = (c: ContextState, field: string, value: Head
       stagedHeadersOf(c)[name] = next[0] ?? "";
       return;
     }
-    c.flags |= 4;
     stagedHeadersOf(c)[name] = next;
     return;
   }
-  c.flags |= 4;
   const list = Array.isArray(existing) ? [...existing] : [existing];
   list.push(...next);
   stagedHeadersOf(c)[name] = list;

@@ -113,8 +113,7 @@ describe("error-creation footguns", () => {
     expect(res.status).toBe(500); // the TypeError itself rides the funnel
   });
 
-  test("createError(204) name/message shape", async () => {
-    const { createError } = await import("../../src/index.ts");
+  test("createError normalizes a non-error status to 500", () => {
     const e = createError(200, "teapotish");
     expect([e.status, e.name, e.message]).toMatchObject({ 0: 500 });
     expect(e.name).toBe("InternalServerError");

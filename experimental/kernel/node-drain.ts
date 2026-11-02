@@ -87,8 +87,5 @@ export const nodeDrain = (server: Server, changed: () => void) => {
     force(): void {
       for (const connection of connections) connection.socket.destroy();
     },
-    get empty(): boolean {
-      return connections.size === 0;
-    },
   };
 };

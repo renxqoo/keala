@@ -354,20 +354,18 @@ test/unit/surface-regressions.test.ts
 | security/parity-locks.test.ts                                                                                                                                     | 三类拆分：错误类 4 条→error-disclosure；redirect 1 条→baseline-extended；c.URL 1 条→request-ergonomics；**setter 语义 4 条留存原文件（U3c 随 setter 删除，文件头注明）** |
 | auth.test.ts:44（401 body 回退）                                                                                                                                  | **保留**，标注 U3b 行为等价锚点（basicAuth return 化必须字节等价）                                                                                                       |
 | surface-regressions / router-abuse-locks / audit-locks / baseline-extended ×2 / rtc-fuzz / invariants-response / concurrency ×3 / error-mapper / regression-sweep | 测试保留，"(koa parity)" 措辞删除或降级为历史出处                                                                                                                        |
-| errors-surface.test.ts:102（M8 grep 漏网点，甄别时补获）                                                                                                          | 测试保留（R7-QUERY-1 查询恢复 bug 锁），标题/注释去 Koa 框架                                                                                                             |
+| errors-surface.test.ts:102（M8 grep 漏网点，甄别时补获）                                                                                                          | 查询恢复用例位于 `src/core/context/__test__/query.test.ts`，验证 c.query/c.queries                                                                                       |
 
 唯一锁回迁清单（验证子代理逐条 grep 核实 22 项行为后确认的 9 项，其余 13 项在存活文件已有等价锁）：
 
-| 原差分行为                                                   | 回迁落点                                          |
-| ------------------------------------------------------------ | ------------------------------------------------- |
-| `typeIs(ct, ["*/*"])` 返回原始类型（函数级+ctx 级）          | unit/typeis + unit/request                        |
-| redirect 转义四子句（裸 `%`/`%zz`/`'`/`{}`）+ 安全字符集透传 | security/post-fix-locks（RT-F10 节）              |
-| contentDisposition ASCII 名 + 显式字符串 fallback            | unit/response-sugar-regressions                   |
-| `.bin` → application/octet-stream                            | unit/utils（expandContentType 层，越过 U3c 存活） |
-| escapeHtml 非 ASCII/控制字节透传                             | unit/utils                                        |
-| 外域中和精确形态 `/%2Fevil.com`、`https%3A%2Fevil.com`       | property/rtc-fuzz-locks                           |
-| parseCookies 裸 token → `{name:""}`                          | middleware/review-fixes（表格行）                 |
-| Allow 顺序与注册顺序无关                                     | unit/router                                       |
+| 原差分行为                                                   | 回迁落点                             |
+| ------------------------------------------------------------ | ------------------------------------ |
+| `typeIs(ct, ["*/*"])` 返回原始类型（函数级+ctx 级）          | unit/typeis + unit/request           |
+| redirect 转义四子句（裸 `%`/`%zz`/`'`/`{}`）+ 安全字符集透传 | security/post-fix-locks（RT-F10 节） |
+| escapeHtml 非 ASCII/控制字节透传                             | unit/utils                           |
+| 外域中和精确形态 `/%2Fevil.com`、`https%3A%2Fevil.com`       | property/rtc-fuzz-locks              |
+| parseCookies 裸 token → `{name:""}`                          | middleware/review-fixes（表格行）    |
+| Allow 顺序与注册顺序无关                                     | unit/router                          |
 
 grep 复核（U1 后 `grep -rn "koa parity\|Koa's\|matches Koa" test/`）：仅剩
 4 处均为新写的"迁自退役套件（U1）"出处注记 + U3b 锚点注记，无契约主张残留。

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala, createError, type Context, type HttpErrorProps } from "../../src/index.ts";
-import { parseQuery } from "../../src/utils/query.ts";
 import { parseCookies } from "../../src/index.ts";
 import { validateHeaderName } from "../../src/utils/text.ts";
 /**
@@ -344,13 +343,6 @@ describe("audit: unicode confusion (no normalization bypass)", () => {
     expect(path).toBe("/a%EF%BC%8E%EF%BC%8E/b"); // no decode, no folding
     expect(decodeURIComponent("%EF%BC%8E").normalize("NFKC")).toBe(".");
     expect(decodeURIComponent("/a%EF%BC%8E%EF%BC%8E/b")).not.toContain("..");
-  });
-
-  it("overlong UTF-8 percent escapes never decode into metacharacters", () => {
-    // %C0%AF is an overlong encoding of "/"; decoders must reject it.
-    const parsed = parseQuery("?x=%C0%AF..%C0%AFetc");
-    expect(parsed["x"]).not.toContain("/");
-    expect(parsed["x"]).toBe("%C0%AF..%C0%AFetc");
   });
 
   it("fullwidth and homoglyph header names are rejected as invalid tokens", () => {

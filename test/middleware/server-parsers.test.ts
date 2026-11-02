@@ -11,6 +11,23 @@ import { startNodeServer, type NodeServerHandle } from "../../src/adapters/node.
 import { hashPassword, verifyPassword } from "../../src/helpers/password.ts";
 
 const quiet = { env: "test" } as const;
+const raw = (port: number, data: string): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const sock = connect(port, "127.0.0.1", () => sock.write(data));
+    let buf = "";
+    sock.on("data", (chunk) => {
+      buf += chunk.toString();
+    });
+    sock.on("end", () => resolve(buf));
+    sock.on("error", reject);
+    setTimeout(() => {
+      sock.destroy();
+      resolve(buf);
+    }, 2_000);
+  });
+
+const bodyOf = (out: string): string => out.slice(out.indexOf("\r\n\r\n") + 4);
+
 describe("node adapter locks correct behavior", () => {
   const servers: NodeServerHandle[] = [];
   afterAll(() => {
@@ -25,21 +42,6 @@ describe("node adapter locks correct behavior", () => {
     servers.push(server);
     return { port: server.port };
   };
-  const raw = (port: number, data: string): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const sock = connect(port, "127.0.0.1", () => sock.write(data));
-      let buf = "";
-      sock.on("data", (chunk) => {
-        buf += chunk.toString();
-      });
-      sock.on("end", () => resolve(buf));
-      sock.on("error", reject);
-      setTimeout(() => {
-        sock.destroy();
-        resolve(buf);
-      }, 2_000);
-    });
-  const bodyOf = (out: string): string => out.slice(out.indexOf("\r\n\r\n") + 4);
 
   // Bun 1.4's node:http parser refuses the "*" request-target outright.
   it.skipIf(typeof Bun !== "undefined")(

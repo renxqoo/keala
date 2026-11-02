@@ -12,6 +12,8 @@ import { readAllLimited, repumpResponse, repumpStream } from "../../src/utils/st
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
+const tooLarge = (): Error => new Error("too large");
+
 describe("stream / streamText", () => {
   it("writes chunks, closes, and exposes desiredSize", async () => {
     const app = new Keala(quiet);
@@ -330,8 +332,6 @@ describe("repumpResponse", () => {
 });
 
 describe("readAllLimited", () => {
-  const tooLarge = (): Error => new Error("too large");
-
   it("returns the single chunk without copying", async () => {
     const chunk = new Uint8Array([1, 2, 3]);
     const source = new ReadableStream({

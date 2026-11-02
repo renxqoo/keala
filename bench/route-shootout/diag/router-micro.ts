@@ -11,6 +11,10 @@ import { Keala } from "../../../src/index.ts";
 import { matchRoute } from "../../../src/router/router.ts";
 import { Hono } from "hono";
 
+const kealaHandler = () => new Response("x");
+
+const honoHandler = (c: { text: (s: string) => Response }) => c.text("x");
+
 const TABLE: ReadonlyArray<readonly [string, string]> = [
   ["GET", "/user"],
   ["GET", "/user/comments"],
@@ -29,8 +33,6 @@ const TABLE: ReadonlyArray<readonly [string, string]> = [
 const kealaApp = new Keala({ env: "production" });
 const honoApp = new Hono();
 for (const [method, path] of TABLE) {
-  const kealaHandler = () => new Response("x");
-  const honoHandler = (c: { text: (s: string) => Response }) => c.text("x");
   if (method === "GET") {
     kealaApp.get(path, kealaHandler);
     honoApp.get(path, honoHandler as never);
@@ -56,7 +58,7 @@ const PROBES: ReadonlyArray<readonly [string, string, string]> = [
 ];
 
 const medOf = (values: number[]): number => {
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = values.toSorted((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)] as number;
 };
 

@@ -75,43 +75,24 @@ don't handle, or use c.throw() to reject intentionally.
 
 ## 3. Context：单对象扁平化
 
-每请求 **1 个对象**（koa 为 4 个），字段一次成型（固定隐藏类）：
+每个请求使用一个 Context，方法与访问器位于应用原型上，请求缓存和响应槽按需保存。字段定义见 `src/core/context/state.ts`，创建、重置与应用原型绑定见 `src/core/context/context.ts`。
 
-```ts
-interface Ctx {
-  // 请求侧（raw + 惰性缓存）
-  raw: Request;
-  method: string;
-  path: string;
-  query: QueryMap | null;
-  params: Record<string, string> | null;
-  ip: string | null;
-  state: Record<string, unknown> | null; // 惰性
-  runtime: Runtime | null; // server/remote/env 注入
-  // 响应侧（平铺状态，终结器直接读）
-  status: number;
-  body: unknown;
-  headers: Record<string, HeaderValue> | null; // 惰性 record
-  flags: number; // 位打包：显式状态/空体/多值头/长度触碰
-  // body 消费缓存（P1 设计、P2 实现，见 §6.3）
-  bodyCache: { text?: string; json?: unknown; formData?: FormData } | null;
-  // 扩展（decorate 协议，统一根原型，防 megamorphic；值语义，惰性访问器显式走 decorateLazy）
-  [k: symbol]: unknown;
-}
-```
+- 请求属性只读；`c.raw` 按需取得标准 Request，URL、请求头和正文保留共享来源。
+- `c.query(name)` 返回首个值，`c.queries(name)` 返回重复值数组；`c.params(name)` 读取路由捕获视图，不构造整体查询或参数对象。
+- `c.state` 按需创建；正文通过 `bodyOf(c)` 访问，cookie 通过 `createCookies` 插件安装。
+- 响应保存在内部 `_res` 槽，`c.status` 只读。响应头在提交前暂存，提交后写入当前 Response。
+- `flags` 记录开发模式链路跟踪和请求超时。Context 池为显式选项；回收前等待已登记分支，包括等待期间新登记的嵌套分支。
 
-要点：`c.header(name, value)` 直写 `headers` record（惰性创建）；委托链层数 = 0（koa 有 40 处两跳委托）；`c.state`/`c.throw`/`c.assert`/`c.cookies`（含 signed + keys 轮换）**保留**（koa 人体工学，审计确认必须保留项）。
+## 4. 响应提交与清理
 
-## 4. 双模响应语义（六条规则，写进 spec）
+1. handler 返回 `c.text/json/html(...)` 或标准 Response；组合器把返回值提交到当前请求的响应槽。
+2. 中间件在 `next()` 前返回响应会短路，在 `await next()` 后返回响应会替换下游响应；被替换且未转移给最终响应的正文会取消。
+3. 中间件返回 undefined 时保留下游响应；没有提交响应时进入 notFound 路径。
+4. `c.setHeader()`、`c.append()`、`c.remove()` 在提交前操作暂存头，提交后操作当前响应的头。头名称和值在写入时校验，无效 handler 返回值进入错误路径。
+5. 抛出的错误经过 `onError(error, c)` 映射与统一错误收尾；映射器未返回响应时使用内置错误响应。
+6. `bodyOf(c)` 的 json/text/formData/arrayBuffer/blob 读取共享有界正文缓存，多次调用无需重复消费原始流。
 
-1. **单一真相源**：每请求一个内部 `res: Response | undefined` 槽。`c.body/c.status/c.header` 是暂存写；handler 返回的 Response 是提交。
-2. **return 优先**：叶子 `return Response` → 直接用（同请求设过 `c.body` 则 dev 警告）；中间件在 `await next()` **前** return → 短路；在 `await next()` **后** return → 覆盖下游（最终改写权，hono 语义）。
-3. **undefined 由框架兜底**：叶子 undefined 且从未写 body → notFound 处理器；中间件 undefined → 透传下游。
-4. **误用检测**：return 非 Response/undefined → dev 模式 throw；`c.setHeader()` 在提交之后调用 → **直写**已提交 Response 的 headers（保证 `c.json()` 直返后仍能补头；0.7 契约——`c.body/c.status/c.redirect` 提交后写则抛 TypeError，见 docs/KEALA-NATIVE-API.md §3）。
-5. **错误路径**：链中 throw → `onError(err, c)`；HTTPError 携带可选 Response；onError 结果同样可被外层改写。
-6. **body 单次性**：`c.req.json()/text()/formData()/arrayBuffer()/blob()` 全部记忆化到 `bodyCache`（洋葱内多次调用安全）；需重读用 `c.req.clone()`。
-
-**终结器（respond）**：状态与都为默认（200、无自定义头、string/Uint8Array body）→ **裸 `new Response(body)`**（D1，80ns 地板）；有自定义头 → `new Response(body, { headers: Headers 实例 })`（实测比 record init 快 60ns）；JSON 糖走 `Response.json(obj)`（省 74ns）；set-cookie 数组/多值头 → flatten 分支（判定条件全部保留）；204/205/304 清 content 头、HEAD 回填 Content-Length（状态模式从 body 值计算；return 模式由 sugar 助手在 HEAD 时构造期附带精确 CL——**终结器永不读取已提交 body**，开放流生产者不可能阻塞它）、statusText Latin-1 守卫——**判定全部保留**。流响应原样返回，`observeStream` 错误观察改为 opt-in（默认关闭，省 567ns/响应并恢复背压）。
+响应收尾统一处理 HEAD 与无正文状态。Node 适配器根据框架响应的构造事实选择有限正文写入或流传输；外部 Response 使用通用流路径。`some()` 只返回最终选择的候选，`all()` 在组内保留返回式响应传递；两者均取消未被采用的流，并保留最终响应与同一正文流的所有权。
 
 ## 5. 路由（混合结构 + 双发射 IR）
 

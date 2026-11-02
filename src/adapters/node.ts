@@ -30,6 +30,19 @@ import {
 } from "./node-socket-fanout.ts";
 import { createNodeDrainTracker, holdNodeClose, releaseNodeClose } from "./node-drain.ts";
 
+const envelope = (error: unknown): Response => {
+  const status = error instanceof InvalidRequestTargetError ? 400 : 500;
+  const message = status === 400 ? "Bad Request" : "Internal Server Error";
+  return new Response(message, {
+    status,
+    statusText: message,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "content-length": String(Buffer.byteLength(message)),
+    },
+  });
+};
+
 const WIRE_SOURCE = Symbol("keala.wireSource");
 const WIRE_FANOUT = Symbol("keala.wireFanout");
 const WIRE_RELEASE = Symbol("keala.wireRelease");
@@ -322,18 +335,7 @@ export const startNodeServer = (
       out[WIRE_FANOUT] = registerSocketClose(incoming.socket, () => onWireDone.call(out));
     }
   };
-  const envelope = (error: unknown): Response => {
-    const status = error instanceof InvalidRequestTargetError ? 400 : 500;
-    const message = status === 400 ? "Bad Request" : "Internal Server Error";
-    return new Response(message, {
-      status,
-      statusText: message,
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
-        "content-length": String(Buffer.byteLength(message)),
-      },
-    });
-  };
+
   const fail = (error: unknown, out: ServerResponse): Response | Promise<Response> => {
     consoleFallback(app, undefined, toHttpError(error));
     if (!(error instanceof InvalidRequestTargetError) && options.onServeError !== undefined) {

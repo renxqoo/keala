@@ -26,38 +26,37 @@ const boot = (setup?: (app: Keala) => void): Keala => {
   return app;
 };
 
+const scenarios = (
+  app: Keala,
+): Array<{ path: string; status: number; body: string; extra?: [string, string] }> => {
+  app.use((c, next) => {
+    void c.setHeader("x-security", "on");
+    return next();
+  });
+  app.get("/exposed", (c) => c.throw(422, "invalid input", { expose: true }));
+  app.get("/hidden", () => {
+    throw new TypeError("secret internals");
+  });
+  app.get("/auth", (c) =>
+    c.throw(401, "login required", {
+      expose: true,
+      headers: { "www-authenticate": "Bearer" },
+    }),
+  );
+  return [
+    { path: "/exposed", status: 422, body: "invalid input" },
+    { path: "/hidden", status: 500, body: "Internal Server Error" },
+    {
+      path: "/auth",
+      status: 401,
+      body: "login required",
+      extra: ["www-authenticate", "Bearer"],
+    },
+  ];
+};
+
 describe("R4.3 error policy: on/off differential", () => {
   it("decline (void) keeps the built-in response byte-identical", async () => {
-    const scenarios = (
-      app: Keala,
-    ): Array<{ path: string; status: number; body: string; extra?: [string, string] }> => {
-      app.use((c, next) => {
-        // Security header staged BEFORE the throw must survive on error pages.
-        void c.setHeader("x-security", "on");
-        return next();
-      });
-      app.get("/exposed", (c) => c.throw(422, "invalid input", { expose: true }));
-      app.get("/hidden", () => {
-        throw new TypeError("secret internals");
-      });
-      app.get("/auth", (c) =>
-        c.throw(401, "login required", {
-          expose: true,
-          headers: { "www-authenticate": "Bearer" },
-        }),
-      );
-      return [
-        { path: "/exposed", status: 422, body: "invalid input" },
-        { path: "/hidden", status: 500, body: "Internal Server Error" },
-        {
-          path: "/auth",
-          status: 401,
-          body: "login required",
-          extra: ["www-authenticate", "Bearer"],
-        },
-      ];
-    };
-
     const plain = boot((app) => void scenarios(app));
     let mapperRan = 0;
     const declining = boot((app) => {

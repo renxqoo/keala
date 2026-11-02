@@ -37,12 +37,19 @@ export const clearBranches = (host: object): void => {
 export const drainBranches = (host: object): Promise<void> | null => {
   const branches = (host as BranchHost)[BRANCHES];
   if (branches === undefined || branches.length === 0) return null;
-  return Promise.all(
-    branches.map((branch) =>
-      branch.then(
-        () => undefined,
-        () => undefined,
-      ),
-    ),
-  ).then(() => undefined);
+  return (async () => {
+    let offset = 0;
+    while (offset < branches.length) {
+      const batch = branches.slice(offset);
+      offset += batch.length;
+      await Promise.all(
+        batch.map((branch) =>
+          branch.then(
+            () => undefined,
+            () => undefined,
+          ),
+        ),
+      );
+    }
+  })();
 };

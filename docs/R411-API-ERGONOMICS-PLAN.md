@@ -28,11 +28,10 @@
 ### 问题
 
 ```ts
-// 现状:每个读正文的 handler 都要 cast + 手写门面类型
-import { createBodyParser, type ContextWithBody } from "keala";
+import { createBodyParser, bodyOf } from "keala";
 app.use(createBodyParser({ jsonLimit: 1 << 20 }));
 app.post("/users", async (c) => {
-  const body = await (c as ContextWithBody).req.json(); // ← 32 字符 + cast
+  const body = await bodyOf(c).json();
 });
 ```
 
@@ -76,8 +75,8 @@ module "keala"`)只能合并"声明在该入口模块里"的接口——keala �
 (Fastify/Express 能用此法是因为类型就声明在入口模块)。hono 的
 `Hono<Env>` 泛型方案则要给整套 app/handler 类型加参数,破坏扁平
 简洁性,收益不成比例。**`bodyOf` 访问器是零风险、零类型体操、一次
-cast 进库的方案**;`ContextWithBody` 类型保留(存量代码可继续用,
-不再需要出现在新代码里)。
+cast 进库的方案**。正文读取统一使用 `bodyOf(c)`，校验结果使用
+`validOf<T>(c)`，不提供额外的 Context cast 类型。
 
 ### 影响面
 
@@ -85,7 +84,7 @@ cast 进库的方案**;`ContextWithBody` 类型保留(存量代码可继续用,
   更新);
 - 文档:KEALA-NATIVE-API.md 第四部分示例、README、MIGRATION;
 - 测试:新增 3 项(正常读取、未装插件时错误消息、门面全方法直达);
-  全库 74 处 `ContextWithBody` cast 迁移到 `bodyOf`(机械替换);
+  正文读取统一使用 `bodyOf`，不保留 cast 类型;
 - 性能:一次函数调用 + 一次 undefined 检查(~2ns),不在热路径度量
   噪声内(POST 正文读取本身是微秒级)。
 

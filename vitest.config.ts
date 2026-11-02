@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["test/**/*.test.ts"],
+    include: ["test/**/*.test.ts", "src/**/__test__/**/*.test.ts"],
     environment: "node",
     // Several files contain in-process CPU/retained-heap regression fences.
     // Bun workers share one VM/GC domain, so parallel files can charge an
@@ -14,7 +14,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json-summary"],
       include: ["src/**/*.ts"],
-      exclude: ["src/index.ts", "src/types.ts"],
+      exclude: ["src/index.ts", "src/types.ts", "src/**/__test__/**"],
       thresholds: {
         statements: 90,
         branches: 90,

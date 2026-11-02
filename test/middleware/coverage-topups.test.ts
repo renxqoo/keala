@@ -24,6 +24,8 @@ import type { Application } from "../../src/core/app.ts";
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
+const growing = (): Promise<Uint8Array> => Promise.resolve(new Uint8Array(1024).fill(1));
+
 describe("coverage: etag body kinds and negotiation", () => {
   it("tags sugar text/JSON bodies; bytes, streams and null pass through", async () => {
     const app = new Keala(quiet);
@@ -307,7 +309,6 @@ describe("coverage: compress with injected gzip", () => {
   });
 
   it("skips when the packed output would not shrink", async () => {
-    const growing = (): Promise<Uint8Array> => Promise.resolve(new Uint8Array(1024).fill(1));
     const app = new Keala(quiet);
     app.use(compress({ gzip: growing }));
     app.get("/x", (c) => {

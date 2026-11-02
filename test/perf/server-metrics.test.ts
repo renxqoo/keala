@@ -33,7 +33,7 @@ describe("R4.6 server measurement protocol", () => {
     }
   });
 
-  it("reports the pooling fixture switch and tolerates its absence in older payloads", () => {
+  it("reports the pooling fixture switch and rejects missing configuration", () => {
     expect(serverMetrics("production").pooling).toBe(false);
     expect(serverMetrics("production", { pooling: true }).pooling).toBe(true);
     const pooled = { ...serverMetrics("production", { pooling: true }), env: "production" };
@@ -41,12 +41,12 @@ describe("R4.6 server measurement protocol", () => {
     expect(() =>
       validateServerMetrics({ ...pooled, pooling: "yes" }, process.pid, pooled.runtime),
     ).toThrow("config");
-    const legacy: Record<string, unknown> = { ...pooled };
-    delete legacy["pooling"];
-    expect(validateServerMetrics(legacy, process.pid, pooled.runtime)).toBe(legacy);
+    const missing: Record<string, unknown> = { ...pooled };
+    delete missing["pooling"];
+    expect(() => validateServerMetrics(missing, process.pid, pooled.runtime)).toThrow("config");
   });
 
-  it("reports the sink fixture switch and tolerates its absence in older payloads", () => {
+  it("reports the sink fixture switch and rejects missing configuration", () => {
     expect(serverMetrics("production").sink).toBe(false);
     expect(serverMetrics("production", { sink: "param" }).sink).toBe("param");
     const sunk = { ...serverMetrics("production", { sink: "text" }), env: "production" };
@@ -54,8 +54,8 @@ describe("R4.6 server measurement protocol", () => {
     expect(() => validateServerMetrics({ ...sunk, sink: 7 }, process.pid, sunk.runtime)).toThrow(
       "config",
     );
-    const legacy: Record<string, unknown> = { ...sunk };
-    delete legacy["sink"];
-    expect(validateServerMetrics(legacy, process.pid, sunk.runtime)).toBe(legacy);
+    const missing: Record<string, unknown> = { ...sunk };
+    delete missing["sink"];
+    expect(() => validateServerMetrics(missing, process.pid, sunk.runtime)).toThrow("config");
   });
 });

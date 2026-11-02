@@ -37,7 +37,7 @@ export const tryWriteBareNodeResponse = (
 ): boolean => {
   if (out.destroyed || response.status !== 200) return false;
   const facts = responseFactsOf(response);
-  if (facts?.planned !== true || facts.native !== undefined || facts.headerSnapshot !== undefined)
+  if (facts === undefined || facts.native !== undefined || facts.headerSnapshot !== undefined)
     return false;
   const body = facts.directBody;
   const headers: Record<string, string> = {};
@@ -73,7 +73,7 @@ export const prepareNodeResponse = (
     throw new RangeError("cannot send an error or invalid-status response");
   }
   const facts = responseFactsOf(response);
-  if (facts?.planned === true && facts.native === undefined && facts.headerSnapshot === undefined) {
+  if (facts !== undefined && facts.native === undefined && facts.headerSnapshot === undefined) {
     // srvx infers the byte-exact length; avoid calculating it twice.
     const headers: Record<string, string> = {};
     if (facts.implicitContentType !== undefined)
@@ -88,7 +88,7 @@ export const prepareNodeResponse = (
   }
   const sourceHeaders = facts?.headerSnapshot ?? response.headers;
   if (
-    facts?.planned === true &&
+    facts !== undefined &&
     facts.native === undefined &&
     facts.headerSnapshot !== undefined &&
     !closeAfter &&

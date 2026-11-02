@@ -65,7 +65,6 @@ export {
 // implementation instead of re-deriving ~50 lines that drift.
 export { weakEtag, isNotModified, type FreshnessInput } from "./http/conditional.ts";
 export { resolveRelativeSegments, isWithinRoot, findSymlink } from "./utils/path-safety.ts";
-export type { QueryMap, QueryValue } from "./utils/query.ts";
 export { startBunServer, type ServerHandle, type ServeImplementation } from "./adapters/bun.ts";
 export { failFastAdmission, queueAdmission } from "./core/lifecycle-admission.ts";
 export type { AdmissionStrategy } from "./types.ts";
@@ -96,11 +95,6 @@ export {
   type BodyParserOptions,
   type RequestBodyFacade,
 } from "./plugins/body-parser.ts";
-/**
- * @deprecated Use `bodyOf(c)` instead — `await bodyOf(c).json()` needs no
- * cast and fails loud (with the fix) when the plugin is not installed.
- */
-export type { ContextWithBody } from "./plugins/body-parser.ts";
 export {
   stream,
   streamText,

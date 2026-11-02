@@ -281,7 +281,7 @@ export const REDIRECT_TARGETS = [
   "https://ok.example/x",
   "/t?next=" + encodeURIComponent("/中?x=1"),
   "back",
-  "/ré" + "sumé",
+  "/résumé",
   "/" + randString(new Rng(ROOT_SEED + 4242), 40, PRINTABLE + CTL),
 ] as const;
 

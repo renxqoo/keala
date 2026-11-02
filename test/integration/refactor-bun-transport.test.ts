@@ -276,8 +276,10 @@ describe.skipIf(typeof Bun === "undefined")("srvx Bun transport and policy parit
     const server = app.listen({ port: 0, hostname: "127.0.0.1" });
     const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`);
     const closed = new Promise<number>((resolve, reject) => {
-      socket.onclose = (event) => resolve(event.code);
-      socket.onerror = () => reject(new Error("websocket handshake failed"));
+      socket.addEventListener("close", (event) => resolve(event.code), { once: true });
+      socket.addEventListener("error", () => reject(new Error("websocket handshake failed")), {
+        once: true,
+      });
     });
     try {
       await waiting;

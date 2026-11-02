@@ -373,7 +373,7 @@ export class Keala implements NativeApplication {
         : resetContext(recycled, request, runtime);
 
     const settled = dispatchRequest(this, c, this.router, this.#middleware, request);
-    if (this.#poolingEnabled) this.#pool ??= createPool(this, this.#contextProto);
+    if (this.#poolingEnabled) this.#pool ??= createPool(this.#contextProto);
     // Deadline apps pay one guarded settle (U2 once-guard) plus the race;
     // unconfigured apps pass the stable callback.
     if (this.#requestTimeout > 0) {

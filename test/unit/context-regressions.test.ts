@@ -8,8 +8,6 @@ import {
 } from "../../src/plugins/cookies/cookies.ts";
 import { acceptsType } from "../../src/negotiation/accepts.ts";
 import { typeIs } from "../../src/negotiation/typeis.ts";
-import { charsetFromContentType } from "../../src/utils/mime.ts";
-import { contentDisposition } from "../../src/utils/text.ts";
 
 /**
  * RED tests (TDD bug hunt) for the request/response context facades.
@@ -171,40 +169,7 @@ describe("agent3: append() singleton header corruption", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. ctx.charset: RFC 9110 parameter grammar (OWS and quoted values).
 // ---------------------------------------------------------------------------
 
-describe("agent3: charset parameter parsing", () => {
-  it("CONFIRMED-BUG: OWS around '=' is parsed (text/html; charset = utf-8)", async () => {
-    // RFC 9110 allows optional whitespace around the '=' of a parameter;
-    // koa (content-type package) returns 'utf-8' for this header.
-    // (0.7: the ctx.charset accessor is gone — the shared helper is the API.)
-    expect(charsetFromContentType("text/html; charset = utf-8")).toBe("utf-8");
-    await probe({
-      url: "http://localhost:3000/",
-      headers: { "content-type": "text/html; charset = utf-8" },
-    });
-  });
-
-  it("CONFIRMED-BUG: charset must not be read out of an unrelated quoted parameter value", () => {
-    // 'charset=utf-7' here is the VALUE of parameter x, not a charset
-    // parameter; koa's content-type parse yields no charset ('').
-    expect(charsetFromContentType('text/html; x="charset=utf-7"; charset=utf-8')).toBe("utf-8");
-    expect(charsetFromContentType('text/html; x="charset=utf-7"')).toBe("");
-  });
-});
-
 // ---------------------------------------------------------------------------
-// 6. attachment()/contentDisposition: fallback: false on ASCII filenames.
 // ---------------------------------------------------------------------------
-
-describe("agent3: contentDisposition fallback=false", () => {
-  it("CONFIRMED-BUG: fallback: false keeps filename= for ASCII names (content-disposition package)", () => {
-    // koa's content-disposition('a.txt', { fallback: false }) emits
-    // 'attachment; filename="a.txt"' — fallback:false only suppresses the
-    // generated latin-1 fallback NAME, never the plain parameter for a
-    // filename that is already ASCII. Dropping filename= leaves legacy
-    // clients (which ignore filename*) with no filename at all.
-    expect(contentDisposition("a.txt", false)).toBe('attachment; filename="a.txt"');
-  });
-});

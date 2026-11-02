@@ -19,42 +19,8 @@ import {
   type Middleware,
   type MiddlewareContext,
 } from "../../src/index.ts";
-import { parseQuery } from "../../src/utils/query.ts";
 
 const quiet = { env: "test" } as const;
-
-describe("anomalies: query and URL parsing stress", () => {
-  it.each([
-    ["", {}],
-    ["?", {}],
-    ["&&&&", {}],
-    ["=&=&=", { "": ["", "", ""] }],
-    ["a", { a: "" }],
-    ["a=", { a: "" }],
-    ["=b", { "": "b" }],
-    ["a=1&a=2&a=3", { a: ["1", "2", "3"] }],
-    ["a=1&b&a=2", { a: ["1", "2"], b: "" }],
-    ["%2F=%3F", { "/": "?" }],
-    ["a+b=c+d", { "a b": "c d" }],
-    ["%zz=%zz", { "%zz": "%zz" }],
-    ["a%00b=1", { "a\0b": "1" }],
-  ])("parseQuery(%p) → %p", (input, expected) => {
-    expect(parseQuery(input)).toEqual(expected);
-  });
-
-  it("10k query parameters parse without hanging", () => {
-    const search = Array.from({ length: 10_000 }, (_, i) => `k${i}=${i}`).join("&");
-    const start = Date.now();
-    const parsed = parseQuery(search);
-    expect(Object.keys(parsed)).toHaveLength(10_000);
-    expect(Date.now() - start).toBeLessThan(2000);
-  });
-
-  it("deeply nested percent escapes do not blow the stack", () => {
-    const encoded = "%25".repeat(2000);
-    expect(parseQuery(`k=${encoded}`)).toBeDefined();
-  });
-});
 
 describe("anomalies: compose illegal usage", () => {
   it.each([undefined, null, 42, "fn", {}, []].map((value) => ({ value })))(

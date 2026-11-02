@@ -50,25 +50,6 @@ export interface ContextState {
   urlObjectValue: URL | null;
   statusValue: number;
   headersRecord: HeaderMap | null;
-  /**
-   * Bit-packed response flags — one field write instead of four.
-   * (U3c: bits 1 = explicit status and 2 = explicit null body died with the
-   * response setters.) 4 = multi-value header,
-   * 256 = dev tracing: a matched route's own layers were reached
-   * (DOGFOOD-R1 C4 — set by the chain marker, never on the prod hot path),
-   * 512 = dev tracing enabled for this context (set at creation only when
-   * app.env === "development" — DOGFOOD-R2 C2; compose reads it to gate the
-   * stall bit, production pays one AND per level and never writes),
-   * 1024 = dev tracing: a NON-terminal middleware level returned without
-   * calling next() and without a response — the chain stalled (the request
-   * will answer 404 unless something upstream produced a response).
-   * 16384 = the request deadline fired (R4.6): late `c.signal` readers see
-   * an aborted signal even after the error funnel reset the flags.
-   *
-   * The commit contract carries no rebuild flags: once `c._res` is set,
-   * header writes go straight onto the committed Response's Headers and
-   * body/status writes throw (docs/KEALA-NATIVE-API.md §3).
-   */
   flags: number;
   // dual-mode commit slot (see core/compose.ts)
   _res: Response | undefined;

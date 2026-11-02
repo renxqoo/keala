@@ -232,8 +232,7 @@ koa-parity 断言是 U3b 行为等价锚点——标注保至 U3b 落地后再�
 - 比方案更深一层的发现：两个差分文件中的 RED 行是**已修复 bug 的回归锁**。
   验证子代理对 22 项行为逐一 grep 判定锁存在性：13 项在存活文件已有等价锁；
   **9 项为唯一锁，已回迁 keala 原生断言**（明细见附录 M8 回迁清单——
-  `typeIs("*/*")`、redirect 转义四子句+安全字符集、contentDisposition ASCII
-  fallback、`.bin`→octet-stream（expandContentType 层，U3c 后存活）、
+  `typeIs("*/*")`、redirect 转义四子句+安全字符集、
   escapeHtml 透传、外域中和精确形态、parseCookies 裸 token、Allow 顺序
   无关性）。
 - parity-locks.test.ts 三类拆分（167→91 行）：错误类 4 条→error-disclosure
@@ -250,8 +249,7 @@ koa-parity 断言是 U3b 行为等价锚点——标注保至 U3b 落地后再�
   断言覆盖）。
 - 对抗审查（4 条 CONFIRMED，全部修复）：①`.html`/shorthand 扩展的 charset
   **值锁**实为自引用差分（surface-regressions 的两侧同时退化依然绿）——
-  utils.test 补 `expandContentType(".html")==="text/html; charset=utf-8"`
-  值断言；②"(koa contract)" 措辞 7 处残留（初版 grep 面漏变体）——全部
+  当前原生 API 使用完整 MIME 头，不保留响应 setter 的类型扩展工具；②"(koa contract)" 措辞 7 处残留（初版 grep 面漏变体）——全部
   降级，测试不动；③附录 M2/M3/M4 以命令同源重生成（parity-locks 曾被误
   移出 U3c 核销矩阵；attachment 8→7）；④本节数字以终态树复跑为准修正。
 - 顺手修复：oxfmt 存量违规（CHANGELOG 中文裸星号会被 formatter 损坏为
@@ -430,7 +428,7 @@ examples/scripts 同步；parity-locks 第三类删除。
   本身无 body 可读）。双顺序组合/HEAD text/json 四条新锁。NOTE 处置：
   记录数字勘误（2640 基数）、"§8 快照"措辞、stale 注释清理 ×3、
   finishCommitted 注释收窄、sugarHtml 死变量、mime/text 陈旧注释；
-  expandContentType/contentDisposition 保留（U1 回迁的函数级锁仍消费）。
+  响应 setter 专属 MIME/文件名工具已删除；查询与参数解析的有效锁覆盖当前公开接口。
   审查另证实：删除矩阵 86 条纪律良好（无借机删活行为锁）、断言放宽
   13 处全部 D1 容差有据、onStreamError 重挂无副作用（SSE/直通/pooling
   归属探针双 runtime 过）、数字声称逐位复核精确。

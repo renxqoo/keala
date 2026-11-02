@@ -148,12 +148,7 @@ import { describe, expect, it } from "vitest";
 import Negotiator from "negotiator";
 import { Keala, type Application } from "../../src/index.ts";
 import { cache } from "../../src/middleware/cache.ts";
-import {
-  acceptsCharset,
-  acceptsEncoding,
-  acceptsLanguage,
-  acceptsType,
-} from "../../src/negotiation/accepts.ts";
+import { acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: Application, req: Request) => app.handle(req);
@@ -365,15 +360,6 @@ describe("R6-E negotiation: explicit refusals vs wildcards [RED + locks]", () =>
     expect(acceptsType("text/html;q=0,*/*", ["html", "json"])).toBe("json");
   });
 
-  it("Accept-Language: en;q=0,* must NOT answer en (R6-4c)", () => {
-    expect(acceptsLanguage("en;q=0,*", ["en"])).toBe(false);
-    expect(acceptsLanguage("en;q=0,*", ["en", "fr"])).toBe("fr");
-  });
-
-  it("Accept-Charset: utf-8;q=0,* must NOT answer utf-8 (R6-4d)", () => {
-    expect(acceptsCharset("utf-8;q=0,*", ["utf-8"])).toBe(false);
-  });
-
   it("Accept-Encoding: identity;q=0,* must NOT answer identity (R6-4e)", () => {
     expect(acceptsEncoding("identity;q=0,*", ["identity"])).toBe(false);
     expect(acceptsEncoding("identity;q=0.000, *;q=1", ["identity", "gzip"])).toBe("gzip");
@@ -425,31 +411,6 @@ describe("R6-E negotiation: explicit refusals vs wildcards [RED + locks]", () =>
           `${header} | ${provided.join(",")}: ours=${koa === undefined ? "false" : koa}`,
         );
       }
-    }
-    const langCases: Array<[string, string[]]> = [
-      ["en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7", ["en", "zh"]],
-      ["en;q=0.5, fr;q=0.5, de", ["en-US", "fr", "de"]],
-      ["da, en-gb;q=0.8, en;q=0.7", ["en-GB", "en"]],
-      ["zh, en-us;q=0.8, en;q=0.7", ["en", "zh"]],
-    ];
-    for (const [header, provided] of langCases) {
-      const koa = new Negotiator({ headers: { "accept-language": header } }).language(provided);
-      const ours = acceptsLanguage(header, provided);
-      expect(`lang ${header}: ours=${String(ours)}`).toBe(
-        `lang ${header}: ours=${koa === undefined ? "false" : koa}`,
-      );
-    }
-    const csCases: Array<[string, string[]]> = [
-      ["iso-8859-5, unicode-1-1;q=0.8", ["utf-8", "iso-8859-1"]],
-      ["utf-8, iso-8859-1;q=0.5", ["utf-8"]],
-      ["*", ["utf-8", "iso-8859-5"]],
-    ];
-    for (const [header, provided] of csCases) {
-      const koa = new Negotiator({ headers: { "accept-charset": header } }).charset(provided);
-      const ours = acceptsCharset(header, provided);
-      expect(`charset ${header}: ours=${String(ours)}`).toBe(
-        `charset ${header}: ours=${koa === undefined ? "false" : koa}`,
-      );
     }
   });
 });

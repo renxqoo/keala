@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   acceptableValues,
-  acceptsCharset,
   acceptsEncoding,
-  acceptsLanguage,
   acceptsType,
   parsePreferences,
   pickPreference,
@@ -74,7 +72,7 @@ describe("acceptsType", () => {
   });
 });
 
-describe("acceptsEncoding / acceptsCharset / acceptsLanguage", () => {
+describe("acceptsEncoding", () => {
   it("encoding negotiation", () => {
     expect(acceptsEncoding("gzip, compress;q=0.5, br;q=0", ["gzip", "br", "identity"])).toBe(
       "gzip",
@@ -84,18 +82,6 @@ describe("acceptsEncoding / acceptsCharset / acceptsLanguage", () => {
     // live): never the server's first provided coding.
     expect(acceptsEncoding(null, ["gzip", "br"])).toBe(false);
     expect(acceptsEncoding(null, ["gzip", "identity"])).toBe("identity");
-  });
-
-  it("charset negotiation", () => {
-    expect(acceptsCharset("utf-8, iso-8859-1;q=0.5", ["utf-8", "iso-8859-1"])).toBe("utf-8");
-  });
-
-  it("language prefix matching", () => {
-    // negotiator: "en"'s quality is 0.8 (its exact range beats the en-GB
-    // prefix), "zh" carries zh-CN's 0.9 — zh wins.
-    expect(acceptsLanguage("en-GB,en;q=0.8,zh-CN;q=0.9", ["zh", "en", "fr"])).toBe("zh");
-    expect(acceptsLanguage("zh-CN;q=1, en-GB;q=0.5", ["zh", "en"])).toBe("zh");
-    expect(acceptsLanguage("en;q=0.5, zh", ["en", "zh"])).toBe("zh");
   });
 });
 
@@ -170,16 +156,9 @@ describe("R1 (bug): negotiator breaks q-ties on match specificity, not header or
     expect(picked).toBe("gzip");
   });
 
-  it("acceptsCharset: `Accept-Charset: *, utf-8` prefers utf-8 over ascii", async () => {
-    // 0.7: the c.acceptsCharsets accessor is gone; the shared helper (the
-    // unit lock below) carries the same specificity contract.
-    expect(acceptsCharset("*, utf-8", ["ascii", "utf-8"])).toBe("utf-8");
-  });
-
   it("unit level: acceptsType/acceptsEncoding miss the specificity key", () => {
     expect(acceptsType("*/*, text/html", ["application/json", "text/html"])).toBe("text/html");
     expect(acceptsEncoding("*, gzip", ["br", "gzip"])).toBe("gzip");
-    expect(acceptsCharset("*, utf-8", ["ascii", "utf-8"])).toBe("utf-8");
   });
 });
 

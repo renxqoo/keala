@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { Router } from "../../src/router/group.ts";
-import { contentDisposition } from "../../src/utils/text.ts";
 import { toHttpError } from "../../src/http/errors.ts";
 import { baseContextProto, createContext, type Context } from "../../src/core/context/context.ts";
 /**
@@ -107,20 +106,6 @@ describe("coverage: router group paths", () => {
     app.on("Delete", "/d", (c) => c.text("deleted"));
     expect((await app.handle(req("/d", { method: "DELETE" }))).status).toBe(200);
     expect(() => app.on("WAT", "/w", () => undefined)).toThrow(TypeError);
-  });
-});
-
-describe("coverage: content-disposition fallbacks", () => {
-  it("fallback string replaces unencodable filenames", () => {
-    expect(contentDisposition("年度.csv", "fallback.csv")).toContain("fallback.csv");
-  });
-
-  it("fallback false drops the filename parameter entirely", () => {
-    expect(contentDisposition("年度.csv", false)).not.toContain("filename=");
-  });
-
-  it("ascii filenames pass through quoted", () => {
-    expect(contentDisposition("report.pdf")).toBe('attachment; filename="report.pdf"');
   });
 });
 

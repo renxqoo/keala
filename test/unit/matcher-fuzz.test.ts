@@ -11,11 +11,20 @@ import {
   registerDef,
 } from "../../src/router/router.ts";
 
+const noop = () => undefined as never;
+
+const norm = (m: ReturnType<typeof matchRoute>): unknown =>
+  m === null ? null : [m.target.pattern, paramsRecord(m.names, m.values, m.offset)];
+
+async function hitQ(app: InstanceType<typeof Keala>, path: string): Promise<Response> {
+  return app.handle(new Request(`http://localhost${path}`));
+}
+
 describe("matchRoute differential fuzz (fast paths vs trie)", () => {
   // Reference: a router forced off every fast path by having many patterns.
   // We register the SAME pattern into two states: one alone (static-only state
   // keeps bucket/fastDynamic), one inside a crowd (trie walk).
-  const noop = () => undefined as never;
+
   const patterns = [
     "/users/:id",
     "/users/:id/files/:fid",
@@ -68,14 +77,12 @@ describe("matchRoute differential fuzz (fast paths vs trie)", () => {
       for (const path of paths) {
         const a = matchRoute(alone, path);
         const b = matchRoute(crowd, path);
-        const norm = (m: ReturnType<typeof matchRoute>): unknown =>
-          m === null ? null : [m.target.pattern, paramsRecord(m.names, m.values, m.offset)];
+
         // A pattern alone matches a superset (the crowd adds nothing for THIS
         // pattern), so equality is only required when the alone-match hits the
         // pattern itself; mismatch on hit is a fast-path divergence.
         const na = norm(a);
         if (na !== null) {
-          expect([pattern, path, na]).toEqual([pattern, path, na]); // sanity
         }
         // The crowd must match AT LEAST whenever alone matches the same target.
         if (a !== null && a.target.pattern === pattern) {
@@ -210,10 +217,6 @@ describe("request-target forms", () => {
     app.get("/x", (c) => c.text("hit"));
     const res = await app.handle(new Request("http://example.com/x"));
     expect(await res.text()).toBe("hit");
-    expect(c0Host(res)).toBe(null);
-    function c0Host(_r: Response): null {
-      return null;
-    }
   });
 
   it("c.host prefers the Host header over the URL authority", async () => {
@@ -282,8 +285,4 @@ describe("query + url encodings", () => {
     await hitQ(app, "/?k=1&k=2&k=3");
     expect(all).toEqual(["1", "2", "3"]);
   });
-
-  async function hitQ(app: InstanceType<typeof Keala>, path: string): Promise<Response> {
-    return app.handle(new Request(`http://localhost${path}`));
-  }
 });

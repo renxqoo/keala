@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { startNodeServer } from "../../src/adapters/node.ts";
 import { Keala } from "../../src/core/app.ts";
 import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
-import { createPlannedResponse, inheritResponseFacts } from "../../src/core/response-plan.ts";
+import { createPlannedResponse } from "../../src/core/response-plan.ts";
 import { Agent, request } from "node:http";
 import { responseFactsOf } from "../../src/core/response-plan.ts";
 
@@ -50,13 +50,10 @@ describe("R4.5 Node request header ownership", () => {
     }
   });
 
-  it("does not resurrect content-type deleted from a native response carrying body facts", async () => {
+  it("does not resurrect content-type deleted from a materialized planned response", async () => {
     const app = new Keala({ env: "test" });
     app.get("/headers", () => {
-      const response = inheritResponseFacts(
-        new Response("body"),
-        createPlannedResponse("body", {}, "text/plain; charset=utf-8"),
-      );
+      const response = createPlannedResponse("body", {}, "text/plain; charset=utf-8");
       response.headers.delete("content-type");
       return response;
     });

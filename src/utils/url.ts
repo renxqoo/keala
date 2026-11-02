@@ -37,33 +37,6 @@ export const getSearch = (url: string): string => {
   return url.slice(query, limit);
 };
 
-/**
- * Path + search via native delimiter scans: dispatch needs both for the
- * context prefill. Semantics are exactly getPath ⊕ getSearch
- * — the first "?" or "#" ends the path; a search only starts at a "?" that
- * precedes any "#", and then runs to that "#".
- */
-export const splitPathSearch = (url: string): readonly [path: string, search: string] => {
-  let start = 0;
-  if (url.charCodeAt(0) !== 47 /* "/" */) {
-    const scheme = url.indexOf("://");
-    start = scheme === -1 ? 0 : url.indexOf("/", scheme + 3);
-    if (start === -1) return ["/", ""];
-  }
-  const query = url.indexOf("?", start);
-  const hash = url.indexOf("#", start);
-  const sawQuery = query !== -1 && (hash === -1 || query < hash);
-  const end = sawQuery ? query : hash;
-  if (end === -1) {
-    const whole = url.slice(start);
-    return [whole.length === 0 ? "/" : whole, ""];
-  }
-  const path = url.slice(start, end);
-  if (!sawQuery) return [path.length === 0 ? "/" : path, ""];
-  // A "?" ended the path: the search runs to the next "#" (if any).
-  return [path.length === 0 ? "/" : path, url.slice(end, hash === -1 ? url.length : hash)];
-};
-
 /** Lazily build (and cache) a full URL object; only used by rarely-hit getters. */
 export const toURL = (absolute: string): URL | null => {
   try {

@@ -12,12 +12,7 @@ import { Keala, Router, createError } from "../../src/index.ts";
 import { acceptsEncoding } from "../../src/negotiation/accepts.ts";
 import { typeIs } from "../../src/negotiation/typeis.ts";
 import { paramsRecord } from "../../src/router/router.ts";
-import {
-  charsetFromContentType,
-  extensionFromMime,
-  mimeFromExtension,
-  normalizeType,
-} from "../../src/utils/mime.ts";
+import { mimeFromExtension, normalizeType } from "../../src/utils/mime.ts";
 /**
  * Red-team green assets: the randomized matchRoute-vs-trie equivalence fuzz.
  * matchRoute's static Map and bucket fast matchers are accelerators over the
@@ -260,8 +255,6 @@ describe("branch coverage: round 3", () => {
   it("mime helpers handle edges", () => {
     expect(normalizeType("; junk")).toBe("");
     expect(mimeFromExtension("archive.tar.gz")).toBe("application/gzip");
-    expect(extensionFromMime("image/png")).toBe("png");
-    expect(charsetFromContentType("")).toBe("");
   });
 
   it("prefers x-forwarded-host when proxying", async () => {

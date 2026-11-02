@@ -55,7 +55,7 @@ for (const v of VARIANTS) {
   v.child = spawn("bun", ["-e", v.src.replaceAll("PORT", String(v.port))], { stdio: "ignore" });
 }
 const med = (xs) => {
-  const s = [...xs].sort((a, b) => a - b);
+  const s = xs.toSorted((a, b) => a - b);
   return s[Math.floor(s.length / 2)];
 };
 try {
@@ -99,7 +99,7 @@ try {
   }
   VARIANTS.slice(1).forEach((v, i) => {
     const rs = ratios[i];
-    const sorted = [...rs].sort((a, b) => a - b);
+    const sorted = rs.toSorted((a, b) => a - b);
     const q1 = sorted[Math.floor(sorted.length * 0.25)];
     const q3 = sorted[Math.floor(sorted.length * 0.75)];
     console.log(

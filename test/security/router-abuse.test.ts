@@ -148,7 +148,7 @@ describe("redteam — RT-2 HEAD x committed x deferred headers", () => {
     // R7: the finalizer never reads committed bodies — no derived CL on a
     // hand-built Response; the late cookie still joins the committed one.
     expect(res.headers.get("content-length")).toBeNull();
-    expect(res.headers.getSetCookie().sort()).toEqual(["early=1; Path=/", "late=1; Path=/"]);
+    expect(res.headers.getSetCookie().toSorted()).toEqual(["early=1; Path=/", "late=1; Path=/"]);
   });
 
   it("green: HEAD x committed (no deferred writes) backfills CL and drops the body", async () => {

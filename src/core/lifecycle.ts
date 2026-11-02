@@ -11,13 +11,10 @@
 
 import type { Application } from "./app.ts";
 import { serverOf } from "./server-slot.ts";
-import type { CloseOptions, CloseStatus, OverloadOptions } from "../types.ts";
+import type { CloseOptions, CloseStatus, OverloadOptions, OverloadReason } from "../types.ts";
 import { normalizeOverload } from "./lifecycle-admission.ts";
 import type { LifecycleOverload, WaiterSlot } from "./lifecycle-admission.ts";
 import { repumpResponse } from "../utils/streams.ts";
-
-/** Why a request was refused at the admission gate (pre-context, pre-funnel). */
-export type OverloadReason = "concurrency" | "queue" | "draining";
 
 /**
  * One queued waiter: `admit` transfers a freed slot (the releasing request
@@ -201,22 +198,22 @@ const awaitWithShutdownTimeout = (
       resolve(undefined);
     }, timeoutMs);
     timer.unref?.();
-    Promise.resolve(handler()).then(
-      (value) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (reason) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        // Assimilate the rejection into the wrapper so the caller's own
-        // try/catch (the contained-failure log) still observes it.
-        resolve(Promise.reject(reason));
-      },
-    );
+    Promise.resolve()
+      .then(handler)
+      .then(
+        (value) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (reason) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve(Promise.reject(reason));
+        },
+      );
   });
 
 /** Run the registered shutdown handlers exactly once, contained. */

@@ -14,14 +14,8 @@ import { Keala, type Application } from "../../src/index.ts";
 import { cache } from "../../src/middleware/cache.ts";
 import { createBodyParser } from "../../src/plugins/body-parser.ts";
 import { serveStatic } from "../../src/middleware/serve-static.ts";
-import {
-  acceptsCharset,
-  acceptsEncoding,
-  acceptsLanguage,
-  acceptsType,
-} from "../../src/negotiation/accepts.ts";
+import { acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
 import { encodeUrlValue } from "../../src/utils/url.ts";
-import { parseQuery } from "../../src/utils/query.ts";
 import { parseCookies } from "../../src/plugins/cookies/cookies.ts";
 
 const quiet = { env: "test" } as const;
@@ -35,10 +29,10 @@ const encoder = new TextEncoder();
 // r5 redirect neutralization: hostile corpus stays same-origin (re-locked)
 // ---------------------------------------------------------------------------
 
-describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
-  const host = (location: string | null): string =>
-    new URL(location ?? "", "http://good.com:3000/r").host;
+const host = (location: string | null): string =>
+  new URL(location ?? "", "http://good.com:3000/r").host;
 
+describe("R6-D redirect neutralization: hostile corpus [locks]", () => {
   it("every relative-looking foreign target stays a same-origin path", async () => {
     const app = new Keala(quiet);
     app.get("/r", (c) => {
@@ -251,13 +245,9 @@ describe("R6-J regex audit: 100KB hostile inputs stay linear [locks]", () => {
     under("acceptsEncoding 40KB", performance.now() - t0);
   });
 
-  it("query/cookie/url text paths on 100KB inputs", () => {
-    const qs = `${Array.from({ length: 25_000 }, (_, i) => `k${i}=1`).join("&")}&b=2`;
-    let t0 = performance.now();
-    expect(Object.keys(parseQuery(qs)).length).toBe(25_001);
-    under("parseQuery 100KB", performance.now() - t0);
+  it("cookie/url text paths on 100KB inputs", () => {
     const cookie = `${Array.from({ length: 20_000 }, (_, i) => `c${i}=v`).join("; ")};`;
-    t0 = performance.now();
+    let t0 = performance.now();
     expect(Object.keys(parseCookies(cookie)).length).toBe(20_000);
     under("parseCookies 100KB", performance.now() - t0);
     const target = `/${"%".repeat(100_000)}`;
@@ -304,8 +294,6 @@ describe("R6-J regex audit: 100KB hostile inputs stay linear [locks]", () => {
     expect(
       acceptsEncoding("gzip;q=0.3, gzip;q=0.001, identity;q=0.001", ["gzip", "identity"]),
     ).toBe("gzip");
-    expect(acceptsLanguage("en;q=0, *", ["en"]) ?? null).toBe(false);
-    expect(acceptsCharset("utf-8;q=0, *", ["utf-8"]) ?? null).toBe(false);
   });
 });
 

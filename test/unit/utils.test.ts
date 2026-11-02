@@ -1,20 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { getPath, getSearch, parseHostHeader } from "../../src/utils/url.ts";
-import { parseQuery } from "../../src/utils/query.ts";
-import {
-  escapeHtml,
-  contentDisposition,
-  validateHeaderName,
-  validateHeaderValue,
-} from "../../src/utils/text.ts";
-import {
-  charsetFromContentType,
-  expandContentType,
-  extensionFromMime,
-  mimeFromExtension,
-  normalizeType,
-} from "../../src/utils/mime.ts";
+import { escapeHtml, validateHeaderName, validateHeaderValue } from "../../src/utils/text.ts";
+import { mimeFromExtension, normalizeType } from "../../src/utils/mime.ts";
 import { Keala, isHttpError } from "../../src/index.ts";
 import { normalizeError } from "../../src/http/errors.ts";
 import { statusMessage } from "../../src/http/status.ts";
@@ -73,41 +61,6 @@ describe("parseHostHeader", () => {
   });
 });
 
-describe("parseQuery", () => {
-  it("parses basic pairs", () => {
-    expect(parseQuery("?a=1&b=2")).toEqual({ a: "1", b: "2" });
-    expect(parseQuery("a=1")).toEqual({ a: "1" });
-    expect(parseQuery("")).toEqual({});
-  });
-
-  it("decodes + and percent escapes", () => {
-    expect(parseQuery("?q=hello+world&n=%E4%B8%AD")).toEqual({ q: "hello world", n: "中" });
-  });
-
-  it("collects repeated keys into arrays", () => {
-    expect(parseQuery("?a=1&a=2&a=3")).toEqual({ a: ["1", "2", "3"] });
-  });
-
-  it("supports keys without values", () => {
-    expect(parseQuery("?flag&x=1")).toEqual({ flag: "", x: "1" });
-  });
-
-  it("drops prototype pollution keys", () => {
-    const query = parseQuery("?__proto__[x]=1&constructor=2&prototype=3&ok=4");
-    expect(query["ok"]).toBe("4");
-    expect(Object.prototype.hasOwnProperty.call(query, "constructor")).toBe(false);
-    expect(({} as Record<string, unknown>).x).toBeUndefined();
-  });
-
-  it("tolerates malformed percent sequences", () => {
-    expect(parseQuery("?bad=%E0%A4%A")).toEqual({ bad: "%E0%A4%A" });
-  });
-
-  it("returns a null-prototype object", () => {
-    expect(Object.getPrototypeOf(parseQuery("?a=1"))).toBe(null);
-  });
-});
-
 describe("text utils", () => {
   it("escapes HTML entities", () => {
     expect(escapeHtml(`<a href="x">&'`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
@@ -117,12 +70,6 @@ describe("text utils", () => {
     // Re-homed from the retired koa differential fuzz (U1): only the five
     // XML entities are escaped — everything else is verbatim.
     expect(escapeHtml("é中\0\t ")).toBe("é中\0\t ");
-  });
-
-  it("builds content-disposition with ASCII fallback", () => {
-    expect(contentDisposition("report.pdf")).toBe('attachment; filename="report.pdf"');
-    expect(contentDisposition("报告.pdf")).toContain("filename*=UTF-8''%E6%8A%A5%E5%91%8A.pdf");
-    expect(contentDisposition('we"ird.txt')).toBe('attachment; filename="we\\"ird.txt"');
   });
 
   it("validates header names", () => {
@@ -145,31 +92,9 @@ describe("mime utils", () => {
     expect(normalizeType("  Application/JSON ")).toBe("application/json");
   });
 
-  it("maps extensions and back", () => {
+  it("maps file extensions", () => {
     expect(mimeFromExtension("a.tar.gz")).toBe("application/gzip");
     expect(mimeFromExtension("noext")).toBe(null);
-    expect(extensionFromMime("text/html; charset=utf-8")).toBe("html");
-  });
-
-  it("'.bin' expands to application/octet-stream", () => {
-    // Re-homed from the retired koa differential (U1): binary downloads
-    // must never leak a runtime text/plain default.
-    expect(expandContentType(".bin")).toBe("application/octet-stream");
-    expect(expandContentType("bin")).toBe("application/octet-stream");
-  });
-
-  it("extension-form types expand with their charset (value lock, not self-differential)", () => {
-    // Re-homed from the retired koa differential (U1): the ".html" path goes
-    // through the same TYPE_MAP expansion as the "html" shorthand — the
-    // charset is part of the value, and no other test asserts it directly.
-    expect(expandContentType(".html")).toBe("text/html; charset=utf-8");
-    expect(expandContentType("html")).toBe("text/html; charset=utf-8");
-  });
-
-  it("extracts charset", () => {
-    expect(charsetFromContentType("text/html; charset=UTF-8")).toBe("utf-8");
-    expect(charsetFromContentType(`text/html; charset="iso-8859-1"`)).toBe("iso-8859-1");
-    expect(charsetFromContentType("text/html")).toBe("");
   });
 });
 

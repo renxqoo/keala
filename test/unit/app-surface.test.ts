@@ -14,6 +14,17 @@ import { startBunServer, type ServerHandle } from "../../src/adapters/bun.ts";
  * parseListenArgs option-bag coverage.
  */
 
+const onListen = () => {};
+
+const serveImpl = (options: Record<string, unknown>): ServerHandle => ({
+  port: options["port"] as number,
+  hostname: "127.0.0.1",
+  url: new URL("http://localhost:3000"),
+  stop: () => undefined,
+  fetch: async () => new Response("x"),
+  reload: () => undefined,
+});
+
 describe("listen and mount guards", () => {
   it("mergeMountedWs refuses a def whose ws handlers are missing", () => {
     const state = createRouterState();
@@ -44,7 +55,6 @@ describe("listen and mount guards", () => {
   });
 
   it("parseListenArgs accepts positional args, numeric strings and extra bag keys", () => {
-    const onListen = () => {};
     const parsed = parseListenArgs([3000, "0.0.0.0", onListen]);
     expect(parsed.listen.port).toBe(3000);
     expect(parsed.hostname).toBe("0.0.0.0");
@@ -120,15 +130,6 @@ describe("coverage: mount parameter middleware merge", () => {
 });
 
 describe("coverage: listen argument parsing", () => {
-  const serveImpl = (options: Record<string, unknown>): ServerHandle => ({
-    port: options["port"] as number,
-    hostname: "127.0.0.1",
-    url: new URL("http://localhost:3000"),
-    stop: () => undefined,
-    fetch: async () => new Response("x"),
-    reload: () => undefined,
-  });
-
   it.skipIf(REAL_BUN)("accepts numeric string ports, hostnames and option objects", () => {
     const made: Record<string, unknown>[] = [];
     const impl = (options: Record<string, unknown>): ServerHandle => {

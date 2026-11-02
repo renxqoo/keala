@@ -1,9 +1,9 @@
 // koa scale server: 1000 routes through @koa/router (linear layer walk).
 import Koa from "koa";
-import Router from "@koa/router";
+import KoaRouter from "@koa/router";
 
 const app = new Koa();
-const router = new Router();
+const router = new KoaRouter();
 for (let i = 0; i < 1000; i++) {
   router.get(`/route-${i}`, (ctx) => {
     ctx.body = `route-${i}`;

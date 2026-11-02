@@ -149,7 +149,7 @@ describe("guarded pooling: retireWithBody edge paths", () => {
 
   it("a body reader error retires the context exactly once", async () => {
     const app = new Keala({ ...quiet, pooling: true });
-    let detonate: () => void = () => undefined;
+    let detonate!: () => void;
     const boom = new Promise<void>((resolve) => {
       detonate = () => resolve();
     });

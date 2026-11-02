@@ -151,6 +151,10 @@ const flushMicrotasks = async (): Promise<void> => {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 };
 
+const reference = async (): Promise<void> => {
+  await new Response("ok").text();
+};
+
 describe("agent R4.4 perf review: hot-path costs", () => {
   it(
     "PERF-1 unconfigured app: handle+consume stays near the documented ~460ns floor",
@@ -166,9 +170,7 @@ describe("agent R4.4 perf review: hot-path costs", () => {
       // the fence at 16x trips on STRUCTURE (a leaked timer chain, a
       // per-request closure storm), not on hardware.
       const { app, run } = makeProbe({});
-      const reference = async (): Promise<void> => {
-        await new Response("ok").text();
-      };
+
       const measured = await measureVariants(
         [
           { name: "plain", run },

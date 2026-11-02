@@ -2,6 +2,8 @@
 // server run (statics 0.93-0.95x, wildcard 0.92x), keala vs hono (bun).
 import { spawn } from "node:child_process";
 import autocannon from "autocannon";
+const fmt = (v) => v.map((x) => Math.round(x / 1000) + "k").join(",");
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const waitReady = async (port) => {
   for (let i = 0; i < 100; i++) {
@@ -22,7 +24,7 @@ const fire = (port, path) =>
     workers: 4,
     warmup: { connections: 200, duration: 2 },
   });
-const median = (v) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)];
+const median = (v) => v.toSorted((a, b) => a - b)[Math.floor(v.length / 2)];
 const procs = [
   { name: "keala", cmd: ["bun", "bench/route-shootout/servers/keala-bun.ts"], port: 4312 },
   { name: "hono", cmd: ["bun", "bench/route-shootout/servers/hono-bun.ts"], port: 4314 },
@@ -42,7 +44,7 @@ try {
   ]) {
     const rps = { keala: [], hono: [] };
     for (let round = 0; round < 4; round++) {
-      const order = round % 2 === 0 ? procs : [...procs].reverse();
+      const order = round % 2 === 0 ? procs : procs.toReversed();
       for (const p of order) {
         const res = await fire(p.port, path);
         rps[p.name].push(res.requests.average);
@@ -51,7 +53,7 @@ try {
     }
     const k = median(rps.keala),
       h = median(rps.hono);
-    const fmt = (v) => v.map((x) => Math.round(x / 1000) + "k").join(",");
+
     console.log(
       `\n${label}: keala ${Math.round(k).toLocaleString()} [${fmt(rps.keala)}] hono ${Math.round(h).toLocaleString()} [${fmt(rps.hono)}] ratio ${(k / h).toFixed(2)}x`,
     );

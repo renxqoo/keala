@@ -62,12 +62,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
-import {
-  acceptsCharset,
-  acceptsEncoding,
-  acceptsLanguage,
-  acceptsType,
-} from "../../src/negotiation/accepts.ts";
+import { acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
 import { parseCookies, serializeCookie, sign, unsign } from "../../src/plugins/cookies/cookies.ts";
 import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
 import { serveStatic } from "../../src/middleware/serve-static.ts";
@@ -160,14 +155,6 @@ describe("R3-3 negotiation: specificity of a matching range outranks wildcard q"
 
   it("acceptsEncodings: gzip's exact q=0.4 beats * q=0.5, so br must be picked", () => {
     expect(acceptsEncoding("gzip;q=0.4, *;q=0.5", ["gzip", "br"])).toBe("br");
-  });
-
-  it("acceptsLanguages: en's exact q=0.4 beats * q=0.5, so fr must be picked", () => {
-    expect(acceptsLanguage("en;q=0.4, *;q=0.5", ["en", "fr"])).toBe("fr");
-  });
-
-  it("acceptsCharsets: utf-8's exact q=0.4 beats * q=0.5, so latin1 must be picked", () => {
-    expect(acceptsCharset("utf-8;q=0.4, *;q=0.5", ["utf-8", "latin1"])).toBe("latin1");
   });
 });
 

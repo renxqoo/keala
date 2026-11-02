@@ -148,7 +148,7 @@ const acceptedEncodings = (accept: string): { encoding: string; ext: string }[] 
     if (!out.some((e) => e.encoding === "gzip")) out.push({ encoding: "gzip", ext: ".gz" });
   }
   // Deterministic preference order: br first (better compression).
-  return out.sort((a, b) => (a.encoding === "br" ? -1 : b.encoding === "br" ? 1 : 0));
+  return out.toSorted((a, b) => (a.encoding === "br" ? -1 : b.encoding === "br" ? 1 : 0));
 };
 
 export const serveStatic = (options: ServeStaticOptions): RouteHandler => {

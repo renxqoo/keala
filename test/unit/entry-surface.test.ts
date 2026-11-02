@@ -88,8 +88,8 @@ const MIDDLEWARE_FACTORIES = [
 
 describe("entry surface", () => {
   it("the root barrel exports exactly the app surface", () => {
-    const names = Object.keys(root).sort();
-    expect(names).toEqual([...ROOT_EXPORTS].sort());
+    const names = Object.keys(root).toSorted();
+    expect(names).toEqual([...ROOT_EXPORTS].toSorted());
   });
 
   it("the root barrel leaks no middleware", () => {

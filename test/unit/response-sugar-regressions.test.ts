@@ -4,7 +4,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { Keala, createCookies } from "../../src/index.ts";
-import { contentDisposition } from "../../src/utils/text.ts";
 
 const hit = async (
   app: InstanceType<typeof Keala>,
@@ -104,38 +103,6 @@ describe("OPTIONS / unknownMethodAs404", () => {
     const res = await hit(app, "/x", { method: "PROPFIND" });
     expect(res.status).toBe(404);
     expect(res.headers.get("allow")).toBeNull();
-  });
-});
-
-describe("contentDisposition", () => {
-  it("latin1 printable ships whole without filename*", () => {
-    expect(contentDisposition("à.txt")).toBe('attachment; filename="à.txt"');
-  });
-  it("non-latin1 masks fallback and forces extended", () => {
-    expect(contentDisposition("中.txt")).toBe(
-      `attachment; filename="?.txt"; filename*=UTF-8''${encodeURIComponent("中.txt")}`,
-    );
-  });
-  it("a %XX escape forces BOTH parameters", () => {
-    expect(contentDisposition("a%20b")).toBe(
-      `attachment; filename="a%20b"; filename*=UTF-8''${encodeURIComponent("a%20b")}`,
-    );
-  });
-  it("quotes and backslashes are escaped", () => {
-    expect(contentDisposition('a"b\\c')).toBe('attachment; filename="a\\"b\\\\c"');
-  });
-  it("explicit fallback wins the legacy slot", () => {
-    expect(contentDisposition("中.txt", "zh")).toBe(
-      `attachment; filename="zh"; filename*=UTF-8''${encodeURIComponent("中.txt")}`,
-    );
-  });
-  it("an explicit fallback applies to ASCII names too, forcing extended", () => {
-    // Re-homed from the retired koa differential (U1): the fallback is an
-    // explicit legacy-client override — it must not be ignored just because
-    // the filename itself is ASCII.
-    expect(contentDisposition("file.txt", "fallback.txt")).toBe(
-      `attachment; filename="fallback.txt"; filename*=UTF-8''${encodeURIComponent("file.txt")}`,
-    );
   });
 });
 

@@ -43,10 +43,9 @@
 
 ### C3 `c.query` 形态显性化
 
-- 主出口新增类型导出：`QueryMap`、`QueryValue`（纯类型，零运行时成本）。
-- `query` getter 补 JSDoc：懒解析、null 原型普通对象、单值 string / 重复键 string[]、
-  `__proto__`/`constructor`/`prototype` 键丢弃。
-- README（en/zh）context 表同步说明。
+- `c.query(name)` 返回首个值，`c.queries(name)` 返回重复值数组；不构造整体查询对象。
+- 查询值处理 `+` 和百分号转义，非法转义保持原样；原型形态的键也只返回字符串。
+- 根入口不导出整体查询对象类型，README（en/zh）context 表使用相同契约。
 
 ### C4 开发模式吞路由警告（B4 运行时部分）
 

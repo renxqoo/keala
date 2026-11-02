@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/index.ts";
 import { acceptsType } from "../../src/negotiation/accepts.ts";
-import { parseQuery } from "../../src/utils/query.ts";
 import { validateHeaderValue } from "../../src/utils/text.ts";
 
 const quiet = { env: "test" } as const;
@@ -95,17 +94,6 @@ describe("R7-NEG-3 [MEDIUM] malformed qvalues do not gain quality 1", () => {
     expect(
       acceptsType("text/html;q=bogus, application/json;q=0.5", ["text/html", "application/json"]),
     ).toBe("application/json");
-  });
-});
-
-describe("R7-QUERY-1 [MEDIUM] malformed escapes still decode valid query bytes", () => {
-  it("recovers component-by-component around a malformed escape", () => {
-    // Query semantics recover component-by-component: '+' is a space and
-    // valid escapes remain decodable even if another '%' is bad.
-    // Expected: "A %ZZB". Actual: the catch returns the entire raw component,
-    // losing both plus conversion and every valid escape.
-    // Root cause: src/utils/query.ts:14-19.
-    expect(parseQuery("value=%41+%ZZ%42").value).toBe("A %ZZB");
   });
 });
 

@@ -69,6 +69,15 @@ const patternsOf = (
   return map;
 };
 
+const norm = (p: Record<string, string> | null): string =>
+  p === null
+    ? "[]"
+    : JSON.stringify(
+        Object.keys(p)
+          .toSorted()
+          .map((k) => [k, p[k] as string]),
+      );
+
 describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, full shapes)", () => {
   let seed = 1;
   const rand = (): number => {
@@ -131,15 +140,6 @@ describe("redteam round2 — GA-1b matchRoute equals the pure trie (internal, fu
     for (let i = 0; i < n; i++) segs.push(pick(WORDS));
     return rand() < 0.15 ? `/${segs.join("/")}/` : `/${segs.join("/")}`;
   };
-
-  const norm = (p: Record<string, string> | null): string =>
-    p === null
-      ? "[]"
-      : JSON.stringify(
-          Object.keys(p)
-            .toSorted()
-            .map((k) => [k, p[k] as string]),
-        );
 
   it("holds over 300 randomized pattern tables x 200 paths each", { timeout: 30_000 }, () => {
     const problems: string[] = [];

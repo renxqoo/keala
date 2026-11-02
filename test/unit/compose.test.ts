@@ -15,7 +15,7 @@ const ctx = (): TestCtx => ({ state: Object.create(null), _res: undefined, log: 
 
 describe("compose: execution order", () => {
   it("runs levels outside-in and inside-out around next()", async () => {
-    const c = ctx();
+    const context = ctx();
     const run = compose<TestCtx>([
       async (c, next) => {
         c.log.push("1-before");
@@ -28,12 +28,12 @@ describe("compose: execution order", () => {
         c.log.push("2-after");
       },
     ]);
-    await run(c, NOOP_TAIL);
-    expect(c.log).toEqual(["1-before", "2-before", "2-after", "1-after"]);
+    await run(context, NOOP_TAIL);
+    expect(context.log).toEqual(["1-before", "2-before", "2-after", "1-after"]);
   });
 
   it("a fully synchronous chain settles without a single promise", () => {
-    const c = ctx();
+    const context = ctx();
     const run = compose<TestCtx>([
       (c, next) => {
         c.log.push("a");
@@ -43,9 +43,9 @@ describe("compose: execution order", () => {
         c.log.push("b");
       },
     ]);
-    const settled = run(c, NOOP_TAIL);
+    const settled = run(context, NOOP_TAIL);
     expect(settled).toBeUndefined(); // no promise allocated on the sync path
-    expect(c.log).toEqual(["a", "b"]);
+    expect(context.log).toEqual(["a", "b"]);
   });
 
   it("double next() in the same middleware throws", async () => {

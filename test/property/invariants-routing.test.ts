@@ -45,7 +45,7 @@ describe("INV-4 routing determinism", () => {
         expected.set(t, `${r.status}:${await r.text()}`);
       }
       for (let rep = 0; rep < 10; rep++) {
-        for (const t of rng.bool(0.5) ? targets : [...targets].reverse()) {
+        for (const t of rng.bool(0.5) ? targets : [...targets].toReversed()) {
           const r = await app.handle(new Request(`http://localhost${t}`));
           const actual = `${r.status}:${await r.text()}`;
           const want = expected.get(t) as string;
@@ -121,8 +121,8 @@ describe("INV-4 routing determinism", () => {
   }, 25_000);
 });
 describe("INV-5 no-prototype-pollution", () => {
-  const protoBefore = Object.getOwnPropertyNames(Object.prototype).sort().join(",");
-  const globalBefore = Object.getOwnPropertyNames(globalThis).sort().join(",");
+  const protoBefore = Object.getOwnPropertyNames(Object.prototype).toSorted().join(",");
+  const globalBefore = Object.getOwnPropertyNames(globalThis).toSorted().join(",");
 
   it("random query/cookie/JSON inputs leave Object.prototype and globals untouched", async () => {
     await runProp("no-proto-pollution", 250, async (rng, _seed, ctx) => {
@@ -166,8 +166,8 @@ describe("INV-5 no-prototype-pollution", () => {
       await res.text();
       expect(queryHasProto).toBe(false);
       expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
-      expect(Object.getOwnPropertyNames(Object.prototype).sort().join(",")).toBe(protoBefore);
-      expect(Object.getOwnPropertyNames(globalThis).sort().join(",")).toBe(globalBefore);
+      expect(Object.getOwnPropertyNames(Object.prototype).toSorted().join(",")).toBe(protoBefore);
+      expect(Object.getOwnPropertyNames(globalThis).toSorted().join(",")).toBe(globalBefore);
     });
   }, 20_000);
 });

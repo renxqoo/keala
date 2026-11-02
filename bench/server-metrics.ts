@@ -7,10 +7,6 @@ export const serverMetrics = (
   pid: process.pid,
   env: process.env["NODE_ENV"],
   applicationEnv,
-  // Fixture config evidence (e.g. KEALA_POOLING=1, KEALA_SINK=param): every
-  // recorded sample carries which optional fast path was enabled. Optional in
-  // validation so protocol-2 baseline fixtures predating these fields keep
-  // passing.
   pooling: config?.pooling === true,
   sink: config?.sink ?? false,
   runtime: typeof Bun === "undefined" ? "node" : "bun",
@@ -59,10 +55,10 @@ export const validateServerMetrics = (
       throw new Error("invalid server CPU/memory snapshot");
   }
   const raw = value as Record<string, unknown>;
-  if (raw["pooling"] !== undefined && typeof raw["pooling"] !== "boolean") {
+  if (typeof raw["pooling"] !== "boolean") {
     throw new Error("invalid server config snapshot");
   }
-  if (raw["sink"] !== undefined && raw["sink"] !== false && typeof raw["sink"] !== "string") {
+  if (raw["sink"] !== false && typeof raw["sink"] !== "string") {
     throw new Error("invalid server config snapshot");
   }
   return snapshot;

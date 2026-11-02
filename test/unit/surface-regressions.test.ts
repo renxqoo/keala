@@ -29,7 +29,6 @@ import {
   normalizeError,
   type Context,
 } from "../../src/index.ts";
-import { charsetFromContentType, expandContentType } from "../../src/utils/mime.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -312,28 +311,5 @@ describe("R7-SURFACE-5 [MEDIUM] onError validates listeners at subscription time
     // later error path fails while trying to invoke it.
     // Root cause: src/core/app.ts:479-481 + src/core/emitter.ts:16-19.
     expect(() => app.onError(null as never)).toThrow(TypeError);
-  });
-});
-
-describe("R7-SURFACE-6 [MEDIUM] Content-Type quoted-pairs do not break parameter parsing", () => {
-  it("ignores a semicolon after an escaped quote inside another parameter", () => {
-    const contentType = 'text/plain; note="a\\\";charset=decoy"; charset=utf-8';
-
-    // RFC quoted-string permits quoted-pair (`\"`). Expected: the semicolon
-    // remains inside note and the real charset after its closing quote wins.
-    // Actual: every quote toggles state, including escaped quotes, so the
-    // decoy is split out and returned as the charset.
-    // Root cause: src/utils/mime.ts:170-181.
-    expect(charsetFromContentType(contentType)).toBe("utf-8");
-  });
-});
-
-describe("R7-SURFACE-7 [LOW] Content-Type extension expansion is case-insensitive", () => {
-  it.each(["HTML", ".HTML", "Json", "TXT"])("keeps the default charset for %s", (value) => {
-    // MIME extensions are case-insensitive. Expected: the same result as the
-    // lowercase shorthand, including its default UTF-8 charset. Actual: the
-    // direct map misses and the extension fallback returns a bare media type.
-    // Root cause: src/utils/mime.ts:126-134.
-    expect(expandContentType(value)).toBe(expandContentType(value.toLowerCase()));
   });
 });

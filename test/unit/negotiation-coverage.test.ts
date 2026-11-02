@@ -2,13 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
-import {
-  acceptsCharset,
-  acceptsEncoding,
-  acceptsLanguage,
-  acceptsType,
-} from "../../src/negotiation/accepts.ts";
-import { charsetFromContentType, extensionFromMime } from "../../src/utils/mime.ts";
+import { acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
 import { toURL } from "../../src/utils/url.ts";
 
 const probe = async (
@@ -59,26 +53,12 @@ describe("branch coverage: negotiation corners", () => {
     );
   });
 
-  it("matches language ranges in both prefix directions", () => {
-    expect(acceptsLanguage("zh-CN", ["zh", "en"])).toBe("zh");
-    expect(acceptsLanguage("zh", ["zh-CN", "en"])).toBe("zh-CN");
-    expect(acceptsLanguage("fr", ["zh", "en"])).toBe(false);
-  });
-
   it("respects identity and wildcard encodings/charsets", () => {
     expect(acceptsEncoding("gzip;q=0", ["gzip", "identity"])).toBe("identity");
-    expect(acceptsCharset("*", ["utf-8", "ascii"])).toBe("utf-8");
-    expect(acceptsCharset("utf-16", ["utf-8"])).toBe(false);
   });
 });
 
 describe("branch coverage: mime and url helpers", () => {
-  it("parses single-quoted charsets and misses gracefully", () => {
-    expect(charsetFromContentType("text/html; charset='iso-8859-5'")).toBe("iso-8859-5");
-    expect(charsetFromContentType("text/html; charset=")).toBe("");
-    expect(extensionFromMime("application/x-unknown")).toBe(null);
-  });
-
   it("toURL handles invalid input", () => {
     expect(toURL("http://localhost:3000/a")?.pathname).toBe("/a");
     expect(toURL("::definitely not a url::")).toBe(null);

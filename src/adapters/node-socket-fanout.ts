@@ -12,6 +12,8 @@ interface SocketCloseFanout {
   handler: () => void;
 }
 
+const reason = (): DOMException => new DOMException("client disconnected", "AbortError");
+
 const socketCloses = new WeakMap<Socket, SocketCloseFanout>();
 
 export interface SocketCloseRegistration {
@@ -57,7 +59,7 @@ export const watchNodeDisconnect = (
 ): void => {
   if (out.writableEnded) return;
   const socket = incoming.socket;
-  const reason = (): DOMException => new DOMException("client disconnected", "AbortError");
+
   if (out.destroyed || socket === null || socket.destroyed) {
     disconnect(reason());
     return;

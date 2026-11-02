@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createPlannedResponse,
-  inheritResponseFacts,
-  responseFactsOf,
-} from "../../src/core/response-plan.ts";
+import { createPlannedResponse, responseFactsOf } from "../../src/core/response-plan.ts";
 
 describe("R4.5 scoped planned Response contract", () => {
   it("keeps default metadata lazy without storing duplicate status/header state", () => {
@@ -148,7 +144,7 @@ describe("R4.5 scoped planned Response contract", () => {
     }
   });
 
-  it("honors live header mutation and preserves direct facts across a native rebuild", () => {
+  it("honors live header mutation and sends cloned responses through the stream path", async () => {
     const planned = createPlannedResponse("body", {}, "text/plain; charset=utf-8");
     planned.headers.set("x-live", "yes");
     planned.headers.delete("content-type");
@@ -156,22 +152,12 @@ describe("R4.5 scoped planned Response contract", () => {
     expect(facts?.native?.headers).toBe(planned.headers);
     expect(planned.headers.get("content-type")).toBeNull();
 
-    const rebuilt = inheritResponseFacts(
-      new Response("body", { headers: { "x-rebuilt": "yes" } }),
-      planned,
-    );
-    expect(responseFactsOf(rebuilt)?.directBody).toBe("body");
-    expect(responseFactsOf(rebuilt)?.planned).toBeUndefined();
-    expect(rebuilt.headers.get("x-rebuilt")).toBe("yes");
-
-    const bytes = createPlannedResponse(new Uint8Array([1, 2, 3]));
-    const rebuiltBytes = inheritResponseFacts(new Response(new Uint8Array([1, 2, 3])), bytes);
-    expect(responseFactsOf(rebuiltBytes)?.directBody).toEqual(new Uint8Array([1, 2, 3]));
-
-    const foreign = new Response("foreign");
-    const untouched = new Response("target");
-    expect(inheritResponseFacts(untouched, foreign)).toBe(untouched);
-    expect(responseFactsOf(untouched)).toBeUndefined();
+    const cloned = planned.clone() as Response;
+    expect(responseFactsOf(cloned)).toBeUndefined();
+    expect(cloned.headers.get("x-live")).toBe("yes");
+    expect(cloned.headers.get("content-type")).toBeNull();
+    expect(await cloned.text()).toBe("body");
+    expect(await planned.text()).toBe("body");
   });
 
   it("reports a locked foreign/direct body as ineligible for direct writing", () => {

@@ -17,6 +17,18 @@ const hit = async (
   init?: RequestInit,
 ): Promise<Response> => app.handle(new Request(`http://localhost${path}`, init));
 
+const upgradeServer = (seen: unknown[]): unknown => ({
+  upgrade(_req: Request, opts: { data: unknown }): boolean {
+    seen.push(opts.data);
+    return true;
+  },
+});
+
+const req = (path: string, origin?: string): Request =>
+  new Request(`http://localhost:3000${path}`, {
+    headers: origin === undefined ? {} : { origin },
+  });
+
 describe("BUG-6: staged headers merge before empty-status sanitation", () => {
   it("committed bodied 304 merges staged security headers, drops content ones", async () => {
     // Node/undici refuses bodied null-body-status construction, so the
@@ -77,17 +89,6 @@ describe("BUG-6: staged headers merge before empty-status sanitation", () => {
 });
 
 describe("SEC-2: websocket upgrade origin enforcement", () => {
-  const upgradeServer = (seen: unknown[]): unknown => ({
-    upgrade(_req: Request, opts: { data: unknown }): boolean {
-      seen.push(opts.data);
-      return true;
-    },
-  });
-  const req = (path: string, origin?: string): Request =>
-    new Request(`http://localhost:3000${path}`, {
-      headers: origin === undefined ? {} : { origin },
-    });
-
   it("array allowlist: same-origin upgrade proceeds (case-insensitive)", async () => {
     const seen: unknown[] = [];
     const app = new Keala({ env: "test" });

@@ -217,24 +217,17 @@ export type ContextConstructor = new (
 
 /** Keep the exact app prototype while allowing instance-layout tracking. */
 export const createContextConstructor = (proto: object): ContextConstructor => {
-  function BoundContext(this: Context, raw: RequestSource, runtime: ContextState["runtimeValue"]) {
-    this.rawRequest = raw;
-    if (runtime !== undefined) this.runtimeValue = runtime;
-  }
-  BoundContext.prototype = proto;
-  return BoundContext as unknown as ContextConstructor;
-};
-
-/** Internal compatibility helper for callers that supply a prototype. */
-export const createBoundContext = (
-  proto: object,
-  raw: RequestSource,
-  runtime: ContextState["runtimeValue"],
-): Context => {
-  const c = Object.create(proto) as Context;
-  c.rawRequest = raw;
-  if (runtime !== undefined) c.runtimeValue = runtime;
-  return c;
+  return Object.assign(
+    function BoundContext(
+      this: Context,
+      raw: RequestSource,
+      runtime: ContextState["runtimeValue"],
+    ) {
+      this.rawRequest = raw;
+      if (runtime !== undefined) this.runtimeValue = runtime;
+    },
+    { prototype: proto },
+  ) as unknown as ContextConstructor;
 };
 
 /** Reset a recycled context in place (pooling is opt-in; see app options). */

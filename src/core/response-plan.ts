@@ -9,35 +9,17 @@
  * and therefore enter the single streaming path.
  */
 
-import { serializedTextOf, rememberSerializedText } from "./response-snapshot.ts";
+type DirectResponseBody = string | Uint8Array;
 
-export type DirectResponseBody = string | Uint8Array;
-
-export interface ResponseFacts {
-  readonly directBody: DirectResponseBody;
-  readonly implicitContentType?: string;
-  native?: Response;
-  /** Internal, unobserved snapshot; never returned by response.headers. */
-  readonly headerSnapshot?: Headers;
-  readonly planned?: true;
-}
-
-const RESPONSE_FACTS = Symbol("keala.responseFacts");
 // Bun defers string MIME inference to its server; Node exposes it in Headers.
 // Resolve this once, without adding a runtime branch to every response.
 const STRING_CONTENT_TYPE = new Response("").headers.get("content-type") ?? undefined;
-
-type ResponseWithFacts = Response & { [RESPONSE_FACTS]?: ResponseFacts };
 
 class PlannedResponse {
   readonly directBody: DirectResponseBody;
   readonly implicitContentType: string | undefined;
   declare native?: Response;
   declare headerSnapshot?: Headers;
-
-  get planned(): true {
-    return true;
-  }
 
   constructor(body: DirectResponseBody, init?: ResponseInit, implicitContentType?: string) {
     this.directBody = typeof body === "string" ? body : new Uint8Array(body);
@@ -157,32 +139,9 @@ export const createPlannedResponse = (
   implicitContentType?: string,
 ): Response => new PlannedResponse(body, init, implicitContentType) as unknown as Response;
 
-export const responseFactsOf = (response: Response): ResponseFacts | undefined => {
-  if (response instanceof PlannedResponse) {
-    return response.native?.bodyUsed === true || response.native?.body?.locked === true
-      ? undefined
-      : response;
-  }
-  const facts = (response as ResponseWithFacts)[RESPONSE_FACTS];
-  if (response.bodyUsed || response.body?.locked === true) return undefined;
-  return facts;
-};
-
-/** Preserve construction facts only when a rebuild keeps the same body. */
-export const inheritResponseFacts = (target: Response, source: Response): Response => {
-  const text = serializedTextOf(source);
-  if (text !== undefined) rememberSerializedText(target, text);
-  const facts = responseFactsOf(source);
-  if (facts !== undefined) {
-    // A rebuilt native Response owns its new header set. Only carry the
-    // byte-exact body facts; carrying a planned response's original header
-    // init would make the Node writer skip the rebuild's late mutations.
-    (target as ResponseWithFacts)[RESPONSE_FACTS] = {
-      directBody: facts.directBody,
-      ...(facts.implicitContentType === undefined
-        ? {}
-        : { implicitContentType: facts.implicitContentType }),
-    };
-  }
-  return target;
-};
+export const responseFactsOf = (response: Response): PlannedResponse | undefined =>
+  response instanceof PlannedResponse &&
+  response.native?.bodyUsed !== true &&
+  response.native?.body?.locked !== true
+    ? response
+    : undefined;

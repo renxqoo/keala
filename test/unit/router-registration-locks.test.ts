@@ -66,6 +66,16 @@ const req = (path: string, init?: RequestInit) => new Request(`http://localhost:
 // R5-1 — duplicate path+method re-runs global middleware
 // ---------------------------------------------------------------------------
 
+const innerRouter = () => {
+  const inner = new Router();
+  inner.use(async (c, next) => {
+    c.setHeader("X-Inner", "1");
+    await next();
+  });
+  inner.get("/leaf", (c) => c.text("leaf"));
+  return inner;
+};
+
 describe("R5-1 CONFIRMED-BUG: duplicate path+method registration re-runs app.use middleware", () => {
   it("global middleware runs exactly once for a doubly-registered route", async () => {
     const app = new Keala(quiet);
@@ -202,16 +212,6 @@ describe("R5-3 CONFIRMED-BUG: redirect destination requires a param the source o
 // ---------------------------------------------------------------------------
 
 describe("R5-4 CONFIRMED-BUG: nested mount drops the inner router's use() middleware", () => {
-  const innerRouter = () => {
-    const inner = new Router();
-    inner.use(async (c, next) => {
-      c.setHeader("X-Inner", "1");
-      await next();
-    });
-    inner.get("/leaf", (c) => c.text("leaf"));
-    return inner;
-  };
-
   it("the inner middleware runs through the middle app (control)", async () => {
     const mid = new Keala(quiet);
     mid.mount("/r", innerRouter());

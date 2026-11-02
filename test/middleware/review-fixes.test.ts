@@ -20,12 +20,7 @@ import { compress } from "../../src/middleware/etag.ts";
 import { memoryRateLimitStore, rateLimit } from "../../src/middleware/rate-limit.ts";
 import { csrfToken } from "../../src/middleware/csrf-token.ts";
 import { parseCookies } from "../../src/plugins/cookies/cookies.ts";
-import {
-  acceptsCharset,
-  acceptsGzip,
-  acceptsLanguage,
-  parsePreferenceEntries,
-} from "../../src/negotiation/accepts.ts";
+import { acceptsGzip, parsePreferenceEntries } from "../../src/negotiation/accepts.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
@@ -262,22 +257,5 @@ describe.skipIf(REAL_BUN)("csrfToken fallback format gate (redundant tag re-chec
     const issued = Date.now() - 1000;
     const forged = `t1.${"A".repeat(22)}.${issued}.86400000.${"B".repeat(43)}`;
     expect(service.verify(forged)).toBe(false);
-  });
-});
-
-describe("DEAD-5 close-out: standalone negotiation helpers keep koa semantics", () => {
-  // 0.7 contract (docs/KEALA-NATIVE-API.md, commit-0-7-contract.test.ts):
-  // c.acceptsCharsets()/c.acceptsLanguages() stay OFF the context; the
-  // helpers are the supported surface. Docstrings now say so.
-  it("acceptsCharset answers the koa matrix", () => {
-    expect(acceptsCharset("utf-8, iso-8859-1;q=0.5", ["utf-8", "iso-8859-1"])).toBe("utf-8");
-    expect(acceptsCharset("*, utf-8", ["ascii", "utf-8"])).toBe("utf-8");
-    expect(acceptsCharset("utf-8;q=0, *", ["utf-8"])).toBe(false);
-  });
-
-  it("acceptsLanguage answers the koa matrix (prefix matching)", () => {
-    expect(acceptsLanguage("zh-CN;q=1, en;q=0.5", ["zh", "en"])).toBe("zh");
-    expect(acceptsLanguage("en-US,en;q=0.9", ["zh", "en"])).toBe("en");
-    expect(acceptsLanguage("fr", ["zh", "en"])).toBe(false);
   });
 });

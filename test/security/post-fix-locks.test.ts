@@ -15,30 +15,37 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Keala, startBunServer, type ServeImplementation } from "../../src/index.ts";
-import { createBodyParser } from "../../src/plugins/body-parser.ts";
+import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
 import { cache } from "../../src/middleware/cache.ts";
 import { csrfToken } from "../../src/middleware/csrf-token.ts";
 import { etag } from "../../src/middleware/etag.ts";
 import { validator } from "../../src/middleware/validator.ts";
 
 const quiet = { env: "test" } as const;
-const readJson = (body: unknown): { json(): Promise<unknown> } =>
-  body as { json(): Promise<unknown> };
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 
 // ---------------------------------------------------------------------------
+const fakeServe = (): { impl: ServeImplementation; options: () => Record<string, unknown> } => {
+  let captured: Record<string, unknown> = {};
+  const impl: ServeImplementation = (options) => {
+    captured = options;
+    return {
+      port: 0,
+      hostname: "localhost",
+      stop: () => undefined,
+      fetch: async () => new Response("fake"),
+      reload: () => undefined,
+    };
+  };
+  return { impl, options: () => captured };
+};
+
 describe("RT-F1: pooling never leaks parsed bodies or validated values", () => {
   it("a recycled context does not serve the previous request's body", async () => {
     const app = new Keala({ ...quiet, pooling: true });
     app.use(createBodyParser());
-    const readJson = (body: unknown): { json(): Promise<unknown> } =>
-      body as { json(): Promise<unknown> };
-    app.post("/alice", async (c) =>
-      c.json({ got: await readJson((c as unknown as { req: unknown }).req).json() }),
-    );
-    app.post("/bob", async (c) =>
-      c.json({ got: await readJson((c as unknown as { req: unknown }).req).json() }),
-    );
+    app.post("/alice", async (c) => c.json({ got: await bodyOf(c).json() }));
+    app.post("/bob", async (c) => c.json({ got: await bodyOf(c).json() }));
     const alice = await app.handle(
       req("/alice", {
         method: "POST",
@@ -76,7 +83,7 @@ describe("RT-F1: pooling never leaks parsed bodies or validated values", () => {
       c.json((c as unknown as { valid?: unknown }).valid ?? null),
     );
     app.post("/plain", async (c) => {
-      void (await readJson((c as unknown as { req: unknown }).req).json());
+      void (await bodyOf(c).json());
       return c.json({ leaked: (c as unknown as { valid?: unknown }).valid ?? null });
     });
     await app.handle(
@@ -99,21 +106,6 @@ describe("RT-F1: pooling never leaks parsed bodies or validated values", () => {
 
 // ---------------------------------------------------------------------------
 describe("RT-F2: rejecting async ws handlers never crash the process", () => {
-  const fakeServe = (): { impl: ServeImplementation; options: () => Record<string, unknown> } => {
-    let captured: Record<string, unknown> = {};
-    const impl: ServeImplementation = (options) => {
-      captured = options;
-      return {
-        port: 0,
-        hostname: "localhost",
-        stop: () => undefined,
-        fetch: async () => new Response("fake"),
-        reload: () => undefined,
-      };
-    };
-    return { impl, options: () => captured };
-  };
-
   it("open/message rejections route to the console fallback, not unhandledRejection", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown): void => {

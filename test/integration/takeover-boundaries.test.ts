@@ -437,6 +437,7 @@ describe("R4.3 agent review: seeded path fuzz", () => {
         } catch (syncThrow) {
           throw new Error(
             `app.handle threw synchronously for ${JSON.stringify(path)}: ${String(syncThrow)}`,
+            { cause: syncThrow },
           );
         }
         expect(handled.ok, `app.handle must settle for path ${JSON.stringify(path)}`).toBe(true);

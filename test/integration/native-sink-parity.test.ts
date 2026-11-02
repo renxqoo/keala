@@ -209,7 +209,7 @@ describe("production hardening: trustedHosts and unknownMethodAs404", () => {
     }
     // A KNOWN but unregistered method still gets 405 + Allow.
     const known = await app.handle(new Request("http://localhost:3000/x", { method: "POST" }));
-    expect([known.status, known.headers.get("allow")?.split(", ").sort()]).toEqual([
+    expect([known.status, known.headers.get("allow")?.split(", ").toSorted()]).toEqual([
       405,
       ["GET", "HEAD"],
     ]);

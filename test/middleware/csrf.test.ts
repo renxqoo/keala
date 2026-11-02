@@ -26,6 +26,14 @@ const NATIVE = typeof Bun !== "undefined";
 // of the running runtime, then verify through a fresh service.
 const fallbackService = csrfToken({ secret: "fallback-secret" });
 
+const sign = (nonce: string, issuedAt: string, ttl: string): string =>
+  createHmac("sha256", "fallback-secret")
+    .update(`csrf1\u0000\u0000${nonce}\u0000${issuedAt}\u0000${ttl}`)
+    .digest("base64url");
+
+const cookieOf = (c: { header(k: string): string }): string | undefined =>
+  c.header("cookie").match(/session=([^;]+)/)?.[1];
+
 describe("csrfToken service", () => {
   it("round-trips issue → verify on the active backend", () => {
     const service = csrfToken({ secret: "s3cret" });
@@ -99,10 +107,6 @@ describe("csrfToken service", () => {
   });
 
   it.skipIf(REAL_BUN)("fallback: every signed field is tamper-evident", () => {
-    const sign = (nonce: string, issuedAt: string, ttl: string): string =>
-      createHmac("sha256", "fallback-secret")
-        .update(`csrf1\u0000\u0000${nonce}\u0000${issuedAt}\u0000${ttl}`)
-        .digest("base64url");
     const forge = (nonce: string, issuedAt: string, ttl: string): string =>
       `t1.${nonce}.${issuedAt}.${ttl}.${sign(nonce, issuedAt, ttl)}`;
 
@@ -218,8 +222,6 @@ describe("csrfTokenGuard middleware", () => {
   });
 
   it("sessionId resolver binds the token to the request's session", async () => {
-    const cookieOf = (c: { header(k: string): string }): string | undefined =>
-      c.header("cookie").match(/session=([^;]+)/)?.[1];
     const { app, service } = guardedApp(cookieOf);
     const good = req("/act", {
       method: "POST",

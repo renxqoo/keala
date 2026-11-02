@@ -29,17 +29,12 @@ type CaseName =
   | "query"
   | "text-dirty"
   | "text-dirty-correct"
-  | "text-dirty-fallback"
   | "error"
   | "error-mw";
 const pass = (_c: Context, next: () => Promise<void>) => next();
 const asyncPass = async (_c: Context, next: () => Promise<void>): Promise<void> => {
   await next();
 };
-// Kept local so the same harness can run against the R3 worktree, where the
-// capability constant does not exist and this unused bit is harmless.
-const FORCE_IMMUTABLE_HEADERS = 1 << 13;
-
 const framework = process.argv[2] as Framework;
 const caseName = process.argv[3] as CaseName;
 if (!(["keala", "hono"] as const).includes(framework)) {
@@ -63,7 +58,6 @@ if (
       "query",
       "text-dirty",
       "text-dirty-correct",
-      "text-dirty-fallback",
       "error",
       "error-mw",
     ] as const
@@ -130,16 +124,9 @@ if (framework === "keala") {
       return c.text(`${c.params("id")} ${c.query("name")} ${c.query("page")}`);
     });
   } else {
-    if (
-      caseName === "text-dirty" ||
-      caseName === "text-dirty-correct" ||
-      caseName === "text-dirty-fallback"
-    ) {
+    if (caseName === "text-dirty" || caseName === "text-dirty-correct") {
       app.use(async (c, next) => {
         await next();
-        // R4's immutable-capability flag. R3 ignores this unused bit and
-        // naturally rebuilds, giving the fallback path an equal harness.
-        if (caseName === "text-dirty-fallback") c.flags |= FORCE_IMMUTABLE_HEADERS;
         c.setHeader("x-late", "1");
       });
     }
@@ -211,11 +198,7 @@ if (framework === "keala") {
       return c.text(`${id} ${name} ${page}`);
     });
   } else {
-    if (
-      caseName === "text-dirty" ||
-      caseName === "text-dirty-correct" ||
-      caseName === "text-dirty-fallback"
-    ) {
+    if (caseName === "text-dirty" || caseName === "text-dirty-correct") {
       app.use("*", async (c, next) => {
         await next();
         c.header("x-late", "1");
@@ -225,7 +208,7 @@ if (framework === "keala") {
       // Hono's bare dirty response is incorrect on Bun 1.4. This variant
       // pays Hono's public-API cost to produce the same text/plain contract
       // keala now restores internally.
-      if (caseName === "text-dirty-correct" || caseName === "text-dirty-fallback") {
+      if (caseName === "text-dirty-correct") {
         c.header("content-type", "text/plain; charset=utf-8");
       }
       return c.text("hello");
@@ -294,7 +277,7 @@ const runOne = async (index: number): Promise<void> => {
     throw new Error("late header missing");
   }
   if (
-    (caseName === "text-dirty-correct" || caseName === "text-dirty-fallback") &&
+    caseName === "text-dirty-correct" &&
     !/^text\/plain(?:;|$)/i.test(response.headers.get("content-type") ?? "")
   ) {
     throw new Error("incorrect text content-type");

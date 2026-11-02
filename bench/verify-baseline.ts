@@ -80,7 +80,7 @@ for (let round = 0; round < BATCHES; round++) {
   }
 }
 for (const suite of suites) {
-  const sorted = (times.get(suite.name) as number[]).sort((a, b) => a - b);
+  const sorted = (times.get(suite.name) as number[]).toSorted((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)] as number;
   const best = sorted[0] as number;
   const nsPerReq = (median / SUB) * 1e6;

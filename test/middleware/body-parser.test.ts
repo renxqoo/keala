@@ -7,11 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { bodyOf, createBodyParser, readBodyLimited } from "../../src/plugins/body-parser.ts";
-import {
-  validator,
-  type ContextWithValid,
-  type StandardSchema,
-} from "../../src/middleware/validator.ts";
+import { validator, validOf, type StandardSchema } from "../../src/middleware/validator.ts";
 import type { RouteHandler } from "../../src/router/router.ts";
 
 const quiet = { env: "test" } as const;
@@ -28,6 +24,16 @@ const post = (
 
 const jsonBody = (value: unknown, headers: Record<string, string> = {}): Request =>
   post(JSON.stringify(value), { "content-type": "application/json", ...headers });
+
+const schemaOk = (valid: boolean): StandardSchema => ({
+  "~standard": {
+    version: 1,
+    validate: (value: unknown) =>
+      valid
+        ? { value: { doubled: (value as { n: number }).n * 2 } }
+        : { issues: [{ message: "n must be a number", path: ["n"] }] },
+  },
+});
 
 describe("bodyParser: readers", () => {
   it("upgrades an existing raw memo to the stricter facade budget", async () => {
@@ -189,16 +195,6 @@ describe("bodyParser: limits and malformed input", () => {
 });
 
 describe("validator", () => {
-  const schemaOk = (valid: boolean): StandardSchema => ({
-    "~standard": {
-      version: 1,
-      validate: (value: unknown) =>
-        valid
-          ? { value: { doubled: (value as { n: number }).n * 2 } }
-          : { issues: [{ message: "n must be a number", path: ["n"] }] },
-    },
-  });
-
   it("rejects non Standard Schema inputs at construction", () => {
     expect(() => validator({} as StandardSchema)).toThrow(/Standard Schema/);
   });
@@ -210,9 +206,8 @@ describe("validator", () => {
       ran.push("next");
       await next();
     };
-    app.post("/x", mw, validator(schemaOk(true)), (c0) => {
-      const c = c0 as ContextWithValid;
-      return c.text(JSON.stringify(c.valid));
+    app.post("/x", mw, validator(schemaOk(true)), (c) => {
+      return c.text(JSON.stringify(validOf(c)));
     });
     const res = await app.handle(jsonBody({ n: 21 }));
     expect(await res.text()).toBe('{"doubled":42}');
@@ -240,9 +235,8 @@ describe("validator", () => {
         validate: (value) => ({ value }),
       },
     };
-    app.post("/x", validator(echoNull), (c0) => {
-      const c = c0 as ContextWithValid;
-      return c.text(JSON.stringify(c.valid));
+    app.post("/x", validator(echoNull), (c) => {
+      return c.text(JSON.stringify(validOf(c)));
     });
     const empty = await app.handle(post(""));
     expect(await empty.text()).toBe("null");

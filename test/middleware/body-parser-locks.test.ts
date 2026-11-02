@@ -7,11 +7,16 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { createBodyParser } from "../../src/plugins/body-parser.ts";
-import { validator, type ContextWithValid } from "../../src/middleware/validator.ts";
-import type { Context } from "../../src/core/context/context.ts";
+import { validator } from "../../src/middleware/validator.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: InstanceType<typeof Keala>, req: Request) => app.handle(req);
+
+type ValidateResult = { value?: unknown } | { issues: unknown[] };
+
+const schemaOf = (validate: (value: unknown) => ValidateResult | Promise<ValidateResult>) => ({
+  "~standard": { version: 1 as const, validate },
+});
 
 describe("bodyParser locks correct behavior", () => {
   it("a second reader with a SMALLER limit 413s even on cached bytes", async () => {
@@ -271,11 +276,6 @@ describe("bodyParser locks correct behavior", () => {
 // ---------------------------------------------------------------------------
 
 describe("validator locks correct behavior", () => {
-  type ValidateResult = { value?: unknown } | { issues: unknown[] };
-  const schemaOf = (validate: (value: unknown) => ValidateResult | Promise<ValidateResult>) => ({
-    "~standard": { version: 1 as const, validate },
-  });
-
   it("an empty body validates null (bytes.length === 0 → parsed = null)", async () => {
     let seen: unknown = "unset";
     const app = new Keala(quiet);
@@ -390,10 +390,12 @@ describe("validator locks correct behavior", () => {
   it("c.valid installs once per app and stays app-isolated", async () => {
     const app1 = new Keala(quiet);
     const app2 = new Keala(quiet);
-    // c.valid is a decorated getter (installed by validator at request time).
-    const validOf = (c: Context) => String((c as ContextWithValid).valid);
-    app1.post("/", validator(schemaOf(() => ({ value: "one" }))), (c) => c.text(validOf(c)));
-    app2.post("/", validator(schemaOf(() => ({ value: "two" }))), (c) => c.text(validOf(c)));
+    app1.post("/", validator(schemaOf(() => ({ value: "one" }))), (c) =>
+      c.text(String(Reflect.get(c, "valid"))),
+    );
+    app2.post("/", validator(schemaOf(() => ({ value: "two" }))), (c) =>
+      c.text(String(Reflect.get(c, "valid"))),
+    );
     const one = await drive(app1, new Request("http://x/", { method: "POST", body: "{}" }));
     const two = await drive(app2, new Request("http://x/", { method: "POST", body: "{}" }));
     expect([await one.text(), await two.text()]).toEqual(["one", "two"]);

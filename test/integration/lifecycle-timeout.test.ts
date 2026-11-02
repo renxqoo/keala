@@ -250,13 +250,12 @@ describe("R4.6 raceDeadline containment (unit)", () => {
     const { Keala: KealaApp } = await import("../../src/core/app.ts");
     const { createLifecycle } = await import("../../src/core/lifecycle.ts");
     const { raceDeadline } = await import("../../src/core/lifecycle-deadline.ts");
-    const { baseContextProto, createBoundContext } =
-      await import("../../src/core/context/context.ts");
+    const { baseContextProto, createContext } = await import("../../src/core/context/context.ts");
     const app = new KealaApp({ env: "test" });
     const lc = createLifecycle(undefined);
     lc.inFlight = 1;
     const freshContext = () =>
-      createBoundContext(baseContextProto, new Request("http://x/"), undefined);
+      createContext(app, baseContextProto, new Request("http://x/"), undefined);
     const rejecting = Promise.reject(new Error("impossible by contract"));
     const settled = await raceDeadline(app, lc, freshContext(), rejecting, 30);
     expect(settled.status).toBe(504); // the deadline wins; the rejection is contained

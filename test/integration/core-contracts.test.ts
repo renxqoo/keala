@@ -149,7 +149,6 @@ describe("R4.5 internal lifecycle contracts", () => {
   });
 
   it("keeps an empty pool observable and builds a write-only dead prototype", () => {
-    const app = new Keala({ env: "test" });
     const live = Object.create(null) as object;
     const dead = deadProtoFor(live) as { status: number };
     expect(dead.status).toBeUndefined();
@@ -157,7 +156,7 @@ describe("R4.5 internal lifecycle contracts", () => {
       dead.status = 200;
     }).toThrow("context retired");
 
-    const pool = createPool(app, live);
+    const pool = createPool(live);
     expect(pool.size).toBe(0);
     expect(pool.acquire()).toBeUndefined();
     const context = Object.create(live);

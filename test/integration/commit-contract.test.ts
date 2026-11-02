@@ -188,10 +188,10 @@ describe("0.7: the context surface is the §8 quick reference", () => {
       "params",
       "throw",
       "assert",
-    ].sort();
+    ].toSorted();
     const surface = Object.getOwnPropertyNames(baseContextProto)
       .filter((key) => !internal.has(key))
-      .sort();
+      .toSorted();
     expect(surface).toEqual(expected);
   });
 });

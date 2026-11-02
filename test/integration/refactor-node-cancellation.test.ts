@@ -59,7 +59,10 @@ describe("Node body and response cancellation boundaries", () => {
       });
       expect(wire).toContain("504");
       expect(wire.toLowerCase()).toContain("connection: close");
-      for (let i = 0; i < 20 && !finished; i++) await delay(1);
+      for (let i = 0; i < 20; i++) {
+        if (finished) break;
+        await delay(1);
+      }
       expect(finished).toBe(true);
     });
   }

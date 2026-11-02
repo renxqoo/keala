@@ -39,9 +39,7 @@
  * allocation it saves. release() early-exits a full pool before swapping.
  */
 
-import type { Application } from "../app.ts";
 import type { Context } from "./context.ts";
-import { resetContext } from "./context.ts";
 import { drainBranches } from "../branches.ts";
 import { repumpResponse } from "../../utils/streams.ts";
 
@@ -106,11 +104,7 @@ export interface ContextPool {
   readonly size: number;
 }
 
-export const createPool = (app: Application, liveProto: object): ContextPool => {
-  // DEAD-12: `app` stays in the exported signature for future cross-app
-  // assertions; pooling is per-app by construction (each app builds its own
-  // pool). Reference it so the parameter is not dead weight.
-  void app;
+export const createPool = (liveProto: object): ContextPool => {
   const pool: Context[] = [];
   const deadProto: object = deadProtoFor(liveProto);
   return {
@@ -200,5 +194,3 @@ export const retireWithBody = (pool: ContextPool, c: Context, value: Response): 
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
 };
-
-export { resetContext };
