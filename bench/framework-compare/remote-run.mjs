@@ -10,7 +10,7 @@ import { cpuDelta } from "../load-metrics.ts";
 import { HELLO, ROUTES, EXTRA_CHECKS } from "./scenarios.mjs";
 import { summarize, renderRemoteReport } from "./report.mjs";
 import { remoteMatrix, balancedOrder, setOwnCpuPeriod, beforeMetadata } from "./remote-matrix.ts";
-import { verifyArtifacts, dependencyVersions, verifyKernelReady } from "./remote-artifacts.mjs";
+import { verifyArtifacts, dependencyVersions } from "./remote-artifacts.mjs";
 
 assert.equal(process.platform, "linux");
 assert.equal(process.versions.bun, undefined);
@@ -80,7 +80,7 @@ for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => abort.abort(new
 const owned = new Set();
 const instances = new Set();
 const manifest = JSON.parse(await read(join(root, "manifest.json")));
-await verifyArtifacts(root, manifest, process.env, process.versions);
+await verifyArtifacts(manifest, process.env);
 const runtimes = (process.env.BENCH_RUNTIMES ?? "node,bun").split(",");
 assert(
   runtimes.length > 0 &&
@@ -90,8 +90,6 @@ assert(
 const { stacks, scenarios } = remoteMatrix({
   runtimes,
   before: Boolean(process.env.BENCH_BEFORE),
-  kernel: Boolean(manifest.kernel),
-  nativeText: Boolean(manifest.nativeText),
   pilot,
   helloOnly,
   env: process.env,
@@ -118,7 +116,6 @@ const data = {
     node: process.versions.node,
     bun: bunVersion,
     ...(await dependencyVersions(root)),
-    uws: manifest.nativeText?.version,
   },
   source: {
     commit: manifest.commit,
@@ -128,8 +125,6 @@ const data = {
     sourceSha256: manifest.sourceSha256,
     harnessSha256: manifest.harnessSha256,
     nativeClient: manifest.nativeClient,
-    kernel: manifest.kernel,
-    nativeText: manifest.nativeText,
     ...beforeMetadata(manifest, process.env.BENCH_BEFORE, root),
   },
   limits,
@@ -260,7 +255,6 @@ const start = async (stack, suite) => {
     assert.equal(allowed, config.serverCpu, "server CPU affinity differs");
   }
   assert.equal(ready.framework, stack.framework);
-  verifyKernelReady(stack.framework, ready, root);
   if (stack.framework.startsWith("keala"))
     assert.equal(
       ready.kealaEntry,
@@ -269,9 +263,6 @@ const start = async (stack, suite) => {
       ).href,
     );
   instance.kealaEntry = ready.kealaEntry;
-  instance.kernelEntry = ready.kernelEntry;
-  instance.transport = ready.transport;
-  instance.routerStrategy = ready.routerStrategy;
   assert.equal(ready.suite, suite);
   assert.equal(ready.runtime, stack.runtime);
   assert.equal(ready.version, data.versions[stack.runtime]);
@@ -372,9 +363,6 @@ const sample = async (stack, scenario, round, order) => {
       stack: stack.id,
       actualCpuMax,
       kealaEntry: instance.kealaEntry,
-      kernelEntry: instance.kernelEntry,
-      transport: instance.transport,
-      routerStrategy: instance.routerStrategy,
       scenario: scenario.id,
       round,
       order,

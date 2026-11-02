@@ -72,27 +72,6 @@ if (nativeClient) {
   await mkdir(join(output, "runtime"), { recursive: true });
   await cp(resolve(nativeClient), join(output, "runtime/native-client"));
 }
-const kernelDist = process.env.BENCH_KERNEL_DIST;
-if (kernelDist) await cp(resolve(kernelDist), join(output, "kernel"), { recursive: true });
-const nativeTextDir = process.env.BENCH_NATIVE_TEXT_DIR;
-if (nativeTextDir) {
-  assert(kernelDist, "native text probe requires a compiled Kernel");
-  await cp(
-    join(root, "bench/framework-compare/native-text.mjs"),
-    join(output, "bench/framework-compare/native-text.mjs"),
-  );
-  await mkdir(join(output, "native-uws"));
-  for (const file of [
-    "package.json",
-    "LICENSE",
-    "uws.js",
-    "ESM_wrapper.mjs",
-    "index.d.ts",
-    "uws_linux_x64_147.node",
-    "provenance.json",
-  ])
-    await cp(join(resolve(nativeTextDir), file), join(output, "native-uws", file));
-}
 const treeHash = async (directory, hash = createHash("sha256"), prefix = "") => {
   for (const entry of (await readdir(directory, { withFileTypes: true })).toSorted((a, b) =>
     a.name.localeCompare(b.name),
@@ -117,29 +96,6 @@ const manifest = {
   harnessSha256: (await treeHash(join(output, "bench"))).digest("hex"),
   dependencies: Object.fromEntries([...copied].map(([name, value]) => [name, value.version])),
 };
-if (nativeTextDir) {
-  const pkg = JSON.parse(await readFile(join(output, "native-uws/package.json"), "utf8"));
-  assert.equal(pkg.version, "20.67.0");
-  manifest.nativeText = {
-    version: pkg.version,
-    nodeAbi: "147",
-    target: "linux-x64",
-    api: "synchronous text engine probe; no Fetch/middleware/async or graceful drain",
-    binary: "native-uws/uws_linux_x64_147.node",
-    binarySha256: createHash("sha256")
-      .update(await readFile(join(output, "native-uws/uws_linux_x64_147.node")))
-      .digest("hex"),
-    packageSha256: (await treeHash(join(output, "native-uws"))).digest("hex"),
-  };
-}
-if (kernelDist)
-  manifest.kernel = {
-    sourceSha256: (await treeHash(join(root, "experimental/kernel"))).digest("hex"),
-    distSha256: (await treeHash(join(output, "kernel"))).digest("hex"),
-    api: "experimental-kernel-explicit-text-capability",
-    routerCandidates: ["trie", "regexp"],
-    extensions: "no Context; no srvx Request runtime/ip/waitUntil extensions",
-  };
 if (nativeClient) {
   manifest.nativeClient = {
     binarySha256: createHash("sha256")

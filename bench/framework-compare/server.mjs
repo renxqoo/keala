@@ -1,15 +1,13 @@
 // Each process imports only its selected framework. Keala uses freshly built JS,
 // so Node's TypeScript loader is outside the measured server and memory footprint.
-import { pathToFileURL, fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 const [framework, suite] = process.argv.slice(2);
 if (
-  !["kernel", "kernel-regexp", "kernel-uws", "keala", "keala-before", "hono", "h3"].includes(
-    framework,
-  ) ||
+  !["keala", "keala-before", "hono", "h3"].includes(framework) ||
   !["hello", "routes"].includes(suite)
 ) {
-  throw new Error("usage: node|bun server.mjs keala|hono|h3 hello|routes");
+  throw new Error("usage: node|bun server.mjs keala|keala-before|hono|h3 hello|routes");
 }
 if (process.env.NODE_ENV !== "production") throw new Error("NODE_ENV must be production");
 
@@ -17,46 +15,8 @@ const isBun = process.versions.bun !== undefined;
 const options = { port: 0, hostname: "127.0.0.1" };
 let port;
 let kealaEntry;
-let kernelEntry;
-let transport;
-let routerStrategy;
 
-if (framework.startsWith("kernel")) {
-  kernelEntry = new URL("../../kernel/kernel.js", import.meta.url).href;
-  const { Kernel } = await import(kernelEntry);
-  routerStrategy = framework === "kernel-regexp" ? "regexp" : "trie";
-  const app = new Kernel({ router: routerStrategy });
-  if (suite === "hello") app.text("GET", "/", () => "Hello World");
-  else {
-    app.text("GET", "/user", () => "user");
-    app.text("GET", "/user/comments", () => "user/comments");
-    app.text("GET", "/user/avatar", () => "user/avatar");
-    app.text("GET", "/user/lookup/username/:username", (p) => p.username);
-    app.text("GET", "/user/lookup/email/:address", (p) => p.address);
-    app.text("GET", "/event/:id", (p) => p.id);
-    app.text("GET", "/event/:id/comments", (p) => p.id);
-    app.text("POST", "/event/:id/comment", (p) => `${p.id} comment`);
-    app.text("GET", "/map/:location/events", (p) => p.location);
-    app.text("GET", "/status", () => "status");
-    app.text("GET", "/very/deeply/nested/route/hello/there", () => "hello there");
-    app.text("GET", "/static/*", (p) => p.wildcard);
-  }
-  if (framework === "kernel-uws") {
-    if (isBun) throw new Error("native text probe requires Node");
-    const { createRequire } = await import("node:module");
-    const uws = createRequire(import.meta.url)(
-      fileURLToPath(new URL("../../native-uws/uws.js", import.meta.url)),
-    );
-    const { listenNativeText } = await import("./native-text.mjs");
-    port = (await listenNativeText(app.build(), uws, options)).port;
-    transport = "uWebSockets.js-sync-text-probe";
-  } else {
-    const adapter = await import(isBun ? "../../kernel/bun.js" : "../../kernel/node.js");
-    const handle = await adapter[isBun ? "listenBun" : "listenNode"](app, options);
-    port = handle.port;
-    transport = isBun ? "Bun.serve" : "node:http";
-  }
-} else if (framework === "keala" || framework === "keala-before") {
+if (framework === "keala" || framework === "keala-before") {
   const kealaRoot = framework === "keala-before" ? process.env.BENCH_BEFORE : undefined;
   if (framework === "keala-before" && !kealaRoot) throw new Error("BENCH_BEFORE is required");
   kealaEntry = kealaRoot
@@ -145,9 +105,6 @@ if (framework.startsWith("kernel")) {
 const identity = {
   kind: "ready",
   kealaEntry,
-  kernelEntry,
-  transport,
-  routerStrategy,
   framework,
   suite,
   port,

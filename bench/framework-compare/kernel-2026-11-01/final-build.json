@@ -1,7 +1,0 @@
-{
-  "measuredKernelSourceSha256": "3b5ec7b8d5ec96d8269acb5002dbe607d274014a8f23283a2219fc8d59d19098",
-  "finalKernelSourceSha256": "9740fd7402efb6d19b1f767a577d3d50a1671c1f4fbe47e4defa78569781fb9b",
-  "finalKernelDistSha256": "9d6307fa533e61ebd2921baff4f4187bec50ab977eb1c642f4125b545580c492",
-  "unchangedKealaSourceSha256": "33f23a18be16853fdaa06371aee662a1138723e229b0e9fac06d02c0b82b2067",
-  "difference": "Move the capture-free error-response fallback helper to module scope; successful measured request path unchanged. Full diff retained."
-}

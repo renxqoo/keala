@@ -7,67 +7,6 @@ import {
 } from "../../bench/framework-compare/remote-matrix.ts";
 
 describe("remote diagnostic matrix controls", () => {
-  it("selects both Kernel router strategies on either runtime", () => {
-    const result = remoteMatrix({
-      runtimes: ["node", "bun"],
-      before: false,
-      pilot: false,
-      helloOnly: true,
-      kernel: true,
-      env: { BENCH_FRAMEWORKS: "kernel-regexp,kernel" },
-    });
-    expect(result.stacks.map((s) => s.id)).toEqual([
-      "kernel-regexp-node",
-      "kernel-node",
-      "kernel-regexp-bun",
-      "kernel-bun",
-    ]);
-  });
-  it("keeps the native text probe on Node and requires explicit packaging", () => {
-    const base = {
-      runtimes: ["node", "bun"],
-      before: false,
-      pilot: false,
-      helloOnly: true,
-      kernel: true,
-      env: { BENCH_FRAMEWORKS: "kernel-uws,kernel" },
-    };
-    expect(() => remoteMatrix(base)).toThrow();
-    expect(remoteMatrix({ ...base, nativeText: true }).stacks.map((s) => s.id)).toEqual([
-      "kernel-uws-node",
-      "kernel-node",
-      "kernel-bun",
-    ]);
-    expect(() =>
-      remoteMatrix({
-        ...base,
-        nativeText: true,
-        runtimes: ["bun"],
-        env: { BENCH_FRAMEWORKS: "kernel-uws" },
-      }),
-    ).toThrow();
-  });
-  it("requires an explicitly packaged kernel to select the experimental entry", () => {
-    const base = {
-      runtimes: ["node", "bun"],
-      before: false,
-      pilot: false,
-      helloOnly: false,
-      env: { BENCH_FRAMEWORKS: "kernel,keala,hono,h3" },
-    };
-    expect(() => remoteMatrix(base)).toThrow();
-    const result = remoteMatrix({ ...base, kernel: true });
-    expect(result.stacks.map((s) => s.id)).toEqual([
-      "kernel-node",
-      "keala-node",
-      "hono-node",
-      "h3-node",
-      "kernel-bun",
-      "keala-bun",
-      "hono-bun",
-      "h3-bun",
-    ]);
-  });
   it("visits every position equally and reverses each adjacent pair", () => {
     const stacks = ["A", "B", "C", "D", "E", "F"];
     const positions = new Map(stacks.map((id) => [id, Array<number>(6).fill(0)]));
@@ -108,6 +47,7 @@ describe("remote diagnostic matrix controls", () => {
     for (const env of [
       { BENCH_SCENARIOS: "route-0" },
       { BENCH_FRAMEWORKS: "keala,keala" },
+      { BENCH_FRAMEWORKS: "unknown" },
       { BENCH_CPU_PERIODS_US: "0" },
     ])
       expect(() => remoteMatrix({ ...base, env })).toThrow();

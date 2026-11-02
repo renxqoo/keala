@@ -20,27 +20,16 @@ export const remoteMatrix = ({
   pilot,
   helloOnly,
   env,
-  kernel = false,
-  nativeText = false,
 }: {
   runtimes: string[];
   before: boolean;
   pilot: boolean;
   helloOnly: boolean;
   env: Record<string, string | undefined>;
-  kernel?: boolean;
-  nativeText?: boolean;
 }) => {
   const frameworks = selection(
     env.BENCH_FRAMEWORKS,
-    [
-      ...(before ? ["keala-before"] : []),
-      ...(nativeText ? ["kernel-uws"] : []),
-      ...(kernel ? ["kernel", "kernel-regexp"] : []),
-      "keala",
-      "hono",
-      "h3",
-    ],
+    [...(before ? ["keala-before"] : []), "keala", "hono", "h3"],
     "framework",
   );
   const periods = env.BENCH_CPU_PERIODS_US?.split(",").map(Number) ?? [undefined];
@@ -51,18 +40,16 @@ export const remoteMatrix = ({
       "invalid CPU period",
     );
   const stacks = runtimes.flatMap((runtime) =>
-    frameworks
-      .filter((framework) => runtime === "node" || framework !== "kernel-uws")
-      .flatMap((framework) =>
-        periods.map((cpuPeriodUs) => ({
-          id: `${framework}-${runtime}${cpuPeriodUs === undefined ? "" : `-cfs${cpuPeriodUs}us`}`,
-          framework,
-          runtime,
-          cpuPeriodUs,
-        })),
-      ),
+    frameworks.flatMap((framework) =>
+      periods.map((cpuPeriodUs) => ({
+        id: `${framework}-${runtime}${cpuPeriodUs === undefined ? "" : `-cfs${cpuPeriodUs}us`}`,
+        framework,
+        runtime,
+        cpuPeriodUs,
+      })),
+    ),
   );
-  assert(stacks.length > 0, "selected framework requires a different runtime");
+  assert(stacks.length > 0, "benchmark matrix must include at least one stack");
   const hello = HELLO[0];
   assert(hello, "Hello workload is required");
   const all = [

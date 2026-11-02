@@ -62,16 +62,6 @@ export const renderReport = (data) => {
     `- 主机一分钟负载（测量前后采样）范围：${Math.min(...data.samples.flatMap((s) => [s.hostLoadBefore[0], s.hostLoadAfter[0]])).toFixed(2)}–${Math.max(...data.samples.flatMap((s) => [s.hostLoadBefore[0], s.hostLoadAfter[0]])).toFixed(2)}；若接近或超过逻辑 CPU 数，需注意竞争负载与调度影响。`,
     `- 严格计时校验未通过的样本共 ${data.rejectedTimingSamples.length} 次，记录原因后重新预热、重新测量，单组合最多尝试 3 次。正文、状态、超时等失败不重试；有效的低吞吐样本不会被删除。`,
     `- Git HEAD：${data.source.commit}；构建产物 SHA-256：${data.source.distSha256}。工作区${data.source.dirty ? "包含未提交修改（清单见 results.json）" : "干净"}。`,
-    ...(data.source.kernel
-      ? [
-          `- kernel 是独立实验 API：显式 text 能力、启动时固定路由，无旧 Context/srvx Request 扩展；不代表旧 Keala API 等价替换或生产功能齐全。原型源码 SHA-256：${data.source.kernel.sourceSha256}；构建 SHA-256：${data.source.kernel.distSha256}。`,
-        ]
-      : []),
-    ...(data.source.nativeText
-      ? [
-          `- kernel-uws 只用于同步文本执行引擎对照：同一 Kernel 路由、处理器和参数读取，使用 uWebSockets.js ${data.versions.uws}。Fetch/中间件/异步结果返回 501，关闭仅 force；没有 node:http 原型的完整能力与异步 pipeline/grace 合同。不能把该列当作通用生产框架排名。`,
-        ]
-      : []),
     "",
     "## 汇总",
     "",

@@ -2,13 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-
-export const verifyKernelReady = (framework, ready, root) => {
-  if (!framework.startsWith("kernel")) return;
-  assert.equal(ready.kernelEntry, pathToFileURL(join(root, "kernel/kernel.js")).href);
-  assert.equal(ready.routerStrategy, framework === "kernel-regexp" ? "regexp" : "trie");
-};
 
 export const dependencyVersions = async (root) => {
   const paths = {
@@ -29,18 +22,7 @@ export const dependencyVersions = async (root) => {
   );
 };
 
-/** Validate packaged executables before spawning any benchmark processes. */
-export const verifyArtifacts = async (root, manifest, env, versions) => {
-  if (manifest.nativeText) {
-    assert.equal(manifest.nativeText.binary, "native-uws/uws_linux_x64_147.node");
-    assert.equal(versions.modules, manifest.nativeText.nodeAbi);
-    assert.equal(
-      createHash("sha256")
-        .update(await readFile(join(root, manifest.nativeText.binary)))
-        .digest("hex"),
-      manifest.nativeText.binarySha256,
-    );
-  }
+export const verifyArtifacts = async (manifest, env) => {
   if (env.BENCH_NATIVE_CLIENT) {
     assert.equal(
       createHash("sha256")
