@@ -2,18 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { basicAuth, bearerAuth, timingSafeEqual } from "../../src/middleware/auth.ts";
-import {
-  bunPasswordHasher,
-  hashPassword,
-  verifyPassword,
-  type PasswordHasher,
-} from "../../src/helpers/password.ts";
+import { hashPassword, verifyPassword, type PasswordHasher } from "../../src/helpers/password.ts";
 import type { RouteHandler } from "../../src/router/router.ts";
-/**
- * auth component tests: basic/bearer middleware (happy + every malformed
- * shape) and password hashing round-trips on both runtimes (Bun.password
- * natively, node:crypto scrypt as the fallback).
- */
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
@@ -182,27 +172,6 @@ describe("password hashing (runtime-adaptive)", () => {
   it("produces the portable pbkdf2 format on every runtime", async () => {
     const hash = await hashPassword("pw");
     expect(hash.startsWith("pbkdf2$")).toBe(true);
-  });
-
-  it("bunPasswordHasher() is an explicit opt-in with loud failure modes", async () => {
-    if (typeof Bun === "undefined") {
-      expect(() => bunPasswordHasher()).toThrow(/Bun runtime/);
-      return;
-    }
-    if (typeof Bun.password !== "object") {
-      expect(() => bunPasswordHasher()).toThrow(/Bun\.password/);
-      return;
-    }
-    const hasher = bunPasswordHasher();
-    const hash = await hashPassword("pw", hasher);
-    // Where Bun.password works it round-trips; where the native verify is
-    // broken (Bun 1.4.0 on some platforms) it throws Bun's own descriptive
-    // error — never a silent false.
-    try {
-      expect(await verifyPassword(hash, "pw", hasher)).toBe(true);
-    } catch (error) {
-      expect((error as Error).message).toMatch(/Password verification failed/);
-    }
   });
 
   it("pbkdf2 hashes reject iteration-count tampering and bounds violations", async () => {

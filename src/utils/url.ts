@@ -46,20 +46,6 @@ export const toURL = (absolute: string): URL | null => {
   }
 };
 
-/** Parse "host[:port]" honoring bracketed IPv6 literals. */
-export const parseHostHeader = (host: string): { hostname: string; port: string } => {
-  if (host.length === 0) return { hostname: "", port: "" };
-  if (host.charCodeAt(0) === 91 /* "[" */) {
-    const close = host.indexOf("]");
-    if (close === -1) return { hostname: host, port: "" };
-    const port = host.slice(close + 2); // skip "]:"
-    return { hostname: host.slice(1, close), port };
-  }
-  const colon = host.lastIndexOf(":");
-  if (colon === -1) return { hostname: host, port: "" };
-  return { hostname: host.slice(0, colon), port: host.slice(colon + 1) };
-};
-
 /**
  * Koa's `encodeurl`, UTF-8 correct: percent-encode characters unsafe in a
  * Location header (non-ASCII, controls, space, `"`, `<`, `>`, `` ` ``,

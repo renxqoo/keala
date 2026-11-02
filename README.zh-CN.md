@@ -171,9 +171,6 @@ app.listen({ port: 3000 }); // 路由表在启动时内嵌
 app.sink("/ping", new Response("pong")); // 后续 sink → server.reload()
 app.reloadNativeRoutes(); // 或显式重建路由表
 
-// 密码：默认 WebCrypto PBKDF2-SHA-256（Bun/Node 之间可移植 ——
-// Bun 1.4.0 自带的 Bun.password.verify 和 node:crypto.scrypt
-// 在某些平台上是坏的）。bunPasswordHasher() 可显式选用 argon2id。
 const hash = await hashPassword(pw); // pbkdf2$600000$…
 await verifyPassword(hash, pw); // true/false，坏数据一律按失败处理
 
@@ -182,6 +179,10 @@ const tokens = csrfToken({ secret: process.env.CSRF_SECRET! });
 app.use(csrfTokenGuard({ service: tokens, sessionId: (c) => sessionCookie(c) }));
 app.get("/form", (c) => c.html(formWithHidden(tokens.issue(sessionCookie(c)))));
 ```
+
+密码哈希默认使用可在 Bun/Node 之间移植的 WebCrypto PBKDF2-SHA-256。
+显式传入 `bunPasswordHasher()` 可使用 Bun 原生 Argon2id；辅助函数的
+`verify(hash, password)` 接口会转换为 Bun 的 `verify(password, hash)` 顺序。
 
 `basicAuth`/`bearerAuth` 中间件负责解析与质询（RFC 7617/6750）；校验
 始终委托给你的 `verify` 回调。`serveStatic` 的响应体在 Bun 下是

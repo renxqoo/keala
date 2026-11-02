@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { getPath, getSearch, parseHostHeader } from "../../src/utils/url.ts";
-import { escapeHtml, validateHeaderName, validateHeaderValue } from "../../src/utils/text.ts";
+import { getPath, getSearch } from "../../src/utils/url.ts";
+import { validateHeaderName, validateHeaderValue } from "../../src/utils/text.ts";
 import { mimeFromExtension, normalizeType } from "../../src/utils/mime.ts";
 import { Keala, isHttpError } from "../../src/index.ts";
 import { normalizeError } from "../../src/http/errors.ts";
@@ -45,33 +45,7 @@ describe("getSearch", () => {
   });
 });
 
-describe("parseHostHeader", () => {
-  it("splits hostname and port", () => {
-    expect(parseHostHeader("example.com:8080")).toEqual({ hostname: "example.com", port: "8080" });
-    expect(parseHostHeader("example.com")).toEqual({ hostname: "example.com", port: "" });
-  });
-
-  it("handles IPv6 literals", () => {
-    expect(parseHostHeader("[::1]:3000")).toEqual({ hostname: "::1", port: "3000" });
-    expect(parseHostHeader("[2001:db8::1]")).toEqual({ hostname: "2001:db8::1", port: "" });
-  });
-
-  it("handles empty host", () => {
-    expect(parseHostHeader("")).toEqual({ hostname: "", port: "" });
-  });
-});
-
 describe("text utils", () => {
-  it("escapes HTML entities", () => {
-    expect(escapeHtml(`<a href="x">&'`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
-  });
-
-  it("passes non-ASCII and control bytes through untouched", () => {
-    // Re-homed from the retired koa differential fuzz (U1): only the five
-    // XML entities are escaped — everything else is verbatim.
-    expect(escapeHtml("é中\0\t ")).toBe("é中\0\t ");
-  });
-
   it("validates header names", () => {
     expect(() => validateHeaderName("good-header")).not.toThrow();
     expect(() => validateHeaderName("bad header")).toThrow(TypeError);
@@ -177,18 +151,10 @@ describe("coverage gaps", () => {
     expect(typeof wrapped.message).toBe("string");
   });
 
-  it("handles unclosed IPv6 host headers", () => {
-    expect(parseHostHeader("[::1")).toEqual({ hostname: "[::1", port: "" });
-  });
-
   it("handles scheme-less and fragment-first URLs", () => {
     expect(getPath("no-scheme/just-text")).toBe("no-scheme/just-text");
     expect(getSearch("/a#frag?not-query")).toBe("");
     expect(getSearch("")).toBe("");
-  });
-
-  it("escapes nothing when there is nothing to escape", () => {
-    expect(escapeHtml("plain text 123")).toBe("plain text 123");
   });
 
   it("ships a weak validator ETag verbatim (U3c: quoting is the caller's)", async () => {

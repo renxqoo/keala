@@ -37,10 +37,6 @@ export interface StreamWriter {
   onAbort(fn: () => void): void;
 }
 
-interface WriterInternal extends StreamWriter {
-  _aborts: (() => void)[];
-}
-
 /** Run one cleanup handler; a throwing one must never break the cancel path. */
 const runCleanup = (fn: () => void): void => {
   try {
@@ -51,7 +47,7 @@ const runCleanup = (fn: () => void): void => {
 };
 
 const makeStream = (
-  start: (writer: WriterInternal) => Promise<void> | void,
+  start: (writer: StreamWriter) => Promise<void> | void,
   headers: Record<string, string>,
   onError?: (error: unknown) => void,
 ): Response => {
@@ -62,8 +58,7 @@ const makeStream = (
   let cancelled = false;
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
   const encoder = new TextEncoder();
-  const writer: WriterInternal = {
-    _aborts: aborts,
+  const writer: StreamWriter = {
     write(chunk) {
       controllerRef?.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);
     },

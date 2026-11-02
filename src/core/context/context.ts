@@ -95,7 +95,7 @@ const contextApi: ThisType<Context> & {
     throw createError(status, message, props);
   },
   assert(test: unknown, status: number, message?: string, props?: HttpErrorProps): void {
-    if (!test) throw createError(status, message, props);
+    if (!test) this.throw(status, message, props);
   },
 };
 

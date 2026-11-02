@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### 生产代码审查与运行时分支收口
+
+- 支持范围保持 Bun 1.4+、Node 20.16+；删除范围外运行时的 API 形状探测、请求 ID 弱随机生成、ETag FNV 回退及 Request/Response `bytes()` 回退。Promise resolver 统一使用普通 Promise 构造，不按版本切换实现。
+- 删除没有生产调用的 Host 解析器、重复 HTML 转义实现、流 writer 的未读取字段，以及已移除状态式 API 的重定向和 URL 分支；HTML 转义行为测试使用根入口的公开实现。退休仅针对畸形 Bun API 的旧兼容用例，保留完整原生 API 下的默认哈希与桥接行为覆盖。
+- 修复失败断言的状态校验：`c.assert(false, status)` 与 `c.throw(status)` 走相同规则，100–399 整数状态抛出 `TypeError`。
+- 修复 Bun 密码校验的参数顺序：`PasswordHasher.verify(hash, password)` 由适配器转换为原生 `Bun.password.verify(password, hash)`；原生 fixture 和真实 Bun 回归同时验证正确密码成功、错误密码失败。PBKDF2 默认格式保持不变。
+- 兼容窗口在本次提交结束，不保留旧路径。删除条件为无生产调用或当前最低运行时已提供对应能力；观测依据为引用扫描、公开行为回归、双运行时测试和最低 Node 版本的编译产物检查。无持久化数据迁移，回滚使用整体撤销本次提交。
+
 ### 兼容窗口收口与资源清理
 
 - 删除 `ContextWithBody`、`ContextWithValid`、`QueryMap`、`QueryValue` 旧类型；正文与校验结果分别使用 `bodyOf(c)`、`validOf<T>(c)`，查询使用 `c.query(name)`、`c.queries(name)`。

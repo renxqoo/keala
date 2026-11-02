@@ -40,9 +40,7 @@ import { mimeFromExtension } from "../utils/mime.ts";
 // Bun.file bodies are zero-copy (sendfile) with automatic Content-Length and
 // Range handling; Node keeps the buffered readFile path.
 const bunFile =
-  typeof Bun !== "undefined" && typeof Bun.file === "function"
-    ? (path: string): Blob => Bun.file(path) as unknown as Blob
-    : null;
+  typeof Bun === "undefined" ? null : (path: string): Blob => Bun.file(path) as unknown as Blob;
 
 export interface ServeStaticOptions {
   /** Root directory; every resolved path must stay inside it. */

@@ -46,7 +46,7 @@ const nativeBunResponse = (value: Response | Promise<Response>): Response | Prom
   return typeof promise?.then === "function" ? promise.then(nativeBunResponse) : value;
 };
 const defaultServeImplementation = (): ServeImplementation | undefined =>
-  typeof Bun !== "undefined" && typeof Bun.serve === "function"
+  typeof Bun !== "undefined"
     ? (options) => {
         const fetch = options["fetch"] as (
           request: Request,

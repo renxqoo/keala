@@ -1,16 +1,3 @@
-/**
- * Password hashing utilities — the default is WebCrypto PBKDF2-SHA-256
- * (600k iterations, 16-byte salt, constant-time comparison) that works
- * identically under Bun and Node (Bun 1.4.0's `node:crypto.scrypt` rejects
- * with `undefined` and its `Bun.password.verify` throws
- * `UnsupportedAlgorithm` even for its own argon2id/bcrypt hashes on some
- * platforms; neither is defaultable). `bunPasswordHasher()` opts into
- * argon2id explicitly where it works.
- *
- * Called INSIDE handlers (login/signup routes) — helper layer, not
- * middleware; the request guards live in `middleware/auth.ts`.
- */
-
 import { nodeCrypto } from "../utils/node-lazy.ts";
 
 export interface PasswordHasher {
@@ -18,23 +5,15 @@ export interface PasswordHasher {
   verify(hash: string, password: string): Promise<boolean>;
 }
 
-/** Bun.password (argon2id/bcrypt) — explicit opt-in, see the module header. */
 export const bunPasswordHasher = (): PasswordHasher => {
   if (typeof Bun === "undefined") {
     throw new Error("bunPasswordHasher() requires the Bun runtime");
   }
-  const password = (Bun as { password?: unknown }).password;
-  if (typeof password !== "object" || password === null) {
-    throw new Error("bunPasswordHasher() requires Bun.password (Bun >= 1.1.14)");
-  }
-  const { hash, verify } = password as {
-    hash?: unknown;
-    verify?: unknown;
+  const native = Bun.password;
+  return {
+    hash: (password) => native.hash(password),
+    verify: (hash, password) => native.verify(password, hash),
   };
-  if (typeof hash !== "function" || typeof verify !== "function") {
-    throw new Error("bunPasswordHasher() found a malformed Bun.password shape");
-  }
-  return password as unknown as PasswordHasher;
 };
 
 /** PBKDF2 iteration count (OWASP 2023 guidance for PBKDF2-HMAC-SHA-256). */
@@ -113,9 +92,6 @@ export const verifyPassword = async (
   if (hasher !== undefined) return hasher.verify(hash, password);
   // Our own pbkdf2 format verifies everywhere and is the default output.
   if (hash.startsWith("pbkdf2$")) return pbkdf2PasswordHasher().verify(hash, password);
-  // PHC formats ($argon2…, $2b…) need an explicit hasher — Bun 1.4.0's
-  // native verify is unreliable (see module header), so defaulting to it
-  // would flip between working and throwing per platform. Refuse loudly.
   if (hash.startsWith("$")) {
     throw new Error(
       `verifyPassword() cannot verify ${hash.slice(0, 8)}… hashes by default — pass bunPasswordHasher() (or your own hasher) explicitly`,

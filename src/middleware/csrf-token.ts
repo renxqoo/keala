@@ -51,20 +51,6 @@ const sessionIdTag = (sessionId: string): string =>
 const macInput = (sessionId: string, nonce: string, issuedAt: string, ttl: string): string =>
   `csrf1\u0000${sessionIdTag(sessionId)}\u0000${nonce}\u0000${issuedAt}\u0000${ttl}`;
 
-interface NativeCsrf {
-  generate(secret: string, options?: Record<string, unknown>): string;
-  verify(token: string, options?: Record<string, unknown>): boolean;
-}
-
-const nativeCsrf = (): NativeCsrf | null => {
-  if (typeof Bun === "undefined") return null;
-  const csrf = (Bun as { CSRF?: unknown }).CSRF;
-  if (typeof csrf !== "object" || csrf === null) return null;
-  const { generate, verify } = csrf as { generate?: unknown; verify?: unknown };
-  if (typeof generate !== "function" || typeof verify !== "function") return null;
-  return csrf as unknown as NativeCsrf;
-};
-
 export const csrfToken = (options: CsrfTokenOptions): CsrfTokenService => {
   if (typeof options?.secret !== "string" || options.secret.length === 0) {
     throw new TypeError("csrfToken({ secret }) requires a non-empty secret");
@@ -81,7 +67,7 @@ export const csrfToken = (options: CsrfTokenOptions): CsrfTokenService => {
     throw new TypeError("csrfToken({ maxAge }) must be a positive number of ms");
   }
   const algorithm = options.algorithm ?? "sha256";
-  const native = nativeCsrf();
+  const native = typeof Bun === "undefined" ? null : Bun.CSRF;
 
   if (native !== null) {
     return {

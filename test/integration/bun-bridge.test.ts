@@ -64,21 +64,25 @@ describe.skipIf(REAL_BUN)("serve-static × Bun.file body", () => {
   });
 });
 
-describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
-  it("ignores a malformed Bun.password shape and uses the portable pbkdf2 default", async () => {
-    await withBun({ password: { hash: "not-a-function" } }, async () => {
-      const { hashPassword, verifyPassword } = await import("../../src/helpers/password.ts");
-      const hash = await hashPassword("pw");
-      expect(hash.startsWith("pbkdf2$")).toBe(true);
-      expect(await verifyPassword(hash, "pw")).toBe(true);
-    });
-    await withBun({ password: "string-not-object" }, async () => {
-      const { hashPassword } = await import("../../src/helpers/password.ts");
-      expect((await hashPassword("pw")).startsWith("pbkdf2$")).toBe(true);
-    });
+describe.skipIf(REAL_BUN)("auth × Bun.password", () => {
+  it("uses the portable PBKDF2 default when Bun.password is available", async () => {
+    await withBun(
+      {
+        password: {
+          hash: async (pw: string) => `native:${pw}`,
+          verify: async (pw: string, hash: string) => hash === `native:${pw}`,
+        },
+      },
+      async () => {
+        const { hashPassword, verifyPassword } = await import("../../src/helpers/password.ts");
+        const hash = await hashPassword("pw");
+        expect(hash.startsWith("pbkdf2$")).toBe(true);
+        expect(await verifyPassword(hash, "pw")).toBe(true);
+      },
+    );
   });
 
-  it("uses Bun.password when explicitly injected and well-formed", async () => {
+  it("does not reject matching passwords when Bun.password expects the password first", async () => {
     const hashes: string[] = [];
     await withBun(
       {
@@ -87,7 +91,7 @@ describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
             hashes.push(pw);
             return `stubbed:${pw}`;
           },
-          verify: async (hash: string, pw: string) => hash === `stubbed:${pw}`,
+          verify: async (pw: string, hash: string) => hash === `stubbed:${pw}`,
         },
       },
       async () => {
@@ -101,17 +105,6 @@ describe.skipIf(REAL_BUN)("auth × Bun.password detection", () => {
         expect(hashes).toEqual(["pw"]);
       },
     );
-  });
-
-  it("bunPasswordHasher() reports malformed Bun.password shapes loudly", async () => {
-    await withBun({ password: { hash: () => "x" } }, async () => {
-      const { bunPasswordHasher } = await import("../../src/helpers/password.ts");
-      expect(() => bunPasswordHasher()).toThrow(/malformed Bun\.password/);
-    });
-    await withBun({ password: "string-not-object" }, async () => {
-      const { bunPasswordHasher } = await import("../../src/helpers/password.ts");
-      expect(() => bunPasswordHasher()).toThrow(/requires Bun\.password/);
-    });
   });
 
   it("a failing WebCrypto derive makes verification fail closed, not throw", async () => {
@@ -206,15 +199,6 @@ describe.skipIf(REAL_BUN)("csrfToken × Bun.CSRF wrapping", () => {
         ]);
       },
     );
-  });
-
-  it("a malformed Bun.CSRF shape falls back to the HMAC implementation", async () => {
-    await withBun({ CSRF: { generate: () => "x" } }, async () => {
-      const { csrfToken } = await import("../../src/middleware/csrf-token.ts");
-      const service = csrfToken({ secret: "s" });
-      expect(service.verify(service.issue())).toBe(true);
-      expect(service.issue().startsWith("t1.")).toBe(true);
-    });
   });
 
   it("an unbound native issue passes no sessionId key at all", async () => {

@@ -8,15 +8,6 @@
 import { sourceHeader, sourceUrl } from "./request-source.ts";
 import type { RequestSource } from "./request-source.ts";
 
-/**
- * Lowercased Host authority without its port (bracketed IPv6 aware).
- *
- * Sibling of `parseHostHeader` (utils/url.ts) and `stripPort`
- * (core/context/request.ts): three shapes, three call sites. This one is
- * deliberately allocation-free (no {hostname, port} object) — it runs per
- * request when the host whitelist is on. Keep the bracket/colon handling in
- * sync when touching any of the three.
- */
 const stripHostPort = (host: string): string => {
   if (host.startsWith("[")) return host.slice(0, host.indexOf("]") + 1) || host;
   const colon = host.lastIndexOf(":");

@@ -1,19 +1,3 @@
-/**
- * Text helpers: HTML escaping for redirect fallback bodies and strict header
- * name/value validation that closes response-splitting (CRLF injection).
- */
-
-const HTML_ESCAPES: Readonly<Record<string, string>> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
-export const escapeHtml = (input: string): string =>
-  input.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch] ?? ch);
-
 export const hasCrlf = (value: string): boolean => {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);

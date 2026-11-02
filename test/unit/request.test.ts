@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala, createCookies } from "../../src/index.ts";
 import type { Context } from "../../src/core/context/context.ts";
-import { getPath, getSearch, parseHostHeader, toURL } from "../../src/utils/url.ts";
+import { getPath, getSearch, toURL } from "../../src/utils/url.ts";
 
 const probe = async (
   init: { url: string; method?: string; headers?: Record<string, string> },
@@ -274,10 +274,6 @@ const probeHeaders = async (
   return fn(captured as Context);
 };
 
-// ---------------------------------------------------------------------------
-// getPath / getSearch / parseHostHeader — locks correct behavior
-// ---------------------------------------------------------------------------
-
 describe("getPath/getSearch lock correct behavior", () => {
   it("authority-only URLs parse to root", () => {
     expect(getPath("http://x")).toBe("/");
@@ -305,16 +301,6 @@ describe("getPath/getSearch lock correct behavior", () => {
   it("toURL returns null for unparseable URLs", () => {
     expect(toURL("http://ex ample.com/")).toBe(null);
     expect(toURL("http://x/")).toBeInstanceOf(URL);
-  });
-
-  it("parseHostHeader handles ports, IPv6 brackets and garbage ports", () => {
-    expect(parseHostHeader("a.com:8080")).toEqual({ hostname: "a.com", port: "8080" });
-    expect(parseHostHeader("[::1]:3000")).toEqual({ hostname: "::1", port: "3000" });
-    expect(parseHostHeader("[::1]")).toEqual({ hostname: "::1", port: "" });
-    // A trailing dot is a distinct (valid) DNS name — kept verbatim (koa too).
-    expect(parseHostHeader("a.com.")).toEqual({ hostname: "a.com.", port: "" });
-    expect(parseHostHeader("")).toEqual({ hostname: "", port: "" });
-    expect(parseHostHeader("a.com:abc")).toEqual({ hostname: "a.com", port: "abc" });
   });
 });
 

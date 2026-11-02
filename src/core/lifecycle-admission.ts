@@ -186,7 +186,6 @@ const enqueueRequest = (
   transfer: () => void,
 ): Promise<Response | null> => {
   const waiter = lc.waiterPool.pop() ?? new WaiterSlot();
-  // withResolvers: the promise pair without an executor closure.
   const { promise, resolve } = promiseResolvers<Response | null>();
   waiter.arm(lc, source, resolve, timeoutMs, transfer);
   if (!waiter.isSettled) lc.queue.push(waiter);

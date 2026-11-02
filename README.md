@@ -187,9 +187,6 @@ app.listen({ port: 3000 }); // routes table embedded at boot
 app.sink("/ping", new Response("pong")); // later sink → server.reload()
 app.reloadNativeRoutes(); // or rebuild the table explicitly
 
-// Passwords: WebCrypto PBKDF2-SHA-256 default (portable across Bun/Node —
-// Bun 1.4.0's own Bun.password.verify and node:crypto.scrypt are broken on
-// some platforms). bunPasswordHasher() opts into argon2id explicitly.
 const hash = await hashPassword(pw); // pbkdf2$600000$…
 await verifyPassword(hash, pw); // true/false, fails closed on corrupt data
 
@@ -198,6 +195,10 @@ const tokens = csrfToken({ secret: process.env.CSRF_SECRET! });
 app.use(csrfTokenGuard({ service: tokens, sessionId: (c) => sessionCookie(c) }));
 app.get("/form", (c) => c.html(formWithHidden(tokens.issue(sessionCookie(c)))));
 ```
+
+Password hashing defaults to portable WebCrypto PBKDF2-SHA-256. Pass
+`bunPasswordHasher()` explicitly to use Bun's native Argon2id. The helper's
+`verify(hash, password)` interface adapts Bun's `verify(password, hash)` order.
 
 | `basicAuth` / `bearerAuth` middleware parse and challenge (RFC 7617/6750);
 verification always delegates to your `verify` callback. `serveStatic`

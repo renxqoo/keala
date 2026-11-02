@@ -83,10 +83,7 @@ class PlannedResponse {
   }
 
   bytes(): Promise<Uint8Array> {
-    const response = this.#materialize() as Response & { bytes?: () => Promise<Uint8Array> };
-    return typeof response.bytes === "function"
-      ? response.bytes()
-      : response.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+    return (this.#materialize() as Response & { bytes(): Promise<Uint8Array> }).bytes();
   }
 
   clone(): Response {

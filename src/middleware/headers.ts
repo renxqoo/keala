@@ -164,14 +164,6 @@ export const secureHeaders = (options: SecureHeadersOptions = {}): RouteHandler 
   };
 };
 
-const RANDOM_UUID =
-  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? (): string => crypto.randomUUID()
-    : (): string =>
-        `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random()
-          .toString(16)
-          .slice(2)}`;
-
 /**
  * Request correlation: honors an inbound id, generates otherwise, exposes it
  * on `c.state.requestId` and echoes it on the response — on the error path
@@ -180,7 +172,7 @@ const RANDOM_UUID =
 export const requestId = (): RouteHandler => {
   return async (c, next) => {
     const inbound = c.header("x-request-id");
-    const id = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,128}$/.test(inbound) ? inbound : RANDOM_UUID();
+    const id = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,128}$/.test(inbound) ? inbound : crypto.randomUUID();
     c.state.requestId = id;
     try {
       await next();

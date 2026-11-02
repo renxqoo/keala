@@ -279,9 +279,7 @@ export const requestApi: ThisType<ContextState & RequestApi> & RequestApi = {
     return `${this.protocol}://${this.host}`;
   },
   get href(): string {
-    // An absolute-form request target (proxy-style) echoes verbatim.
     const url = this.url;
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
     const host = this.host;
     return host.length === 0 ? url : `${this.protocol}://${host}${url}`;
   },
