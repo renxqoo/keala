@@ -42,7 +42,6 @@ export const etag = (): RouteHandler => {
     // use IT for the If-None-Match check instead of computing our own.
     const presetTag = committed.headers.get("etag");
     const tag = presetTag !== null ? presetTag : await tagOfResponse(committed);
-    if (tag === null) return;
     const noneMatch = c.header("if-none-match");
     if (noneMatch.length > 0 && etagMatches(tag, noneMatch)) {
       // 304 short-circuit: rebuilt CLEAN — no body, no content-describing
@@ -68,7 +67,7 @@ export const etag = (): RouteHandler => {
  * lane reads a CLONE — the committed body itself must stay unconsumed for
  * the wire. Byte bodies never reach here (the sugar surface is text/json).
  */
-const tagOfResponse = async (res: Response): Promise<string | null> => {
+const tagOfResponse = async (res: Response): Promise<string> => {
   const memo = serializedTextOf(res);
   if (memo !== undefined) return textTagOf(memo);
   const text = await res.clone().text();

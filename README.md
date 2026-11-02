@@ -265,6 +265,10 @@ if (
 | `bodyLimit` / `timeout`               | declared-length fast 413; wall-clock 504 with floating-promise containment                                                                                                                                                                                                                                                                                                                                                    |
 | `app.ws`                              | native `server.upgrade`; events dispatched per route with the request context                                                                                                                                                                                                                                                                                                                                                 |
 
+With `precompressed: true`, an explicit encoding refusal (`q=0`) overrides `*`.
+Among accepted encodings, Brotli is preferred; `x-gzip` selects gzip. Missing
+siblings fall back to the next accepted encoding, then the original file.
+
 ## The context: one flat object
 
 Every request allocates exactly one context. Request and response live on the

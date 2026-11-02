@@ -37,31 +37,14 @@ export const finalizeGuarded = (app: Application, c: Context): Response | Promis
   }
 };
 
-/**
- * The `app.handle` boundary (DOGFOOD-R1 C1): run the dispatcher, retire a
- * pooling context through its body-safe wrapper, and ALWAYS hand back a
- * Promise — the sync fast paths stay internal, the public contract settles
- * uniformly (a bare sync `Response` cost every consumer the
- * `Response | Promise<Response>` union). Never throws, never rejects: the
- * dispatcher's own guards already answer error Responses.
- */
-/**
- * Native adapters keep synchronous chains synchronous; public handle wraps once.
- * The optional `release` slot (R4.6) rides the SAME settle tail — during
- * drain a bodied response holds its in-flight slot until consumed, and a
- * deadline zombie (504 already answered, `c.deadlineAnswered`) releases
- * capacity without retiring into the pool: the live handler still holds
- * the context, so it goes to GC instead of the next request.
- */
 export const settleNativeHandle = (
   pool: ContextPool | null,
   pooling: boolean,
   c: Context,
   settled: Response | Promise<Response>,
-  release?: (value: Response) => Response,
+  release: (value: Response) => Response,
 ): Response | Promise<Response> => {
   if (!pooling) {
-    if (release === undefined) return settled;
     // Capacity release rides the callback (deadline-configured apps pass a
     // guarded settle — the zombie's late release dies THERE, at settle time).
     return settled instanceof Promise ? settled.then(release) : release(settled);
@@ -74,14 +57,6 @@ export const settleNativeHandle = (
   // A deadline zombie's late settle (checked at SETTLE time — the flag can
   // only flip after dispatch parked) skips retirement: the live handler
   // still holds the context, so it goes to GC instead of the next request.
-  if (release === undefined) {
-    if (settled instanceof Promise) {
-      return settled.then((value) =>
-        c.deadlineAnswered === true ? value : retireWithBody(pool, c, value),
-      );
-    }
-    return retireWithBody(pool, c, settled);
-  }
   if (settled instanceof Promise) {
     return settled.then((value) =>
       c.deadlineAnswered === true ? value : retireWithBody(pool, c, release(value)),

@@ -96,9 +96,9 @@ describe("R4.5 internal lifecycle contracts", () => {
       undefined,
     );
     expect(context.flags & FLAG_DEV_CHAIN).toBe(FLAG_DEV_CHAIN);
-    expect(() => settleNativeHandle(null, true, context, new Response(null))).toThrow(
-      "pooling dispatch requires a context pool",
-    );
+    expect(() =>
+      settleNativeHandle(null, true, context, new Response(null), (value) => value),
+    ).toThrow("pooling dispatch requires a context pool");
   });
 
   it("reuses one native materialization and rejects invalid router handlers", () => {

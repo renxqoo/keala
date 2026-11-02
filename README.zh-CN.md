@@ -248,6 +248,10 @@ if (
 | `bodyLimit` / `timeout`               | 带 Content-Length 的请求快速 413；墙钟 504 并收敛漂浮的 Promise                                                                                                                                                                                                                                                                                                   |
 | `app.ws`                              | 原生 `server.upgrade`；事件按路由分发，并携带请求 context                                                                                                                                                                                                                                                                                                         |
 
+启用 `precompressed: true` 时，显式编码拒绝（`q=0`）优先于 `*`。
+在可接受的编码中优先选择 Brotli，`x-gzip` 对应 gzip；兄弟文件缺失时，
+继续尝试下一个可接受的编码，最后回退到原文件。
+
 ## Context：一个扁平对象
 
 每个请求只分配一个 context。请求与响应在同一个对象上；一切惰性属性

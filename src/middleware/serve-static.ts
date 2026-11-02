@@ -36,6 +36,7 @@ import {
   resolveRelativeSegments,
 } from "../utils/path-safety.ts";
 import { mimeFromExtension } from "../utils/mime.ts";
+import { parsePreferenceEntries } from "../negotiation/accepts.ts";
 
 // Bun.file bodies are zero-copy (sendfile) with automatic Content-Length and
 // Range handling; Node keeps the buffered readFile path.
@@ -118,35 +119,19 @@ const stripPrefixOf = (rawPrefix: string | undefined): string | undefined => {
   return rawPrefix;
 };
 
-/**
- * Accept-Encoding candidates in preference order (brotli before gzip —
- * better ratio, hono parity). The q-parameter is stripped before the
- * token match; `*` accepts either.
- */
 const acceptedEncodings = (accept: string): { encoding: string; ext: string }[] => {
-  // q-aware: `gzip;q=0` is a REFUSAL (RFC 9110 §12.5.2 — q=0 = not
-  // acceptable), not a preference to be overridden by a later wildcard.
-  // The old token-only match served rejected encodings (and let a rejected
-  // br outrank an explicitly accepted gzip).
-  const out: { encoding: string; ext: string }[] = [];
-  let wildcard = false;
-  for (const raw of accept.split(",")) {
-    const token = raw.split(";")[0]?.trim() ?? "";
-    const qMatch = /;\s*q\s*=\s*([\d.]+)/.exec(raw);
-    if (qMatch !== null && Number.parseFloat(qMatch[1] ?? "1") === 0) {
-      continue; // q=0: refused — do not offer this encoding
-    }
-    if (token === "br" || token === "*") wildcard = token === "*";
-    if (token === "br") out.push({ encoding: "br", ext: ".br" });
-    if (token === "gzip" || token === "x-gzip") out.push({ encoding: "gzip", ext: ".gz" });
-  }
-  // `*` accepts everything not explicitly refused above.
-  if (wildcard) {
-    if (!out.some((e) => e.encoding === "br")) out.push({ encoding: "br", ext: ".br" });
-    if (!out.some((e) => e.encoding === "gzip")) out.push({ encoding: "gzip", ext: ".gz" });
-  }
-  // Deterministic preference order: br first (better compression).
-  return out.toSorted((a, b) => (a.encoding === "br" ? -1 : b.encoding === "br" ? 1 : 0));
+  const entries = parsePreferenceEntries(accept);
+  return [
+    { encoding: "br", ext: ".br" },
+    { encoding: "gzip", ext: ".gz" },
+  ].filter(({ encoding }) => {
+    const explicit = entries.filter(
+      ({ value }) => value === encoding || (encoding === "gzip" && value === "x-gzip"),
+    );
+    const applicable =
+      explicit.length > 0 ? explicit : entries.filter(({ value }) => value === "*");
+    return applicable.some(({ q }) => q > 0);
+  });
 };
 
 export const serveStatic = (options: ServeStaticOptions): RouteHandler => {

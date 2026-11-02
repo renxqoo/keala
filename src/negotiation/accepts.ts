@@ -69,9 +69,12 @@ export const parsePreferenceEntries = (header: string | null): Preference[] => {
     let params: string[] | null = null;
     for (let i = 1; i < segments.length; i++) {
       const param = (segments[i] ?? "").trim();
-      if (!weighted && (param.startsWith("q=") || param.startsWith("Q="))) {
+      const eq = param.indexOf("=");
+      if (eq === -1) continue;
+      const name = param.slice(0, eq).trim().toLowerCase();
+      if (!weighted && name === "q") {
         weighted = true;
-        const parsed = Number.parseFloat(param.slice(2));
+        const parsed = Number.parseFloat(param.slice(eq + 1));
         if (Number.isNaN(parsed)) {
           malformed = true;
           break;
@@ -79,10 +82,7 @@ export const parsePreferenceEntries = (header: string | null): Preference[] => {
         q = Math.min(Math.max(parsed, 0), 1);
         continue;
       }
-      if (weighted) continue; // accept-ext after the weight: metadata, not a media constraint
-      const eq = param.indexOf("=");
-      if (eq === -1) continue;
-      const name = param.slice(0, eq).trim().toLowerCase();
+      if (weighted) continue;
       if (name.length === 0) continue;
       (params ??= []).push(`${name}=${param.slice(eq + 1).trim()}`);
     }
