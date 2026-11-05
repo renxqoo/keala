@@ -1,35 +1,6 @@
-/**
- * webhook — HMAC-SHA256 signature verification for provider webhooks (N3).
- *
- * Four wire formats, one constant-time comparison at the bottom:
- * - stripe: `t=<unix-seconds>,v1=<mac>` — MAC over `<t>.<body>` (Stripe
- *   ships hex v1; base64 is accepted too), multiple `v1` entries rotate keys
- * - github: `sha256=<hex-mac>` — MAC over the raw body
- * - slack: `v0=<mac>` + `x-slack-request-timestamp` (the `v0=<ts>,<mac>`
- *   comma-embedded form is also accepted) — MAC over `v0:<ts>:<body>`
- * - raw: the configured header value IS the MAC (hex or base64)
- *
- * The three traps this exists to defuse:
- * 1. timing attacks — the received MAC is compared with `timingSafeEqual`
- *    (MAC vs MAC, never plaintext), imported from the auth tier
- * 2. replay attacks — stripe/slack timestamps must land inside the
- *    `tolerance` window (default 300s, future timestamps included);
- *    TODO(replay-cache): an optional seen-signature store would tighten the
- *    window to once-only delivery — the timestamp bound is the 0.x contract
- * 3. body consumption — the MAC runs over `c.raw.clone().text()`, so the
- *    original body stays readable for the downstream handler
- *
- * MOUNT ORDER: this middleware must be mounted BEFORE any body-consuming
- * middleware (bodyParser, a `c.raw.text()` reader, anything that drains the
- * request stream). `clone()` of an already-consumed body throws, and the
- * webhook answers 500 instead of verifying — the signature check can only
- * run on a still-unread stream.
- *
- * Statuses: missing/empty/malformed signature or a stale timestamp → 400
- * (the request is not verifiable), a well-formed signature that does not
- * verify → 401.
- */
-
+import { limitBodyStream } from "srvx/body-limit";
+import { createError } from "../http/errors.ts";
+import { readAllLimited } from "../utils/streams.ts";
 import { timingSafeEqual } from "./auth.ts";
 import type { RouteHandler } from "../router/router.ts";
 
@@ -47,11 +18,13 @@ export interface WebhookOptions {
    * Timestamp freshness window in seconds (stripe/slack only). Default 300.
    */
   tolerance?: number;
+  maxBodySize?: number;
 }
 
 /** An HMAC-SHA256 MAC is exactly 32 bytes — anything else is malformed. */
 const MAC_BYTES = 32;
 const DEFAULT_TOLERANCE = 300;
+const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
 /** Header-value cap: parsing an unbounded attacker-controlled string is a DoS. */
 const MAX_SIGNATURE_LENGTH = 512;
 const HEX_RE = /^[0-9a-f]+$/i;
@@ -60,6 +33,8 @@ const DIGITS_RE = /^[0-9]+$/;
 const SLACK_TIMESTAMP_HEADER = "x-slack-request-timestamp";
 
 const encoder = new TextEncoder();
+const bodyTooLarge = () =>
+  createError(413, "webhook body exceeds the byte limit", { expose: true });
 
 const hexBytes = (hex: string): Uint8Array => {
   const out = new Uint8Array(hex.length >> 1);
@@ -95,11 +70,10 @@ const epochSeconds = (value: string): number | null => {
   return Number(trimmed);
 };
 
-/** A parsed header: the MAC input (as a function of the body) and its timestamp. */
 interface ParsedSignature {
   signatures: string[];
   timestamp: string | null;
-  input: (body: string) => string;
+  prefix: string;
 }
 
 const parseStripe = (value: string): ParsedSignature | null => {
@@ -115,12 +89,12 @@ const parseStripe = (value: string): ParsedSignature | null => {
     // Unknown keys (future Stripe schemes) are ignored, not fatal.
   }
   if (timestamp === null || timestamp.length === 0 || signatures.length === 0) return null;
-  return { signatures, timestamp, input: (body) => `${timestamp}.${body}` };
+  return { signatures, timestamp, prefix: `${timestamp}.` };
 };
 
 const parseGithub = (value: string): ParsedSignature | null => {
   if (!value.startsWith("sha256=")) return null;
-  return { signatures: [value.slice("sha256=".length)], timestamp: null, input: (body) => body };
+  return { signatures: [value.slice("sha256=".length)], timestamp: null, prefix: "" };
 };
 
 const parseSlack = (value: string, timestampHeader: string): ParsedSignature | null => {
@@ -136,7 +110,7 @@ const parseSlack = (value: string, timestampHeader: string): ParsedSignature | n
     signature = signature.slice(comma + 1).trim();
   }
   if (timestamp.length === 0) return null;
-  return { signatures: [signature], timestamp, input: (body) => `v0:${timestamp}:${body}` };
+  return { signatures: [signature], timestamp, prefix: `v0:${timestamp}:` };
 };
 
 const parseSignature = (
@@ -152,7 +126,7 @@ const parseSignature = (
     case "slack":
       return parseSlack(value, slackTs);
     case "raw":
-      return { signatures: [value], timestamp: null, input: (body) => body };
+      return { signatures: [value], timestamp: null, prefix: "" };
   }
 };
 
@@ -173,6 +147,10 @@ export const webhook = (options: WebhookOptions): RouteHandler => {
   if (!Number.isFinite(tolerance) || tolerance <= 0) {
     throw new TypeError("webhook({ tolerance }) must be a positive number of seconds");
   }
+  const maxBodySize = options.maxBodySize ?? DEFAULT_MAX_BODY_SIZE;
+  if (!Number.isSafeInteger(maxBodySize) || maxBodySize < 0) {
+    throw new TypeError("webhook({ maxBodySize }) requires a non-negative safe integer of bytes");
+  }
   const normalizedHeader = headerName.trim().toLowerCase();
   // The HMAC key imports once at setup; requests await the settled promise.
   const key = crypto.subtle.importKey(
@@ -182,8 +160,8 @@ export const webhook = (options: WebhookOptions): RouteHandler => {
     false,
     ["sign"],
   );
-  const sign = async (payload: string): Promise<Uint8Array> =>
-    new Uint8Array(await crypto.subtle.sign("HMAC", await key, encoder.encode(payload)));
+  const sign = async (payload: Uint8Array): Promise<Uint8Array> =>
+    new Uint8Array(await crypto.subtle.sign("HMAC", await key, payload));
 
   return async (c, next) => {
     const headerValue = c.header(normalizedHeader).trim();
@@ -194,33 +172,41 @@ export const webhook = (options: WebhookOptions): RouteHandler => {
     if (parsed === null) {
       return c.text("Malformed webhook signature", 400);
     }
-    // clone(): the MAC reads a copy — the original body stays unread for the
-    // downstream handler (the body-preservation contract).
-    const body = await c.raw.clone().text();
-    const expected = await sign(parsed.input(body));
-    // Decode first, compare second: a decodable-but-wrong MAC is a forgery
-    // (401); a value that cannot even decode is a malformed header (400).
-    let decoded: Uint8Array | null = null;
-    let verified = false;
-    for (const signature of parsed.signatures) {
-      const candidate = macBytes(signature);
-      if (candidate === null) continue;
-      decoded = candidate;
-      if (timingSafeEqual(expected, candidate)) {
-        verified = true;
-        break;
-      }
-    }
-    if (decoded === null) return c.text("Malformed webhook signature", 400);
-    if (!verified) return c.text("Invalid webhook signature", 401);
+    const signatures = parsed.signatures.map(macBytes).filter((value) => value !== null);
+    if (signatures.length === 0) return c.text("Malformed webhook signature", 400);
     if (parsed.timestamp !== null) {
       const seconds = epochSeconds(parsed.timestamp);
       if (seconds === null) return c.text("Malformed webhook timestamp", 400);
-      // Both directions: a far-future timestamp is as untrustworthy as a stale
-      // one (clock-skew forgeries), and the window also bounds replay.
       if (Math.abs(Math.floor(Date.now() / 1000) - seconds) > tolerance) {
         return c.text("Stale webhook timestamp", 400);
       }
+    }
+    const declared = c.reqLength;
+    if (declared !== undefined && declared > maxBodySize) throw bodyTooLarge();
+    const raw = c.raw;
+    const copy = raw.clone();
+    let body: Uint8Array;
+    try {
+      body =
+        copy.body === null
+          ? new Uint8Array(0)
+          : await readAllLimited(
+              limitBodyStream(copy.body, maxBodySize, { createError: bodyTooLarge }),
+              maxBodySize,
+              bodyTooLarge,
+            );
+    } catch (error) {
+      void raw.body?.cancel(error).catch(() => undefined);
+      throw error;
+    }
+    const prefix = encoder.encode(parsed.prefix);
+    const payload = new Uint8Array(prefix.byteLength + body.byteLength);
+    payload.set(prefix);
+    payload.set(body, prefix.byteLength);
+    const expected = await sign(payload);
+    if (!signatures.some((candidate) => timingSafeEqual(expected, candidate))) {
+      void raw.body?.cancel().catch(() => undefined);
+      return c.text("Invalid webhook signature", 401);
     }
     await next();
   };

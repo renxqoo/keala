@@ -197,7 +197,6 @@ const awaitWithShutdownTimeout = (
       );
       resolve(undefined);
     }, timeoutMs);
-    timer.unref?.();
     Promise.resolve()
       .then(handler)
       .then(
@@ -237,7 +236,15 @@ const runShutdownHandlers = (lc: LifecycleState, shutdownTimeoutMs: number): Pro
             `onShutdown handler #${index + 1}`,
           );
         } else {
-          await handler();
+          const keepAlive = new MessageChannel();
+          keepAlive.port1.addEventListener("message", () => undefined);
+          keepAlive.port1.start();
+          try {
+            await handler();
+          } finally {
+            keepAlive.port1.close();
+            keepAlive.port2.close();
+          }
         }
       } catch (reason) {
         console.error(

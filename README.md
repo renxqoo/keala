@@ -269,6 +269,15 @@ With `precompressed: true`, an explicit encoding refusal (`q=0`) overrides `*`.
 Among accepted encodings, Brotli is preferred; `x-gzip` selects gzip. Missing
 siblings fall back to the next accepted encoding, then the original file.
 
+`webhook({ secret, header, format, maxBodySize? })` verifies raw request bytes
+for Stripe, GitHub, Slack and raw HMAC signatures. Its byte limit defaults to
+1 MiB; oversized bodies answer 413 even without Content-Length. Successful
+verification leaves `c.raw` readable. Mount it before body-consuming middleware.
+
+JWT CryptoKeys must match the declared algorithm, hash and curve; verification
+accepts keys with only `verify` usage. CSRF token verification applies both the
+token's lifetime and the verifier's `expiresIn`/`maxAge` caps on both runtimes.
+
 ## The context: one flat object
 
 Every request allocates exactly one context. Request and response live on the

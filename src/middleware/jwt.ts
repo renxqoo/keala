@@ -151,15 +151,6 @@ const tokenSegments = (token: string): string[] => {
   return parts;
 };
 
-/** Constant-time byte comparison for the HMAC path (length inequality returns
- * early — signature lengths are public). */
-const timingSafeEqual = (a: Uint8Array, b: Uint8Array): boolean => {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-  return diff === 0;
-};
-
 const isCryptoKey = (key: unknown): key is CryptoKey =>
   typeof CryptoKey !== "undefined" && key instanceof CryptoKey;
 
@@ -176,7 +167,11 @@ const algOfKey = (key: JWTKey): SignatureAlgorithm | undefined => {
     // the runtime's normalization — accept both.
     const hashName = typeof algorithm.hash === "string" ? algorithm.hash : algorithm.hash?.name;
     const bits = hashName?.slice(4);
-    if (bits !== undefined && BITS.has(bits))
+    if (
+      (algorithm.name === "HMAC" || algorithm.name === "RSASSA-PKCS1-v1_5") &&
+      bits !== undefined &&
+      BITS.has(bits)
+    )
       return `${algorithm.name === "HMAC" ? "HS" : "RS"}${bits}` as SignatureAlgorithm;
     if (algorithm.name === "ECDSA")
       return algorithm.namedCurve === undefined
@@ -207,6 +202,7 @@ const publicJwkOf = (jwk: JsonWebKey): JsonWebKey => ({
 const signingKey = async (key: JWTKey, alg: SignatureAlgorithm): Promise<CryptoKey> => {
   const params = algorithmParams(alg);
   if (isCryptoKey(key)) {
+    assertKeyAlgorithm(key, alg);
     if (key.type === "private" || key.type === "secret") return key;
     throw new TypeError(`signJWT: a ${key.type} key cannot sign — pass the private key`);
   }
@@ -261,15 +257,16 @@ export const signJWT = async (
   return `${signingInput}.${b64url(raw)}`;
 };
 
-/** Resolve the verification whitelist. Setup-shaped mistakes (empty or
- * unsupported lists, family contradictions) are TypeErrors — loud at
- * registration, never silently permissive. */
+const assertKeyAlgorithm = (key: CryptoKey, alg: SignatureAlgorithm): void => {
+  if (algOfKey(key) !== alg) throw new TypeError(`jwt: CryptoKey algorithm contradicts ${alg}`);
+};
+
 const resolveAlgorithms = (
   secret: JWTKey,
   algorithms: readonly SignatureAlgorithm[] | undefined,
 ): readonly SignatureAlgorithm[] => {
   const symmetric = isSymmetricKey(secret);
-  const list = algorithms ?? (symmetric ? HS_ALGORITHMS : undefined);
+  const list = algorithms ?? (symmetric && !isCryptoKey(secret) ? HS_ALGORITHMS : undefined);
   if (list === undefined) {
     const derived = algOfKey(secret);
     if (derived === undefined) {
@@ -282,6 +279,7 @@ const resolveAlgorithms = (
   if (list.length === 0)
     throw new TypeError("jwt({ algorithms }) must list at least one algorithm");
   for (const alg of list) {
+    if (isCryptoKey(secret)) assertKeyAlgorithm(secret, alg);
     if (!SUPPORTED.has(alg)) {
       throw new TypeError(
         `jwt: "${String(alg)}" is not supported — HS*/RS*/ES* only, "none" never`,
@@ -363,8 +361,6 @@ export const verifyJWT = async (
   return payload;
 };
 
-/** One signature check, both families: HMAC signed and constant-time compared
- * by us; asymmetric verification via crypto.subtle.verify. */
 const signatureMatches = async (
   secret: JWTKey,
   alg: SignatureAlgorithm,
@@ -375,12 +371,11 @@ const signatureMatches = async (
   if (isHmac(alg)) {
     const key =
       typeof secret === "string"
-        ? await crypto.subtle.importKey("raw", encoder.encode(secret), params, false, ["sign"])
+        ? await crypto.subtle.importKey("raw", encoder.encode(secret), params, false, ["verify"])
         : isCryptoKey(secret)
           ? secret
-          : await crypto.subtle.importKey("jwk", secret, params, false, ["sign"]);
-    const mac = new Uint8Array(await crypto.subtle.sign(params, key, data));
-    return timingSafeEqual(signature, mac);
+          : await crypto.subtle.importKey("jwk", secret, params, false, ["verify"]);
+    return crypto.subtle.verify(params, key, signature, data);
   }
   return crypto.subtle.verify(params, await verifyingKey(secret, alg), signature, data);
 };

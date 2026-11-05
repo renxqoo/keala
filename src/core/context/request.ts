@@ -106,8 +106,8 @@ const authorityOf = (url: string): string => {
   const scheme = url.indexOf("://");
   if (scheme === -1) return "";
   let rest = url.slice(scheme + 3);
-  const slash = rest.indexOf("/");
-  if (slash !== -1) rest = rest.slice(0, slash);
+  const end = rest.search(/[/?#]/);
+  if (end !== -1) rest = rest.slice(0, end);
   const at = rest.lastIndexOf("@");
   if (at !== -1) rest = rest.slice(at + 1);
   return rest;

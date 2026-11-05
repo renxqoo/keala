@@ -4,6 +4,17 @@
 
 ## Unreleased
 
+### 生产边界回归修复
+
+- `trustedHosts` 拒绝带 userinfo、非法端口和 authority 分隔符的 Host 与转发 Host，防止白名单校验与请求 origin/href 解析不一致。
+- 无 Host 的 absolute-form 请求按路径、查询和片段的统一边界解析 authority，查询中的 `@` 不再影响主机名。
+- shutdown hook 在有界超时及 `shutdownTimeout: 0` 模式下均保持 Node 事件循环，避免监听器关闭后提前退出、遗漏后续清理；无界模式的 MessageChannel 在钩子结束后关闭。
+- Bun CSRF 验证同时应用本服务 `expiresIn` 与可选 `maxAge`，拒绝超过当前服务有效期的同密钥长效 token。
+- JWT HMAC 验签使用 WebCrypto verify，支持仅授予 `verify` 权限的 CryptoKey。
+- JWT CryptoKey 的原生算法、hash 和曲线必须匹配 JOSE 算法，签名、验证与中间件配置均拒绝不一致的密钥。
+- Webhook 的四种格式直接验证原始请求字节，不再通过 UTF-8 文本重编码；下游原始正文读取保持可用。
+- Webhook 新增 `maxBodySize`，默认 1 MiB，按实际字节限制正文并返回 413；畸形签名和过期时间戳在读取正文前拒绝。需要更大正文的调用方显式配置有限额的字节数；切换立即生效，不保留无界读取路径，可观测结果为 400/401/413，回滚使用整体撤销本次提交。
+
 ### 生产代码审查与运行时分支收口
 
 - 支持范围保持 Bun 1.4+、Node 20.16+；删除范围外运行时的 API 形状探测、请求 ID 弱随机生成、ETag FNV 回退及 Request/Response `bytes()` 回退。Promise resolver 统一使用普通 Promise 构造，不按版本切换实现。

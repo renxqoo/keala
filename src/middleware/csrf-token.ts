@@ -84,7 +84,7 @@ export const csrfToken = (options: CsrfTokenOptions): CsrfTokenService => {
         return native.verify(token, {
           secret: options.secret,
           ...(sessionId !== undefined ? { sessionId } : {}),
-          ...(maxAge !== undefined ? { maxAge } : {}),
+          maxAge: Math.min(ttl, maxAge ?? ttl),
           algorithm,
         });
       },

@@ -8,30 +8,21 @@
 import { sourceHeader, sourceUrl } from "./request-source.ts";
 import type { RequestSource } from "./request-source.ts";
 
-const stripHostPort = (host: string): string => {
-  if (host.startsWith("[")) return host.slice(0, host.indexOf("]") + 1) || host;
-  const colon = host.lastIndexOf(":");
-  return colon === -1 ? host : host.slice(0, colon);
+const stripHostPort = (host: string): string | null => {
+  if (host.length === 0 || host.endsWith(":") || /[\s/@\\%?#]/u.test(host)) return null;
+  try {
+    if (new URL(`http://${host}`).hostname.length === 0) return null;
+  } catch {
+    return null;
+  }
+  const end = host.startsWith("[") ? host.indexOf("]") + 1 : host.indexOf(":");
+  return end < 0 ? host : host.slice(0, end);
 };
 
-/**
- * URL authority (host[:port]) for requests without a Host header.
- *
- * Deliberately NOT shared with `authorityOf` (core/context/request.ts):
- * that one feeds `c.host` from trusted Bun/Node URLs and locates userinfo
- * with lastIndexOf("@"), this one parses possibly-hostile absolute-form
- * request targets and uses first-"@"-before-path plus a `[/?#]` terminator
- * (path/query/fragment cannot leak into the authority). The divergence is
- * the security boundary — do not unify without revisiting both threat
- * models (review DEAD-27).
- */
 const urlAuthority = (url: string): string => {
   const scheme = url.indexOf("://");
   if (scheme === -1) return "";
-  let rest = url.slice(scheme + 3);
-  const slash = rest.indexOf("/");
-  const at = rest.indexOf("@");
-  if (at !== -1 && (slash === -1 || at < slash)) rest = rest.slice(at + 1);
+  const rest = url.slice(scheme + 3);
   const end = rest.search(/[/?#]/);
   return end === -1 ? rest : rest.slice(0, end);
 };
@@ -47,6 +38,7 @@ export const compileTrustedHosts = (trustedHosts: string[] | undefined): Trusted
     // not materialize it, so the URL authority is the fallback source.
     const header = sourceHeader(request, "host");
     const authority = stripHostPort((header ?? urlAuthority(sourceUrl(request))).toLowerCase());
+    if (authority === null) return false;
     // Under proxy trust, c.host/origin/back() prefer X-Forwarded-Host — the
     // whitelist must admit THAT authority too, or a pass-through proxy
     // re-enables exactly the poisoning trustedHosts exists to stop. A
@@ -55,7 +47,7 @@ export const compileTrustedHosts = (trustedHosts: string[] | undefined): Trusted
     const forwarded = sourceHeader(request, "x-forwarded-host");
     if (forwarded !== null && forwarded !== "") {
       const first = stripHostPort(forwarded.split(",")[0]?.trim().toLowerCase() ?? "");
-      if (first.length > 0 && !entries.some((entry) => matchesEntry(entry, first))) {
+      if (first === null || !entries.some((entry) => matchesEntry(entry, first))) {
         return false;
       }
     }

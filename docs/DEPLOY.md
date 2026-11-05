@@ -24,7 +24,7 @@ app.inFlight; // 只读:已准入未结算数
 
 排空语义:在途响应的 body 送完才算结算;`drain: 0` 立即强停,
 `Infinity` 永不超时。重复 `close()` 返回同一 Promise(幂等)。
-`shutdownTimeout`(默认 10s,`0` 禁用)约束 `onShutdown` 钩子的总预算
+`shutdownTimeout`(默认 10s,`0` 禁用)分别约束每个 `onShutdown` 钩子的预算
 ——超时的钩子记录日志后停机继续,不会因一个卡死的清理钩子挂死:
 
 ```ts
@@ -33,6 +33,10 @@ app.onShutdown(async () => {
   await db.close(); // 都在预算内顺序运行
 });
 ```
+
+监听器关闭后，Node 仍会等待当前钩子完成或达到该钩子的超时，再执行后续钩子。
+`shutdownTimeout: 0` 会持续等待钩子完成，即使钩子不持有其他事件循环句柄。
+编排器的终止宽限期应覆盖 drain 窗口及所有清理钩子的预算。
 
 **k8s terminationGracePeriodSeconds 应大于 drain 窗口**;preStop 钩子
 里先把 readiness 翻转(见 §2),再等 SIGTERM 触发 close。
@@ -81,17 +85,18 @@ app.use(bodyLimit(1 << 20)); // 声明式 body 上限(413 先于读取)
 
 Bun 的 `Bun.serve` 自带传输级正文上限(`maxRequestBodySize`,
 **默认 128MB**),超限在传输层即断;Node 适配器历史上**没有**这个
-默认——不显式配置时正文读取面上不封顶。两种收法:
+默认——不显式配置时原始正文读取面上不封顶。Node 必须显式配置传输层上限:
 
 ```ts
 // 1) Node 侧显式传传输层上限(与 Bun 同名同单位:字节)
 import { listen } from "keala/node";
 listen(app, { port: 3000, maxRequestBodySize: 64 << 20 });
-
-// 2) 或装 bodyLimit 中间件(双运行时一致;按声明长度快速 413)
-import { bodyLimit } from "keala/middleware";
-app.use(bodyLimit(64 << 20));
 ```
+
+`bodyLimit(bytes)` 只预检声明的 Content-Length，不能替代传输层限额。
+没有 Content-Length 的 chunked 请求仍需由传输层或有界 reader 计数。
+`webhook({ secret, header, format, maxBodySize })` 自带实际字节限额，默认
+1 MiB，超限返回 413；该限额独立于 body-parser 插件的读取器限额。
 
 注意:Bun 侧调小上限用 `app.listen({ maxRequestBodySize })`;但
 **原生路由表(sunk 路由)不受它约束**(Bun 1.4 实测)——下沉的

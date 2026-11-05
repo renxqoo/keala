@@ -252,6 +252,15 @@ if (
 在可接受的编码中优先选择 Brotli，`x-gzip` 对应 gzip；兄弟文件缺失时，
 继续尝试下一个可接受的编码，最后回退到原文件。
 
+`webhook({ secret, header, format, maxBodySize? })` 按原始请求字节验证
+Stripe、GitHub、Slack 和 raw HMAC 签名。默认正文上限为 1 MiB；
+即使没有 Content-Length，超限也返回 413。验证成功后 `c.raw` 仍可读取，
+该中间件应放在任何消耗正文的读取器之前。
+
+JWT CryptoKey 的算法、hash 和曲线必须匹配声明算法，验证密钥只需 `verify`
+权限。两种运行时的 CSRF 验证同时应用 token 自身有效期与验证服务的
+`expiresIn`/`maxAge` 上限。
+
 ## Context：一个扁平对象
 
 每个请求只分配一个 context。请求与响应在同一个对象上；一切惰性属性
