@@ -7,15 +7,19 @@
  * (the same trick Hono uses, minus the URL object when it is not needed).
  */
 
-/** Extract the absolute-path portion of a URL (no origin, no query, no fragment). */
-export const getPath = (url: string): string => {
-  let start = 0;
-  if (url.charCodeAt(0) !== 47 /* "/" */) {
-    // Absolute URL: skip "scheme://authority".
-    const scheme = url.indexOf("://");
-    start = scheme === -1 ? 0 : url.indexOf("/", scheme + 3);
-    if (start === -1) return "/";
+export const getPathStart = (url: string): number => {
+  if (url.charCodeAt(0) === 47) return 0;
+  const scheme = url.indexOf("://");
+  if (scheme === -1) return 0;
+  for (let index = scheme + 3; index < url.length; index++) {
+    const code = url.charCodeAt(index);
+    if (code === 47 || code === 63 || code === 35) return index;
   }
+  return url.length;
+};
+
+export const getPath = (url: string): string => {
+  const start = getPathStart(url);
   let end = url.length;
   for (let i = start; i < end; i++) {
     const code = url.charCodeAt(i);

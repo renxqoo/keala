@@ -11,7 +11,7 @@ describe("routing URL prefill", () => {
     ["", "/", "/"],
     ["?q=1", "/", "/?q=1"],
     ["#fragment?q=1", "/", "/"],
-    ["http://host?q=1", "/", "/"],
+    ["http://host?q=1", "/", "/?q=1"],
     ["http://host", "/", "/"],
     ["/a%2Fb?q=%23#fragment", "/a%2Fb", "/a%2Fb?q=%23"],
     ["http://host/path?q=1#x", "/path", "/path?q=1"],

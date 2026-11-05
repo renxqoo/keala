@@ -184,6 +184,9 @@ c.accepts("json", "html") / c.acceptsEncodings("gzip") / c.is("json");
 Host 和转发 Host 必须是有效的主机名或方括号 IPv6，可带有效数字端口；
 userinfo、非法端口和 authority 分隔符直接返回 403。
 没有 Host 头时，absolute-form 请求只从路径、查询或片段之前提取 authority。
+absolute-form 没有显式路径时匹配 `/`，查询中的 `/` 不参与路由，fragment 不进入
+`c.path` 或 `c.url`。例如 `http://app.site?next=/private` 的 `c.path` 为 `/`，
+`c.url` 为 `/?next=/private`；路径中的百分号编码保持原样。
 
 ### 4.3 请求体
 

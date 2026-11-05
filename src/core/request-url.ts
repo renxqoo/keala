@@ -1,17 +1,9 @@
 import type { ContextState } from "./context/state.ts";
+import { getPathStart } from "../utils/url.ts";
 
 /** Prefill routing and public URL views without a temporary match tuple. */
 export const primeRequestUrl = (c: ContextState, url: string): string => {
-  let start = 0;
-  if (url.charCodeAt(0) !== 47) {
-    const scheme = url.indexOf("://");
-    start = scheme === -1 ? 0 : url.indexOf("/", scheme + 3);
-    if (start === -1) {
-      c.pathValue = "/";
-      c.urlValue = "/";
-      return "/";
-    }
-  }
+  const start = getPathStart(url);
   const query = url.indexOf("?", start);
   const hash = url.indexOf("#", start);
   const sawQuery = query !== -1 && (hash === -1 || query < hash);

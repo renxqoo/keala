@@ -8,6 +8,7 @@
 
 - `trustedHosts` 拒绝带 userinfo、非法端口和 authority 分隔符的 Host 与转发 Host，防止白名单校验与请求 origin/href 解析不一致。
 - 无 Host 的 absolute-form 请求按路径、查询和片段的统一边界解析 authority，查询中的 `@` 不再影响主机名。
+- 修复无显式路径的 absolute-form 请求误把 query/fragment 中的 `/` 当作路由路径；路径提取与请求视图初始化共享边界扫描，无路径时匹配 `/` 并完整保留查询和空查询标记。
 - shutdown hook 在有界超时及 `shutdownTimeout: 0` 模式下均保持 Node 事件循环，避免监听器关闭后提前退出、遗漏后续清理；无界模式的 MessageChannel 在钩子结束后关闭。
 - Bun CSRF 验证同时应用本服务 `expiresIn` 与可选 `maxAge`，拒绝超过当前服务有效期的同密钥长效 token。
 - JWT HMAC 验签使用 WebCrypto verify，支持仅授予 `verify` 权限的 CryptoKey。
