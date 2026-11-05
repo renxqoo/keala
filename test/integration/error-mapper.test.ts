@@ -150,51 +150,6 @@ describe("agent review: toHttpError in-place classification", () => {
       consoleError.mockRestore();
     }
   });
-
-  it.skip("staged content-encoding must not ride the takeover merge onto an unencoded body (UNCERTAIN: contract enumerates only content-type/-length/transfer-encoding)", async () => {
-    // Judgment call, not clearly contract-covered: the reset strips exactly
-    // the three enumerated content headers, so a staged content-encoding
-    // (e.g. a compression middleware that staged the header before the body
-    // failed) is merged if-absent onto the takeover body — the client then
-    // tries to gunzip plain text. rebuildCommitted (respond.ts) deletes
-    // content-encoding on body replacement, so framework precedent treats it
-    // as body-describing. Left skipped pending a ruling on the enumeration.
-    const app = boot((a) => {
-      a.use((c, next) => {
-        void c.setHeader("content-encoding", "gzip");
-        return next();
-      });
-      a.get("/boom", () => {
-        throw new Error("x");
-      });
-      a.onError(() => new Response("plain error page", { status: 500 }));
-    });
-    const res = await app.handle(requestFor("/boom"));
-    expect(res.headers.get("content-encoding")).toBeNull();
-  });
-});
-
-describe("agent review: mapper Response ownership", () => {
-  it.skip("a REUSED Response object across requests (body already consumed) — documented behavior, contract silent (UNCERTAIN)", async () => {
-    // User misuse rather than a framework defect, but recording what ships:
-    //  - non-pooling: app.handle resolves with the same object; the SECOND
-    //    consumer's body read rejects with TypeError "Body already used".
-    //  - pooling: retireWithBody's getReader() throws on the used body and
-    //    the mapper's intended response is silently replaced by a static
-    //    500 "Internal Server Error".
-    const shared = new Response("shared", { status: 429 });
-    const app = boot((a) => {
-      a.get("/e", () => {
-        throw new Error("x");
-      });
-      a.onError(() => shared);
-    });
-    const first = await app.handle(requestFor("/e"));
-    expect(first.status).toBe(429);
-    expect(await first.text()).toBe("shared");
-    const second = await app.handle(requestFor("/e"));
-    await expect(second.text()).resolves.toBe("shared");
-  });
 });
 
 /**
@@ -208,8 +163,8 @@ const hit = async (
   init?: RequestInit,
 ): Promise<Response> => app.handle(new Request(`http://localhost${path}`, init));
 
-describe("BUG-1: redirect() registration range vs effective redirect statuses", () => {
-  it("app.redirect 306 is silently coerced to 302 on the wire", async () => {
+describe("BUG-1 (fixed): redirect() registration accepts every 3xx and honors it on the wire", () => {
+  it("app.redirect 306 stays 306 (registration no longer coerces to 302)", async () => {
     const app = new Keala({ env: "test" });
     app.use(createCookies());
     app.redirect("/a", "/b", 306);
@@ -217,7 +172,7 @@ describe("BUG-1: redirect() registration range vs effective redirect statuses", 
     expect([res.status, res.headers.get("location")]).toEqual([306, "/b"]);
   });
 
-  it("app.redirect 304 is silently coerced to 302 on the wire", async () => {
+  it("app.redirect 304 stays 304", async () => {
     const app = new Keala({ env: "test" });
     app.use(createCookies());
     app.redirect("/a", "/b", 304);
@@ -225,7 +180,7 @@ describe("BUG-1: redirect() registration range vs effective redirect statuses", 
     expect(res.status).toBe(304);
   });
 
-  it("Router.redirect 306 is silently coerced to 302 on the wire", async () => {
+  it("Router.redirect 306 stays 306", async () => {
     const app = new Keala({ env: "test" });
     app.use(createCookies());
     const r = new Router();

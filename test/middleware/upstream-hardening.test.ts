@@ -263,16 +263,11 @@ describe("upstream hardening: forwarded headers", () => {
   it("koa host.test: userinfo in X-Forwarded-Host is stripped", async () => {
     const app = new Keala({ ...quiet, proxy: true });
     app.use(createCookies());
-    let host = "";
-    app.get("/h", (c) => {
-      host = c.host;
-      return c.text(host);
-    });
+    app.get("/h", (c) => c.text(c.host));
     const res = await app.handle(
       req("/h", { headers: { "x-forwarded-host": "evil.com:fake@legitimate.com" } }),
     );
     expect(await res.text()).toBe("legitimate.com");
-    void host;
   });
 
   it("koa#827: X-Forwarded-For entries carry stripped ports", async () => {

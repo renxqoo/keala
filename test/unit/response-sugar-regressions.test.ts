@@ -208,17 +208,6 @@ describe("misc request edges", () => {
     expect([a, b]).toEqual(["1", "2"]);
   });
 
-  it("referer/referrer lookups are interchangeable", async () => {
-    const app = new Keala({ env: "test" });
-    let r = "";
-    app.get("/", (c) => {
-      r = c.header("Referrer");
-      return c.text("ok");
-    });
-    await hit(app, "/", { headers: { referer: "http://x/y" } });
-    expect(r).toBe("http://x/y");
-  });
-
   it("ip falls back to runtime requestIP", async () => {
     const app = new Keala({ env: "test" });
     let ip = "";

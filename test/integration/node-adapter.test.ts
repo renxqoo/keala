@@ -313,7 +313,7 @@ describe("node adapter: failure surfaces", () => {
     expect(body).toContain("10.0.0.1, 10.0.0.2");
   });
 
-  it("a client disconnect before the response answers the bridge 500 path", async () => {
+  it("a client disconnect before the response keeps the bridge healthy for the next request", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -333,6 +333,11 @@ describe("node adapter: failure surfaces", () => {
     socket.destroy();
     release?.();
     await new Promise((r) => setTimeout(r, 30));
+    // The disconnect is contained: the server keeps serving on a fresh
+    // connection instead of wedging the bridge.
+    const followUp = await fetch(`http://127.0.0.1:${server.port}/slow`);
+    expect(followUp.status).toBe(200);
+    expect(await followUp.text()).toBe("late");
   });
 
   it("a response stream failing after headers destroys the socket", async () => {

@@ -140,6 +140,16 @@ describe("response facade (flat context)", () => {
     expect(await res.text()).toBe("");
   });
 
+  it("backfills Content-Length from the UTF-8 BYTE length for HEAD (héllo = 6)", async () => {
+    const app = makeApp();
+    app.use(async (c) => {
+      return c.text("héllo");
+    });
+    const res = await app.handle(new Request("http://localhost:3000/", { method: "HEAD" }));
+    expect(res.headers.get("content-length")).toBe("6"); // 6 UTF-8 bytes, not 5 UTF-16 code units
+    expect(await res.text()).toBe("");
+  });
+
   it("set/append/remove header operations", async () => {
     const app = makeApp();
     app.use(async (c) => {

@@ -58,18 +58,6 @@ describe("agent3 — post-commit response rewrites", () => {
   // `c.status =` setter's TypeError guard — the write path no longer exists.
   // The surviving post-commit surface (header writers landing on the
   // committed Response) is kept below.
-  it("post-commit header writes still land on the committed Response", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c, next) => {
-      await next();
-      c.setHeader("X-Late", "1"); // header writes stay legal post-commit
-    });
-    app.get("/x", () => new Response("ok"));
-    const res = await app.handle(req("/x"));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("x-late")).toBe("1");
-  });
-
   // Root cause: src/core/context/response.ts append() stores a FIRST single
   // value as a plain string with no append marker; src/core/respond.ts
   // mergeIntoCommitted() then applies staged strings via `headers.set()`,
@@ -159,42 +147,6 @@ describe("agent3 — investigated and cleared", () => {
     });
     const res = await app.handle(req("/e", { method: "HEAD" }));
     expect(res.status).toBe(418);
-    expect(res.headers.get("content-length")).toBeNull();
-    expect(await res.text()).toBe("");
-  });
-
-  it("clear: circular body answers a clean 500, not a rejection", async () => {
-    const app = new Keala(quiet);
-    app.get("/c", (c) => {
-      const o: Record<string, unknown> = {};
-      o["self"] = o;
-      return c.json(o);
-    });
-    const res = await app.handle(req("/c"));
-    expect(res.status).toBe(500);
-    expect(await res.text()).toBe("Internal Server Error");
-  });
-
-  it("clear: a throwing onerror listener still answers the static 500", async () => {
-    const app = new Keala(quiet);
-    app.onError(() => {
-      throw new Error("listener boom");
-    });
-    app.get("/x", () => {
-      throw new Error("handler boom");
-    });
-    const res = await app.handle(req("/x"));
-    expect(res.status).toBe(500);
-    expect(await res.text()).toBe("Internal Server Error");
-  });
-
-  it("clear: HEAD on a committed Response strips the body without reading it", async () => {
-    // R7: no body reads in the finalizer — CL stays what the Response itself
-    // exposes (sugar helpers attach it at construction for HEAD instead).
-    const app = new Keala(quiet);
-    app.get("/x", () => new Response("committed-body"));
-    const res = await app.handle(req("/x", { method: "HEAD" }));
-    expect(res.status).toBe(200);
     expect(res.headers.get("content-length")).toBeNull();
     expect(await res.text()).toBe("");
   });

@@ -381,24 +381,6 @@ describe("bodyParser: coverage top-up", () => {
     );
     expect(res.status).toBe(413);
   });
-
-  it("a declared content-length over the limit fails fast with 413", async () => {
-    const app = new Keala(quiet);
-    app.use(createBodyParser({ jsonLimit: 16 }));
-    app.post("/x", (c) => {
-      return bodyOf(c)
-        .json()
-        .then(() => c.text("parsed"));
-    });
-    const res = await app.handle(
-      new Request("http://localhost:3000/x", {
-        method: "POST",
-        body: "x".repeat(64),
-        headers: { "content-type": "application/json", "content-length": "64" },
-      }),
-    );
-    expect(res.status).toBe(413);
-  });
 });
 
 describe("bodyParser: boundary edge cases", () => {

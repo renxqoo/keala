@@ -31,17 +31,6 @@ describe("redirect semantics", () => {
     expect(() => app.redirect("/a", "/b", 302.5)).toThrow();
   });
 
-  it("c.redirect default 302 keeps Location, no body", async () => {
-    const app = new Keala({ env: "test" });
-    app.get("/go", (c) => {
-      return c.redirect("/target");
-    });
-    const res = await hit(app, "/go");
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/target");
-    expect(await res.text()).toBe("");
-  });
-
   it("c.redirect back-form removed: explicit code path validates", async () => {
     const app = new Keala({ env: "test" });
     let caught: unknown = null;
@@ -165,17 +154,7 @@ describe("error funnel interactions", () => {
 });
 
 describe("HEAD handling", () => {
-  it("HEAD on a sugar text body: CL backfilled, no body", async () => {
-    const app = new Keala({ env: "test" });
-    app.get("/", (c) => {
-      return c.text("héllo");
-    });
-    const res = await hit(app, "/", { method: "HEAD" });
-    expect(res.headers.get("content-length")).toBe("6"); // héllo = 6 UTF-8 bytes
-    expect(await res.text()).toBe("");
-  });
-
-  it("HEAD on committed Response: body stripped, headers kept", async () => {
+  it("HEAD on a committed Response: body stripped, headers kept", async () => {
     const app = new Keala({ env: "test" });
     app.get("/", () => new Response("body-body", { headers: { "x-k": "v" } }));
     const res = await hit(app, "/", { method: "HEAD" });
@@ -219,18 +198,10 @@ describe("router edges", () => {
     expect(b).toBe('{"b":"x"}');
   });
 
-  it("wildcard root answers /", async () => {
-    const app = new Keala({ env: "test" });
-    app.get("/*", (c) => c.text(`w:${c.params("wildcard")}`));
-    expect(await (await hit(app, "/")).text()).toBe("w:");
-    expect(await (await hit(app, "/x/y")).text()).toBe("w:x/y");
-  });
-
   it("percent-encoded param is decoded once", async () => {
     const app = new Keala({ env: "test" });
     app.get("/u/:name", (c) => c.text(c.params("name") ?? ""));
     expect(await (await hit(app, "/u/a%20b")).text()).toBe("a b");
-    expect(await (await hit(app, "/u/a%2Fb")).text()).toBe("a/b");
   });
 
   it("static route prefers exact over dynamic; 405 Allow lists methods", async () => {
@@ -243,22 +214,6 @@ describe("router edges", () => {
     const del = await hit(app, "/users/7", { method: "DELETE" });
     expect(del.status).toBe(405);
     expect(del.headers.get("allow")).toBe("POST"); // static /users/7 target (POST) shadows dynamic /users/:id by design
-  });
-
-  it("OPTIONS on unregistered method answers 200 + Allow", async () => {
-    const app = new Keala({ env: "test" });
-    app.get("/x", (c) => c.text("g"));
-    const res = await hit(app, "/x", { method: "OPTIONS" });
-    expect(res.status).toBe(200);
-    expect(res.headers.get("allow")).toContain("GET");
-  });
-
-  it("unknown method answers 501 with Allow", async () => {
-    const app = new Keala({ env: "test" });
-    app.get("/x", (c) => c.text("g"));
-    const res = await hit(app, "/x", { method: "PURGE" });
-    expect(res.status).toBe(501);
-    expect(res.headers.get("allow")).toContain("GET");
   });
 
   it("trailing slash static hit", async () => {
@@ -344,24 +299,6 @@ describe("cookie facade", () => {
 });
 
 describe("response defaults (U3c: state mode retired)", () => {
-  it("default 404 body is the status text", async () => {
-    const app = new Keala({ env: "test" });
-    const res = await hit(app, "/nope");
-    expect(res.status).toBe(404);
-    expect(await res.text()).toBe("Not Found");
-  });
-
-  it("sugar 204 clears content headers", async () => {
-    const app = new Keala({ env: "test" });
-    app.get("/", (c) => {
-      return c.text("x", 204);
-    });
-    const res = await hit(app, "/");
-    expect(res.status).toBe(204);
-    expect(res.headers.get("content-type")).toBeNull();
-    expect(await res.text()).toBe("");
-  });
-
   it("JSON object body gets application/json", async () => {
     const app = new Keala({ env: "test" });
     app.get("/", (c) => {

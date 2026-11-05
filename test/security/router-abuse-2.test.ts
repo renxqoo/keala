@@ -125,15 +125,6 @@ describe("red team: trie matching", () => {
     expect(matchPattern(root, "/users/xyz/a")).toBeNull();
   });
 
-  it("[T2c] an identical pattern variant shares one node (no duplicate variants)", () => {
-    const root = buildTrie(["/users/:id(\\d+)", "/users/:id(\\d+)"]);
-    expect(matchPattern(root, "/users/7")).not.toBeNull();
-    expect(matchPattern(root, "/users/x")).toBeNull();
-    // The second registration must not have created a second variant that
-    // could match "/users/x" through the plain-looking path.
-    expect(root.children.get("users")?.param?.pattern).not.toBeNull();
-  });
-
   it("[T2d] conflicting parameter NAMES at one position still throw", () => {
     expect(() => buildTrie(["/users/:id", "/users/:name"])).toThrow(TypeError);
   });

@@ -228,15 +228,6 @@ describe("C2: path-safety primitives re-exported from the root entry", () => {
     expect(isWithinRoot("/www/file", "/www", "/")).toBe(true);
     expect(isWithinRoot("/wwwfile", "/www", "/")).toBe(false);
   });
-  it("the primitives are the ones serveStatic itself uses (same import path)", async () => {
-    // serveStatic behavior is covered by middleware-serve-static.test.ts; here
-    // we lock that the ROOT exports exist as callable values.
-    expect(typeof resolveRelativeSegments).toBe("function");
-    expect(typeof isWithinRoot).toBe("function");
-    expect(typeof findSymlink).toBe("function");
-    expect(typeof weakEtag).toBe("function");
-    expect(typeof isNotModified).toBe("function");
-  });
 });
 
 // ---------------------------------------------------------------------------

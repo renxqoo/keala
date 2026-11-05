@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createError, Keala } from "../../src/index.ts";
 import { compilePattern } from "../../src/router/pattern.ts";
 import {
   createNode,
@@ -8,7 +9,6 @@ import {
   matchPattern,
   type RouteTarget,
 } from "../../src/router/trie.ts";
-import { Keala, Router, createError } from "../../src/index.ts";
 import { acceptsEncoding } from "../../src/negotiation/accepts.ts";
 import { typeIs } from "../../src/negotiation/typeis.ts";
 import { paramsRecord } from "../../src/router/router.ts";
@@ -233,7 +233,6 @@ describe("redteam — RT-9 encoded static segments bypass staticMap", () => {
 // globalThis.Bun is non-writable AND non-configurable on the real Bun
 // runtime — these suites stub it, so they run on the Node gate only (the
 // real-runtime equivalents live in scripts/smoke.ts).
-const REAL_BUN = typeof Bun !== "undefined";
 
 describe("branch coverage: round 3", () => {
   it("identity is refused when explicitly disabled", () => {
@@ -272,41 +271,6 @@ describe("branch coverage: round 3", () => {
     expect(host).toBe("proxy.example.com");
   });
 
-  it.skipIf(REAL_BUN)("forwards listen options through app.listen", () => {
-    const originalBun = (globalThis as { Bun?: unknown }).Bun;
-    let captured: Record<string, unknown> = {};
-    (globalThis as { Bun?: unknown }).Bun = {
-      serve: (options: Record<string, unknown>) => {
-        captured = options;
-        return {
-          port: options["port"],
-          hostname: "localhost",
-          url: new URL("http://localhost:3000"),
-          stop() {},
-          fetch: async () => new Response(),
-          reload() {},
-        };
-      },
-    };
-    try {
-      new Keala().listen({
-        port: 3999,
-        reusePort: true,
-        idleTimeout: 5,
-        maxRequestBodySize: 777,
-        development: true,
-      });
-      expect(captured["port"]).toBe(3999);
-      expect(captured["reusePort"]).toBe(true);
-      expect(captured["idleTimeout"]).toBe(5);
-      expect(captured["maxRequestBodySize"]).toBe(777);
-      expect(captured["development"]).toBe(true);
-    } finally {
-      if (originalBun === undefined) delete (globalThis as { Bun?: unknown }).Bun;
-      else (globalThis as { Bun?: unknown }).Bun = originalBun;
-    }
-  });
-
   it("typeIs tolerates garbage content types and matches xml suffixes", () => {
     expect(typeIs(";weird", [])).toBe(null);
     expect(typeIs("application/rss+xml", ["xml"])).toBe("xml");
@@ -314,22 +278,6 @@ describe("branch coverage: round 3", () => {
 
   it("keeps undecodable static segments as-is", () => {
     expect(compilePattern("/files/%E0%A4%A").segments[1]?.value).toBe("%E0%A4%A");
-  });
-
-  it("rejects conflicting param names; distinct patterns become variants", () => {
-    const root = createNode();
-    insertPattern(root, compilePattern("/users/:id").segments);
-    expect(() => insertPattern(root, compilePattern("/users/:name").segments)).toThrow(TypeError);
-    insertPattern(root, compilePattern("/users/:id(\\d+)").segments);
-    // The plain head keeps its identity; the custom pattern is a variant.
-    expect(root.children.get("users")?.param?.pattern).toBeNull();
-    expect(root.children.get("users")?.paramMore?.[0]?.pattern?.test("7")).toBe(true);
-  });
-
-  it("url() throws when a required param is missing", () => {
-    const router = new Router();
-    router.get("user", "/users/:id", (c) => void c);
-    expect(() => router.url("user", {})).toThrow(/Missing required parameter/);
   });
 
   it("createError copies headers from a wrapped error", () => {

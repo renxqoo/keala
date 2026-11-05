@@ -23,7 +23,5 @@ describe("routing URL prefill", () => {
     expect(primeRequestUrl(c, url)).toBe(path);
     expect(c.pathValue).toBe(path);
     expect(c.urlValue).toBe(view);
-    const keys = Object.keys(c);
-    expect(keys.indexOf("pathValue")).toBeLessThan(keys.indexOf("urlValue"));
   });
 });

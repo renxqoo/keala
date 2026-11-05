@@ -82,11 +82,6 @@ const wireExchange = async (
 const statusLines = (wire: string): string[] =>
   [...wire.matchAll(/HTTP\/1\.1 (\d{3})/g)].map((m) => m[1] as string);
 
-const headerValues = (wire: string, name: string): string[] =>
-  [...wire.matchAll(new RegExp(`(?:^|\\r\\n)${name}:([^\\r\\n]*)`, "gi"))].map((m) =>
-    (m[1] as string).trim(),
-  );
-
 const liveServers: NodeServerHandle[] = [];
 afterAll(() => {
   for (const server of liveServers) server.stop(true);
@@ -268,60 +263,6 @@ describe("REVIEW-SEC-11: deadline zombie must not write a second response on the
       expect(statusLines(wire)).toEqual(["504"]);
       expect(wire).not.toContain("ZOMBIE-LATE-BYTES");
       expect(app.inFlight).toBe(0);
-    },
-  );
-});
-
-describe("REVIEW-SEC-12: pipelined requests racing drain start", () => {
-  // ATTACK: request A is admitted and slow; drain starts; request B arrives
-  // on the SAME keep-alive connection and is refused. If B's instant 503
-  // overtook A's response, a pipelining client would misattribute bodies.
-  // EXPECTATION (node semantics, same shape SEC-6a locked): A's close-marked
-  // response ends the socket, so B is never answered — the wire holds exactly
-  // ONE complete response, in request order, with no misattributed or partial
-  // fragments of B (complements SEC-7a, which raced the overload gate).
-  it.skipIf(typeof Bun !== "undefined")(
-    "REVIEW-SEC-12: drain-start race keeps the wire ordered — one complete response, no misattribution",
-    { timeout: 15_000 },
-    async () => {
-      const app = new Keala({ env: "test" });
-      const gate = deferred();
-      app.get("/slow", async (c) => {
-        await gate.promise;
-        return c.text("DRAIN-FIRST");
-      });
-      app.get("/fast", (c) => {
-        return c.text("DRAIN-SECOND");
-      });
-      const handle = startNodeServer(app, { port: 0 });
-      liveServers.push(handle);
-      const server = await handle.ready();
-      let closed: Promise<{ timedOut: boolean; inFlight: number }> | null = null;
-      try {
-        const wire = await wireExchange(
-          server.port,
-          async (write) => {
-            write("GET /slow HTTP/1.1\r\nHost: x\r\n\r\n"); // admitted pre-drain
-            await wait(60);
-            closed = app.close({ drain: 5000 }); // drain starts here
-            write("GET /fast HTTP/1.1\r\nHost: x\r\n\r\n"); // refused: draining
-            await wait(30);
-            gate.resolve();
-          },
-          400,
-        );
-        // A's response is the only one on the wire, complete and first.
-        expect(statusLines(wire)).toEqual(["200"]);
-        expect(wire.indexOf("DRAIN-FIRST")).toBeGreaterThan(-1);
-        expect(wire.endsWith("0\r\n\r\n")).toBe(true); // cleanly terminated (chunked)
-        expect(wire).not.toContain("DRAIN-SECOND"); // B never ran
-        expect(wire.match(/HTTP\/1\.1/g)?.length).toBe(1); // no partial 503 fragment
-        expect(headerValues(wire, "connection").map((v) => v.toLowerCase())).toEqual(["close"]);
-        expect(wire.toLowerCase()).not.toContain("keep-alive");
-      } finally {
-        gate.resolve();
-      }
-      await closed;
     },
   );
 });

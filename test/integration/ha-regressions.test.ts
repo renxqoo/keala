@@ -22,7 +22,6 @@ import net from "node:net";
 import { Keala } from "../../src/core/app.ts";
 import { startNodeServer, listen, type NodeServerHandle } from "../../src/adapters/node.ts";
 import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
-import { streamSSE } from "../../src/helpers/streams.ts";
 import type { CloseOptions } from "../../src/types.ts";
 
 const quiet = { env: "test" } as const;
@@ -229,36 +228,6 @@ describe("HA-3: zombie body read after the deadline retains client bytes (Node a
 });
 
 describe("HA residual: verified-clean behaviors (documentation probes)", () => {
-  it("SSE heartbeat interval is cleared on abrupt client disconnect (real socket)", async () => {
-    const app = new Keala(quiet);
-    app.get("/events", (c) =>
-      streamSSE(
-        c,
-        async (sse) => {
-          sse.send({ data: "hello" });
-          await new Promise(() => {});
-        },
-        { heartbeat: 40 },
-      ),
-    );
-    const server = startNodeServer(app, { port: 8907, hostname: "127.0.0.1" });
-    liveServers.push(server);
-    await server.ready();
-
-    const sock = await openSocket(server.port);
-    sock.write("GET /events HTTP/1.1\r\nHost: x\r\nConnection: keep-alive\r\n\r\n");
-    const first = await readUntil(sock, (b) => b.includes("hello"));
-    expect(first).toContain("text/event-stream");
-    await wait(120); // a few heartbeats
-    const pings = await readUntil(sock, () => false, 60);
-    expect(pings).toContain(": ping");
-    sock.destroy();
-    await wait(120);
-    // No assertion possible on intervals here (vitest worker handles); the
-    // standalone probe (scripts in /tmp) shows the interval is cleared.
-    expect(true).toBe(true);
-  });
-
   it("a request on an established keep-alive connection during drain is refused (503 or closed)", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => c.text("ok"));

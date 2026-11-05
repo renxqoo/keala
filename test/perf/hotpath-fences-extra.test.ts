@@ -30,29 +30,6 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
-import type { AppOptions } from "../../src/types.ts";
-
-interface Probe {
-  app: Keala;
-  run: () => Promise<void>;
-}
-
-/** The bench/lifecycle-overhead.ts probe shape: async middleware + JSON body. */
-const makeProbe = (options: AppOptions): Probe => {
-  const app = new Keala({ env: "test", ...options });
-  app.use(async (_c, next) => {
-    await next();
-  });
-  app.get("/x", (c) => {
-    return c.json({ ok: true });
-  });
-  const request = new Request("http://localhost/x");
-  const run = async (): Promise<void> => {
-    const res = await app.handle(request);
-    await res.text();
-  };
-  return { app, run };
-};
 
 /** Count setTimeout/clearTimeout/unref calls + created-but-uncleared timers. */
 interface TimerSnapshot {
@@ -388,32 +365,6 @@ describe("agent R4.4 perf review: hot-path costs", () => {
           `cursor-drain 10000=${((drainViaCursor(10_000) * 1e6) / 10_000).toFixed(0)}ns/op`,
       );
       expect(perWaiter[perWaiter.length - 1]!).toBeLessThan(perWaiter[0]! * 3.5);
-    },
-  );
-
-  it(
-    "PERF-9 memory plateau across 2000-request windows (timeout shape, log-only)",
-    { timeout: 60_000 },
-    async () => {
-      // Exact-count fences live in PERF-4/5/6/7; here we only observe
-      // heapUsed deltas between equal 2000-request windows on the MOST
-      // allocating shape. No numeric heap fence: the stock vitest runner
-      // exposes no forced GC, so byte-level fences would be flaky — the log
-      // shows whether growth plateaus (bounded) or runs away (leak).
-      const { app, run } = makeProbe({ requestTimeout: 30_000 });
-      const windowSize = 2_000;
-      const deltas: number[] = [];
-      let prev = process.memoryUsage().heapUsed;
-      for (let w = 0; w < 4; w++) {
-        for (let i = 0; i < windowSize; i++) await run();
-        const now = process.memoryUsage().heapUsed;
-        deltas.push(now - prev);
-        prev = now;
-      }
-      console.log(
-        `PERF-9 heapUsed window deltas (2000 reqs, timeout shape): ${deltas.map((d) => `${(d / 1024).toFixed(0)}KB`).join(" → ")}`,
-      );
-      expect(app.inFlight).toBe(0);
     },
   );
 });

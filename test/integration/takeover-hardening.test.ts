@@ -288,6 +288,3 @@ describe("R4.3 agent review: ws + serve runtime error paths", () => {
     STEP_MS,
   );
 });
-
-// ---------------------------------------------------------------------------
-// Concurrency + pooling state isolation

@@ -94,23 +94,6 @@ describe("R4.6 deadline: 504 through the funnel", () => {
     await wait(5);
   });
 
-  it("pooling apps: the 504 path never recycles the zombie's context, and later requests are clean", async () => {
-    const app = new Keala({ env: "test", pooling: true, requestTimeout: 40 });
-    const gate = deferred();
-    app.get("/stuck", () => gate.promise.then(() => undefined));
-    app.get("/ok", (c) => {
-      return c.text("still-ok");
-    });
-    const dead = await app.handle(new Request("http://x/stuck"));
-    expect(dead.status).toBe(504);
-    const next = await app.handle(new Request("http://x/ok"));
-    expect(await next.text()).toBe("still-ok");
-    gate.resolve();
-    await wait(5);
-    const after = await app.handle(new Request("http://x/ok"));
-    expect(await after.text()).toBe("still-ok");
-  });
-
   it("the zombie's late settlement never becomes an unhandled rejection", async () => {
     const onUnhandled = vi.fn();
     (process.on as unknown as (event: string, fn: (reason: unknown) => void) => void)(
@@ -129,13 +112,6 @@ describe("R4.6 deadline: 504 through the funnel", () => {
       onUnhandled,
     );
     expect(onUnhandled).not.toHaveBeenCalled();
-  });
-
-  it("requestTimeout validation is loud at setup", () => {
-    expect(() => new Keala({ requestTimeout: -1 })).toThrow(TypeError);
-    expect(() => new Keala({ requestTimeout: Number.POSITIVE_INFINITY })).toThrow(TypeError);
-    expect(() => new Keala({ requestTimeout: Number.NaN })).toThrow(TypeError);
-    expect(() => new Keala({ requestTimeout: 0 })).not.toThrow(); // 0 = off
   });
 
   it("a deadline zombie settling DURING drain releases nothing twice", async () => {

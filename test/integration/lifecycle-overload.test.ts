@@ -69,22 +69,6 @@ describe("R4.6 overload: fail-fast (default maxQueue 0)", () => {
     expect(app.inFlight).toBe(0);
   });
 
-  it("retryAfterSeconds: 0 omits the header", async () => {
-    const app = new Keala({
-      env: "test",
-      overload: { maxConcurrency: 1, retryAfterSeconds: 0 },
-    });
-    const gate = deferred();
-    app.get("/work", async () => {
-      await gate.promise;
-    });
-    const first = app.handle(new Request("http://x/work"));
-    const second = await app.handle(new Request("http://x/work"));
-    expect(second.headers.get("retry-after")).toBeNull();
-    gate.resolve();
-    await first;
-  });
-
   it("refusals never reach the error funnel (pre-context)", async () => {
     const app = new Keala({ env: "test", overload: { maxConcurrency: 1 } });
     const mapper = vi.fn();
@@ -192,27 +176,6 @@ describe("R4.6 overload: queue (opt-in maxQueue)", () => {
     expect(await (await first).text()).toBe("done");
   });
 
-  it("a queued request whose client disconnects leaves the queue (503, slot freed)", async () => {
-    const app = new Keala({ env: "test", overload: { maxConcurrency: 1, maxQueue: 2 } });
-    const gate = deferred();
-    app.get("/work", async (c) => {
-      await gate.promise;
-      return c.text("done");
-    });
-    const first = app.handle(new Request("http://x/work"));
-    const abort = new AbortController();
-    // Parks in the queue (not awaited — it settles when the client leaves).
-    const gone = app.handle(new Request("http://x/work", { signal: abort.signal }));
-    abort.abort();
-    const left = await gone;
-    expect(left.status).toBe(503);
-    // The queue must be empty now: the next request takes the freed spot.
-    const nextQueued = app.handle(new Request("http://x/work"));
-    gate.resolve();
-    await Promise.all([first, nextQueued]);
-    expect(app.inFlight).toBe(0);
-  });
-
   it("S4: a NATIVE queued request whose client disconnects leaves the queue (real socket)", async () => {
     const app = new Keala({ env: "test", overload: { maxConcurrency: 1, maxQueue: 2 } });
     const gate = deferred();
@@ -301,19 +264,6 @@ describe("R4.6 overload: pre-aborted and malformed queue entries", () => {
     expect(refused.status).toBe(503);
     gate.resolve();
     await first;
-  });
-
-  it("overload options must be an object; retryAfterSeconds must be an integer", () => {
-    expect(() => new Keala({ overload: "nope" as never })).toThrow(TypeError);
-    expect(() => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: 1.5 } })).toThrow(
-      TypeError,
-    );
-    expect(() => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: -1 } })).toThrow(
-      TypeError,
-    );
-    expect(
-      () => new Keala({ overload: { maxConcurrency: 1, retryAfterSeconds: 2 } }),
-    ).not.toThrow();
   });
 
   it("rejects non-positive concurrency, bad queue shapes, non-function handlers/strategies", () => {

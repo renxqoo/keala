@@ -177,12 +177,6 @@ describe("coverage: typeis wildcard shorthands", () => {
     expect(typeIs("image/png", ["*/png"])).toBe("*/png");
     expect(typeIs("image/jpeg", ["*/png"])).toBe(false);
   });
-
-  it("plain and mismatched types behave", () => {
-    expect(typeIs("text/html", ["html"])).toBe("html");
-    expect(typeIs("text/html", ["json"])).toBe(false);
-    expect(typeIs(null, ["html"])).toBeNull();
-  });
 });
 
 describe("coverage: startBunServer error listener", () => {

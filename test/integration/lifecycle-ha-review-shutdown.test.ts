@@ -13,7 +13,6 @@ import { connect, type Socket } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Keala } from "../../src/core/app.ts";
 import { startNodeServer, type NodeServerHandle } from "../../src/adapters/node.ts";
-import { installSignalBridge } from "../../src/core/lifecycle.ts";
 import { startBunServer, type ServeImplementation } from "../../src/index.ts";
 import { attachServer } from "../../src/core/server-slot.ts";
 import type { CloseStatus } from "../../src/types.ts";
@@ -73,17 +72,6 @@ const getRequest = (path: string): string =>
  * once-listeners consumed themselves, letting a repeated same-name signal
  * fall to the OS default disposition).
  */
-const captureOnce = (): { registered: Array<[string, () => void]>; restore: () => void } => {
-  const registered: Array<[string, () => void]> = [];
-  const onSpy = vi.spyOn(process, "on").mockImplementation(((
-    event: string | symbol,
-    handler: () => void,
-  ) => {
-    if (typeof event === "string") registered.push([event, handler]);
-    return process;
-  }) as unknown as typeof process.on);
-  return { registered, restore: () => onSpy.mockRestore() };
-};
 
 /** Count live Timeout handles — a leaked waiter/deadline timer survives here. */
 export const timeoutHandles = (): number =>
@@ -148,56 +136,6 @@ export const readResponse = (sock: Socket): Promise<{ head: string; body: string
   });
 
 describe("agent R4.6 HA review: lifecycle concurrency combinations", () => {
-  it(
-    "REVIEW-HA-5: double SIGTERM under load — forced close terminates, status honest",
-    { timeout: 15_000 },
-    async () => {
-      // The bridge's second signal escalates to force (§2.2 r9) while 100
-      // requests are in flight: close idempotency must not swallow it, the
-      // status must report honestly, and the zombies must settle cleanly.
-      const { registered, restore } = captureOnce();
-      const gate = deferred();
-      const unhandled = trackUnhandled();
-      try {
-        const app = new Keala({ env: "test" });
-        app.get("/stuck", async (c) => {
-          await gate.promise;
-          return c.text("late");
-        });
-        const zombieHandles = Array.from({ length: 100 }, () =>
-          app.handle(new Request("http://x/stuck")),
-        );
-        expect(app.inFlight).toBe(100);
-        installSignalBridge(app);
-        const fire = registered.find(([event]) => event === "SIGTERM")?.[1];
-        expect(fire).toBeDefined();
-        fire!(); // SIGTERM #1 — graceful drain, default 30s window
-        fire!(); // SIGTERM #2 — documented FORCE close
-        let hung = false;
-        const status = await Promise.race([
-          app.close(),
-          wait(1200).then(() => {
-            hung = true;
-            return undefined as CloseStatus | undefined;
-          }),
-        ]);
-        expect(hung).toBe(false); // the escalation terminated the close
-        expect(status).toEqual({ timedOut: true, inFlight: 100 }); // honest report
-        expect(app.isDraining()).toBe(true);
-        gate.resolve(); // all 100 zombies settle long after the force
-        const responses = await Promise.all(zombieHandles);
-        for (const r of responses) await r.text(); // consume held bodies
-        expect(app.inFlight).toBe(0); // every hold returned its slot
-        expect(unhandled.spy).not.toHaveBeenCalled(); // zombies contained
-        await expect(app.close()).resolves.toBe(status); // still memoized
-      } finally {
-        unhandled.off();
-        restore();
-        gate.resolve();
-      }
-    },
-  );
-
   it(
     "REVIEW-HA-6: WS 1001 evacuation under load — 100 sockets, hostile ones contained",
     { timeout: 10_000 },

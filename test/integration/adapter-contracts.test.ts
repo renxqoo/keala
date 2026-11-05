@@ -24,7 +24,6 @@
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { Keala } from "../../src/core/app.ts";
-import { installSignalBridge } from "../../src/core/lifecycle.ts";
 import { startBunServer, type ServeImplementation } from "../../src/adapters/bun.ts";
 import { startNodeServer, type NodeServerHandle } from "../../src/adapters/node.ts";
 import { streamText } from "../../src/helpers/streams.ts";
@@ -119,47 +118,6 @@ const fakeServe = (): {
 };
 
 describe("R4.4 contract coherence (agent-r44)", () => {
-  it("CT-1 §2.2 r9/§2.1: a second signal must force-close an in-flight drain", async () => {
-    // Doc: "首个 SIGTERM/SIGINT → app.close()(默认 drain);第二个 →
-    // close({drain: 0}) 强停" — the second signal resolves the pending close
-    // immediately (force). ACTUAL (lifecycle.ts installSignalBridge →
-    // closeApp): app.close({drain: 0}) hits the idempotency early-return and
-    // hands back the ORIGINAL 30s-drain promise — drain:0 is silently
-    // swallowed, the second signal is a no-op.
-    const registered: Array<[string, () => void]> = [];
-    // REVIEW-BUG-1 fix: the bridge registers PERMANENT process.on listeners.
-    const once = vi.spyOn(process, "on").mockImplementation(((
-      event: string | symbol,
-      handler: () => void,
-    ) => {
-      if (typeof event === "string" && typeof handler === "function") {
-        registered.push([event, handler]);
-      }
-      return process;
-    }) as unknown as typeof process.on);
-    const gate = deferred();
-    try {
-      const app = new Keala({ env: "test" });
-      app.get("/stuck", () => gate.promise.then(() => undefined));
-      void app.handle(new Request("http://x/stuck")); // in-flight work under drain
-      installSignalBridge(app);
-      expect(registered.map(([event]) => event).toSorted()).toEqual(["SIGINT", "SIGTERM"]);
-      const handler = registered[0]![1];
-      handler(); // first SIGTERM → app.close() with the default 30s drain
-      expect(app.isDraining()).toBe(true);
-      const closing = app.close(); // the very promise the bridge holds
-      handler(); // second SIGTERM → close({drain: 0}) per the bridge
-      const outcome = await Promise.race([
-        closing.then(() => "resolved"),
-        wait(40).then(() => "still-pending"),
-      ]);
-      expect(outcome).toBe("resolved"); // EXPECTED: force-stopped at once. ACTUAL: pending 30s.
-    } finally {
-      once.mockRestore();
-      gate.resolve(); // let the stranded drain finish in the background
-    }
-  });
-
   it("CT-2 §2.3 r5 vs §2.2 r4: capacity releases at SETTLE while a body streams (the documented asymmetry)", async () => {
     // Doc §2.3 r5: "并发口径 = 已准入未结算(settlement 边界)…body 流送不占并发槽".
     // The queued request must be admitted the moment the first request

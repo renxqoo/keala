@@ -1,45 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { Keala } from "../../src/index.ts";
-import type { Context } from "../../src/core/context/context.ts";
 import { acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
 import { toURL } from "../../src/utils/url.ts";
-
-const probe = async (
-  url: string,
-  headers: Record<string, string>,
-  proxy = false,
-): Promise<Context> => {
-  const app = new Keala({ proxy });
-  let captured: Context | undefined;
-  app.use(async (c) => {
-    captured = c;
-    return c.text("probed");
-  });
-  await app.handle(new Request(url, { headers }));
-  if (captured === undefined) throw new Error("probe did not run");
-  return captured;
-};
-
-describe("branch coverage: protocol and proxy", () => {
-  it("takes the first x-forwarded-proto token", async () => {
-    const ctx = await probe("http://localhost/", { "X-Forwarded-Proto": "https, http" }, true);
-    expect(ctx.protocol).toBe("https");
-  });
-
-  it("falls back to the URL scheme when the forwarded proto is empty", async () => {
-    const ctx = await probe("http://localhost/", { "X-Forwarded-Proto": "" }, true);
-    expect(ctx.protocol).toBe("http");
-    const secure = await probe("https://localhost/", {});
-    expect(secure.protocol).toBe("https");
-    expect(secure.secure).toBe(true);
-  });
-
-  it("treats protocol-relative URLs as http", async () => {
-    const ctx = await probe("http://localhost/", {});
-    expect(ctx.protocol).toBe("http");
-  });
-});
 
 // 0.7: the "branch coverage: freshness" suite is gone — c.fresh (the
 // request.ts private copy) was deleted; conditional.ts owns the single

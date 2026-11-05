@@ -20,7 +20,6 @@ const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
 const post = (headers: Record<string, string>): Request =>
   new Request("http://localhost:3000/x", { method: "POST", headers });
-const NATIVE = typeof Bun !== "undefined";
 
 // Driving the fallback explicitly: forge/direct the HMAC format regardless
 // of the running runtime, then verify through a fresh service.
@@ -183,8 +182,8 @@ describe("csrfTokenGuard middleware", () => {
     const { app } = guardedApp();
     expect((await app.handle(req("/read"))).status).toBe(200);
     expect(
-      await app.handle(new Request("http://localhost:3000/read", { method: "HEAD" })),
-    ).toBeDefined();
+      (await app.handle(new Request("http://localhost:3000/read", { method: "HEAD" }))).status,
+    ).toBe(200);
   });
 
   it("a valid token lets the unsafe method through", async () => {
@@ -276,16 +275,6 @@ describe("csrfTokenGuard middleware", () => {
   });
 });
 
-describe.skipIf(REAL_BUN)("csrfToken cross-backend consistency", () => {
-  it("a Bun-native service and a fallback service reject each other's tokens", () => {
-    if (!NATIVE) return;
-    const native = csrfToken({ secret: "same" });
-    const fallback = csrfToken({ secret: "same" });
-    // Different MAC domains by construction; cross-verification must fail.
-    expect(native.verify(fallback.issue())).toBe(false);
-    expect(fallback.verify(native.issue())).toBe(false);
-  });
-});
 describe("csrf", () => {
   it("safe methods pass without origins", async () => {
     const app = new Keala(quiet);

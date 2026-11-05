@@ -11,7 +11,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Keala } from "../../src/core/app.ts";
 import { createBodyParser, readBodyLimited } from "../../src/index.ts";
 import { bodyOf } from "../../src/plugins/body-parser.ts";
-import type { Next, RouteHandler } from "../../src/index.ts";
 import { isHttpError } from "../../src/index.ts";
 
 const quiet = { env: "test" } as const;
@@ -204,14 +203,6 @@ describe("C4: body errors carry machine-readable codes", () => {
     );
     expect(res.status).toBe(413);
     expect(await res.json()).toEqual({ code: "payload_too_large" });
-  });
-
-  it("Next and RouteHandler are importable from the root entry (type-level)", () => {
-    // eslint-disable-next-line unicorn/consistent-function-scoping -- local on purpose: proves the type composition
-    const mw: RouteHandler = async (_c, next: Next) => {
-      await next();
-    };
-    expect(typeof mw).toBe("function");
   });
 });
 

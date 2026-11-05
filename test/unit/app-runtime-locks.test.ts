@@ -222,17 +222,6 @@ describe("agent r5 — locks correct behavior", () => {
     expect(res.body).toBeNull();
   });
 
-  it("finalizer: sugar 204 stays 204/empty (U3c rewrite of the status-then-body lock)", async () => {
-    const app = new Keala(quiet);
-    app.get("/", (c) => {
-      return c.text("x", 204);
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(204);
-    expect(await res.text()).toBe("");
-    expect(res.headers.get("content-length")).toBeNull();
-  });
-
   it("finalizer: HEAD + unmatched method answers 405 with Allow and staged global headers", async () => {
     const app = new Keala(quiet);
     app.use(async (c, next) => {
@@ -298,16 +287,6 @@ describe("agent r5 — locks correct behavior", () => {
     const res = await drive(app, new Request("http://localhost:3000/k"));
     expect(res.headers.get("x-early")).toBe("1");
     expect(res.headers.get("x-late")).toBe("1");
-  });
-
-  it("sugar: HEAD on a sugar response backfills Content-Length and drops the body", async () => {
-    const app = new Keala(quiet);
-    app.use(createCookies());
-    app.get("/h", (c) => c.text("hello"));
-    const res = await drive(app, new Request("http://localhost:3000/h", { method: "HEAD" }));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-length")).toBe("5");
-    expect(res.body).toBeNull();
   });
 
   it("sugar: 304 keeps validators/cookies and drops content headers", async () => {

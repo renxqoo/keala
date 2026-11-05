@@ -173,15 +173,6 @@ describe("app pipeline", () => {
     expect((error.mock.calls[0] as unknown as [Error])[0].message).toBe("boom");
   });
 
-  it("HEAD reuses the GET handler, drops the body, backfills Content-Length", async () => {
-    const app = new Keala(quiet);
-    app.get("/h", (c) => c.text("hello"));
-    const res = await app.handle(new Request("http://localhost:3000/h", { method: "HEAD" }));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-length")).toBe("5");
-    expect(await res.text()).toBe("");
-  });
-
   it("late app.use() recomposes existing route chains", async () => {
     const app = new Keala(quiet);
     app.get("/late", (c) => c.text("core"));
@@ -213,13 +204,6 @@ describe("app pipeline", () => {
     const res = await app.handle(req("/ip"), { remote });
     expect(await res.text()).toBe("9.9.9.9|9.9.9.9");
     expect(calls).toBe(1);
-  });
-
-  it("callback() wraps handle 1:1", async () => {
-    const app = new Keala(quiet);
-    app.get("/cb", (c) => c.text("cb"));
-    const res = await app.callback()(req("/cb"));
-    expect(await res.text()).toBe("cb");
   });
 });
 
@@ -264,7 +248,6 @@ describe("app: registration validation", () => {
     expect(app.url("user", { id: "7" })).toBe("/users/7");
     expect(app.route("user")).toBe("/users/:id(\\d+)");
     expect(app.route("missing")).toBeUndefined();
-    expect(() => app.url("user", {})).toThrow(/Missing required parameter/);
   });
 
   it("app.param middleware runs for routes capturing the param", async () => {

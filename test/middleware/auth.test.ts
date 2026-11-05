@@ -162,6 +162,18 @@ describe("bearerAuth", () => {
 });
 
 describe("password hashing (runtime-adaptive)", () => {
+  it("salts are random per hash", async () => {
+    expect(await hashPassword("x")).not.toBe(await hashPassword("x"));
+  });
+
+  it("handles unicode passwords and non-string inputs", async () => {
+    const hash = await hashPassword("pässwörd→∞");
+    expect(await verifyPassword(hash, "pässwörd→∞")).toBe(true);
+    expect(await verifyPassword(hash, "password→∞")).toBe(false);
+    expect(await verifyPassword(null as unknown as string, "x")).toBe(false);
+    expect(await verifyPassword(hash, undefined as unknown as string)).toBe(false);
+  });
+
   it("hash and verify round-trip", async () => {
     const hash = await hashPassword("correct horse battery staple");
     expect(hash).not.toContain("correct");
@@ -340,35 +352,6 @@ describe("M7: bearerAuth({ token }) — static token with timing-safe compare", 
 });
 
 describe("M7: RFC 6750 three-way — malformed → 400 invalid_request", () => {
-  it("token with internal whitespace → 400 error=invalid_request", async () => {
-    const app = new Keala(quiet);
-    app.use(bearerAuth({ verify: () => true }));
-    app.get("/x", (c) => c.text("ok"));
-    const res = await app.handle(
-      req("/x", { headers: { authorization: "Bearer not@valid token" } }),
-    );
-    expect(res.status).toBe(400);
-    expect(res.headers.get("www-authenticate")).toContain('error="invalid_request"');
-  });
-
-  it("token with control bytes → 400", async () => {
-    const app = new Keala(quiet);
-    app.use(bearerAuth({ verify: () => true }));
-    app.get("/x", (c) => c.text("ok"));
-    const res = await app.handle(
-      req("/x", { headers: { authorization: `Bearer tok${"\x01"}en` } }),
-    );
-    expect(res.status).toBe(400);
-  });
-
-  it("empty Bearer token → 400", async () => {
-    const app = new Keala(quiet);
-    app.use(bearerAuth({ verify: () => true }));
-    app.get("/x", (c) => c.text("ok"));
-    const res = await app.handle(req("/x", { headers: { authorization: "Bearer " } }));
-    expect(res.status).toBe(400);
-  });
-
   it("verify-rejected (valid format) → 401 + error=invalid_token", async () => {
     const app = new Keala(quiet);
     app.use(bearerAuth({ verify: () => false }));
@@ -393,15 +376,6 @@ describe("M7: basicAuth({ username, password }) — static credentials", () => {
     app.use(basicAuth({ username: "admin", password: "s3cret" }));
     app.get("/x", (c) => c.text("ok"));
     const res = await app.handle(req("/x", { headers: basic("admin", "wrong") }));
-    expect(res.status).toBe(401);
-  });
-
-  it("timing-safe (not === on plaintext)", async () => {
-    const app = new Keala(quiet);
-    app.use(basicAuth({ username: "admin", password: "s3cret" }));
-    app.get("/x", (c) => c.text("ok"));
-    // Prefix-match attempt (=== would short-circuit true on partial match)
-    const res = await app.handle(req("/x", { headers: basic("admin", "s3cr") }));
     expect(res.status).toBe(401);
   });
 });

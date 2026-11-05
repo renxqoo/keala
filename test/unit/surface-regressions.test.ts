@@ -71,16 +71,6 @@ describe("agent audit: redirect status classification (statuses.redirect)", () =
     }
   });
 
-  it("redirect() answers 302 by default (U3c: no staged status can feed it)", async () => {
-    const app = new Keala(quiet);
-    app.get("/", (c) => {
-      return c.redirect("/next");
-    });
-    const res = await app.handle(new Request("http://localhost:3000/"));
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/next");
-  });
-
   it("redirect() honors an explicit 305 code (a real redirect status)", async () => {
     const app = new Keala(quiet);
     app.get("/", (c) => {

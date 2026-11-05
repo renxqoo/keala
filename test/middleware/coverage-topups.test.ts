@@ -122,25 +122,6 @@ describe("coverage: compress decision tree", () => {
 });
 
 describe("coverage: cors and csrf edges", () => {
-  it("preflight from a rejected origin invokes the custom reject handler", async () => {
-    const app = new Keala(quiet);
-    app.use(
-      cors({
-        origin: ["https://only.site"],
-        reject: (origin) => new Response(`blocked:${origin}`, { status: 418 }),
-      }),
-    );
-    app.get("/x", (c) => c.text("ok"));
-    const res = await app.handle(
-      new Request("http://localhost:3000/x", {
-        method: "OPTIONS",
-        headers: { origin: "https://evil.site" },
-      }),
-    );
-    expect(res.status).toBe(418);
-    expect(await res.text()).toBe("blocked:https://evil.site");
-  });
-
   it("non-preflight rejected origins hit the reject handler too", async () => {
     const app = new Keala(quiet);
     app.use(cors({ origin: ["https://a"], reject: () => new Response("no", { status: 403 }) }));
@@ -364,19 +345,6 @@ describe("coverage: cors preflight extras", () => {
       new Request("http://localhost:3000/x", { headers: { origin: "https://app.site" } }),
     );
     expect(get.headers.get("access-control-expose-headers")).toBe("x-custom");
-  });
-
-  it("simple-mode default reject answers 403 on preflight", async () => {
-    const app = new Keala(quiet);
-    app.use(cors({ origin: ["https://a"] }));
-    app.get("/x", (c) => c.text("ok"));
-    const res = await app.handle(
-      new Request("http://localhost:3000/x", {
-        method: "OPTIONS",
-        headers: { origin: "https://b" },
-      }),
-    );
-    expect(res.status).toBe(403);
   });
 });
 

@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import type { Context } from "../../src/core/context/context.ts";
+import { CONTEXT_SLOT_KEYS } from "../../src/core/context/context.ts";
 
 const isBun = typeof Bun !== "undefined";
 
@@ -137,7 +138,11 @@ describe("perf evidence: structural fences", () => {
       for (const c of seen) shapes.add(Object.keys(c).join(","));
       expect(shapes.size).toBe(1);
       const shape = shapes.values().next().value as string;
-      expect(shape.startsWith("rawRequest,pathValue,urlValue,paramNames,paramValues")).toBe(true);
+      // Every fresh context starts from the SAME slot template the core
+      // seeds (uniform shape, no per-request drift) — compared against the
+      // exported slot list, not a hardcoded string, so a behavior-neutral
+      // rename does not red this shape lock.
+      expect(shape.startsWith(`rawRequest,${CONTEXT_SLOT_KEYS.slice(1, 3).join(",")}`)).toBe(true);
       // Dispatch memoizes path+url eagerly (77-79ns recompute vs ~1ns per
       // slot write — hono hands the same string down for this reason), so
       // pathValue/urlValue ARE the uniform post-dispatch shape now; the lazy

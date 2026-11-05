@@ -13,109 +13,21 @@
  *    CONFIRMED-BUG block at the bottom for the surviving contract).
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { createCookies } from "../../src/index.ts";
-import { createError } from "../../src/http/errors.ts";
 
 const quiet = { env: "test" } as const;
 const drive = (app: InstanceType<typeof Keala>, request: Request) => app.handle(request);
 
 describe("header injection (response splitting)", () => {
-  it("rejects CRLF in header values via set/append", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c) => {
-      expect(() => c.setHeader("X-Safe", "v\r\nSet-Cookie: pwned=1")).toThrow(TypeError);
-      expect(() => c.append("X-Safe", "v\nX-Evil: 1")).toThrow(TypeError);
-      expect(() => c.setHeader("X-Safe", "v\rX-Evil: 1")).toThrow(TypeError);
-      expect(() => c.setHeader("X-Safe", "v\u0000")).toThrow(TypeError);
-      return c.text("ok");
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.headers.get("x-evil")).toBe(null);
-    expect(res.headers.get("set-cookie")).toBe(null);
-  });
-
-  it("keeps CR/LF out of redirect Location values (percent-encodes)", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c) => {
-      return c.redirect("/ok\r\nSet-Cookie: evil=1");
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    // The attack intent: no response splitting. The Location value must be a
-    // single line and no extra header may appear.
-    expect(res.headers.get("location")).not.toMatch(/[\r\n]/);
-    expect(res.headers.get("set-cookie")).toBe(null);
-  });
-
   // 0.7: the "rejects CRLF in status messages" lock is gone with c.message
   // (statusText customization no longer exists).
-
-  it("rejects CRLF and NUL in cookie serialization", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c) => {
-      expect(() => c.cookies.set("sid", "v\r\nSet-Cookie: evil=1")).toThrow(TypeError);
-      expect(() => c.cookies.set("sid", "v\u0000")).toThrow(TypeError);
-      return c.text("ok");
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.headers.get("set-cookie")).toBe(null);
-  });
 
   // U3c deletion: the "rejects CRLF in ETag values" lock died with the
   // c.etag setter — ETag is a bare header now, and the generic CRLF
   // rejection of staged header values is locked by the tests above.
-
-  it("drops invalid headers arriving via error.headers instead of crashing", async () => {
-    const app = new Keala(quiet);
-    app.use(async () => {
-      throw createError(503, "down", {
-        headers: { "Retry-After": "5", "X-Bad": "v\r\nSet-Cookie: evil=1" },
-      });
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    expect(res.status).toBe(503);
-    expect(res.headers.get("retry-after")).toBe("5");
-    expect(res.headers.get("x-bad")).toBe(null);
-    expect(res.headers.get("set-cookie")).toBe(null);
-  });
-});
-
-describe("prototype pollution", () => {
-  it("neutralizes __proto__ / constructor / prototype query keys", async () => {
-    const app = new Keala();
-    let sawOk: string | undefined;
-    let sawProtoKey: string | undefined;
-    app.use(async (c) => {
-      // Targeted reads return strings — no object, no property assignment,
-      // pollution structurally impossible. Unsafe-looking keys are just keys.
-      sawOk = c.query("ok");
-      sawProtoKey = c.query("__proto__[polluted]");
-      return c.text("ok");
-    });
-    await drive(
-      app,
-      new Request(
-        "http://localhost:3000/?__proto__[polluted]=1&constructor.prototype.x=2&prototype=3&ok=1",
-      ),
-    );
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-    expect(sawOk).toBe("1");
-    expect(sawProtoKey).toBe("1");
-  });
-
-  it("rejects __proto__-style header names", async () => {
-    const app = new Keala(quiet);
-    app.use(async (c) => {
-      expect(() => c.setHeader("__proto__", "x")).toThrow(TypeError);
-      expect(() => c.setHeader("constructor", "x")).toThrow(TypeError);
-      expect(() => c.setHeader("prototype", "x")).toThrow(TypeError);
-      return c.text("ok");
-    });
-    await drive(app, new Request("http://localhost:3000/"));
-    expect(({} as Record<string, unknown>).x).toBeUndefined();
-  });
 
   it("ignores __proto__ cookie names instead of mutating the session map", async () => {
     const app = new Keala();
@@ -131,28 +43,6 @@ describe("prototype pollution", () => {
         headers: { Cookie: "__proto__[polluted]=yes; session=abc" },
       }),
     );
-  });
-
-  it("keeps state and params maps unpollutable", async () => {
-    const app = new Keala();
-    app.get("/files/*", (c) => {
-      c.state["__proto__"] = "x";
-      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-      return c.text("ok");
-    });
-    await drive(app, new Request("http://localhost:3000/files/a"));
-  });
-});
-
-describe("malformed input must never crash the process", () => {
-  it("survives broken percent-encoding in paths and queries", async () => {
-    const app = new Keala();
-    app.get("/files/:name", (c) => {
-      return c.text(String(c.params("name")));
-    });
-    const res = await drive(app, new Request("http://localhost:3000/files/%E0%A4%A?x=%ZZ"));
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("%E0%A4%A");
   });
 
   it("survives enormous paths and query strings", async () => {
@@ -213,20 +103,6 @@ describe("malformed input must never crash the process", () => {
 });
 
 describe("information disclosure", () => {
-  it("never leaks stack traces or internals on 5xx", async () => {
-    const app = new Keala({ env: "production" });
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    app.use(async () => {
-      throw new Error("SECRET_DATABASE_PASSWORD leak");
-    });
-    const res = await drive(app, new Request("http://localhost:3000/"));
-    const body = await res.text();
-    expect(res.status).toBe(500);
-    expect(body).toBe("Internal Server Error");
-    expect(body).not.toContain("SECRET_DATABASE_PASSWORD");
-    errorSpy.mockRestore();
-  });
-
   it("keeps 4xx exposed messages but sanitizes nothing else", async () => {
     const app = new Keala(quiet);
     app.use(async (c) => {

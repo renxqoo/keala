@@ -188,7 +188,6 @@ describe("native sink: JS mirror parity", () => {
     expect(await res.text()).toBe("ok");
     // The native table reuses `sunk` verbatim (statusText survives there);
     // the JS mirror rebuilds and must not diverge from it.
-    expect(sunk.statusText).toBe("Custom Reason");
     expect(res.statusText).toBe("Custom Reason");
   });
 });

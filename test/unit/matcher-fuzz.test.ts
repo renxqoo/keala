@@ -81,9 +81,6 @@ describe("matchRoute differential fuzz (fast paths vs trie)", () => {
         // A pattern alone matches a superset (the crowd adds nothing for THIS
         // pattern), so equality is only required when the alone-match hits the
         // pattern itself; mismatch on hit is a fast-path divergence.
-        const na = norm(a);
-        if (na !== null) {
-        }
         // The crowd must match AT LEAST whenever alone matches the same target.
         if (a !== null && a.target.pattern === pattern) {
           expect([pattern, path, norm(b)]).toEqual([
@@ -247,21 +244,6 @@ describe("request-target forms", () => {
 });
 
 describe("app surface guards", () => {
-  it("second listen() throws; close-then-listen throws", () => {
-    const app = new Keala({ env: "test" });
-    const fakeServer = {
-      port: 0,
-      hostname: "x",
-      stop() {},
-      fetch: async () => new Response("x"),
-      reload() {},
-    };
-    // attach via a stubbed serve implementation through startBunServer is Bun-only;
-    // instead verify the draining guard only.
-    void fakeServer;
-    expect(() => app.redirect("/a", "/b", "301x" as unknown as number)).toThrow();
-  });
-
   it("redirect destination params validate at registration", () => {
     const app = new Keala({ env: "test" });
     expect(() => app.redirect("/u/:id", "/v/:other")).toThrow(/never captures/);

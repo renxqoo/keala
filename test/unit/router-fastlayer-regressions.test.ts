@@ -163,17 +163,16 @@ describe("locks correct: positional alternation order (trie DFS, not exacts-vs-w
     expectAgreement(build(["/a/:x/:y", "/a/b/*"]), "/a/b/c");
   });
 
-  it("unit-level: the compiled alternation ranks the wildcard pattern first and returns its target", () => {
+  it("unit-level: the compiled table regex returns the wildcard pattern's target (same as the trie)", () => {
     const state = build(["/a/b/*", "/a/:x/:y"]);
     const table = compileTableRegex(state.regexIndex, state.impureFirst);
     expect(table).not.toBeNull();
-    // RegExp#source escapes "/"; normalize it away. The wildcard pattern
-    // must LEAD the alternation (positional order, not exacts-first).
-    const source = table?.regex.source.replace(/\\\//g, "/") ?? "";
-    expect(source.startsWith("^(?:/a/b/(.*)")).toBe(true);
     const matched = table === null ? null : matchTableRegex(table, "/a/b/c");
     const trie = matchPattern(state.trieRoot, "/a/b/c");
     expect(matched?.target).toBe(trie?.target);
+    // The wildcard pattern's target is what the table regex hands back for
+    // the deep path (behavioral identity, not regex layout).
+    expect(matched?.target?.pattern).toBe("/a/b/*");
   });
 
   it("realistic shape: /files/static/* wins over /files/:area/:name on /files/static/x", () => {

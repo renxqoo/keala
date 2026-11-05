@@ -36,24 +36,6 @@ const wait = (ms: number): Promise<void> => new Promise((res) => setTimeout(res,
  * wire writes (abandoned sockets, force-closed drains) are the classic
  * source; counting keeps the worker alive so the finding is attributable.
  */
-export const noiseTracker = (): { count: () => number; stop: () => void } => {
-  let n = 0;
-  const bump = (): void => {
-    n += 1;
-  };
-  const on = process.on.bind(process) as unknown as (event: string, fn: () => void) => void;
-  const off = process.off.bind(process) as unknown as (event: string, fn: () => void) => void;
-  on("unhandledRejection", bump);
-  on("uncaughtException", bump);
-  return {
-    count: () => n,
-    stop: () => {
-      off("unhandledRejection", bump);
-      off("uncaughtException", bump);
-    },
-  };
-};
-
 /** Wire-level exchange (pattern from agent-r46-security-2.test.ts). */
 const wireExchange = async (
   port: number,

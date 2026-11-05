@@ -5,7 +5,6 @@ import { validateHeaderName, validateHeaderValue } from "../../src/utils/text.ts
 import { mimeFromExtension, normalizeType } from "../../src/utils/mime.ts";
 import { Keala, isHttpError } from "../../src/index.ts";
 import { normalizeError } from "../../src/http/errors.ts";
-import { statusMessage } from "../../src/http/status.ts";
 
 describe("getPath", () => {
   it("extracts the path from absolute URLs", () => {
@@ -116,7 +115,7 @@ describe("coverage gaps", () => {
     // U3c: `c.status = 599` with no body used to fall back to the status
     // text — the sugar's second parameter is the equivalent status channel.
     const app = new Keala();
-    app.use((c) => c.text(statusMessage(599) || String(599), 599));
+    app.use((c) => c.text("599", 599));
     const res = await app.handle(new Request("http://localhost:3000/"));
     expect(res.status).toBe(599);
     expect(await res.text()).toBe("599");

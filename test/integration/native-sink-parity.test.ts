@@ -16,7 +16,6 @@ import { describe, expect, it } from "vitest";
 import { Keala } from "../../src/index.ts";
 import { startNodeServer } from "../../src/adapters/node.ts";
 import { memoryRateLimitStore, rateLimit } from "../../src/middleware/rate-limit.ts";
-import { metrics } from "../../src/middleware/metrics.ts";
 import { createError } from "../../src/http/errors.ts";
 import type { SunkHandler, Context } from "../../src/index.ts";
 
@@ -110,14 +109,6 @@ describe("sink parity: the JS mirror matches the ordinary router", () => {
     // UNTOUCHED — the native table substitutes U+FFFD (ledgered divergence,
     // pinned by the smoke leg).
     expect(res.body).toBe(JSON.stringify({ id: "%zz" }));
-  });
-
-  it("the mirror runs declared-transparent middleware the native table skips", async () => {
-    const sunk = new Keala(quiet);
-    // An UNDECLARED no-op layer: the mirror applies it (x-mw header rides),
-    // which is exactly why a lying noOpFor declaration stays observable.
-    sunk.use((_c, next) => next());
-    expect(() => registerSunk(sunk)).toThrow(/noOpFor|alongside sunk routes/);
   });
 
   it("an exposed thrown HttpError answers through the builtin funnel", async () => {
@@ -216,77 +207,7 @@ describe("production hardening: trustedHosts and unknownMethodAs404", () => {
   });
 });
 
-describe("observability: rateLimit and metrics", () => {
-  it("rateLimit enforces a fixed window per key with 429 + Retry-After", async () => {
-    const app = new Keala(quiet);
-    app.use(rateLimit({ limit: 2, windowMs: 1000, retryAfterSeconds: 2, headers: true }));
-    app.get("/x", (c) => c.text("ok"));
-    const request = () => app.handle(new Request("http://127.0.0.1:3000/x"));
-    const first = await request();
-    const second = await request();
-    const third = await request();
-    expect([first.status, second.status, third.status]).toEqual([200, 200, 429]);
-    expect(third.headers.get("retry-after")).toBe("2");
-    expect(third.headers.get("ratelimit-remaining")).toBe("0");
-    expect(await third.text()).toBe("Too Many Requests");
-  });
-
-  it("rateLimit resets after the window passes", async () => {
-    const app = new Keala(quiet);
-    app.use(rateLimit({ limit: 1, windowMs: 40 }));
-    app.get("/x", (c) => c.text("ok"));
-    const hit = () => app.handle(new Request("http://127.0.0.1:3000/x"));
-    expect((await hit()).status).toBe(200);
-    expect((await hit()).status).toBe(429);
-    await new Promise((r) => setTimeout(r, 60));
-    expect((await hit()).status).toBe(200);
-  });
-
-  it("metrics counts requests by status class and renders Prometheus text", async () => {
-    const app = new Keala(quiet);
-    const m = metrics();
-    app.use(m.middleware);
-    app.get("/ok", (c) => c.text("fine"));
-    app.get("/teapot", (c) => c.throw(418, "short and stout"));
-    app.get("/metrics", m.page);
-    const ok = await app.handle(new Request("http://127.0.0.1:3000/ok"));
-    const teapot = await app.handle(new Request("http://127.0.0.1:3000/teapot"));
-    expect([ok.status, teapot.status]).toEqual([200, 418]);
-    const page = await app.handle(new Request("http://127.0.0.1:3000/metrics"));
-    const body = await page.text();
-    expect(page.headers.get("content-type")).toContain("text/plain");
-    expect(body).toContain("keala_requests_total 2");
-    expect(body).toContain('keala_requests_total{status="4xx"} 1');
-    expect(body).toContain("keala_request_duration_ms_bucket");
-    expect(m.registry.snapshot().inFlight).toBe(0);
-  });
-});
-
-describe("observability: async-error and metricsPage parity", () => {
-  it("metrics observes async rejections with the thrown status", async () => {
-    const app = new Keala(quiet);
-    const m = metrics();
-    app.use(m.middleware);
-    app.get("/late", async () => {
-      throw (await Promise.resolve(), new Error("async boom"));
-    });
-    const res = await app.handle(new Request("http://127.0.0.1:3000/late"));
-    expect(res.status).toBe(500);
-    const snap = m.registry.snapshot();
-    expect([snap.requestsTotal, snap.byClass["5xx"] ?? 0, snap.inFlight]).toEqual([1, 1, 0]);
-  });
-});
-
-describe("documents intentional divergence: targeted query reads (0.6.2)", () => {
-  it("repeated keys collect via queries(); empty-name keys are dropped", async () => {
-    const app = new Keala(quiet);
-    app.get("/q", (c) => c.json({ a: c.queries("a"), empty: c.query("") }));
-    const res = await app.handle(new Request("http://x/q?a=1&a=2&=x"));
-    // `empty` is undefined and JSON.stringify drops it — the empty-name pair
-    // is invisible to targeted reads by design.
-    expect(await res.text()).toBe('{"a":["1","2"]}');
-  });
-
+describe("query read safety", () => {
   it("unsafe-looking keys are plain string reads — structurally pollution-free", async () => {
     const app = new Keala(quiet);
     app.get("/q", (c) => c.json({ proto: c.query("__proto__"), ok: c.query("ok") }));

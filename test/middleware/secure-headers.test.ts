@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
-import { secureHeaders, requestId, timing, logger } from "../../src/middleware/headers.ts";
+import { secureHeaders, requestId, timing } from "../../src/middleware/headers.ts";
 
 const quiet = { env: "test" } as const;
 const req = (path: string, init?: RequestInit) => new Request(`http://localhost:3000${path}`, init);
@@ -404,15 +404,5 @@ describe("timing + logger", () => {
     const value = res.headers.get("server-timing") ?? "";
     expect(value).toContain("total;dur=");
     expect(value).toContain("db;dur=");
-  });
-
-  it("logger writes one structured line per request", async () => {
-    const lines: string[] = [];
-    const app = new Keala(quiet);
-    app.use(logger({ write: (line) => lines.push(line) }));
-    app.get("/x", (c) => c.text("ok"));
-    await app.handle(req("/x"));
-    expect(lines.length).toBe(1);
-    expect(lines[0]).toMatch(/^GET \/x -> 200 \d+ms -$/);
   });
 });

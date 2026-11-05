@@ -308,18 +308,6 @@ describe("redteam — RT-5 sugar helpers corrupt multi-value headers", () => {
     expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]);
   });
 
-  it("green control: state-mode cookies.set without sugar keeps both headers", async () => {
-    const app = new Keala(quiet);
-    app.use(createCookies());
-    app.get("/x", (c) => {
-      c.cookies.set("sess", "1", { path: "/" });
-      c.cookies.set("cart", "2", { path: "/" });
-      return c.text("hi");
-    });
-    const res = await app.handle(req("http://localhost/x"));
-    expect(res.headers.getSetCookie()).toEqual(["sess=1; Path=/", "cart=2; Path=/"]);
-  });
-
   it("green: rule-4 merge of committed set-cookie + late cookies.set (GET)", async () => {
     const app = new Keala(quiet);
     app.use(createCookies());

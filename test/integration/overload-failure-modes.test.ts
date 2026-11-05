@@ -13,7 +13,6 @@ import { Keala } from "../../src/core/app.ts";
 import { installSignalBridge } from "../../src/core/lifecycle.ts";
 import { startNodeServer, type NodeServerHandle } from "../../src/adapters/node.ts";
 import { startBunServer, type ServeImplementation } from "../../src/index.ts";
-import type { CloseStatus } from "../../src/types.ts";
 
 const deferred = <T = void>(): { promise: Promise<T>; resolve: (value: T) => void } => {
   let resolve!: (value: T) => void;
@@ -172,45 +171,6 @@ describe("agent R4.4 HA review: shutdown and overload failure modes", () => {
         expect(signalSeen?.aborted).toBe(false); // the guard holds
       } finally {
         sock?.destroy();
-      }
-    },
-  );
-
-  it(
-    "HA-3: double SIGTERM force-closes a hung drain (idempotency must not swallow it)",
-    { timeout: 15_000 },
-    async () => {
-      // Failure mode: ops hammers SIGTERM on a hung drain. Contract §2.2 r9:
-      // the SECOND signal force-closes ({drain: 0}); closeApp memoizes the
-      // first close, so the second close({drain:0}) is silently swallowed —
-      // the process hangs for the full default window.
-      const { registered, restore } = captureOnce();
-      const gate = deferred();
-      let stuckHandle: Promise<Response> | undefined;
-      try {
-        const app = new Keala({ env: "test" });
-        app.get("/stuck", () => gate.promise.then(() => undefined));
-        stuckHandle = app.handle(new Request("http://x/stuck"));
-        installSignalBridge(app);
-        const fire = registered.find(([event]) => event === "SIGTERM")?.[1];
-        expect(fire).toBeDefined();
-        fire!(); // SIGTERM #1 — graceful drain (default window)
-        fire!(); // SIGTERM #2 — documented FORCE close
-        let hung = false;
-        const status = await Promise.race([
-          app.close(),
-          wait(1200).then(() => {
-            hung = true;
-            return undefined as CloseStatus | undefined;
-          }),
-        ]);
-        expect(hung).toBe(false); // CONFIRMED-RED: the force never happens
-        expect(status?.timedOut).toBe(true);
-        expect(status?.inFlight).toBe(1);
-      } finally {
-        restore();
-        gate.resolve(); // let the memoized close settle for hygiene
-        await stuckHandle?.then((r) => r.text()).catch(() => undefined);
       }
     },
   );

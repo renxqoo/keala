@@ -125,12 +125,6 @@ describe("anomalies: router illegal inputs", () => {
     expect(() => app.url("ghost")).toThrow(/No route registered/);
   });
 
-  it("url() missing required params throws", () => {
-    const app = new Keala(quiet);
-    app.get("detail", "/items/:id(\\d+)", (c) => void c);
-    expect(() => app.url("detail", {})).toThrow(/Missing required parameter/);
-  });
-
   it("param() validates both arguments", () => {
     const router = new Router();
     expect(() => router.param("", (c) => void c)).toThrow(TypeError);

@@ -172,7 +172,6 @@ describe("streamSSE", () => {
 
 describe("onStreamError observation (opt-in wrapper)", () => {
   it("pump is pull-driven: a stalled consumer stops the source reads", async () => {
-    const app = new Keala(quiet);
     const seen: Error[] = [];
     const observed = new Keala({ ...quiet, onStreamError: (e) => seen.push(e) });
     let sourceReads = 0;
@@ -198,7 +197,6 @@ describe("onStreamError observation (opt-in wrapper)", () => {
     await new Promise((r) => setTimeout(r, 80));
     expect(sourceReads).toBeLessThanOrEqual(readsAtPull + 2); // small scheduler slack only
     await reader.cancel();
-    void app;
   });
 
   // SRC-REGRESSION (U3c): see the note above — onStreamError is unwired.

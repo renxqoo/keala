@@ -113,7 +113,7 @@ describe("adapter websocket dispatcher", () => {
     expect(events).toEqual(["a-open:sock-a:/a", "a-msg:hello", "a-close:1000", "b-open"]);
   });
 
-  it("no websocket config is emitted without ws routes", () => {
+  it("websocket dispatchers install unconditionally so late app.ws() routes work without reload", () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => c.text("x"));
     const made: Record<string, unknown>[] = [];

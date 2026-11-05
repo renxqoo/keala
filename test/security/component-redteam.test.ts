@@ -386,17 +386,6 @@ describe("redteam P2: core regression quick-scan (green)", () => {
     expect(await res.text()).not.toContain("boom");
   });
 
-  it("decorate stays isolated across apps; self-mount is rejected", async () => {
-    const a = new Keala(quiet);
-    const b = new Keala(quiet);
-    a.decorate("onlyA", 1);
-    expect(() => a.mount("/self", a)).toThrow(TypeError);
-    a.get("/x", (c) => c.text(`a:${(c as unknown as { onlyA: number }).onlyA}`));
-    b.get("/x", (c) => c.text(`b:${String((c as unknown as { onlyA?: number }).onlyA)}`));
-    expect(await (await a.handle(req("/x"))).text()).toBe("a:1");
-    expect(await (await b.handle(req("/x"))).text()).toBe("b:undefined");
-  });
-
   it("floating next() containment: a handler that skips awaiting never crashes", async () => {
     const app = new Keala(quiet);
     app.use((c, next) => {

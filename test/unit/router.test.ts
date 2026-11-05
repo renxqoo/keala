@@ -270,13 +270,6 @@ describe("router: groups and mounts", () => {
     expect(res.headers.get("x-org")).toBe("acme");
     expect((await app.handle(req("/api/others/1"))).headers.get("x-org")).toBeNull();
   });
-
-  it("an array of routes shares handlers", async () => {
-    const app = new Keala(quiet);
-    for (const path of ["/a", "/b"]) app.get(path, (c) => c.text(`hit:${c.path}`));
-    expect(await (await app.handle(req("/a"))).text()).toBe("hit:/a");
-    expect(await (await app.handle(req("/b"))).text()).toBe("hit:/b");
-  });
 });
 
 /**

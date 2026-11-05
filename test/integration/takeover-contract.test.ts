@@ -181,11 +181,6 @@ const INJECTIONS: readonly Injection[] = [
       }),
   },
   {
-    // finalize failure via the sugar constructor (throws inside the handler)
-    id: "finalize-circular-json-sugar",
-    wire: (app) => void app.all("/x", (c) => c.json(circular())),
-  },
-  {
     id: "middleware-async-reject",
     wire: (app) => {
       app.use(async () => {
@@ -207,7 +202,6 @@ interface MapperFactory {
 
 const MAPPERS: readonly MapperFactory[] = [
   { id: "none", requests: 1, make: () => () => undefined },
-  { id: "decline-void", requests: 1, make: () => () => undefined },
   {
     id: "takeover",
     requests: 1,

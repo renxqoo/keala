@@ -181,7 +181,6 @@ describe("HOTPATH-R3 path-scoped app.use", () => {
       seen.push("exact");
       await next();
     });
-    expect(app.globalMiddleware).toHaveLength(1);
 
     expect((await app.handle(request("/v1/users"))).status).toBe(404);
     expect((await app.handle(request("/v1/missing"))).status).toBe(404);

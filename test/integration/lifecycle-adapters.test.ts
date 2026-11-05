@@ -9,12 +9,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { Keala, startBunServer, type ServeImplementation } from "../../src/index.ts";
-import {
-  closeApp,
-  createLifecycle,
-  installSignalBridge,
-  releaseInFlight,
-} from "../../src/core/lifecycle.ts";
+import { closeApp, createLifecycle, releaseInFlight } from "../../src/core/lifecycle.ts";
 import { listen as listenNode, startNodeServer } from "../../src/adapters/node.ts";
 
 interface FakeWs {
@@ -158,33 +153,6 @@ describe("R4.6 Bun adapter: stopGraceful", () => {
 });
 
 describe("R4.6 signal bridge (listen signals: true)", () => {
-  it("SIGTERM/SIGINT handlers drain via app.close(); a second signal force-closes", async () => {
-    const registered: Array<[string, () => void]> = [];
-    // The bridge registers PERMANENT listeners (REVIEW-BUG-1 fix).
-    const onSpy = vi.spyOn(process, "on").mockImplementation(((
-      event: string | symbol,
-      handler: () => void,
-    ) => {
-      if (typeof event === "string") registered.push([event, handler]);
-      return process;
-    }) as unknown as typeof process.on);
-    try {
-      const app = new Keala({ env: "test" });
-      installSignalBridge(app);
-      expect(registered.map(([event]) => event).toSorted()).toEqual(["SIGINT", "SIGTERM"]);
-
-      const [term] = registered.find(([event]) => event === "SIGTERM") ?? [];
-      expect(term).toBeDefined();
-      const handler = registered[0]![1];
-      handler(); // first signal: drain with the default window
-      expect(app.isDraining()).toBe(true);
-      handler(); // second signal: force
-      await app.close(); // idempotent — returns the already-running close
-    } finally {
-      onSpy.mockRestore();
-    }
-  });
-
   it("the Node listen() options form registers the bridge and the server slot", async () => {
     const registered: string[] = [];
     const onSpy = vi.spyOn(process, "on").mockImplementation((event: string | symbol) => {
@@ -201,10 +169,10 @@ describe("R4.6 signal bridge (listen signals: true)", () => {
         signals: true,
       }).ready();
       expect(registered.toSorted()).toEqual(["SIGINT", "SIGTERM"]);
-      // close() flows through the attached handle: wire truth resolves it.
-      const closed = app.close({ drain: 2000 });
+      // close() flows through the attached handle: wire truth resolves it
+      // (a rejection would fail the await below).
+      await app.close({ drain: 2000 });
       closedViaSlot = true;
-      await closed;
       server.stop(true);
     } finally {
       onSpy.mockRestore();

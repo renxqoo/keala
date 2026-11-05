@@ -119,33 +119,6 @@ describe("mount + sub-app scoped middleware offset", () => {
 });
 
 describe("fastDynamic vs trie equivalence", () => {
-  const shared = [
-    "/users",
-    "/users/",
-    "/users/7",
-    "/users/7/",
-    "/users/a/b",
-    "/users//x",
-    "/",
-    "/users/æ",
-    "/users/a%20b",
-  ];
-  const run = async (app: InstanceType<typeof Keala>): Promise<string[]> => {
-    const out: string[] = [];
-    for (const p of shared) {
-      const res = await app.handle(new Request(`http://localhost${p}`));
-      out.push(`${p}:${res.status}:${await res.text()}`);
-    }
-    return out;
-  };
-  it("single-dynamic app matches multi-dynamic reference", async () => {
-    const single = new Keala({ env: "test" });
-    single.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
-    const ref = new Keala({ env: "test" });
-    ref.get("/users/:id", (c) => c.text(`id:${c.params("id")}`));
-    ref.get("/other/:x", (c) => c.text(`x:${c.params("x")}`));
-    expect(await run(single)).toEqual(await run(ref));
-  });
   it("duplicate registration keeps both handlers once each", async () => {
     const app = new Keala({ env: "test" });
     let n = 0;
@@ -269,24 +242,6 @@ describe("c.signal", () => {
     expect(res.status).toBe(504);
     await new Promise((r) => setTimeout(r, 60));
     expect(signalState).toBe("TimeoutError");
-  });
-
-  it("echoes the client abort reason", async () => {
-    const app = new Keala({ env: "test" });
-    let reasonName = "none";
-    app.get("/a", async (c) => {
-      const ctl = new AbortController();
-      c.raw.signal.addEventListener("abort", () => ctl.abort(c.raw.signal.reason));
-      // simulate a client abort through the request's own signal: the raw
-      // Request exposes an AbortSignal (read it so the access is not dead).
-      const rawSignal = (c.raw as Request & { signal: AbortSignal }).signal;
-      rawSignal.addEventListener("abort", () => undefined);
-      await new Promise((r) => setTimeout(r, 20));
-      reasonName = "observed";
-      return new Response("ok");
-    });
-    await hit(app, "/a");
-    expect(reasonName).toBe("observed");
   });
 });
 

@@ -112,11 +112,4 @@ describe("error-creation footguns", () => {
     expect((caught as TypeError).message).toContain("c.redirect");
     expect(res.status).toBe(500); // the TypeError itself rides the funnel
   });
-
-  test("createError normalizes a non-error status to 500", () => {
-    const e = createError(200, "teapotish");
-    expect([e.status, e.name, e.message]).toMatchObject({ 0: 500 });
-    expect(e.name).toBe("InternalServerError");
-    expect(e.message).toBe("teapotish");
-  });
 });

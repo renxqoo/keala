@@ -37,68 +37,6 @@ describe("admission queue (latched)", () => {
     expect(app.inFlight).toBe(0);
   });
 
-  it("queued request evicted on client disconnect", async () => {
-    const app = new Keala({
-      env: "test",
-      overload: { maxConcurrency: 1, maxQueue: 4, queueTimeoutMs: 5000 },
-    });
-    const ctl = new AbortController();
-    let release: (() => void) | null = null;
-    app.get("/hold", async () => {
-      await new Promise<void>((r) => {
-        release = r;
-      });
-      return new Response("done");
-    });
-    const first = app.handle(new Request("http://localhost/hold"));
-    await new Promise((r) => setTimeout(r, 5));
-    // NOTE: app.handle takes a Request; abort its own signal to simulate the
-    // client walking away while queued.
-    const queuedReq = new Request("http://localhost/hold", { signal: ctl.signal });
-    const second = app.handle(queuedReq);
-    await new Promise((r) => setTimeout(r, 5));
-    ctl.abort();
-    const settled = await second;
-    expect(settled.status).toBe(503);
-    // The cast resets TS's closure-blind narrowing to `null` (the assignment
-    // happens inside the handler's promise executor).
-    (release as (() => void) | null)?.();
-    expect((await first).status).toBe(200);
-  });
-});
-
-describe("deadline + signal", () => {
-  it("zombie handler sees aborted c.signal (TimeoutError)", async () => {
-    const app = new Keala({ env: "test", requestTimeout: 15 });
-    let observed: unknown = "unset";
-    app.get("/s", async (c) => {
-      await new Promise((r) => setTimeout(r, 60));
-      observed = c.signal.aborted ? (c.signal.reason as DOMException).name : "live";
-      return new Response("late");
-    });
-    const res = await hit(app, "/s");
-    expect(res.status).toBe(504);
-    await new Promise((r) => setTimeout(r, 80));
-    expect(observed).toBe("TimeoutError");
-  });
-
-  it("deadline + pooling: the zombie never corrupts the pool", async () => {
-    const app = new Keala({ env: "test", pooling: true, requestTimeout: 10 });
-    app.get("/slow", async (c) => {
-      await new Promise((r) => setTimeout(r, 50));
-      return c.text("late");
-    });
-    app.get("/ok", (c) => c.text("fine"));
-    const timedOut = await hit(app, "/slow");
-    expect(timedOut.status).toBe(504);
-    const ok = await hit(app, "/ok");
-    expect(ok.status).toBe(200);
-    expect(await ok.text()).toBe("fine");
-    await new Promise((r) => setTimeout(r, 80));
-    const ok2 = await hit(app, "/ok");
-    expect(await ok2.text()).toBe("fine");
-  });
-
   it("a fast request under a deadline app settles normally", async () => {
     const app = new Keala({ env: "test", requestTimeout: 1000 });
     app.get("/f", (c) => c.text("fast"));

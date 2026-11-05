@@ -6,47 +6,14 @@
  * (rule cited in the name); PASSING = contract holds (kept as a lock).
  * Helper style mirrors test/r4-lifecycle-overload.test.ts.
  */
-import { afterAll, expect, it, vi } from "vitest";
-import net from "node:net";
-import { spawn } from "node:child_process";
+import { expect, it, vi } from "vitest";
 import { Keala } from "../../src/core/app.ts";
-import { type NodeServerHandle } from "../../src/adapters/node.ts";
-import { type ServeImplementation } from "../../src/adapters/bun.ts";
-import type { Context } from "../../src/core/context/context.ts";
 
 const deferred = <T = void>(): { promise: Promise<T>; resolve: (value: T) => void } => {
   let resolve!: (value: T) => void;
   return { promise: new Promise<T>((res) => (resolve = res)), resolve };
 };
 const wait = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
-const waitUntil = async <T>(probe: () => T | false, ms: number): Promise<T | null> => {
-  const end = Date.now() + ms;
-  for (;;) {
-    const v = probe();
-    if (v) return v;
-    if (Date.now() >= end) return null;
-    await wait(25);
-  }
-};
-export const state = (p: Promise<unknown>, ms: number): Promise<"resolved" | "pending"> =>
-  Promise.race([p.then(() => "resolved" as const), wait(ms).then(() => "pending" as const)]);
-
-const liveServers: NodeServerHandle[] = [];
-afterAll(() => {
-  for (const s of liveServers) s.stop(true);
-});
-
-/** True when the port refuses new TCP connections (the listener is dead). */
-export const refusedPort = (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
-    const sock = net.connect(port, "127.0.0.1");
-    sock.once(
-      "error",
-      (e: NodeJS.ErrnoException) => (sock.destroy(), resolve(e.code === "ECONNREFUSED")),
-    );
-    sock.once("connect", () => (sock.destroy(), resolve(false)));
-  });
-
 /** unhandledRejection spy (typing cast per test/r4-lifecycle-timeout.test.ts). */
 const unhandledWatch = (): { hits: unknown[]; stop: () => void } => {
   const hits: unknown[] = [];
@@ -65,103 +32,6 @@ const unhandledWatch = (): { hits: unknown[]; stop: () => void } => {
         on,
       ),
   };
-};
-
-/** Bun-shaped serve mock with a real-shaped stopGraceful (registerForce wired). */
-export const fakeGracefulServe = (): {
-  impl: ServeImplementation;
-  stopCalls: () => Array<boolean | undefined>;
-} => {
-  const stops: Array<boolean | undefined> = [];
-  const impl: ServeImplementation = (options) => ({
-    port: (options["port"] as number) ?? 0,
-    hostname: "localhost",
-    stop: (closeActive?: boolean) => void stops.push(closeActive),
-    fetch: async () => new Response("fake"),
-    reload: () => {},
-    stopGraceful: (grace) =>
-      new Promise((resolve) => {
-        stops.push(undefined);
-        let done = false;
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const finish = (timedOut: boolean): void => {
-          if (done) return;
-          done = true;
-          if (timer !== undefined) clearTimeout(timer);
-          if (timedOut) stops.push(true);
-          resolve({ timedOut });
-        };
-        grace.registerForce?.(() => finish(true));
-        if (grace.drain !== Number.POSITIVE_INFINITY)
-          timer = setTimeout(() => finish(true), grace.drain);
-        if (grace.onSettled(() => finish(false))) finish(false);
-      }),
-  });
-  return { impl, stopCalls: () => stops };
-};
-
-/**
- * Real-signal bridge probe (§2.1 "二次信号强停", §2.2 r9): a child process
- * runs the Node adapter with signals:true; the parent sends two real signals;
- * the child reports the bridge close's CloseStatus (and how it exited).
- */
-export const bridgeChildClose = async (
-  signals: readonly [NodeJS.Signals, NodeJS.Signals],
-): Promise<{ status: { timedOut: boolean } | null; exitBySecondSignal: boolean }> => {
-  const appUrl = new URL("../../src/core/app.ts", import.meta.url).href;
-  const nodeUrl = new URL("../../src/adapters/node.ts", import.meta.url).href;
-  const source = `
-import { Keala } from ${JSON.stringify(appUrl)};
-import { listen } from ${JSON.stringify(nodeUrl)};
-const app = new Keala({ env: "test" });
-app.get("/park", async (c) => {
-  await new Promise((resolve) => setTimeout(resolve, 5000)); // outlives the probe
-  return c.text("done");
-});
-const server = await listen(app, { port: 0, hostname: "127.0.0.1", signals: true }).ready();
-process.stdout.write("READY\\n");
-void fetch("http://127.0.0.1:" + server.port + "/park").catch(() => undefined);
-const poll = setInterval(() => {
-  if (!app.isDraining()) return;
-  clearInterval(poll);
-  void app.close().then(
-    (status) => process.stdout.write("CLOSE " + JSON.stringify(status) + "\\n"),
-    (error) => process.stdout.write("CLOSE-ERROR " + String(error) + "\\n"),
-  );
-}, 10);
-`;
-  const child = spawn(
-    process.execPath,
-    ["--experimental-strip-types", "--input-type=module", "-e", source],
-    {
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  let out = "";
-  const exitBox: { current: { code: number | null; signal: string | null } | null } = {
-    current: null,
-  };
-  child.stdout.setEncoding("utf8");
-  child.stdout.on("data", (c: string) => (out += c));
-  child.on("exit", (code, signal) => (exitBox.current = { code, signal }));
-  child.stderr.resume();
-  try {
-    if ((await waitUntil(() => out.includes("READY"), 5000)) === null)
-      return { status: null, exitBySecondSignal: exitBox.current?.signal === signals[1] };
-    await wait(200);
-    child.kill(signals[0]);
-    await wait(200); // drain running on the default window
-    child.kill(signals[1]);
-    const line = await waitUntil(() => {
-      const m = out.match(/CLOSE (.+)\n|CLOSE-ERROR (.+)\n/);
-      return m ? (m[1] ?? `ERROR:${m[2]}`) : false;
-    }, 1500);
-    if (line === null || line.startsWith("ERROR:"))
-      return { status: null, exitBySecondSignal: exitBox.current?.signal === signals[1] };
-    return { status: JSON.parse(line) as { timedOut: boolean }, exitBySecondSignal: false };
-  } finally {
-    child.kill("SIGKILL");
-  }
 };
 
 it("REVIEW-CT-27: §2.1 — c.signal is lazy, stable per request, and replays a client disconnect (AbortError)", async () => {
@@ -260,29 +130,6 @@ it("REVIEW-CT-31: §2.2 r1 — the 504 frees the slot at once; the zombie's late
   gate.resolve(); // zombie settles LATE
   await wait(20);
   expect(app.inFlight).toBe(0); // never -1: exactly one release per admission
-});
-
-it("REVIEW-CT-32: §2.2 invariant — a deadline-504 Context is never recycled into the pool", async () => {
-  const controlApp = new Keala({ env: "test", pooling: true });
-  let controlCtx: Context | undefined;
-  controlApp.get("/n", (c) => ((controlCtx = c), new Response(null)));
-  await controlApp.handle(new Request("http://x/n"));
-  // U3c: probe retirement through a surviving mutating path (the body setter
-  // left the surface with the API).
-  expect(() => (controlCtx as Context).setHeader("x-late", "1")).toThrow(/retired/); // guard active
-
-  const app = new Keala({ env: "test", pooling: true, requestTimeout: 40 });
-  const gate = deferred();
-  let zombieCtx: Context | undefined;
-  app.get("/z", async (c) => {
-    zombieCtx = c;
-    await gate.promise;
-    return new Response(null);
-  });
-  expect((await app.handle(new Request("http://x/z"))).status).toBe(504);
-  gate.resolve(); // the zombie settles — its context must go to GC, not the pool
-  await wait(20);
-  expect(() => (zombieCtx as Context).setHeader("x-late", "1")).not.toThrow();
 });
 
 it("REVIEW-CT-33: §2.2 invariant — a REJECTING strategy is contained to the built-in 503", async () => {

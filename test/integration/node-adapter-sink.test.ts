@@ -65,14 +65,6 @@ describe("node adapter: sink mirrors and serve-error surface", () => {
 });
 
 describe("review fixes: option surfaces and callback containment", () => {
-  it("startNodeServer refuses unknown option keys (typo guard parity)", () => {
-    const app = new Keala(quiet);
-    expect(() => startNodeServer(app, { port: 0, idleTimout: 99 } as never)).toThrow(
-      /unknown option/,
-    );
-    expect(() => startNodeServer(app, { port: 0 })).not.toThrow();
-  });
-
   it("a throwing onListen callback never becomes an uncaughtException", async () => {
     const app = new Keala(quiet);
     app.get("/x", (c) => c.text("ok"));

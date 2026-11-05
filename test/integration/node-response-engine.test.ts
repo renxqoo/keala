@@ -360,8 +360,6 @@ describe("R4.5 Node body ownership and cleanup", () => {
       const server = await start((app) => {
         app.use(createBodyParser({ jsonLimit: 64 }));
         app.post("/raw-first", async (c) => {
-          expect(c.raw).toBe(c.raw);
-          expect(c.headers).toBe(c.headers);
           expect(c.header("x-missing")).toBe("");
           return c.json(await bodyOf(c).json());
         });

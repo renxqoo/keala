@@ -7,7 +7,6 @@
  * Helper style mirrors test/r4-lifecycle-overload.test.ts.
  */
 import { afterAll, expect, it, vi } from "vitest";
-import net from "node:net";
 import { spawn } from "node:child_process";
 import { Keala } from "../../src/core/app.ts";
 import { installSignalBridge } from "../../src/core/lifecycle.ts";
@@ -36,37 +35,6 @@ const liveServers: NodeServerHandle[] = [];
 afterAll(() => {
   for (const s of liveServers) s.stop(true);
 });
-
-/** True when the port refuses new TCP connections (the listener is dead). */
-export const refusedPort = (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
-    const sock = net.connect(port, "127.0.0.1");
-    sock.once(
-      "error",
-      (e: NodeJS.ErrnoException) => (sock.destroy(), resolve(e.code === "ECONNREFUSED")),
-    );
-    sock.once("connect", () => (sock.destroy(), resolve(false)));
-  });
-
-/** unhandledRejection spy (typing cast per test/r4-lifecycle-timeout.test.ts). */
-export const unhandledWatch = (): { hits: unknown[]; stop: () => void } => {
-  const hits: unknown[] = [];
-  const on = (reason: unknown): void => {
-    hits.push(reason);
-  };
-  (process.on as unknown as (event: string, fn: (r: unknown) => void) => void)(
-    "unhandledRejection",
-    on,
-  );
-  return {
-    hits,
-    stop: () =>
-      (process.off as unknown as (event: string, fn: (r: unknown) => void) => void)(
-        "unhandledRejection",
-        on,
-      ),
-  };
-};
 
 /** Bun-shaped serve mock with a real-shaped stopGraceful (registerForce wired). */
 const fakeGracefulServe = (): {

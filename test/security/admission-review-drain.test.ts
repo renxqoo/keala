@@ -82,11 +82,6 @@ const wireExchange = async (
 const statusLines = (wire: string): string[] =>
   [...wire.matchAll(/HTTP\/1\.1 (\d{3})/g)].map((m) => m[1] as string);
 
-export const headerValues = (wire: string, name: string): string[] =>
-  [...wire.matchAll(new RegExp(`(?:^|\\r\\n)${name}:([^\\r\\n]*)`, "gi"))].map((m) =>
-    (m[1] as string).trim(),
-  );
-
 const liveServers: NodeServerHandle[] = [];
 afterAll(() => {
   for (const server of liveServers) server.stop(true);

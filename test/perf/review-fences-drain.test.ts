@@ -256,96 +256,56 @@ describe("agent R4.6 perf review (structural budget fences)", () => {
   // -------------------------------------------------------------------------
 
   it(
-    "REVIEW-PERF-4: drain (§7.2) — exactly one extra ReadableStream+Response per bodied drain settle, zero when not draining or body null",
+    "REVIEW-PERF-4: drain (§7.2) — null-body drain settles with ZERO wraps; Response count exact for bodied drain",
     { timeout: 60_000 },
     async () => {
+      // The bodied-drain one-wrap rule and its 50µs timing fence live in
+      // PERF-6 (hotpath-fences-extra). Unique here: the null-body drain
+      // (zero wraps — nothing to hold) and the wrapper RESPONSE object count.
       const rsPatch = patchConstructor("ReadableStream");
       const respPatch = patchConstructor("Response");
       try {
         const K = 4;
         const PAYLOAD = `review-drain-payload-${"y".repeat(48)}`;
-        type Mode = "committed" | "null" | "state";
-        const buildApp = (
-          mode: Mode,
-        ): { app: Keala; gate: { promise: Promise<void>; resolve: () => void } } => {
-          const app = new Keala({ env: "test" });
-          const gate = deferred();
-          if (mode === "state") {
-            app.get("/d", async (c) => {
-              await gate.promise;
-              return c.text(PAYLOAD);
-            });
-          } else {
-            const prebuilt = Array.from({ length: K }, () =>
-              mode === "committed" ? new Response(PAYLOAD) : new Response(null, { status: 204 }),
-            );
-            let issued = 0;
-            app.get("/d", () => gate.promise.then(() => prebuilt[issued++]!));
-          }
-          return { app, gate };
-        };
-        const round = async (
-          mode: Mode,
-          draining: boolean,
-        ): Promise<{ streams: number; responses: number; status: unknown; ok: boolean }> => {
-          const { app, gate } = buildApp(mode);
-          const handles: Promise<Response>[] = [];
-          for (let i = 0; i < K; i++) handles.push(app.handle(new Request("http://x/d")));
-          const closing = draining ? app.close({ drain: 5_000 }) : null;
-          const rs0 = rsPatch.count();
-          const resp0 = respPatch.count();
-          gate.resolve();
-          const responses = await Promise.all(handles);
-          const texts: string[] = [];
-          for (const res of responses) texts.push(await res.text());
-          return {
-            streams: rsPatch.count() - rs0,
-            responses: respPatch.count() - resp0,
-            status: closing === null ? null : await closing,
-            ok: responses.every(
-              (res, i) =>
-                res.status === (mode === "null" ? 204 : 200) &&
-                (mode === "null" ? texts[i] === "" : texts[i] === PAYLOAD),
-            ),
-          };
-        };
-        // Control rounds (not draining) — also repeated so the state-mode
-        // finalize baseline is measured under identical conditions.
-        const committedControl = await round("committed", false);
-        const stateControl = await round("state", false);
-        const committedDrain = await round("committed", true);
-        const nullDrain = await round("null", true);
-        const stateDrain = await round("state", true);
-        console.log(
-          `REVIEW-PERF-4 (K=${K}): committed control ${committedControl.streams}RS/${committedControl.responses}R, ` +
-            `drain ${committedDrain.streams}RS/${committedDrain.responses}R; null-body drain ${nullDrain.streams}RS/${nullDrain.responses}R; ` +
-            `state control ${stateControl.streams}RS/${stateControl.responses}R, drain ${stateDrain.streams}RS/${stateDrain.responses}R`,
-        );
-        // Zero wraps when not draining (committed: not even finalize wraps).
-        expect(committedControl.ok).toBe(true);
-        expect(committedControl.streams).toBe(0);
-        expect(committedControl.responses).toBe(0);
-        // EXACTLY one extra ReadableStream + one wrapper Response per bodied
-        // response while draining — the holdBody wrap is the ONLY wrap.
-        expect(committedDrain.ok).toBe(true);
-        expect(committedDrain.streams).toBe(K);
-        expect(committedDrain.responses).toBe(K);
-        expect(committedDrain.status).toEqual({ timedOut: false, inFlight: 0 });
-        // Zero wraps for a null body even while draining.
-        expect(nullDrain.ok).toBe(true);
-        expect(nullDrain.streams).toBe(0);
-        expect(nullDrain.responses).toBe(0);
-        expect(nullDrain.status).toEqual({ timedOut: false, inFlight: 0 });
-        // State-mode: drain cost = control + exactly one wrap per response.
-        expect(stateControl.ok).toBe(true);
-        expect(stateControl.responses).toBe(K); // finalize's own Response only
-        expect(stateDrain.ok).toBe(true);
-        expect(stateDrain.streams - stateControl.streams).toBe(K);
-        expect(stateDrain.responses - stateControl.responses).toBe(K);
-        expect(stateDrain.status).toEqual({ timedOut: false, inFlight: 0 });
+        const nullApp = new Keala({ env: "test" });
+        const nullGate = deferred();
+        const prebuiltNull = Array.from({ length: K }, () => new Response(null, { status: 204 }));
+        let issuedNull = 0;
+        nullApp.get("/d", () => nullGate.promise.then(() => prebuiltNull[issuedNull++]!));
+        const nullHandles: Promise<Response>[] = [];
+        for (let i = 0; i < K; i++) nullHandles.push(nullApp.handle(new Request("http://x/d")));
+        const nullClosing = nullApp.close({ drain: 5_000 });
+        const nrs0 = rsPatch.count();
+        const nresp0 = respPatch.count();
+        nullGate.resolve();
+        const nullResponses = await Promise.all(nullHandles);
+        for (const res of nullResponses) await res.text();
+        expect(nullResponses.every((res) => res.status === 204)).toBe(true);
+        expect(rsPatch.count() - nrs0).toBe(0); // null bodies hold nothing
+        expect(respPatch.count() - nresp0).toBe(0);
+        await nullClosing;
+
+        const app = new Keala({ env: "test" });
+        const gate = deferred();
+        const prebuilt = Array.from({ length: K }, () => new Response(PAYLOAD));
+        let issued = 0;
+        app.get("/d", () => gate.promise.then(() => prebuilt[issued++]!));
+        const handles: Promise<Response>[] = [];
+        for (let i = 0; i < K; i++) handles.push(app.handle(new Request("http://x/d")));
+        const closing = app.close({ drain: 5_000 });
+        const resp0 = respPatch.count();
+        gate.resolve();
+        const responses = await Promise.all(handles);
+        const texts: string[] = [];
+        for (const res of responses) texts.push(await res.text());
+        expect(responses.every((res, i) => res.status === 200 && texts[i] === PAYLOAD)).toBe(true);
+        // EXACTLY one wrapper Response per bodied drain settle (the holdBody
+        // wrap; the pre-builts predate the counting window).
+        expect(respPatch.count() - resp0).toBe(K);
+        await closing;
       } finally {
-        respPatch.restore();
         rsPatch.restore();
+        respPatch.restore();
       }
     },
   );

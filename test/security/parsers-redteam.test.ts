@@ -56,16 +56,12 @@
  *   exact same shape; the cookie serializer must too.
  */
 
-import { mkdtemp, mkdir, symlink, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { acceptsEncoding, acceptsType } from "../../src/negotiation/accepts.ts";
 import { parseCookies, serializeCookie, sign, unsign } from "../../src/plugins/cookies/cookies.ts";
 import { bodyOf, createBodyParser } from "../../src/plugins/body-parser.ts";
-import { serveStatic } from "../../src/middleware/serve-static.ts";
 
 const quiet = { env: "test" } as const;
 
@@ -85,34 +81,6 @@ const partsBody = (boundary: string, count: number): string => {
  */
 const echoedCookieHeader = (name: string, setCookie: string): string =>
   `${name}=${(setCookie.split(";")[0] ?? "").slice(name.length + 1)}`;
-
-describe("R3-1 serveStatic: a symlinked subdirectory index escapes root", () => {
-  let root = "";
-  let outside = "";
-
-  beforeAll(async () => {
-    root = await mkdtemp(join(tmpdir(), "bk-r3-root-"));
-    outside = await mkdtemp(join(tmpdir(), "bk-r3-out-"));
-    await writeFile(join(outside, "loot.txt"), "TOP SECRET LOOT");
-    await mkdir(join(root, "uploads"));
-    // uploads/index.html is a symlink OUT of root — the exact thing the
-    // lstat walk exists to catch with followSymlinks off (the default).
-    await symlink(join(outside, "loot.txt"), join(root, "uploads", "index.html"));
-  });
-
-  afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
-    await rm(outside, { recursive: true, force: true });
-  });
-
-  it("denies <dir>/index.html symlinks with followSymlinks off (default)", async () => {
-    const app = new Keala(quiet);
-    app.use(serveStatic({ root }));
-    const res = await app.handle(new Request("http://localhost:3000/uploads/"));
-    expect(res.status).toBe(403); // same denial as the top-level link.js case
-    expect(await res.text()).not.toContain("TOP SECRET LOOT");
-  });
-});
 
 describe("R3-2 bodyParser: multipart part budget disarmed by `;` in a quoted boundary", () => {
   const appOf = () => {

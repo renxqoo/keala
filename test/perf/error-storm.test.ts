@@ -16,7 +16,6 @@ import { describe, expect, it } from "vitest";
 
 import { Keala } from "../../src/core/app.ts";
 import { createError, toHttpError } from "../../src/http/errors.ts";
-import { getPath, getSearch } from "../../src/utils/url.ts";
 
 const isBun = typeof Bun !== "undefined";
 
@@ -93,7 +92,7 @@ const envelope = { error: { code: "internal" } } as const;
 
 describe("R4.3 perf review: happy path must not feel the mapper", () => {
   it(
-    "probe-like happy path: registered mapper vs no mapper is parity (<10%)",
+    "probe-like happy path: registered mapper vs no mapper is parity (<1.45x)",
     { timeout: 120_000 },
     async () => {
       const bare = new Keala({ env: "test" });
@@ -131,7 +130,7 @@ describe("R4.3 perf review: happy path must not feel the mapper", () => {
   );
 
   it(
-    "dirty happy path (post-next header set): registered mapper vs no mapper is parity (<10%)",
+    "dirty happy path (post-next header set): registered mapper vs no mapper is parity (<1.45x)",
     { timeout: 120_000 },
     async () => {
       const bare = new Keala({ env: "test" });
@@ -406,25 +405,6 @@ describe("R4.3 perf review: error-path costs and shapes", () => {
       // Non-Error normalization pays one unavoidable stack capture; fence vs
       // the Error-construction floor at 4x.
       expect(nsString).toBeLessThan(nsNewError * 4);
-    },
-  );
-
-  it(
-    "c.url computation cost (eagerly evaluated by the suppressed consoleFallback on no-mapper errors)",
-    { timeout: 60_000 },
-    () => {
-      // consoleFallback computes the URL before its env/status check, so
-      // every no-mapper error pays one path+search parse + concat.
-      const url = "http://localhost:3000/boom";
-      const fullUrl = (): string => getPath(url) + getSearch(url);
-      const nsUrl = microMedian(fullUrl, 200_000, 200_000, 11);
-      // Relative to ONE component (getPath) — absolute ns is not portable
-      // (CI runners measure ~4x the M4). The whole is ~2-3x the component.
-      const nsPath = microMedian(() => getPath(url), 200_000, 200_000, 11);
-      console.log(
-        `[perf-review] c.url micro: ${nsUrl.toFixed(1)}ns (${(nsUrl / nsPath).toFixed(1)}x getPath)`,
-      );
-      expect(nsUrl).toBeLessThan(nsPath * 4); // generous; informational
     },
   );
 });

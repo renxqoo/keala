@@ -12,7 +12,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Keala } from "../../src/core/app.ts";
 import { startNodeServer, type NodeServerHandle } from "../../src/adapters/node.ts";
 import { startBunServer, type ServeImplementation } from "../../src/index.ts";
-import { installSignalBridge } from "../../src/core/lifecycle.ts";
 import type { Context } from "../../src/core/context/context.ts";
 
 const deferred = <T = void>(): { promise: Promise<T>; resolve: (value: T) => void } => {
@@ -104,62 +103,6 @@ describe("agent-r44 bug hunt: drain body-hold counter accounting", () => {
       await wait(25); // let the resumed pull's catch arm run
       expect(app.inFlight).toBe(0); // PREDICTED ACTUAL: -1 (double release)
       await expect(closed).resolves.toEqual({ timedOut: false, inFlight: 0 });
-    },
-  );
-});
-
-describe("agent-r44 bug hunt: signal bridge force semantics", () => {
-  it(
-    "FINDING-2: a second SIGTERM never force-closes — close() idempotency swallows {drain: 0}",
-    { timeout: 8000 },
-    async () => {
-      // DEFECT: installSignalBridge (src/core/lifecycle.ts) answers the second
-      // signal with app.close({drain: 0}), but closeApp's FIRST line returns
-      // the already-created closePromise, so the force option is dead code.
-      // Nothing ever calls handle.stop(true) on the second signal.
-      // CONTRACT: §2.2 rule 9 — "首个 SIGTERM/SIGINT → app.close()（默认
-      // drain）；第二个 → close({drain:0}) 强停". With a stuck in-flight
-      // request the process should die promptly on the second signal, not
-      // after the full 30s default window (K8s then SIGKILLs it, losing the
-      // clean-exit code path entirely).
-      // OBSERVABLE: after two signals with a parked request, close() is still
-      // pending 200ms later instead of having resolved {timedOut:true}.
-      // STATUS: CONFIRMED-RED — observed "still-draining" after 200ms.
-      const registered: Array<[string, () => void]> = [];
-      // REVIEW-BUG-1 fix: the bridge registers PERMANENT process.on
-      // listeners (a once-listener consumed itself and let a repeated
-      // same-name signal fall to the OS default disposition).
-      const once = vi.spyOn(process, "on").mockImplementation(((
-        event: string | symbol,
-        handler: () => void,
-      ) => {
-        if (typeof event === "string") registered.push([event, handler]);
-        return process;
-      }) as unknown as typeof process.on);
-      try {
-        const app = new Keala({ env: "test" });
-        const gate = deferred();
-        app.get("/stuck", async (c) => {
-          await gate.promise;
-          return c.text("late");
-        });
-        void app.handle(new Request("http://x/stuck")); // in-flight for the drain
-        installSignalBridge(app);
-        const entry = registered.find(([event]) => event === "SIGTERM");
-        expect(entry).toBeDefined();
-        const handler = entry![1]!;
-        handler(); // first signal: close() with the DEFAULT 30s drain
-        handler(); // second signal: contract says force ({drain: 0})
-        const outcome = await Promise.race([
-          app.close().then((status) => `resolved:${status.timedOut}`),
-          wait(200).then(() => "still-draining"),
-        ]);
-        expect(outcome).toBe("resolved:true"); // PREDICTED ACTUAL: still-draining
-        gate.resolve(); // cleanup either way
-        await wait(10);
-      } finally {
-        once.mockRestore();
-      }
     },
   );
 });

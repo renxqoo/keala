@@ -8,7 +8,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import { Keala } from "../../src/core/app.ts";
 import { connect } from "node:net";
 import { startNodeServer, type NodeServerHandle } from "../../src/adapters/node.ts";
-import { hashPassword, verifyPassword } from "../../src/helpers/password.ts";
 
 const quiet = { env: "test" } as const;
 const raw = (port: number, data: string): Promise<string> =>
@@ -174,45 +173,3 @@ describe("node adapter locks correct behavior", () => {
 // ---------------------------------------------------------------------------
 // password helpers — locks correct behavior
 // ---------------------------------------------------------------------------
-
-describe("password helpers lock correct behavior", () => {
-  it("hash/verify round-trips and rejects wrong passwords", async () => {
-    const hash = await hashPassword("correct horse");
-    expect(hash.startsWith("pbkdf2$600000$")).toBe(true);
-    expect(await verifyPassword(hash, "correct horse")).toBe(true);
-    expect(await verifyPassword(hash, "wrong")).toBe(false);
-  });
-
-  it("salts are random per hash", async () => {
-    expect(await hashPassword("x")).not.toBe(await hashPassword("x"));
-  });
-
-  it("hashPassword bounds its inputs", async () => {
-    await expect(hashPassword("")).rejects.toThrow(TypeError);
-    await expect(hashPassword("x".repeat(1025))).rejects.toThrow(TypeError);
-  });
-
-  it("verifyPassword fails closed on corrupt data and bounds hostile hashes", async () => {
-    expect(await verifyPassword("garbage", "x")).toBe(false);
-    expect(await verifyPassword("", "x")).toBe(false);
-    expect(await verifyPassword("pbkdf2$600000$AAAA", "x")).toBe(false); // wrong arity
-    expect(await verifyPassword("pbkdf2$abc$AAAA$BBBB", "x")).toBe(false); // non-numeric iters
-    const salt = Buffer.from(new Uint8Array(16)).toString("base64");
-    const key = Buffer.from(new Uint8Array(32)).toString("base64");
-    expect(await verifyPassword(`pbkdf2$999$${salt}$${key}`, "x")).toBe(false); // < MIN_ITERATIONS
-    expect(await verifyPassword(`pbkdf2$9999999$${salt}$${key}`, "x")).toBe(false); // > MAX
-    expect(await verifyPassword(`pbkdf2$600000$${salt}$AQID`, "x")).toBe(false); // length mismatch
-  });
-
-  it("refuses PHC-style hashes unless a hasher is passed explicitly", async () => {
-    await expect(verifyPassword("$2b$12$abcdefghijklmnopqrstuv", "x")).rejects.toThrow();
-  });
-
-  it("handles unicode passwords and non-string inputs", async () => {
-    const hash = await hashPassword("pässwörd→∞");
-    expect(await verifyPassword(hash, "pässwörd→∞")).toBe(true);
-    expect(await verifyPassword(hash, "password→∞")).toBe(false);
-    expect(await verifyPassword(null as unknown as string, "x")).toBe(false);
-    expect(await verifyPassword(hash, undefined as unknown as string)).toBe(false);
-  });
-});

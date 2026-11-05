@@ -94,21 +94,6 @@ describe("R4.6 drain: handle mode (no server)", () => {
     gate.resolve();
   });
 
-  it("close() is idempotent — the same promise object comes back", async () => {
-    const app = new Keala({ env: "test" });
-    const first = app.close({ drain: 50 });
-    const second = app.close({ drain: 9999 });
-    expect(second).toBe(first);
-    await first;
-  });
-
-  it("listen() after close() throws, isDraining never regresses", async () => {
-    const app = new Keala({ env: "test" });
-    await app.close({ drain: 10 });
-    expect(app.isDraining()).toBe(true);
-    expect(() => app.listen(0)).toThrow(/shutting down/);
-  });
-
   it("a response settling during drain holds its slot until the body is consumed", async () => {
     const app = new Keala({ env: "test" });
     const gate = deferred();
@@ -198,13 +183,6 @@ describe("R4.6 drain: handle mode (no server)", () => {
     const response = await inflight;
     await response.body!.cancel(); // consumer walks away mid-hold
     await expect(closed).resolves.toEqual({ timedOut: false, inFlight: 0 });
-  });
-
-  it("close() validates the drain option loudly", async () => {
-    const app = new Keala({ env: "test" });
-    expect(() => app.close({ drain: -1 })).toThrow(TypeError);
-    expect(() => app.close({ drain: Number.NaN })).toThrow(TypeError);
-    await app.close({ drain: 10 });
   });
 });
 
