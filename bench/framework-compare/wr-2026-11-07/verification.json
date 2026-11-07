@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-11-07T07:52:00Z",
+  "samples": 234,
+  "requests": 5661330,
+  "resultsSha256": "7c698e706b06b92a4e603513fa1c8feaff87ec49bbe46d238a92c56485627c90",
+  "ownedChildrenExited": true,
+  "liveOwnedPids": [],
+  "benchmarkCgroupsExist": [],
+  "hostOom": 0,
+  "otherServicesBefore": [
+    {"pid": 34074, "name": "bun (vless-sub-server.js)", "startedBeforeRun": true}
+  ],
+  "otherServicesAfter": [
+    {"pid": 34074, "name": "bun (vless-sub-server.js)", "alive": true}
+  ],
+  "remoteDirectory": "/tmp/keala-upload-1107",
+  "remoteRemoved": true
+}

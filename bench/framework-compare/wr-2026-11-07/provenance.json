@@ -1,0 +1,20 @@
+{
+  "nodeArchive": {
+    "url": "https://nodejs.org/dist/v26.9.0/node-v26.9.0-linux-x64.tar.xz",
+    "sha256": "c6ecd8efc1c1d395265891675319da7a7b3785c6be174bd78933cf4f057624d1",
+    "verifiedAgainst": "official SHASUMS256.txt",
+    "localAndRemoteCheck": "both OK"
+  },
+  "systemLibatomic": "/usr/lib/x86_64-linux-gnu/libatomic.so.1 (present, no private copy needed)",
+  "bun": "/usr/local/bin/bun 1.4.4 (server pre-installed)",
+  "payload": {
+    "bundleTgzSha256": "34e35d2e3efbbc6cada2c91519814410a3b8f7b50d65c7ace893d61a270b9174",
+    "localAndRemoteCheck": "both OK"
+  },
+  "launch": "three systemd transient units keala-bench-{pilot,verify,full}-1107, CPUQuota=150% MemoryMax=640M TasksMax=128",
+  "results": {
+    "formattedJson": "results.json",
+    "report": "REPORT.md",
+    "remoteSha256Matches": true
+  }
+}

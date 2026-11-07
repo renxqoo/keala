@@ -1,0 +1,4 @@
+Nov 07 07:27:29 C20261028093367 systemd[1]: Started keala-bench-verify-1107.service - /usr/bin/env NODE_OPTIONS=--max-old-space-size=128 UV_THREADPOOL_SIZE=2 BENCH_BUN=/usr/local/bin/bun BENCH_OUTPUT=/tmp/keala-upload-1107/results-verify /tmp/keala-upload-1107/runtime/bin/node /tmp/keala-upload-1107/bundle/bench/framework-compare/remote-run.mjs --verify-only.
+Nov 07 07:27:32 C20261028093367 env[41378]: HTTP correctness: 132 checks passed.
+Nov 07 07:27:32 C20261028093367 systemd[1]: keala-bench-verify-1107.service: Deactivated successfully.
+Nov 07 07:27:32 C20261028093367 systemd[1]: keala-bench-verify-1107.service: Consumed 3.763s CPU time.
